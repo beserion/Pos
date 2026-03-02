@@ -32,4 +32,9 @@ export class InvoicesController {
     remove(@Param('id') id: string) {
         return this.invoicesService.remove(+id);
     }
+
+    @Get('partner/:id')
+    findByPartner(@Param('id') id: string) {
+        return this.invoicesService.findByPartner(+id);
+    }
 }

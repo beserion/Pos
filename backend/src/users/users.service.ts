@@ -46,11 +46,13 @@ export class UsersService {
     async update(id: number, updateData: Partial<User>): Promise<User> {
         await this.findOne(id);
         try {
+            const user = await this.findOne(id);
             if (updateData.passwordHash) {
                 updateData.passwordHash = await bcrypt.hash(updateData.passwordHash, 10);
             }
-            await this.userRepository.update(id, updateData);
-            return this.findOne(id);
+            const { id: _, role, ...data } = updateData as any;
+            this.userRepository.merge(user, data);
+            return await this.userRepository.save(user);
         } catch (error: any) {
             console.error('USER UPDATE ERROR:', error);
             if (error.number === 2627 || error.number === 2601) {

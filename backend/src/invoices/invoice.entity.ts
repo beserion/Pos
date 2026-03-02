@@ -14,6 +14,9 @@ export class Invoice {
     @Column({ nullable: true })
     customerId: number;
 
+    @Column({ nullable: true })
+    description: string;
+
     @Column('decimal', { precision: 12, scale: 2 })
     totalAmount: number;
 

@@ -37,4 +37,11 @@ export class InvoicesService {
         await this.findOne(id);
         await this.invoiceRepository.delete(id);
     }
+
+    async findByPartner(partnerId: number): Promise<Invoice[]> {
+        return await this.invoiceRepository.find({
+            where: { customerId: partnerId },
+            order: { createdAt: 'DESC' }
+        });
+    }
 }

@@ -8,4 +8,5 @@ export declare class InvoicesController {
     create(invoiceData: Partial<Invoice>): Promise<Invoice>;
     update(id: string, updateData: Partial<Invoice>): Promise<Invoice>;
     remove(id: string): Promise<void>;
+    findByPartner(id: string): Promise<Invoice[]>;
 }

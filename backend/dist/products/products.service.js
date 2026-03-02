@@ -37,9 +37,10 @@ let ProductsService = class ProductsService {
         return await this.productRepository.save(newProduct);
     }
     async update(id, updateData) {
-        await this.findOne(id);
-        await this.productRepository.update(id, updateData);
-        return this.findOne(id);
+        const product = await this.findOne(id);
+        const { id: _, ...data } = updateData;
+        this.productRepository.merge(product, data);
+        return await this.productRepository.save(product);
     }
     async remove(id) {
         await this.findOne(id);

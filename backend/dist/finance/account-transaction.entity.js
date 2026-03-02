@@ -22,6 +22,7 @@ let AccountTransaction = class AccountTransaction {
     paymentMethod;
     category;
     user;
+    partnerId;
     createdAt;
     updatedAt;
 };
@@ -63,6 +64,10 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'userId' }),
     __metadata("design:type", user_entity_1.User)
 ], AccountTransaction.prototype, "user", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", Number)
+], AccountTransaction.prototype, "partnerId", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)

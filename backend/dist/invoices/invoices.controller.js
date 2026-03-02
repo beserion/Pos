@@ -36,6 +36,9 @@ let InvoicesController = class InvoicesController {
     remove(id) {
         return this.invoicesService.remove(+id);
     }
+    findByPartner(id) {
+        return this.invoicesService.findByPartner(+id);
+    }
 };
 exports.InvoicesController = InvoicesController;
 __decorate([
@@ -73,6 +76,13 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], InvoicesController.prototype, "remove", null);
+__decorate([
+    (0, common_1.Get)('partner/:id'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], InvoicesController.prototype, "findByPartner", null);
 exports.InvoicesController = InvoicesController = __decorate([
     (0, common_1.Controller)('invoices'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),

@@ -28,9 +28,10 @@ export class LocationsService {
     }
 
     async update(id: number, updateData: Partial<Location>): Promise<Location> {
-        await this.findOne(id); // Check existence
-        await this.locationRepository.update(id, updateData);
-        return this.findOne(id);
+        const location = await this.findOne(id);
+        const { id: _, zones, employees, warehouses, ...data } = updateData as any;
+        this.locationRepository.merge(location, data);
+        return await this.locationRepository.save(location);
     }
 
     async remove(id: number): Promise<void> {

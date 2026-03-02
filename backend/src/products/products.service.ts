@@ -28,9 +28,10 @@ export class ProductsService {
     }
 
     async update(id: number, updateData: Partial<Product>): Promise<Product> {
-        await this.findOne(id); // Check existence
-        await this.productRepository.update(id, updateData);
-        return this.findOne(id);
+        const product = await this.findOne(id);
+        const { id: _, ...data } = updateData as any;
+        this.productRepository.merge(product, data);
+        return await this.productRepository.save(product);
     }
 
     async remove(id: number): Promise<void> {

@@ -37,9 +37,10 @@ let ZonesService = class ZonesService {
         return await this.zoneRepository.save(newZone);
     }
     async update(id, updateData) {
-        await this.findOne(id);
-        await this.zoneRepository.update(id, updateData);
-        return this.findOne(id);
+        const zone = await this.findOne(id);
+        const { id: _, location, tables, ...data } = updateData;
+        this.zoneRepository.merge(zone, data);
+        return await this.zoneRepository.save(zone);
     }
     async remove(id) {
         await this.findOne(id);

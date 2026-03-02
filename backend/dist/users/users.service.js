@@ -88,11 +88,13 @@ let UsersService = class UsersService {
     async update(id, updateData) {
         await this.findOne(id);
         try {
+            const user = await this.findOne(id);
             if (updateData.passwordHash) {
                 updateData.passwordHash = await bcrypt.hash(updateData.passwordHash, 10);
             }
-            await this.userRepository.update(id, updateData);
-            return this.findOne(id);
+            const { id: _, role, ...data } = updateData;
+            this.userRepository.merge(user, data);
+            return await this.userRepository.save(user);
         }
         catch (error) {
             console.error('USER UPDATE ERROR:', error);

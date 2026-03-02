@@ -45,6 +45,12 @@ let InvoicesService = class InvoicesService {
         await this.findOne(id);
         await this.invoiceRepository.delete(id);
     }
+    async findByPartner(partnerId) {
+        return await this.invoiceRepository.find({
+            where: { customerId: partnerId },
+            order: { createdAt: 'DESC' }
+        });
+    }
 };
 exports.InvoicesService = InvoicesService;
 exports.InvoicesService = InvoicesService = __decorate([

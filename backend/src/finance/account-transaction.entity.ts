@@ -31,6 +31,9 @@ export class AccountTransaction {
     @JoinColumn({ name: 'userId' })
     user: User;
 
+    @Column({ nullable: true })
+    partnerId: number;
+
     @CreateDateColumn()
     createdAt: Date;
 

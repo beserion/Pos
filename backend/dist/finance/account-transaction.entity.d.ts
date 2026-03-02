@@ -9,6 +9,7 @@ export declare class AccountTransaction {
     paymentMethod: string;
     category: string;
     user: User;
+    partnerId: number;
     createdAt: Date;
     updatedAt: Date;
 }

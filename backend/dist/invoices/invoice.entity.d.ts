@@ -3,6 +3,7 @@ export declare class Invoice {
     invoiceNumber: string;
     saleId: number;
     customerId: number;
+    description: string;
     totalAmount: number;
     taxAmount: number;
     issueDate: Date;

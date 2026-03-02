@@ -16,5 +16,6 @@ export declare class FinanceController {
     getTransaction(id: string): Promise<AccountTransaction>;
     createTransaction(data: Partial<AccountTransaction>): Promise<AccountTransaction>;
     updateTransaction(id: string, data: Partial<AccountTransaction>): Promise<AccountTransaction>;
-    deleteTransaction(id: string): Promise<void>;
+    remove(id: string): Promise<void>;
+    findByPartner(id: string): Promise<AccountTransaction[]>;
 }

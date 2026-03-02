@@ -17,4 +17,5 @@ export declare class FinanceService {
         kart: number;
         count: number;
     }>;
+    findByPartner(partnerId: number): Promise<AccountTransaction[]>;
 }

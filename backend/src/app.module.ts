@@ -19,6 +19,8 @@ import { PartnersModule } from './partners/partners.module';
 import { WarehousesModule } from './warehouses/warehouses.module';
 import { FinanceModule } from './finance/finance.module';
 import { OrdersModule } from './orders/orders.module';
+import { SecurityModule } from './auth/security.module';
+import { User } from './users/user.entity';
 
 @Module({
   imports: [
@@ -59,6 +61,7 @@ import { OrdersModule } from './orders/orders.module';
     WarehousesModule,
     FinanceModule,
     OrdersModule,
+    SecurityModule,
   ],
   controllers: [AppController],
   providers: [AppService],

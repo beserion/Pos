@@ -34,7 +34,12 @@ export class FinanceController {
     }
 
     @Delete('transactions/:id')
-    deleteTransaction(@Param('id') id: string) {
+    remove(@Param('id') id: string) {
         return this.financeService.remove(+id);
+    }
+
+    @Get('partner/:id')
+    findByPartner(@Param('id') id: string) {
+        return this.financeService.findByPartner(+id);
     }
 }

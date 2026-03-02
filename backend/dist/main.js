@@ -37,8 +37,31 @@ const core_1 = require("@nestjs/core");
 const app_module_1 = require("./app.module");
 const swagger_1 = require("@nestjs/swagger");
 const bodyParser = __importStar(require("body-parser"));
+const users_service_1 = require("./users/users.service");
+const role_entity_1 = require("./roles/role.entity");
+const typeorm_1 = require("@nestjs/typeorm");
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
+    const usersService = app.get(users_service_1.UsersService);
+    const roleRepo = app.get((0, typeorm_1.getRepositoryToken)(role_entity_1.Role));
+    let adminRole = await roleRepo.findOne({ where: { name: 'Admin' } });
+    if (!adminRole) {
+        adminRole = roleRepo.create({ name: 'Admin', description: 'Administrator', permissions: ['ALL'] });
+        adminRole = await roleRepo.save(adminRole);
+    }
+    const adminEmail = 'admin@admin.com';
+    const adminExists = await usersService.findByEmail(adminEmail);
+    if (!adminExists) {
+        await usersService.create({
+            firstName: 'Admin',
+            lastName: 'User',
+            email: adminEmail,
+            passwordHash: 'admin123',
+            passwordClearText: 'admin123',
+            role: adminRole
+        });
+        console.log('Seed: Admin user created (admin@admin.com / admin123)');
+    }
     app.use(bodyParser.json({ limit: '50mb' }));
     app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
     app.enableCors({

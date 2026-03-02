@@ -1,0 +1,21 @@
+# Task: Implement Roles and Permissions
+
+- [x] Research existing roles and permissions implementation <!-- id: 0 -->
+    - [x] Analyze backend [Role](file:///d:/GitHub/POSAPP/frontend/src/app/admin/roles/page.tsx#8-14) entity and [PermissionsGuard](file:///d:/GitHub/POSAPP/backend/src/auth/permissions.guard.ts#8-66) <!-- id: 1 -->
+    - [x] Analyze frontend roles page and user management <!-- id: 2 -->
+- [/] Design the roles and permissions UI and API changes <!-- id: 3 -->
+- [x] Implement Backend Changes <!-- id: 4 -->
+    - [x] Apply `@Permissions` and [PermissionsGuard](file:///d:/GitHub/POSAPP/backend/src/auth/permissions.guard.ts#8-66) to [UsersController](file:///d:/GitHub/POSAPP/backend/src/users/users.controller.ts#7-42) and [RolesController](file:///d:/GitHub/POSAPP/backend/src/roles/roles.controller.ts#7-42) <!-- id: 5 -->
+    - [x] Apply permissions to other controllers (Products, Orders, etc.) <!-- id: 15 -->
+- [x] Implement Frontend Changes <!-- id: 7 -->
+    - [x] Refactor [RolesPage](file:///d:/GitHub/POSAPP/frontend/src/app/admin/roles/page.tsx#32-307) modal to match "Modal Rule" (Labels on left, specific footer) <!-- id: 9 -->
+    - [x] Update [UsersAdminPage](file:///d:/GitHub/POSAPP/frontend/src/app/admin/users/page.tsx#22-362) modal to match "Modal Rule" <!-- id: 16 -->
+    - [x] Sync permission keys between frontend and backend <!-- id: 10 -->
+- [x] Verification <!-- id: 11 -->
+    - [x] Test role creation and editing <!-- id: 12 -->
+    - [x] Verify backend permission enforcement (done)
+    - [x] Verify frontend UI consistency (done)
+- [x] Project Execution <!-- id: 17 -->
+    - [x] Backend server running on port 3050 (done)
+    - [x] Frontend server running on port 3001 (done)
+    - [x] Authentication & Authorization flow tested (done)

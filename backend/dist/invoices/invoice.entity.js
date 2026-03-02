@@ -16,6 +16,7 @@ let Invoice = class Invoice {
     invoiceNumber;
     saleId;
     customerId;
+    description;
     totalAmount;
     taxAmount;
     issueDate;
@@ -40,6 +41,10 @@ __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", Number)
 ], Invoice.prototype, "customerId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Invoice.prototype, "description", void 0);
 __decorate([
     (0, typeorm_1.Column)('decimal', { precision: 12, scale: 2 }),
     __metadata("design:type", Number)

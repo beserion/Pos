@@ -2,9 +2,37 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as bodyParser from 'body-parser';
+import { UsersService } from './users/users.service';
+import { Repository } from 'typeorm';
+import { Role } from './roles/role.entity';
+import { getRepositoryToken } from '@nestjs/typeorm';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Seed Admin user if not exists
+  const usersService = app.get(UsersService);
+  const roleRepo: Repository<Role> = app.get(getRepositoryToken(Role));
+
+  let adminRole = await roleRepo.findOne({ where: { name: 'Admin' } });
+  if (!adminRole) {
+    adminRole = roleRepo.create({ name: 'Admin', description: 'Administrator', permissions: ['ALL'] });
+    adminRole = await roleRepo.save(adminRole);
+  }
+
+  const adminEmail = 'admin@admin.com';
+  const adminExists = await usersService.findByEmail(adminEmail);
+  if (!adminExists) {
+    await usersService.create({
+      firstName: 'Admin',
+      lastName: 'User',
+      email: adminEmail,
+      passwordHash: 'admin123',
+      passwordClearText: 'admin123',
+      role: adminRole
+    });
+    console.log('Seed: Admin user created (admin@admin.com / admin123)');
+  }
 
   // Increase payload size limit
   app.use(bodyParser.json({ limit: '50mb' }));

@@ -37,9 +37,10 @@ let LocationsService = class LocationsService {
         return await this.locationRepository.save(newLocation);
     }
     async update(id, updateData) {
-        await this.findOne(id);
-        await this.locationRepository.update(id, updateData);
-        return this.findOne(id);
+        const location = await this.findOne(id);
+        const { id: _, zones, employees, warehouses, ...data } = updateData;
+        this.locationRepository.merge(location, data);
+        return await this.locationRepository.save(location);
     }
     async remove(id) {
         await this.findOne(id);

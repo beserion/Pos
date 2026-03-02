@@ -63,6 +63,12 @@ let FinanceService = class FinanceService {
             count: transactions.length
         };
     }
+    async findByPartner(partnerId) {
+        return await this.transactionRepository.find({
+            where: { partnerId },
+            order: { createdAt: 'DESC' }
+        });
+    }
 };
 exports.FinanceService = FinanceService;
 exports.FinanceService = FinanceService = __decorate([

@@ -57,4 +57,11 @@ export class FinanceService {
             count: transactions.length
         };
     }
+
+    async findByPartner(partnerId: number): Promise<AccountTransaction[]> {
+        return await this.transactionRepository.find({
+            where: { partnerId },
+            order: { createdAt: 'DESC' }
+        });
+    }
 }

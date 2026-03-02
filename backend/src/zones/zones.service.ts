@@ -28,9 +28,10 @@ export class ZonesService {
     }
 
     async update(id: number, updateData: Partial<Zone>): Promise<Zone> {
-        await this.findOne(id); // Check existence
-        await this.zoneRepository.update(id, updateData);
-        return this.findOne(id);
+        const zone = await this.findOne(id);
+        const { id: _, location, tables, ...data } = updateData as any;
+        this.zoneRepository.merge(zone, data);
+        return await this.zoneRepository.save(zone);
     }
 
     async remove(id: number): Promise<void> {
