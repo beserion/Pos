@@ -40,9 +40,10 @@ let EmployeesService = class EmployeesService {
         return await this.employeeRepository.save(newEmployee);
     }
     async update(id, updateData) {
-        await this.findOne(id);
-        await this.employeeRepository.update(id, updateData);
-        return this.findOne(id);
+        const employee = await this.findOne(id);
+        const { id: _, ...data } = updateData;
+        this.employeeRepository.merge(employee, data);
+        return await this.employeeRepository.save(employee);
     }
     async remove(id) {
         await this.findOne(id);

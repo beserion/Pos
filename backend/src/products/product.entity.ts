@@ -1,5 +1,6 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, OneToMany, ManyToOne } from 'typeorm';
 import { Stock } from '../stocks/stock.entity';
+import { Printer } from '../printers/printer.entity';
 
 @Entity('products')
 export class Product {
@@ -20,6 +21,12 @@ export class Product {
 
     @Column({ default: true })
     isActive: boolean;
+
+    @Column({ nullable: true })
+    printerId: number;
+
+    @ManyToOne(() => Printer, printer => printer.products, { nullable: true, onDelete: 'SET NULL' })
+    printer: Printer;
 
     @OneToMany(() => Stock, stock => stock.product)
     stocks: Stock[];

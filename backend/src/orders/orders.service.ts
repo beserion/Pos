@@ -39,7 +39,30 @@ export class OrdersService {
 
     async create(orderData: Partial<Order>): Promise<Order> {
         const newOrder = this.orderRepository.create(orderData);
-        return await this.orderRepository.save(newOrder);
+        const savedOrder = await this.orderRepository.save(newOrder);
+
+        // Update table status if it's linked
+        if (orderData.table && orderData.table.id) {
+            const tableId = orderData.table.id;
+            const table = await this.orderRepository.manager.findOne('Table', {
+                where: { id: tableId },
+                relations: ['waiterName']
+            } as any);
+
+            if (table && table.status === 'BOŞ') {
+                const waiter = await this.orderRepository.manager.findOne('User', {
+                    where: { id: (orderData.waiter as any).id }
+                } as any);
+
+                await this.orderRepository.manager.update('Table', tableId, {
+                    status: 'DOLU',
+                    waiterName: waiter ? `${waiter.firstName} ${waiter.lastName}` : 'Sistem',
+                    orderStartTime: new Date()
+                });
+            }
+        }
+
+        return savedOrder;
     }
 
     async updateStatus(id: number, status: string): Promise<Order> {

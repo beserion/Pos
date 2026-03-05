@@ -19,6 +19,8 @@ let Table = class Table {
     status;
     zone;
     isActive;
+    waiterName;
+    orderStartTime;
     createdAt;
     updatedAt;
 };
@@ -47,6 +49,14 @@ __decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)
 ], Table.prototype, "isActive", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Table.prototype, "waiterName", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
+    __metadata("design:type", Date)
+], Table.prototype, "orderStartTime", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)

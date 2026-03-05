@@ -23,6 +23,18 @@ export class AuthService {
         return null;
     }
 
+    async getWaiters() {
+        return this.usersService.findWaiters();
+    }
+
+    async loginWithPin(userId: number, pinCode: string) {
+        const user = await this.usersService.findByPin(userId, pinCode);
+        if (user) {
+            return this.login(user); // returns token and user data
+        }
+        return null;
+    }
+
     async login(user: any) {
         const payload = { username: user.email, sub: user.id, role: user.role?.name };
         return {

@@ -29,6 +29,7 @@ const warehouses_module_1 = require("./warehouses/warehouses.module");
 const finance_module_1 = require("./finance/finance.module");
 const orders_module_1 = require("./orders/orders.module");
 const security_module_1 = require("./auth/security.module");
+const printers_module_1 = require("./printers/printers.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -73,6 +74,7 @@ exports.AppModule = AppModule = __decorate([
             finance_module_1.FinanceModule,
             orders_module_1.OrdersModule,
             security_module_1.SecurityModule,
+            printers_module_1.PrintersModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

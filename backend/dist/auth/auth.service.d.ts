@@ -5,6 +5,11 @@ export declare class AuthService {
     private jwtService;
     constructor(usersService: UsersService, jwtService: JwtService);
     validateUser(email: string, pass: string): Promise<any>;
+    getWaiters(): Promise<Partial<import("../users/user.entity").User>[]>;
+    loginWithPin(userId: number, pinCode: string): Promise<{
+        access_token: string;
+        user: any;
+    } | null>;
     login(user: any): Promise<{
         access_token: string;
         user: any;

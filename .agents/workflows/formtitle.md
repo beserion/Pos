@@ -10,9 +10,9 @@ Sayfa başlığında kullanılacak standart yapı. Kullanıcı **formtitle** ded
 ## Yapı
 
 - **Sol ikon**: FontAwesome Pro Thin (`fat fa-...`), 40px (`style="font-size:40px"`), yanında boşluk için `me-3`
-- **Başlık (h3)**: `font-extralight`, uppercase, geniş karakter aralığı `tracking-[0.25em]`, ikon ile aynı renk
+- **Başlık (h3)**: `font-extralight`, uppercase, geniş karakter aralığı `tracking-[0.25em]`, ikon ile aynı renk (`text-...`)
 - **Alt metin (h5)**: Normal cümle düzeni (uppercase KULLANMA), `font-medium`, `text-slate-400 dark:text-slate-500`, başlıkla arası `mt-0.5`
-- **Sağ taraf**: Aksiyon butonları + "Geri Dön" butonu en sağda
+- **Sağ taraf**: Aksiyon butonları (soft style) + "Geri Dön" butonu en sağda
 - **Hizalama**: `flex items-center justify-between`
 - **Sayfa container**: `w-full px-[50px]`
 - **Scroll**: Veri azsa `h-screen overflow-hidden`, çoksa `min-h-screen`

@@ -6,6 +6,8 @@ export declare class Table {
     status: string;
     zone: Zone;
     isActive: boolean;
+    waiterName: string;
+    orderStartTime: Date;
     createdAt: Date;
     updatedAt: Date;
 }

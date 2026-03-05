@@ -49,7 +49,25 @@ let OrdersService = class OrdersService {
     }
     async create(orderData) {
         const newOrder = this.orderRepository.create(orderData);
-        return await this.orderRepository.save(newOrder);
+        const savedOrder = await this.orderRepository.save(newOrder);
+        if (orderData.table && orderData.table.id) {
+            const tableId = orderData.table.id;
+            const table = await this.orderRepository.manager.findOne('Table', {
+                where: { id: tableId },
+                relations: ['waiterName']
+            });
+            if (table && table.status === 'BOŞ') {
+                const waiter = await this.orderRepository.manager.findOne('User', {
+                    where: { id: orderData.waiter.id }
+                });
+                await this.orderRepository.manager.update('Table', tableId, {
+                    status: 'DOLU',
+                    waiterName: waiter ? `${waiter.firstName} ${waiter.lastName}` : 'Sistem',
+                    orderStartTime: new Date()
+                });
+            }
+        }
+        return savedOrder;
     }
     async updateStatus(id, status) {
         const order = await this.findOne(id);

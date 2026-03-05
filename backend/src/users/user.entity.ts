@@ -21,6 +21,9 @@ export class User {
     @Column({ nullable: true })
     passwordClearText: string;
 
+    @Column({ nullable: true, length: 10 })
+    pinCode: string;
+
     @Column({ default: true })
     isActive: boolean;
 

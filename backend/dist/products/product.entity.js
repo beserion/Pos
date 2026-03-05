@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Product = void 0;
 const typeorm_1 = require("typeorm");
 const stock_entity_1 = require("../stocks/stock.entity");
+const printer_entity_1 = require("../printers/printer.entity");
 let Product = class Product {
     id;
     name;
@@ -19,6 +20,8 @@ let Product = class Product {
     price;
     category;
     isActive;
+    printerId;
+    printer;
     stocks;
     createdAt;
     updatedAt;
@@ -48,6 +51,14 @@ __decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)
 ], Product.prototype, "isActive", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", Number)
+], Product.prototype, "printerId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => printer_entity_1.Printer, printer => printer.products, { nullable: true, onDelete: 'SET NULL' }),
+    __metadata("design:type", printer_entity_1.Printer)
+], Product.prototype, "printer", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => stock_entity_1.Stock, stock => stock.product),
     __metadata("design:type", Array)

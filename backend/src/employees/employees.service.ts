@@ -31,9 +31,10 @@ export class EmployeesService {
     }
 
     async update(id: number, updateData: Partial<Employee>): Promise<Employee> {
-        await this.findOne(id); // Check existence
-        await this.employeeRepository.update(id, updateData);
-        return this.findOne(id);
+        const employee = await this.findOne(id);
+        const { id: _, ...data } = updateData as any;
+        this.employeeRepository.merge(employee, data);
+        return await this.employeeRepository.save(employee);
     }
 
     async remove(id: number): Promise<void> {

@@ -6,5 +6,10 @@ export declare class AuthController {
         access_token: string;
         user: any;
     }>;
+    getWaiters(): Promise<Partial<import("../users/user.entity").User>[]>;
+    loginPin(body: any): Promise<{
+        access_token: string;
+        user: any;
+    }>;
     register(body: any): Promise<import("../users/user.entity").User>;
 }

@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Body, Get, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 
 @Controller('auth')
@@ -12,6 +12,20 @@ export class AuthController {
             throw new UnauthorizedException('Geçersiz e-posta veya şifre');
         }
         return this.authService.login(user);
+    }
+
+    @Get('waiters')
+    async getWaiters() {
+        return this.authService.getWaiters();
+    }
+
+    @Post('login-pin')
+    async loginPin(@Body() body: any) {
+        const result = await this.authService.loginWithPin(body.userId, body.pinCode);
+        if (!result) {
+            throw new UnauthorizedException('Hatalı Şifre');
+        }
+        return result;
     }
 
     @Post('register')

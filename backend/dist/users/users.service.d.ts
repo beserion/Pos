@@ -6,6 +6,8 @@ export declare class UsersService {
     findAll(): Promise<User[]>;
     findOne(id: number): Promise<User>;
     findByEmail(email: string): Promise<User | null>;
+    findWaiters(): Promise<Partial<User>[]>;
+    findByPin(id: number, pinCode: string): Promise<User | null>;
     create(userData: Partial<User>): Promise<User>;
     update(id: number, updateData: Partial<User>): Promise<User>;
     remove(id: number): Promise<void>;

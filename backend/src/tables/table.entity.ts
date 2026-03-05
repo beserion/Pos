@@ -21,6 +21,12 @@ export class Table {
     @Column({ default: true })
     isActive: boolean;
 
+    @Column({ nullable: true })
+    waiterName: string;
+
+    @Column({ type: 'datetime', nullable: true })
+    orderStartTime: Date;
+
     @CreateDateColumn()
     createdAt: Date;
 

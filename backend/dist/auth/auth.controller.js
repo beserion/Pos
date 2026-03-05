@@ -27,6 +27,16 @@ let AuthController = class AuthController {
         }
         return this.authService.login(user);
     }
+    async getWaiters() {
+        return this.authService.getWaiters();
+    }
+    async loginPin(body) {
+        const result = await this.authService.loginWithPin(body.userId, body.pinCode);
+        if (!result) {
+            throw new common_1.UnauthorizedException('Hatalı Şifre');
+        }
+        return result;
+    }
     async register(body) {
         return this.authService.register(body);
     }
@@ -39,6 +49,19 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "login", null);
+__decorate([
+    (0, common_1.Get)('waiters'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "getWaiters", null);
+__decorate([
+    (0, common_1.Post)('login-pin'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "loginPin", null);
 __decorate([
     (0, common_1.Post)('register'),
     __param(0, (0, common_1.Body)()),

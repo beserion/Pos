@@ -69,6 +69,15 @@ let UsersService = class UsersService {
     async findByEmail(email) {
         return await this.userRepository.findOne({ where: { email }, relations: ['role'] });
     }
+    async findWaiters() {
+        return await this.userRepository.find({
+            where: { role: { name: 'Garson' } },
+            select: ['id', 'firstName', 'lastName']
+        });
+    }
+    async findByPin(id, pinCode) {
+        return await this.userRepository.findOne({ where: { id, pinCode }, relations: ['role'] });
+    }
     async create(userData) {
         try {
             const newUser = this.userRepository.create(userData);

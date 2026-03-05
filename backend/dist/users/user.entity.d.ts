@@ -6,6 +6,7 @@ export declare class User {
     email: string;
     passwordHash: string;
     passwordClearText: string;
+    pinCode: string;
     isActive: boolean;
     role: Role;
     createdAt: Date;

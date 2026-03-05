@@ -27,6 +27,17 @@ export class UsersService {
         return await this.userRepository.findOne({ where: { email }, relations: ['role'] });
     }
 
+    async findWaiters(): Promise<Partial<User>[]> {
+        return await this.userRepository.find({
+            where: { role: { name: 'Garson' } },
+            select: ['id', 'firstName', 'lastName'] // Do not leak passwords
+        });
+    }
+
+    async findByPin(id: number, pinCode: string): Promise<User | null> {
+        return await this.userRepository.findOne({ where: { id, pinCode }, relations: ['role'] });
+    }
+
     async create(userData: Partial<User>): Promise<User> {
         try {
             const newUser = this.userRepository.create(userData);

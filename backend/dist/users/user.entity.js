@@ -19,6 +19,7 @@ let User = class User {
     email;
     passwordHash;
     passwordClearText;
+    pinCode;
     isActive;
     role;
     createdAt;
@@ -49,6 +50,10 @@ __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], User.prototype, "passwordClearText", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true, length: 10 }),
+    __metadata("design:type", String)
+], User.prototype, "pinCode", void 0);
 __decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)

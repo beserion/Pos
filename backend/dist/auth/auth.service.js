@@ -68,6 +68,16 @@ let AuthService = class AuthService {
         }
         return null;
     }
+    async getWaiters() {
+        return this.usersService.findWaiters();
+    }
+    async loginWithPin(userId, pinCode) {
+        const user = await this.usersService.findByPin(userId, pinCode);
+        if (user) {
+            return this.login(user);
+        }
+        return null;
+    }
     async login(user) {
         const payload = { username: user.email, sub: user.id, role: user.role?.name };
         return {

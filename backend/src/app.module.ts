@@ -20,6 +20,7 @@ import { WarehousesModule } from './warehouses/warehouses.module';
 import { FinanceModule } from './finance/finance.module';
 import { OrdersModule } from './orders/orders.module';
 import { SecurityModule } from './auth/security.module';
+import { PrintersModule } from './printers/printers.module';
 import { User } from './users/user.entity';
 
 @Module({
@@ -62,6 +63,7 @@ import { User } from './users/user.entity';
     FinanceModule,
     OrdersModule,
     SecurityModule,
+    PrintersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

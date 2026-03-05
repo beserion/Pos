@@ -16,7 +16,7 @@ IF NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@antigravity.com')
 BEGIN
     DECLARE @RoleId INT = (SELECT TOP 1 id FROM roles WHERE name = 'ADMIN');
     INSERT INTO users (firstName, lastName, email, passwordHash, isActive, roleId, createdAt, updatedAt)
-    VALUES ('Sistem', 'Yöneticisi', 'admin@antigravity.com', '$2b$10$YourMockHashReplaceWithActualIfNeeded', 1, @RoleId, GETDATE(), GETDATE());
+    VALUES ('Sistem', 'Yöneticisi', 'admin@antigravity.com', '$2b$10$AQd95KXZSHuYwVWlwqHMgOs7Q4EG7ssLIBllZ.nYUHyWaUBzN475i', 1, @RoleId, GETDATE(), GETDATE());
 END
 
 -- Seed Locations
