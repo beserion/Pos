@@ -13,6 +13,7 @@ exports.Product = void 0;
 const typeorm_1 = require("typeorm");
 const stock_entity_1 = require("../stocks/stock.entity");
 const printer_entity_1 = require("../printers/printer.entity");
+const recipe_entity_1 = require("../recipes/recipe.entity");
 let Product = class Product {
     id;
     name;
@@ -21,8 +22,12 @@ let Product = class Product {
     category;
     isActive;
     printerId;
+    costPrice;
+    minStockLevel;
+    unit;
     printer;
     stocks;
+    recipes;
     createdAt;
     updatedAt;
 };
@@ -56,6 +61,18 @@ __decorate([
     __metadata("design:type", Number)
 ], Product.prototype, "printerId", void 0);
 __decorate([
+    (0, typeorm_1.Column)('decimal', { precision: 10, scale: 2, default: 0, nullable: true }),
+    __metadata("design:type", Number)
+], Product.prototype, "costPrice", void 0);
+__decorate([
+    (0, typeorm_1.Column)('decimal', { precision: 10, scale: 2, default: 0, nullable: true }),
+    __metadata("design:type", Number)
+], Product.prototype, "minStockLevel", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ default: 'adet', nullable: true }),
+    __metadata("design:type", String)
+], Product.prototype, "unit", void 0);
+__decorate([
     (0, typeorm_1.ManyToOne)(() => printer_entity_1.Printer, printer => printer.products, { nullable: true, onDelete: 'SET NULL' }),
     __metadata("design:type", printer_entity_1.Printer)
 ], Product.prototype, "printer", void 0);
@@ -63,6 +80,10 @@ __decorate([
     (0, typeorm_1.OneToMany)(() => stock_entity_1.Stock, stock => stock.product),
     __metadata("design:type", Array)
 ], Product.prototype, "stocks", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => recipe_entity_1.Recipe, recipe => recipe.product),
+    __metadata("design:type", Array)
+], Product.prototype, "recipes", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)

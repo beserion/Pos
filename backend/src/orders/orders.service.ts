@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Order } from './order.entity';
 import { OrderItem } from './order-item.entity';
+import { RecipesService } from '../recipes/recipes.service';
+import { StocksService } from '../stocks/stocks.service';
 
 @Injectable()
 export class OrdersService {
@@ -11,6 +13,8 @@ export class OrdersService {
         private orderRepository: Repository<Order>,
         @InjectRepository(OrderItem)
         private orderItemRepository: Repository<OrderItem>,
+        private recipesService: RecipesService,
+        private stocksService: StocksService,
     ) { }
 
     async findAll(): Promise<Order[]> {
@@ -62,6 +66,9 @@ export class OrdersService {
             }
         }
 
+        // Auto-deduct stock based on recipes
+        await this.deductStockForOrder(savedOrder);
+
         return savedOrder;
     }
 
@@ -75,4 +82,31 @@ export class OrdersService {
         const order = await this.findOne(id);
         await this.orderRepository.remove(order);
     }
+
+    /**
+     * For each item in the order, look up its recipe and deduct ingredient stocks.
+     * If a product has no recipe, deduct the product itself from stock.
+     */
+    private async deductStockForOrder(order: Order): Promise<void> {
+        const fullOrder = await this.findOne(order.id);
+
+        for (const item of fullOrder.items) {
+            const productId = item.product?.id;
+            if (!productId) continue;
+
+            const recipes = await this.recipesService.findByProduct(productId);
+
+            if (recipes.length > 0) {
+                // Product has a recipe — deduct ingredients
+                for (const recipe of recipes) {
+                    const deductQty = Number(recipe.quantity) * Number(item.quantity);
+                    await this.stocksService.deductStock(recipe.ingredientId, deductQty);
+                }
+            } else {
+                // No recipe — deduct the product itself
+                await this.stocksService.deductStock(productId, Number(item.quantity));
+            }
+        }
+    }
 }
+
