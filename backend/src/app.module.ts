@@ -34,6 +34,7 @@ import { User } from './users/user.entity';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
+<<<<<<< HEAD
       useFactory: (configService: ConfigService) => {
         const instanceName = configService.get<string>('DB_INSTANCE');
         const config: any = {
@@ -56,6 +57,22 @@ import { User } from './users/user.entity';
         }
         return config;
       },
+=======
+      useFactory: (configService: ConfigService) => ({
+        type: 'mssql',
+        host: configService.get<string>('DB_HOST', 'localhost'),
+        port: parseInt(configService.get<string>('DB_PORT', '1433'), 10),
+        username: configService.get<string>('DB_USERNAME', 'sa'),
+        password: configService.get<string>('DB_PASSWORD', 'YourStrong@Passw0rd'),
+        database: configService.get<string>('DB_DATABASE', 'AntigravityPOS'),
+        autoLoadEntities: true,
+        synchronize: false, // Auto-create tables for MVP
+        options: {
+          encrypt: false,
+          trustServerCertificate: true,
+        },
+      }),
+>>>>>>> master
     }),
     RolesModule,
     UsersModule,
