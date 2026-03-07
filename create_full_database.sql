@@ -23,6 +23,7 @@ IF OBJECT_ID(N'[dbo].[invoices]', N'U') IS NOT NULL DROP TABLE [dbo].[invoices];
 IF OBJECT_ID(N'[dbo].[sale_items]', N'U') IS NOT NULL DROP TABLE [dbo].[sale_items];
 IF OBJECT_ID(N'[dbo].[sales]', N'U') IS NOT NULL DROP TABLE [dbo].[sales];
 IF OBJECT_ID(N'[dbo].[stocks]', N'U') IS NOT NULL DROP TABLE [dbo].[stocks];
+IF OBJECT_ID(N'[dbo].[recipes]', N'U') IS NOT NULL DROP TABLE [dbo].[recipes];
 IF OBJECT_ID(N'[dbo].[products]', N'U') IS NOT NULL DROP TABLE [dbo].[products];
 IF OBJECT_ID(N'[dbo].[employees]', N'U') IS NOT NULL DROP TABLE [dbo].[employees];
 IF OBJECT_ID(N'[dbo].[tables]', N'U') IS NOT NULL DROP TABLE [dbo].[tables];
@@ -126,6 +127,17 @@ CREATE TABLE [dbo].[products] (
     [imageUrl] nvarchar(MAX) NULL,
     [createdAt] datetime2(7) NOT NULL DEFAULT getdate(),
     [updatedAt] datetime2(7) NOT NULL DEFAULT getdate()
+);
+
+-- Recipes Table
+CREATE TABLE [dbo].[recipes] (
+    [id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    [productId] INT NOT NULL FOREIGN KEY REFERENCES [dbo].[products]([id]) ON DELETE CASCADE,
+    [ingredientId] INT NOT NULL FOREIGN KEY REFERENCES [dbo].[products]([id]),
+    [quantity] DECIMAL(10,3) NOT NULL,
+    [unit] NVARCHAR(50) DEFAULT 'adet',
+    [createdAt] DATETIME2(7) NOT NULL DEFAULT GETDATE(),
+    [updatedAt] DATETIME2(7) NOT NULL DEFAULT GETDATE()
 );
 
 -- Stocks Table

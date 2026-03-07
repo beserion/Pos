@@ -10,6 +10,8 @@ export default function AdminPage() {
         { title: 'Masa Yönetimi', subtitle: 'Kroki ve masa tanımları', path: '/admin/tables', icon: 'fa-chair-office', color: 'text-purple-500' },
         { title: 'Personel Yönetimi', subtitle: 'Çalışan ünvan ve yetkileri', path: '/admin/employees', icon: 'fa-users-gear', color: 'text-emerald-500' },
         { title: 'Ürün Yönetimi', subtitle: 'Menü, kategori, fiyatlandırma', path: '/admin/products', icon: 'fa-mug-hot', color: 'text-teal-500' },
+        { title: 'Hammadde Yönetimi', subtitle: 'Reçete içerik ve sarf malzeme', path: '/admin/ingredients', icon: 'fa-leaf', color: 'text-emerald-500' },
+        { title: 'Reçete Yönetimi', subtitle: 'Hammadde kullanım talimatları', path: '/admin/recipes', icon: 'fa-blender', color: 'text-orange-500' },
         { title: 'Yazıcı Yönetimi', subtitle: 'Adisyon ve mutfak yazıcıları', path: '/admin/printers', icon: 'fa-print', color: 'text-sky-500' },
         { title: 'Depo Yönetimi', subtitle: 'Stok ve depolama alanları', path: '/admin/warehouses', icon: 'fa-warehouse-full', color: 'text-amber-500' },
         { title: 'Paket Servis Takip', subtitle: 'Dış sipariş operasyonları', path: '/admin/deliveries', icon: 'fa-truck-fast', color: 'text-indigo-500' },

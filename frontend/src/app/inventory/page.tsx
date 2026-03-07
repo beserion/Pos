@@ -2,20 +2,67 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
 import { useRouter } from 'next/navigation';
+import axios from 'axios';
+import Cookies from 'js-cookie';
+
+interface AppStock {
+    id: number;
+    name: string;
+    sku: string;
+    qty: number;
+    location: string;
+    status: string;
+}
 
 export default function InventoryPage() {
     const { user, loading } = useAuth();
     const router = useRouter();
 
-    const [stocks] = useState([
-        { id: 1, name: 'Espresso Kahve Çekirdeği (1KG)', sku: 'CF-ESP-01', qty: 24, location: 'Ana Depo', status: 'Yeterli' },
-        { id: 2, name: 'Süt (1L x 12)', sku: 'MILK-01', qty: 5, location: 'Dolap 1', status: 'Kritik' },
-        { id: 3, name: 'Cheesecake Dilimi', sku: 'DK-CHE-01', qty: 12, location: 'Dolap 2', status: 'Yeterli' },
-        { id: 4, name: 'Limonata Konsantresi', sku: 'BV-LIM-01', qty: 0, location: 'Ana Depo', status: 'Tükendi' },
-    ]);
+    const [stocks, setStocks] = useState<AppStock[]>([]);
+    const [stats, setStats] = useState({ total: 0, warning: 0, empty: 0 });
+
+    const fetchStocks = async () => {
+        try {
+            const token = Cookies.get('token');
+            const res = await axios.get('http://localhost:3050/stocks', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            const data = res.data.map((s: any) => {
+                const qty = Number(s.quantity);
+                const minLevel = Number(s.product?.minStockLevel || 5);
+                let status = 'Yeterli';
+                if (qty <= 0) status = 'Tükendi';
+                else if (qty <= minLevel) status = 'Kritik';
+
+                return {
+                    id: s.id,
+                    name: s.product?.name || 'Bilinmeyen Ürün',
+                    sku: s.product?.sku || '-',
+                    qty: qty,
+                    location: s.location,
+                    status: status
+                };
+            });
+
+            setStocks(data);
+
+            // Calculate stats
+            setStats({
+                total: data.length,
+                warning: data.filter((d: any) => d.status === 'Kritik').length,
+                empty: data.filter((d: any) => d.status === 'Tükendi').length
+            });
+        } catch (error) {
+            console.error('Error fetching stocks:', error);
+        }
+    };
 
     useEffect(() => {
         if (!loading && !user) router.push('/login');
+        if (user) {
+            fetchStocks();
+        }
     }, [user, loading, router]);
 
     if (loading || !user) return null;
@@ -59,7 +106,7 @@ export default function InventoryPage() {
                     <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-3xl border border-white/50 dark:border-slate-700/50 shadow-xl shadow-slate-200/20 dark:shadow-none flex items-center justify-between transition-all hover:scale-[1.02]">
                         <div>
                             <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Toplam Ürün</p>
-                            <h3 className="text-2xl font-black text-slate-800 dark:text-slate-100">1,248</h3>
+                            <h3 className="text-2xl font-black text-slate-800 dark:text-slate-100">{stats.total}</h3>
                         </div>
                         <div className="w-14 h-14 bg-gradient-to-br from-blue-100 to-blue-50 dark:from-blue-500/20 dark:to-blue-500/5 text-blue-500 rounded-2xl flex items-center justify-center shadow-inner border border-white/50 dark:border-white/5">
                             <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
@@ -68,7 +115,7 @@ export default function InventoryPage() {
                     <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-3xl border border-white/50 dark:border-slate-700/50 shadow-xl shadow-amber-500/10 flex items-center justify-between transition-all hover:scale-[1.02]">
                         <div>
                             <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Kritik Stok</p>
-                            <h3 className="text-2xl font-black text-amber-600 dark:text-amber-400">24</h3>
+                            <h3 className="text-2xl font-black text-amber-600 dark:text-amber-400">{stats.warning}</h3>
                         </div>
                         <div className="w-14 h-14 bg-gradient-to-br from-amber-100 to-amber-50 dark:from-amber-500/20 dark:to-amber-500/5 text-amber-500 rounded-2xl flex items-center justify-center shadow-inner border border-white/50 dark:border-white/5">
                             <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
@@ -77,7 +124,7 @@ export default function InventoryPage() {
                     <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-3xl border border-white/50 dark:border-slate-700/50 shadow-xl shadow-red-500/10 flex items-center justify-between transition-all hover:scale-[1.02]">
                         <div>
                             <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Tükenenler</p>
-                            <h3 className="text-2xl font-black text-red-600 dark:text-red-400">5</h3>
+                            <h3 className="text-2xl font-black text-red-600 dark:text-red-400">{stats.empty}</h3>
                         </div>
                         <div className="w-14 h-14 bg-gradient-to-br from-red-100 to-red-50 dark:from-red-500/20 dark:to-red-500/5 text-red-500 rounded-2xl flex items-center justify-center shadow-inner border border-white/50 dark:border-white/5">
                             <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
