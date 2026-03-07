@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
 import { useRouter } from 'next/navigation';
-import Swal from 'sweetalert2';
+import { showSwal, toastSwal } from '../utils/swal';
 
 interface Product {
     id: number;
@@ -10,6 +10,7 @@ interface Product {
     price: number;
     category: string;
     imageUrl?: string;
+    isQuickSale?: boolean;
 }
 
 interface Zone { id: number; name: string; }
@@ -63,20 +64,17 @@ export default function PosPage() {
     };
 
     const handleCheckout = (paymentMethod: 'Nakit' | 'Kart') => {
-        Swal.fire({
+        showSwal({
             title: 'Başarılı!',
             text: `Hesap (${paymentMethod}) yöntemiyle tahsil edildi!`,
             icon: 'success',
-            confirmButtonColor: '#4f46e5',
-            confirmButtonText: 'Tamam',
-            timer: 2000
         });
         setCart([]);
         setIsCheckoutOpen(false);
     };
 
-    const categories = ['Tümü', ...Array.from(new Set(products.map(p => p.category)))];
-    const filteredProducts = selectedCategory === 'Tümü' ? products : products.filter(p => p.category === selectedCategory);
+    const categories = ['Tümü', ...Array.from(new Set(products.filter(p => p.isQuickSale).map(p => p.category)))];
+    const filteredProducts = products.filter(p => p.isQuickSale && (selectedCategory === 'Tümü' || p.category === selectedCategory));
 
     const addToCart = (product: Product) => {
         setCart(prev => {

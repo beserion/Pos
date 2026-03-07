@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../AuthContext';
 import { useTheme } from 'next-themes';
 import axios from 'axios';
+import Cookies from 'js-cookie';
 import {
     Chart as ChartJS,
     CategoryScale,
@@ -45,15 +46,33 @@ export default function ReportsPage() {
     const router = useRouter();
     const { theme } = useTheme();
     const [isMounted, setIsMounted] = useState(false);
+    const [dashboardData, setDashboardData] = useState<any>(null);
+    const [dataLoading, setDataLoading] = useState(true);
+
+    const fetchDashboardData = async () => {
+        try {
+            const token = Cookies.get('token');
+            const res = await axios.get('http://localhost:3050/reports/dashboard', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setDashboardData(res.data);
+        } catch (error) {
+            console.error('Error fetching reports data:', error);
+        } finally {
+            setDataLoading(false);
+        }
+    };
 
     useEffect(() => {
         setIsMounted(true);
         if (!loading && !user) {
             router.push('/login');
+        } else if (user) {
+            fetchDashboardData();
         }
     }, [user, loading, router]);
 
-    if (!isMounted || loading) {
+    if (!isMounted || loading || dataLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 transition-colors">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
@@ -103,10 +122,10 @@ export default function ReportsPage() {
 
     // 1. Günlük Satışlar Data
     const salesData = {
-        labels: ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'],
+        labels: dashboardData?.salesData?.labels || ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'],
         datasets: [{
             label: 'Günlük Satış (₺)',
-            data: [12500, 19200, 15000, 22400, 28000, 35000, 32000],
+            data: dashboardData?.salesData?.data || [0, 0, 0, 0, 0, 0, 0],
             borderColor: '#6366f1',
             backgroundColor: 'rgba(99, 102, 241, 0.1)',
             fill: true,
@@ -118,9 +137,9 @@ export default function ReportsPage() {
 
     // 2. Nakit/Banka Durumu Data
     const balanceData = {
-        labels: ['Kasa (Nakit)', 'Banka (POS)', 'Diğer'],
+        labels: dashboardData?.balanceData?.labels || ['Kasa (Nakit)', 'Banka (POS)', 'Diğer'],
         datasets: [{
-            data: [45000, 82000, 12000],
+            data: dashboardData?.balanceData?.data || [0, 0, 0],
             backgroundColor: [
                 '#10b981', // emerald
                 '#3b82f6', // blue
@@ -133,10 +152,10 @@ export default function ReportsPage() {
 
     // 3. En Çok Satılan 10 Ürün Data
     const topProductsData = {
-        labels: ['Türk Kahvesi', 'Latte', 'Hamburger', 'Pizza Mara', 'Çay', 'Pasta Dilim', 'Limonata', 'Su', 'Tost', 'Salata'],
+        labels: dashboardData?.topProductsData?.labels || ['Ürün Bulunamadı'],
         datasets: [{
             label: 'Satış Adedi',
-            data: [450, 390, 320, 280, 250, 210, 180, 160, 140, 120],
+            data: dashboardData?.topProductsData?.data || [0],
             backgroundColor: 'rgba(139, 92, 246, 0.8)',
             borderRadius: 8,
             hoverBackgroundColor: '#8b5cf6',
@@ -173,10 +192,10 @@ export default function ReportsPage() {
 
                 {/* KPI Cards Row */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-[20px] mb-10">
-                    <KPICard title="Toplam Satış" value="185.400 ₺" trend="+12.5%" icon={<DollarSign className="text-emerald-500" />} />
-                    <KPICard title="Kasa Nakit" value="45.200 ₺" trend="+5.2%" icon={<Wallet className="text-blue-500" />} />
-                    <KPICard title="Banka (POS)" value="82.150 ₺" trend="+8.1%" icon={<CreditCard className="text-indigo-500" />} />
-                    <KPICard title="Giderler" value="34.800 ₺" trend="-2.4%" icon={<Package className="text-rose-500" />} negative />
+                    <KPICard title="Toplam Gelir" value={`${(dashboardData?.totalIncome || 0).toLocaleString('tr-TR')} ₺`} trend="+0%" icon={<DollarSign className="text-emerald-500" />} />
+                    <KPICard title="Kasa Nakit" value={`${(dashboardData?.kasa || 0).toLocaleString('tr-TR')} ₺`} trend="+0%" icon={<Wallet className="text-blue-500" />} />
+                    <KPICard title="Banka (POS)" value={`${(dashboardData?.banka || 0).toLocaleString('tr-TR')} ₺`} trend="+0%" icon={<CreditCard className="text-indigo-500" />} />
+                    <KPICard title="Giderler" value={`${(dashboardData?.totalExpense || 0).toLocaleString('tr-TR')} ₺`} trend="-0%" icon={<Package className="text-rose-500" />} negative />
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-[20px]">
@@ -218,27 +237,27 @@ export default function ReportsPage() {
                                 />
                             </div>
                             <div className="mt-8 space-y-4">
-                                <BalanceItem label="Kasa (Nakit)" value="45.000 ₺" color="bg-emerald-500" />
-                                <BalanceItem label="Banka (POS)" value="82.000 ₺" color="bg-blue-500" />
-                                <BalanceItem label="Diğer" value="12.000 ₺" color="bg-amber-500" />
+                                <BalanceItem label="Kasa (Nakit)" value={`${(dashboardData?.kasa || 0).toLocaleString('tr-TR')} ₺`} color="bg-emerald-500" />
+                                <BalanceItem label="Banka (POS)" value={`${(dashboardData?.banka || 0).toLocaleString('tr-TR')} ₺`} color="bg-blue-500" />
+                                <BalanceItem label="Kart/Diğer" value={`${(dashboardData?.kart || 0).toLocaleString('tr-TR')} ₺`} color="bg-amber-500" />
                             </div>
                         </div>
 
                         {/* Income / Expense Summary */}
                         <div className="bg-gradient-to-br from-indigo-600 to-violet-700 rounded-[32px] p-8 text-white shadow-xl shadow-indigo-500/20">
-                            <h3 className="text-xl font-bold mb-6">Aylık Kar/Zarar</h3>
+                            <h3 className="text-xl font-bold mb-6">Aylık Kar/Zarar Özeti</h3>
                             <div className="space-y-6">
                                 <div>
                                     <span className="text-indigo-100 text-sm">Hasılat</span>
-                                    <div className="text-3xl font-black mt-1">150.600 ₺</div>
+                                    <div className="text-3xl font-black mt-1">{(dashboardData?.totalIncome || 0).toLocaleString('tr-TR')} ₺</div>
                                 </div>
                                 <div className="h-2 w-full bg-white/20 rounded-full overflow-hidden">
-                                    <div className="h-full bg-emerald-400" style={{ width: '75%' }}></div>
+                                    <div className="h-full bg-emerald-400" style={{ width: `${dashboardData?.totalIncome > 0 ? Math.min(100, (dashboardData?.totalIncome / (dashboardData?.totalIncome + dashboardData?.totalExpense)) * 100) : 50}%` }}></div>
                                 </div>
                                 <div className="flex justify-between items-end">
                                     <div>
-                                        <span className="text-indigo-100 text-sm">Giderler (75.200 ₺)</span>
-                                        <div className="text-xl font-bold mt-1 text-emerald-300">75.400 ₺ Net Kar</div>
+                                        <span className="text-indigo-100 text-sm">Giderler ({(dashboardData?.totalExpense || 0).toLocaleString('tr-TR')} ₺)</span>
+                                        <div className="text-xl font-bold mt-1 text-emerald-300">{(dashboardData?.totalIncome - dashboardData?.totalExpense || 0).toLocaleString('tr-TR')} ₺ Net Bakiye</div>
                                     </div>
                                     <div className="bg-white/10 p-3 rounded-2xl backdrop-blur-md">
                                         <TrendingUp size={24} />

@@ -38,6 +38,12 @@ export class Product {
     @Column({ default: 'adet', nullable: true })
     unit: string; // gr, kg, ml, lt, adet
 
+    @Column({ default: false })
+    isQuickSale: boolean; // Hızlı satış menüsünde görünüp görünmeyeceği
+
+    @Column({ default: false })
+    isIngredient: boolean; // Hammadde (reçete bileşeni) olup olmadığı
+
     @ManyToOne(() => Printer, printer => printer.products, { nullable: true, onDelete: 'SET NULL' })
     printer: Printer;
 
