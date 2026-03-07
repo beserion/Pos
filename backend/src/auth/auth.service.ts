@@ -27,6 +27,10 @@ export class AuthService {
         return this.usersService.findWaiters();
     }
 
+    async getCashiers() {
+        return this.usersService.findCashiers();
+    }
+
     async loginWithPin(userId: number, pinCode: string) {
         const user = await this.usersService.findByPin(userId, pinCode);
         if (user) {

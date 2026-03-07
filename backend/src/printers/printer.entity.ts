@@ -10,6 +10,12 @@ export class Printer {
     name: string;
 
     @Column({ nullable: true })
+    location: string;
+
+    @Column({ nullable: true })
+    printerName: string;
+
+    @Column({ nullable: true })
     ipAddress: string;
 
     @Column({ default: true })

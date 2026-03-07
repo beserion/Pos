@@ -29,8 +29,23 @@ export class UsersService {
 
     async findWaiters(): Promise<Partial<User>[]> {
         return await this.userRepository.find({
-            where: { role: { name: 'Garson' } },
-            select: ['id', 'firstName', 'lastName'] // Do not leak passwords
+            where: [
+                { role: { name: 'Garson' } },
+                { role: { name: 'Waiter' } }
+            ],
+            select: ['id', 'firstName', 'lastName']
+        });
+    }
+
+    async findCashiers(): Promise<Partial<User>[]> {
+        return await this.userRepository.find({
+            where: [
+                { role: { name: 'Kasiyer' } },
+                { role: { name: 'Cashier' } },
+                { role: { name: 'Admin' } },
+                { role: { name: 'Administrator' } }
+            ],
+            select: ['id', 'firstName', 'lastName']
         });
     }
 

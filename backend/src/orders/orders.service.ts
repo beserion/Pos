@@ -5,6 +5,9 @@ import { Order } from './order.entity';
 import { OrderItem } from './order-item.entity';
 import { RecipesService } from '../recipes/recipes.service';
 import { StocksService } from '../stocks/stocks.service';
+import { Table } from '../tables/table.entity';
+import { User } from '../users/user.entity';
+import { KitchenGateway } from './kitchen.gateway';
 
 @Injectable()
 export class OrdersService {
@@ -15,6 +18,7 @@ export class OrdersService {
         private orderItemRepository: Repository<OrderItem>,
         private recipesService: RecipesService,
         private stocksService: StocksService,
+        private kitchenGateway: KitchenGateway,
     ) { }
 
     async findAll(): Promise<Order[]> {
@@ -42,40 +46,77 @@ export class OrdersService {
     }
 
     async create(orderData: Partial<Order>): Promise<Order> {
-        const newOrder = this.orderRepository.create(orderData);
-        const savedOrder = await this.orderRepository.save(newOrder);
+        try {
+            console.log('Creating order with data:', JSON.stringify(orderData));
+            const { items, ...data } = orderData;
 
-        // Update table status if it's linked
-        if (orderData.table && orderData.table.id) {
-            const tableId = orderData.table.id;
-            const table = await this.orderRepository.manager.findOne('Table', {
-                where: { id: tableId },
-                relations: ['waiterName']
-            } as any);
+            // 1. Save the order first
+            const newOrder = this.orderRepository.create(data);
+            const savedOrder = await this.orderRepository.save(newOrder);
 
-            if (table && table.status === 'BOŞ') {
-                const waiter = await this.orderRepository.manager.findOne('User', {
-                    where: { id: (orderData.waiter as any).id }
-                } as any);
-
-                await this.orderRepository.manager.update('Table', tableId, {
-                    status: 'DOLU',
-                    waiterName: waiter ? `${waiter.firstName} ${waiter.lastName}` : 'Sistem',
-                    orderStartTime: new Date()
-                });
+            // 2. Save items if present
+            if (items && items.length > 0) {
+                for (const item of items) {
+                    const orderItem = this.orderItemRepository.create({
+                        product: item.product,
+                        quantity: item.quantity,
+                        unitPrice: item.unitPrice || (item as any).price,
+                        note: item.note,
+                        order: savedOrder
+                    });
+                    await this.orderItemRepository.save(orderItem);
+                }
             }
+
+            // 3. Update table status if it's linked
+            const tableId = orderData.table?.id || (orderData.table as any);
+            if (tableId) {
+                const table = await this.orderRepository.manager.findOne(Table, {
+                    where: { id: tableId }
+                });
+
+                if (table) {
+                    const waiterId = (orderData.waiter as any).id || (orderData.waiter as any).sub || orderData.waiter;
+                    console.log('Looking up waiter with ID:', waiterId);
+                    const waiter = await this.orderRepository.manager.findOne(User, {
+                        where: { id: waiterId }
+                    });
+
+                    // For a new order, we update the table
+                    await this.orderRepository.manager.update(Table, tableId, {
+                        status: 'DOLU',
+                        waiterName: waiter ? `${waiter.firstName} ${waiter.lastName}` : 'Sistem',
+                        orderStartTime: table.status === 'BOŞ' ? new Date() : table.orderStartTime,
+                        currentTotal: Number(table.currentTotal || 0) + Number(savedOrder.totalAmount)
+                    });
+                }
+            }
+
+            // 4. Auto-deduct stock based on recipes
+            await this.deductStockForOrder(savedOrder);
+
+            const fullOrderConfig = await this.findOne(savedOrder.id);
+            this.kitchenGateway.notifyNewOrder(fullOrderConfig);
+
+            return fullOrderConfig;
+        } catch (error: any) {
+            console.error('ORDER CREATE ERROR:', error.message);
+            if (error.query) console.error('SQL QUERY:', error.query);
+            if (error.parameters) console.error('SQL PARAMS:', error.parameters);
+            throw error;
         }
-
-        // Auto-deduct stock based on recipes
-        await this.deductStockForOrder(savedOrder);
-
-        return savedOrder;
     }
 
     async updateStatus(id: number, status: string): Promise<Order> {
         const order = await this.findOne(id);
         order.status = status;
-        return await this.orderRepository.save(order);
+        const updatedOrder = await this.orderRepository.save(order);
+
+        if (status === 'READY') {
+            this.kitchenGateway.notifyOrderReady(updatedOrder);
+        }
+
+        return updatedOrder;
     }
 
     async remove(id: number): Promise<void> {

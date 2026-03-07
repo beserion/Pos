@@ -8,14 +8,18 @@ import { SecurityModule } from '../auth/security.module';
 import { RecipesModule } from '../recipes/recipes.module';
 import { StocksModule } from '../stocks/stocks.module';
 
+import { Table } from '../tables/table.entity';
+import { User } from '../users/user.entity';
+import { KitchenGateway } from './kitchen.gateway';
+
 @Module({
     imports: [
-        TypeOrmModule.forFeature([Order, OrderItem]),
+        TypeOrmModule.forFeature([Order, OrderItem, Table, User]),
         SecurityModule,
         RecipesModule,
         StocksModule,
     ],
-    providers: [OrdersService],
+    providers: [OrdersService, KitchenGateway],
     controllers: [OrdersController],
     exports: [OrdersService],
 })

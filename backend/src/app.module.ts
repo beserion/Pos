@@ -26,6 +26,7 @@ import { WastagesModule } from './wastages/wastages.module';
 import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
 import { User } from './users/user.entity';
 import { ReportsModule } from './reports/reports.module';
+import { ReservationsModule } from './reservations/reservations.module';
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { ReportsModule } from './reports/reports.module';
     WastagesModule,
     PurchaseOrdersModule,
     ReportsModule,
+    ReservationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

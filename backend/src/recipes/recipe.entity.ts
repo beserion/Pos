@@ -13,7 +13,7 @@ export class Recipe {
     @Column()
     productId: number;
 
-    @ManyToOne(() => Product, { onDelete: 'CASCADE' })
+    @ManyToOne(() => Product, { onDelete: 'NO ACTION', nullable: true })
     @JoinColumn({ name: 'ingredientId' })
     ingredient: Product;
 

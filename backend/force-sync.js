@@ -9,7 +9,7 @@ const AppDataSource = new DataSource({
     username: process.env.DB_USERNAME || 'sa',
     password: process.env.DB_PASSWORD || 'YourStrong@Passw0rd',
     database: process.env.DB_DATABASE || 'AntigravityPOS',
-    synchronize: true, // Force sync to see what's failing in the console
+    synchronize: true,
     entities: [__dirname + '/dist/**/*.entity.js'],
     options: {
         encrypt: false,
@@ -25,8 +25,11 @@ async function runSync() {
         await AppDataSource.initialize();
         console.log('Synchronization completed successfully!');
     } catch (err) {
-        console.error('Synchronization failed during connection or schema update:');
-        console.error(err.message);
+        console.error('=== FULL ERROR ===');
+        console.error('Message:', err.message);
+        console.error('Number:', err.number);
+        console.error('State:', err.state);
+        console.error('PrecedingErrors:', JSON.stringify(err.precedingErrors || [], null, 2));
         if (err.query) {
             console.error('Failed Query:', err.query);
         }

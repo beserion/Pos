@@ -19,6 +19,11 @@ export class AuthController {
         return this.authService.getWaiters();
     }
 
+    @Get('cashiers')
+    async getCashiers() {
+        return this.authService.getCashiers();
+    }
+
     @Post('login-pin')
     async loginPin(@Body() body: any) {
         const result = await this.authService.loginWithPin(body.userId, body.pinCode);

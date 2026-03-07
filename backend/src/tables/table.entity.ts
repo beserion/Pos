@@ -27,6 +27,9 @@ export class Table {
     @Column({ type: 'datetime', nullable: true })
     orderStartTime: Date;
 
+    @Column('decimal', { precision: 12, scale: 2, default: 0 })
+    currentTotal: number;
+
     @CreateDateColumn()
     createdAt: Date;
 

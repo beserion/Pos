@@ -1,32 +1,20 @@
-const { DataSource } = require('typeorm');
-const path = require('path');
+const sql = require('mssql');
+const dotenv = require('dotenv');
+dotenv.config();
 
-async function checkUsers() {
-    const AppDataSource = new DataSource({
-        type: 'mssql',
-        host: 'localhost',
-        port: 1433,
-        username: 'sa',
-        password: 'YourStrong@Passw0rd',
-        database: 'AntigravityPOS',
-        entities: [path.join(__dirname, 'dist/**/*.entity.js')],
-        synchronize: false,
-        options: { encrypt: false, trustServerCertificate: true },
-        logging: false,
-    });
+const config = {
+    server: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USERNAME || 'sa',
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_DATABASE || 'AntigravityPOS',
+    options: { encrypt: false, trustServerCertificate: true }
+};
 
-    try {
-        await AppDataSource.initialize();
-        const users = await AppDataSource.manager.find('User');
-        console.log(`Found ${users.length} users:`);
-        users.forEach(u => {
-            console.log(`- ${u.email} (Active: ${u.isActive})`);
-        });
-    } catch (err) {
-        console.error('Failed to get users:', err.message);
-    } finally {
-        if (AppDataSource.isInitialized) await AppDataSource.destroy();
-    }
-}
-
-checkUsers();
+(async () => {
+    const pool = await sql.connect(config);
+    const cols = await pool.request().query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='users'");
+    console.log('Users columns:', cols.recordset.map(c => c.COLUMN_NAME).join(', '));
+    const rows = await pool.request().query("SELECT TOP 3 id, username, email, isActive FROM users");
+    console.log('Users sample:', JSON.stringify(rows.recordset, null, 2));
+    pool.close();
+})().catch(e => console.error(e.message));

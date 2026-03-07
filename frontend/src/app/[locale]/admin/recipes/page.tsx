@@ -1,0 +1,356 @@
+'use client';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import axios from 'axios';
+import { useAuth } from '@/app/[locale]/AuthContext';
+import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
+import { useTranslations, useLocale } from 'next-intl';
+
+interface Product {
+    id: number;
+    name: string;
+    category: string;
+}
+
+interface Recipe {
+    id: number;
+    productId: number;
+    product: Product;
+    ingredientId: number;
+    ingredient: Product;
+    quantity: number;
+    unit: string;
+}
+
+export default function RecipesAdminPage() {
+    const t = useTranslations('Recipes');
+    const tc = useTranslations('Common');
+    const locale = useLocale();
+    const router = useRouter();
+    const { user } = useAuth();
+
+    const [recipes, setRecipes] = useState<Recipe[]>([]);
+    const [products, setProducts] = useState<Product[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [formData, setFormData] = useState({ id: 0, productId: 0, ingredientId: 0, quantity: 0, unit: 'adet' });
+
+    useEffect(() => {
+        if (user?.token) {
+            fetchData();
+        } else if (user === null) {
+            setLoading(false);
+        }
+    }, [user]);
+
+    const fetchData = async () => {
+        if (!user?.token) return;
+        try {
+            const [recipeRes, prodRes] = await Promise.all([
+                axios.get('http://localhost:3050/recipes', { headers: { Authorization: `Bearer ${user.token}` } }),
+                axios.get('http://localhost:3050/products', { headers: { Authorization: `Bearer ${user.token}` } })
+            ]);
+            setRecipes(recipeRes.data);
+            setProducts(prodRes.data);
+        } catch (error) {
+            console.error('Error fetching data', error);
+            showSwal({ title: tc('error'), text: tc('loadingError'), icon: 'error' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!user?.token) return;
+
+        if (formData.productId === 0 || formData.ingredientId === 0 || formData.quantity <= 0) {
+            showSwal({ title: tc('error'), text: t('validationError'), icon: 'warning' });
+            return;
+        }
+
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const payload = { ...formData, quantity: Number(formData.quantity) };
+
+            if (formData.id === 0) {
+                const { id, ...postData } = payload;
+                await axios.post('http://localhost:3050/recipes', postData, config);
+                toastSwal({ title: tc('success'), text: tc('added'), icon: 'success' });
+            } else {
+                await axios.put(`http://localhost:3050/recipes/${formData.id}`, payload, config);
+                toastSwal({ title: tc('success'), text: tc('saved'), icon: 'success' });
+            }
+            setIsModalOpen(false);
+            fetchData();
+        } catch (error: any) {
+            console.error('Error saving recipe', error);
+            showSwal({ title: tc('error'), text: error?.response?.data?.message || tc('saveError'), icon: 'error' });
+        }
+    };
+
+    const handleDelete = async (id: number) => {
+        const result = await showSwal({
+            title: t('deleteConfirmTitle'),
+            text: t('deleteConfirmText'),
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: tc('confirmDelete'),
+            cancelButtonText: tc('cancel')
+        });
+
+        if (result.isConfirmed && user?.token) {
+            try {
+                await axios.delete(`http://localhost:3050/recipes/${id}`, {
+                    headers: { Authorization: `Bearer ${user.token}` }
+                });
+                toastSwal({ title: tc('deleted'), text: t('deleteSuccess'), icon: 'success' });
+                fetchData();
+            } catch (error) {
+                console.error('Error deleting recipe', error);
+                showSwal({ title: tc('error'), text: tc('deleteError'), icon: 'error' });
+            }
+        }
+    };
+
+    const openModal = (recipe?: Recipe) => {
+        if (recipe) {
+            setFormData({
+                id: recipe.id,
+                productId: recipe.productId,
+                ingredientId: recipe.ingredientId,
+                quantity: recipe.quantity,
+                unit: recipe.unit
+            });
+        }
+        else setFormData({ id: 0, productId: 0, ingredientId: 0, quantity: 0, unit: 'adet' });
+        setIsModalOpen(true);
+    };
+
+    // Calculate total recipes per product
+    const uniqueProductsWithRecipes = new Set(recipes.map(r => r.productId)).size;
+
+    const getUnitName = (unit: string | null) => {
+        if (!unit) return '-';
+        switch (unit.toLowerCase()) {
+            case 'gr': return t('unitGr');
+            case 'kg': return t('unitKg');
+            case 'ml': return t('unitMl');
+            case 'lt': return t('unitLt');
+            case 'adet': return t('unitPiece');
+            case 'porsiyon': return t('unitPortion');
+            default: return unit;
+        }
+    };
+
+    return (
+        <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">
+            {/* Background Decorations */}
+            <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-orange-500/5 blur-[120px] pointer-events-none z-0"></div>
+            <div className="absolute bottom-[-10%] left-[-5%] w-[40%] h-[40%] rounded-full bg-rose-500/5 blur-[120px] pointer-events-none z-0"></div>
+
+            <div className="w-full px-[50px] py-8 relative z-10">
+                {/* Header */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                    <div className="flex items-center gap-4">
+                        <i className="fat fa-blender text-orange-500/80 drop-shadow-sm transition-transform hover:scale-110 hover:rotate-3 duration-300 ease-out" style={{ fontSize: '50px' }}></i>
+                        <div className="flex flex-col">
+                            <h3 className="mb-0 text-3xl font-extralight text-orange-600 dark:text-orange-400 leading-none uppercase tracking-[0.25em]" id="title">
+                                {t('title')}
+                            </h3>
+                            <div className="h-1 w-1/2 bg-gradient-to-r from-orange-400 to-transparent rounded-full mt-2 mb-1"></div>
+                            <h5 className="text-muted mb-0 text-sm font-semibold text-slate-500 dark:text-slate-400 tracking-wide">
+                                {t('subtitle')}
+                            </h5>
+                        </div>
+                    </div>
+                    <div className="flex gap-3">
+                        <button onClick={() => openModal()} className="px-6 py-3 bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-orange-600 dark:text-orange-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:border-orange-200 dark:hover:border-orange-500/30 transition-all flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98]">
+                            <i className="fat fa-plus-circle text-lg"></i> {t('newRecipeItem')}
+                        </button>
+                        <button onClick={() => router.push(`/${locale}/admin`)} className="px-6 py-3 bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98]">
+                            <i className="fat fa-reply"></i> {tc('back')}
+                        </button>
+                    </div>
+                </div>
+
+                {/* KPI Bar */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-orange-300 dark:hover:border-orange-500/40 hover:shadow-[0_8px_30px_-5px_rgba(249,115,22,0.3)] hover:scale-[1.02] cursor-pointer">
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Toplam Reçete</p>
+                            <h3 className="text-3xl font-black text-slate-800 dark:text-white">{recipes.length}</h3>
+                        </div>
+                        <div className="w-16 h-16 rounded-2xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center text-orange-600 dark:text-orange-400">
+                            <i className="fat fa-scroll text-3xl"></i>
+                        </div>
+                    </div>
+
+                    <div className="relative overflow-hidden bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-rose-300 dark:hover:border-rose-500/40 hover:shadow-[0_8px_30px_-5px_rgba(244,63,94,0.3)] hover:scale-[1.02] cursor-pointer group">
+                        <div className="absolute -bottom-8 -right-8 w-32 h-32 bg-rose-500/10 rounded-full blur-2xl group-hover:bg-rose-500/20 transition-all duration-500"></div>
+                        <div className="relative z-10">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1.5 drop-shadow-sm">
+                                <i className="fat fa-sparkles text-rose-400/70"></i> {t('uniqueProducts')}
+                            </p>
+                            <h3 className="text-3xl font-black text-slate-800 dark:text-white drop-shadow-sm leading-none">{uniqueProductsWithRecipes}</h3>
+                        </div>
+                        <div className="relative z-10 w-16 h-16 rounded-2xl bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center text-rose-600 dark:text-rose-400 shadow-[inset_0_2px_10px_rgba(0,0,0,0.02)] border border-rose-100 dark:border-rose-500/20">
+                            <i className="fat fa-layer-group text-3xl group-hover:scale-110 transition-transform duration-300"></i>
+                        </div>
+                    </div>
+                </div>
+
+                {loading ? (
+                    <div className="flex flex-col items-center justify-center p-20">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mb-4"></div>
+                        <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Veriler Yükleniyor...</p>
+                    </div>
+                ) : (
+                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl rounded-[40px] border border-white dark:border-slate-700/50 overflow-hidden">
+                        <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 340px)' }}>
+                            <table className="w-full text-left border-collapse">
+                                <thead className="sticky top-0 z-10">
+                                    <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-700/50">
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest" style={{ width: '40px' }}>ID</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ürün</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">İçerik (Malzeme)</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Miktar / Birim</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">İşlemler</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                                    {recipes.map(recipe => (
+                                        <tr key={recipe.id} className="hover:bg-orange-500/5 dark:hover:bg-orange-500/10 transition-all group">
+                                            <td className="px-8 py-3">
+                                                <span className="text-sm font-black text-slate-400">#{recipe.id}</span>
+                                            </td>
+                                            <td className="px-8 py-3">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-center font-black text-orange-600 dark:text-orange-400 group-hover:scale-110 transition-transform">
+                                                        <i className="fat fa-bowl-food"></i>
+                                                    </div>
+                                                    <span className="font-black text-slate-800 dark:text-white tracking-tight leading-none text-lg capitalize">{recipe.product.name}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-8 py-3">
+                                                <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-700">
+                                                    <i className="fat fa-leaf text-emerald-500 text-xs text-indigo-500"></i>
+                                                    <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                                                        {recipe.ingredient.name}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="px-8 py-3 text-orange-600 dark:text-orange-400 font-black">
+                                                {recipe.quantity} {recipe.unit}
+                                            </td>
+                                            <td className="px-8 py-3 text-right">
+                                                <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
+                                                    <button onClick={() => openModal(recipe)} className="w-10 h-10 bg-white dark:bg-slate-800 text-blue-600 hover:text-white hover:bg-blue-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center">
+                                                        <i className="fat fa-pen-field text-lg"></i>
+                                                    </button>
+                                                    <button onClick={() => handleDelete(recipe.id)} className="w-10 h-10 bg-white dark:bg-slate-800 text-red-600 hover:text-white hover:bg-red-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center">
+                                                        <i className="fat fa-trash-can text-lg"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {recipes.length === 0 && (
+                                        <tr>
+                                            <td colSpan={5} className="p-20 text-center">
+                                                <div className="flex flex-col items-center opacity-40">
+                                                    <i className="fat fa-scroll text-6xl mb-4 text-slate-300"></i>
+                                                    <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">Kayıtlı Reçete Bulunamadı</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Modal */}
+            {isModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xl">
+                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-xl shadow-lg overflow-hidden border border-white/20 dark:border-slate-700/50 animate-in fade-in zoom-in duration-300">
+                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20">
+                            <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase mb-0">
+                                <i className={`fat ${formData.id === 0 ? 'fa-plus-circle' : 'fa-pen-to-square'} text-orange-600`}></i>
+                                {formData.id === 0 ? 'YENİ REÇETE' : 'REÇETE DÜZENLE'}
+                            </h2>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-0">Ürün içeriğini tanımlayın</p>
+                        </div>
+                        <form onSubmit={handleSave} className="p-8">
+                            <div className="text-start w-100">
+                                <div className="row mp-0 g-2">
+                                    <div className="col-12 mb-2">
+                                        <div className="input-group">
+                                            <div className="input-group-text wd-130 font-bold"><span>Ana Ürün <span className="text-danger">*</span></span></div>
+                                            <select required value={formData.productId || ''} onChange={(e) => setFormData({ ...formData, productId: parseInt(e.target.value) })} className="form-select">
+                                                <option value="">Ürün Seçiniz</option>
+                                                {products.map(p => (
+                                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                                ))}
+                                            </select>
+                                            <div className="input-group-text wd-50"><i className="fat fa-bowl-food"></i></div>
+                                        </div>
+                                    </div>
+
+                                    <div className="col-12 mb-2">
+                                        <div className="input-group">
+                                            <div className="input-group-text wd-130 font-bold"><span>Malzeme <span className="text-danger">*</span></span></div>
+                                            <select required value={formData.ingredientId || ''} onChange={(e) => setFormData({ ...formData, ingredientId: parseInt(e.target.value) })} className="form-select">
+                                                <option value="">Malzeme Seçiniz</option>
+                                                {ingredients.map(i => (
+                                                    <option key={i.id} value={i.id}>{i.name}</option>
+                                                ))}
+                                            </select>
+                                            <div className="input-group-text wd-50"><i className="fat fa-leaf"></i></div>
+                                        </div>
+                                    </div>
+
+                                    <div className="col-md-6 mb-2">
+                                        <div className="input-group">
+                                            <div className="input-group-text wd-130 font-bold"><span>Miktar</span></div>
+                                            <input type="number" step="0.001" value={formData.quantity} onChange={(e) => setFormData({ ...formData, quantity: parseFloat(e.target.value) })} className="form-control" />
+                                            <div className="input-group-text wd-50"><i className="fat fa-scale-balanced"></i></div>
+                                        </div>
+                                    </div>
+
+                                    <div className="col-md-6 mb-2">
+                                        <div className="input-group">
+                                            <div className="input-group-text wd-130 font-bold"><span>Birim</span></div>
+                                            <select value={formData.unit} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} className="form-select">
+                                                <option value="kg">Kilogram (kg)</option>
+                                                <option value="gr">Gram (gr)</option>
+                                                <option value="lt">Litre (lt)</option>
+                                                <option value="ml">Mililitre (ml)</option>
+                                                <option value="adet">Adet (pcs)</option>
+                                                <option value="porsiyon">Porsiyon</option>
+                                            </select>
+                                            <div className="input-group-text wd-50"><i className="fat fa-ruler-combined"></i></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <hr className="my-2" />
+                                <div className="d-flex justify-content-between align-items-center">
+                                    <button type="button" className="btn btn-soft-danger btn-label border" onClick={() => setIsModalOpen(false)}>
+                                        <i className="fas fa-times label-icon"></i> İptal
+                                    </button>
+                                    <button type="submit" className="btn btn-soft-success btn-label border">
+                                        <i className="fas fa-save label-icon"></i> Kaydet
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}

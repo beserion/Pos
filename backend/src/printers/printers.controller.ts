@@ -33,4 +33,9 @@ export class PrintersController {
     remove(@Param('id') id: string): Promise<void> {
         return this.printersService.remove(+id);
     }
+
+    @Post('print-receipt')
+    printReceipt(@Body() data: any): Promise<{ success: boolean; message: string }> {
+        return this.printersService.printReceipt(data);
+    }
 }
