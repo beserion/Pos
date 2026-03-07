@@ -53,7 +53,7 @@ exports.AppModule = AppModule = __decorate([
                     password: configService.get('DB_PASSWORD', 'YourStrong@Passw0rd'),
                     database: configService.get('DB_DATABASE', 'AntigravityPOS'),
                     autoLoadEntities: true,
-                    synchronize: true,
+                    synchronize: false,
                     options: {
                         encrypt: false,
                         trustServerCertificate: true,

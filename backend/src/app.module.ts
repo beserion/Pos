@@ -42,7 +42,7 @@ import { User } from './users/user.entity';
         password: configService.get<string>('DB_PASSWORD', 'YourStrong@Passw0rd'),
         database: configService.get<string>('DB_DATABASE', 'AntigravityPOS'),
         autoLoadEntities: true,
-        synchronize: true, // Auto-create tables for MVP
+        synchronize: false, // Auto-create tables for MVP
         options: {
           encrypt: false,
           trustServerCertificate: true,
