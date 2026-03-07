@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
 import { useRouter } from 'next/navigation';
-import Swal from 'sweetalert2';
+import { showSwal, toastSwal } from '../utils/swal';
 
 interface Product {
     id: number;
@@ -63,13 +63,10 @@ export default function PosPage() {
     };
 
     const handleCheckout = (paymentMethod: 'Nakit' | 'Kart') => {
-        Swal.fire({
+        showSwal({
             title: 'Başarılı!',
             text: `Hesap (${paymentMethod}) yöntemiyle tahsil edildi!`,
             icon: 'success',
-            confirmButtonColor: '#4f46e5',
-            confirmButtonText: 'Tamam',
-            timer: 2000
         });
         setCart([]);
         setIsCheckoutOpen(false);
