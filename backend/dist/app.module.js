@@ -45,20 +45,27 @@ exports.AppModule = AppModule = __decorate([
             typeorm_1.TypeOrmModule.forRootAsync({
                 imports: [config_1.ConfigModule],
                 inject: [config_1.ConfigService],
-                useFactory: (configService) => ({
-                    type: 'mssql',
-                    host: configService.get('DB_HOST', 'localhost'),
-                    port: parseInt(configService.get('DB_PORT', '1433'), 10),
-                    username: configService.get('DB_USERNAME', 'sa'),
-                    password: configService.get('DB_PASSWORD', 'YourStrong@Passw0rd'),
-                    database: configService.get('DB_DATABASE', 'AntigravityPOS'),
-                    autoLoadEntities: true,
-                    synchronize: true,
-                    options: {
-                        encrypt: false,
-                        trustServerCertificate: true,
-                    },
-                }),
+                useFactory: (configService) => {
+                    const instanceName = configService.get('DB_INSTANCE');
+                    const config = {
+                        type: 'mssql',
+                        host: configService.get('DB_HOST', 'localhost'),
+                        username: configService.get('DB_USERNAME', 'sa'),
+                        password: configService.get('DB_PASSWORD', 'YourStrong@Passw0rd'),
+                        database: configService.get('DB_DATABASE', 'AntigravityPOS'),
+                        autoLoadEntities: true,
+                        synchronize: false,
+                        options: {
+                            encrypt: false,
+                            trustServerCertificate: true,
+                            ...(instanceName ? { instanceName } : {}),
+                        },
+                    };
+                    if (!instanceName) {
+                        config.port = parseInt(configService.get('DB_PORT', '1433'), 10);
+                    }
+                    return config;
+                },
             }),
             roles_module_1.RolesModule,
             users_module_1.UsersModule,

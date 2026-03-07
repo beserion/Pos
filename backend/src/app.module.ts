@@ -34,20 +34,28 @@ import { User } from './users/user.entity';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'mssql',
-        host: configService.get<string>('DB_HOST', 'localhost'),
-        port: parseInt(configService.get<string>('DB_PORT', '1433'), 10),
-        username: configService.get<string>('DB_USERNAME', 'sa'),
-        password: configService.get<string>('DB_PASSWORD', 'YourStrong@Passw0rd'),
-        database: configService.get<string>('DB_DATABASE', 'AntigravityPOS'),
-        autoLoadEntities: true,
-        synchronize: true, // Auto-create tables for MVP
-        options: {
-          encrypt: false,
-          trustServerCertificate: true,
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const instanceName = configService.get<string>('DB_INSTANCE');
+        const config: any = {
+          type: 'mssql',
+          host: configService.get<string>('DB_HOST', 'localhost'),
+          username: configService.get<string>('DB_USERNAME', 'sa'),
+          password: configService.get<string>('DB_PASSWORD', 'YourStrong@Passw0rd'),
+          database: configService.get<string>('DB_DATABASE', 'AntigravityPOS'),
+          autoLoadEntities: true,
+          synchronize: false, // Tables created by SQL script
+          options: {
+            encrypt: false,
+            trustServerCertificate: true,
+            ...(instanceName ? { instanceName } : {}),
+          },
+        };
+        // When using a named instance, don't specify port (uses dynamic port via SQL Browser)
+        if (!instanceName) {
+          config.port = parseInt(configService.get<string>('DB_PORT', '1433'), 10);
+        }
+        return config;
+      },
     }),
     RolesModule,
     UsersModule,
