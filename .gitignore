@@ -16,6 +16,8 @@ out/
 *.tsbuildinfo
 *.tss.map
 *.js.map
+backend/dist/
+backend/*.tsbuildinfo
 
 # Misc
 .DS_Store
