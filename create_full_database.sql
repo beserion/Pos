@@ -91,6 +91,8 @@ CREATE TABLE [dbo].[tables] (
     [capacity] int NOT NULL DEFAULT 4,
     [status] nvarchar(255) NOT NULL DEFAULT 'AVAILABLE',
     [isActive] bit NOT NULL DEFAULT 1,
+    [waiterName] nvarchar(255) NULL,
+    [orderStartTime] datetime2(7) NULL,
     [zoneId] int NULL FOREIGN KEY REFERENCES [dbo].[zones]([id]) ON DELETE CASCADE,
     [createdAt] datetime2(7) NOT NULL DEFAULT getdate(),
     [updatedAt] datetime2(7) NOT NULL DEFAULT getdate()
@@ -219,7 +221,7 @@ INSERT INTO [dbo].[roles] (name, description) VALUES
 
 -- 3.2 Insert Users
 -- Password hash corresponds to '123456' using bcrypt (10 rounds) for demo purposes
-DECLARE @DefaultHash NVARCHAR(255) = '$2b$10$miX1t/gVlemdwi.LI1qt0OqV/6fh1UwCCXuzhNJ0hWIH6ppVV/f0FO';
+DECLARE @DefaultHash NVARCHAR(255) = '$2b$10$wYxZZjEJ1QkWiK/M8MLE7OKMML4H86PSCVNLwysPzk3RXT0qqk2KMO';
 DECLARE @AdminRoleId INT = (SELECT id FROM [dbo].[roles] WHERE name = 'Admin');
 DECLARE @CashierRoleId INT = (SELECT id FROM [dbo].[roles] WHERE name = 'Cashier');
 DECLARE @WaiterRoleId INT = (SELECT id FROM [dbo].[roles] WHERE name = 'Waiter');
