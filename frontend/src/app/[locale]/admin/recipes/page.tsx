@@ -305,7 +305,7 @@ export default function RecipesAdminPage() {
                                             <div className="input-group-text wd-130 font-bold"><span>Malzeme <span className="text-danger">*</span></span></div>
                                             <select required value={formData.ingredientId || ''} onChange={(e) => setFormData({ ...formData, ingredientId: parseInt(e.target.value) })} className="form-select">
                                                 <option value="">Malzeme Seçiniz</option>
-                                                {ingredients.map(i => (
+                                                {products.filter(p => (p as any).isIngredient).map(i => (
                                                     <option key={i.id} value={i.id}>{i.name}</option>
                                                 ))}
                                             </select>

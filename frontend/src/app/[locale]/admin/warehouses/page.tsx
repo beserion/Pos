@@ -191,41 +191,42 @@ export default function WarehousesAdminPage() {
                                             </td>
                                             <td className="px-8 py-3 text-right">
                                                 <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
-                                                    <i className="fat fa-pen-to-square"></i>
-                                                </button>
-                                                <button onClick={() => handleDelete(w.id)} className="p-2.5 bg-white dark:bg-slate-800 text-red-600 hover:text-white hover:bg-red-600 dark:hover:bg-red-600 border border-slate-200 dark:border-slate-700 rounded-xl transition-all shadow-sm">
-                                                    <i className="fat fa-trash-can"></i>
-                                                </button>
-                                            </div>
-                                        </td>
+                                                    <button onClick={() => openModal(warehouse)} className="w-10 h-10 bg-white dark:bg-slate-800 text-blue-600 hover:text-white hover:bg-blue-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center">
+                                                        <i className="fat fa-pen-field text-lg"></i>
+                                                    </button>
+                                                    <button onClick={() => handleDelete(warehouse.id)} className="w-10 h-10 bg-white dark:bg-slate-800 text-red-600 hover:text-white hover:bg-red-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center">
+                                                        <i className="fat fa-trash-can text-lg"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
                                         </tr>
                                     ))}
-                                {warehouses.length === 0 && (
-                                    <tr>
-                                        <td colSpan={5} className="p-20 text-center">
-                                            <div className="flex flex-col items-center opacity-40">
-                                                <i className="fat fa-warehouse text-6xl mb-4 text-slate-300"></i>
-                                                <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">{t('noWarehouseFound') || 'Depo Verisi Bulunamadı'}</p>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                    {warehouses.length === 0 && (
+                                        <tr>
+                                            <td colSpan={4} className="p-20 text-center">
+                                                <div className="flex flex-col items-center opacity-40">
+                                                    <i className="fat fa-warehouse text-6xl mb-4 text-slate-300"></i>
+                                                    <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">Kayıtlı Depo Bulunamadı</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )}
 
-            {isModalOpen && (
-                <WarehouseUpsert
-                    formData={formData}
-                    setFormData={setFormData}
-                    locations={locations}
-                    onSave={handleSave}
-                    onClose={() => setIsModalOpen(false)}
-                />
-            )}
+                {isModalOpen && (
+                    <WarehouseUpsert
+                        formData={formData}
+                        setFormData={setFormData}
+                        locations={locations}
+                        onSave={handleSave}
+                        onClose={() => setIsModalOpen(false)}
+                    />
+                )}
+            </div>
         </div>
-        </div >
     );
 }

@@ -57,36 +57,77 @@ export default function WarehouseUpsert({ formData, setFormData, locations, onSa
             <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-5xl shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col max-h-[90vh]">
                 <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20">
                     <div>
-                        <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 leading-tight uppercase tracking-wider">
-                            Depo konumunu belirlemek için sağdaki harita üzerinden seçim yapabilirsiniz.
-                        </p>
+                        <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase mb-0">
+                            <i className="fat fa-warehouse text-sky-600"></i>
+                            {formData.id === 0 ? 'YENİ DEPO KAYDI' : 'DEPO BİLGİLERİNİ DÜZENLE'}
+                        </h2>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-0">Stok merkezi konum ve şube eşlemesini yapın</p>
                     </div>
+                    <button onClick={onClose} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white shadow-sm transition-all">&times;</button>
                 </div>
 
-                {/* Map Picker */}
-                <div className="lg:col-span-7 flex flex-col h-full min-h-[400px]">
-                    <div className="flex-1 rounded-[32px] overflow-hidden border border-slate-200 dark:border-slate-700 shadow-inner relative z-0">
-                        <MapContainer center={position || [40.7663, 29.9175]} zoom={13} style={{ height: '100%', width: '100%' }}>
-                            <TileLayer
-                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                            />
-                            <LocationMarker position={position} setPosition={setPosition} setFormData={setFormData} formData={formData} />
-                        </MapContainer>
-                    </div>
-                </div>
-            </div>
+                <form onSubmit={onSave} className="flex-1 overflow-y-auto p-8">
+                    <div className="text-start w-100">
+                        <div className="row mp-0 g-2">
+                            <div className="col-md-6 mb-2">
+                                <div className="input-group">
+                                    <div className="input-group-text wd-130 font-bold"><span>Depo Adı <span className="text-danger">*</span></span></div>
+                                    <input type="text" required value={formData.name || ''} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="form-control" placeholder="Örn: Ana Stok Deposu" />
+                                    <div className="input-group-text wd-50"><i className="fat fa-tag"></i></div>
+                                </div>
+                            </div>
 
-            <div className="pt-8 mt-8 border-t border-slate-100 dark:border-slate-700 flex gap-3">
-                <button type="button" onClick={onClose} className="flex-1 py-4 rounded-[20px] border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 font-black text-xs uppercase tracking-widest transition-all">
-                    VAZGEÇ
-                </button>
-                <button type="submit" className="flex-[2] py-4 rounded-[20px] bg-amber-600 hover:bg-amber-700 text-white font-black text-xs uppercase tracking-widest shadow-xl shadow-amber-500/20 scale-100 hover:scale-[1.02] active:scale-95 transition-all">
-                    DEPOYU KAYDET
-                </button>
+                            <div className="col-md-6 mb-2">
+                                <div className="input-group">
+                                    <div className="input-group-text wd-130 font-bold"><span>Bağlı Şube</span></div>
+                                    <select value={formData.locationId || 0} onChange={(e) => setFormData({ ...formData, locationId: parseInt(e.target.value) })} className="form-select">
+                                        <option value={0}>Şube Seçilmedi (Merkez)</option>
+                                        {locations.map((loc) => (
+                                            <option key={loc.id} value={loc.id}>{loc.name}</option>
+                                        ))}
+                                    </select>
+                                    <div className="input-group-text wd-50"><i className="fat fa-building"></i></div>
+                                </div>
+                            </div>
+
+                            <div className="col-12 mb-2">
+                                <div className="input-group">
+                                    <div className="input-group-text wd-130 font-bold"><span>Adres Bilgisi</span></div>
+                                    <input type="text" value={formData.address || ''} onChange={(e) => setFormData({ ...formData, address: e.target.value })} className="form-control" placeholder="Açık adres yazınız..." />
+                                    <div className="input-group-text wd-50"><i className="fat fa-map-location-dot"></i></div>
+                                </div>
+                            </div>
+
+                            <div className="col-12 mb-2">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Konum Seçimi (Harita üzerinde tıklayın)</p>
+                                <div className="h-64 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-inner relative z-0">
+                                    <MapContainer center={position || [40.7663, 29.9175]} zoom={13} style={{ height: '100%', width: '100%' }}>
+                                        <TileLayer
+                                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                        />
+                                        <LocationMarker position={position} setPosition={setPosition} setFormData={setFormData} formData={formData} />
+                                    </MapContainer>
+                                </div>
+                                <div className="flex gap-4 mt-2 px-1">
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase">Enlem: <span className="text-sky-600">{formData.latitude?.toFixed(6) || '-'}</span></p>
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase">Boylam: <span className="text-sky-600">{formData.longitude?.toFixed(6) || '-'}</span></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr className="my-2" />
+                        <div className="d-flex justify-content-between align-items-center">
+                            <button type="button" className="btn btn-soft-danger btn-label border" onClick={onClose}>
+                                <i className="fas fa-times label-icon"></i> İptal
+                            </button>
+                            <button type="submit" className="btn btn-soft-success btn-label border">
+                                <i className="fas fa-save label-icon"></i> Kaydet
+                            </button>
+                        </div>
+                    </div>
+                </form>
             </div>
-        </form>
-            </div >
-        </div >
+        </div>
     );
 }
