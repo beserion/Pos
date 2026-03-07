@@ -1,0 +1,290 @@
+[32m[Nest] 15208  - [39m06.03.2026 21:00:19 [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 15208  - [39m06.03.2026 21:00:19 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mTypeOrmModule dependencies initialized[39m[38;5;3m +15ms[39m
+[32m[Nest] 15208  - [39m06.03.2026 21:00:19 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPassportModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 15208  - [39m06.03.2026 21:00:19 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 15208  - [39m06.03.2026 21:00:19 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 15208  - [39m06.03.2026 21:00:19 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +10ms[39m
+[32m[Nest] 15208  - [39m06.03.2026 21:00:19 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 15208  - [39m06.03.2026 21:00:20 [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mJwtModule dependencies initialized[39m[38;5;3m +194ms[39m
+[31m[Nest] 15208  - [39m06.03.2026 21:00:20 [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (1)...[39m
+QueryFailedError: Error: Could not create constraint or index. See previous errors.
+    at D:\GitHub\POSAPP\backend\node_modules\typeorm\driver\sqlserver\SqlServerQueryRunner.js:204:30
+    at D:\GitHub\POSAPP\backend\node_modules\mssql\lib\base\request.js:443:25
+    at Request.userCallback (D:\GitHub\POSAPP\backend\node_modules\mssql\lib\tedious\request.js:492:15)
+    at Request.callback (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\request.js:239:14)
+    at Parser.onEndOfMessage (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\connection.js:2662:22)
+    at Object.onceWrapper (node:events:632:28)
+    at Parser.emit (node:events:518:28)
+    at Readable.<anonymous> (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\token\token-stream-parser.js:25:12)
+    at Readable.emit (node:events:518:28)
+    at endReadableNT (node:internal/streams/readable:1698:12)
+[31m[Nest] 15208  - [39m06.03.2026 21:00:23 [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (2)...[39m
+QueryFailedError: Error: Could not create constraint or index. See previous errors.
+    at D:\GitHub\POSAPP\backend\node_modules\typeorm\driver\sqlserver\SqlServerQueryRunner.js:204:30
+    at D:\GitHub\POSAPP\backend\node_modules\mssql\lib\base\request.js:443:25
+    at Request.userCallback (D:\GitHub\POSAPP\backend\node_modules\mssql\lib\tedious\request.js:492:15)
+    at Request.callback (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\request.js:239:14)
+    at Parser.onEndOfMessage (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\connection.js:2662:22)
+    at Object.onceWrapper (node:events:632:28)
+    at Parser.emit (node:events:518:28)
+    at Readable.<anonymous> (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\token\token-stream-parser.js:25:12)
+    at Readable.emit (node:events:518:28)
+    at endReadableNT (node:internal/streams/readable:1698:12)
+[31m[Nest] 15208  - [39m06.03.2026 21:00:27 [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (3)...[39m
+QueryFailedError: Error: Could not create constraint or index. See previous errors.
+    at D:\GitHub\POSAPP\backend\node_modules\typeorm\driver\sqlserver\SqlServerQueryRunner.js:204:30
+    at D:\GitHub\POSAPP\backend\node_modules\mssql\lib\base\request.js:443:25
+    at Request.userCallback (D:\GitHub\POSAPP\backend\node_modules\mssql\lib\tedious\request.js:492:15)
+    at Request.callback (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\request.js:239:14)
+    at Parser.onEndOfMessage (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\connection.js:2662:22)
+    at Object.onceWrapper (node:events:632:28)
+    at Parser.emit (node:events:518:28)
+    at Readable.<anonymous> (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\token\token-stream-parser.js:25:12)
+    at Readable.emit (node:events:518:28)
+    at endReadableNT (node:internal/streams/readable:1698:12)
+[31m[Nest] 15208  - [39m06.03.2026 21:00:31 [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (4)...[39m
+QueryFailedError: Error: Could not create constraint or index. See previous errors.
+    at D:\GitHub\POSAPP\backend\node_modules\typeorm\driver\sqlserver\SqlServerQueryRunner.js:204:30
+    at D:\GitHub\POSAPP\backend\node_modules\mssql\lib\base\request.js:443:25
+    at Request.userCallback (D:\GitHub\POSAPP\backend\node_modules\mssql\lib\tedious\request.js:492:15)
+    at Request.callback (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\request.js:239:14)
+    at Parser.onEndOfMessage (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\connection.js:2662:22)
+    at Object.onceWrapper (node:events:632:28)
+    at Parser.emit (node:events:518:28)
+    at Readable.<anonymous> (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\token\token-stream-parser.js:25:12)
+    at Readable.emit (node:events:518:28)
+    at endReadableNT (node:internal/streams/readable:1698:12)
+[31m[Nest] 15208  - [39m06.03.2026 21:00:35 [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (5)...[39m
+QueryFailedError: Error: Could not create constraint or index. See previous errors.
+    at D:\GitHub\POSAPP\backend\node_modules\typeorm\driver\sqlserver\SqlServerQueryRunner.js:204:30
+    at D:\GitHub\POSAPP\backend\node_modules\mssql\lib\base\request.js:443:25
+    at Request.userCallback (D:\GitHub\POSAPP\backend\node_modules\mssql\lib\tedious\request.js:492:15)
+    at Request.callback (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\request.js:239:14)
+    at Parser.onEndOfMessage (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\connection.js:2662:22)
+    at Object.onceWrapper (node:events:632:28)
+    at Parser.emit (node:events:518:28)
+    at Readable.<anonymous> (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\token\token-stream-parser.js:25:12)
+    at Readable.emit (node:events:518:28)
+    at endReadableNT (node:internal/streams/readable:1698:12)
+[31m[Nest] 15208  - [39m06.03.2026 21:00:39 [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (6)...[39m
+QueryFailedError: Error: Could not create constraint or index. See previous errors.
+    at D:\GitHub\POSAPP\backend\node_modules\typeorm\driver\sqlserver\SqlServerQueryRunner.js:204:30
+    at D:\GitHub\POSAPP\backend\node_modules\mssql\lib\base\request.js:443:25
+    at Request.userCallback (D:\GitHub\POSAPP\backend\node_modules\mssql\lib\tedious\request.js:492:15)
+    at Request.callback (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\request.js:239:14)
+    at Parser.onEndOfMessage (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\connection.js:2662:22)
+    at Object.onceWrapper (node:events:632:28)
+    at Parser.emit (node:events:518:28)
+    at Readable.<anonymous> (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\token\token-stream-parser.js:25:12)
+    at Readable.emit (node:events:518:28)
+    at endReadableNT (node:internal/streams/readable:1698:12)
+[31m[Nest] 15208  - [39m06.03.2026 21:00:42 [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (7)...[39m
+QueryFailedError: Error: Could not create constraint or index. See previous errors.
+    at D:\GitHub\POSAPP\backend\node_modules\typeorm\driver\sqlserver\SqlServerQueryRunner.js:204:30
+    at D:\GitHub\POSAPP\backend\node_modules\mssql\lib\base\request.js:443:25
+    at Request.userCallback (D:\GitHub\POSAPP\backend\node_modules\mssql\lib\tedious\request.js:492:15)
+    at Request.callback (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\request.js:239:14)
+    at Parser.onEndOfMessage (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\connection.js:2662:22)
+    at Object.onceWrapper (node:events:632:28)
+    at Parser.emit (node:events:518:28)
+    at Readable.<anonymous> (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\token\token-stream-parser.js:25:12)
+    at Readable.emit (node:events:518:28)
+    at endReadableNT (node:internal/streams/readable:1698:12)
+[31m[Nest] 15208  - [39m06.03.2026 21:00:45 [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (8)...[39m
+QueryFailedError: Error: Could not create constraint or index. See previous errors.
+    at D:\GitHub\POSAPP\backend\node_modules\typeorm\driver\sqlserver\SqlServerQueryRunner.js:204:30
+    at D:\GitHub\POSAPP\backend\node_modules\mssql\lib\base\request.js:443:25
+    at Request.userCallback (D:\GitHub\POSAPP\backend\node_modules\mssql\lib\tedious\request.js:492:15)
+    at Request.callback (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\request.js:239:14)
+    at Parser.onEndOfMessage (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\connection.js:2662:22)
+    at Object.onceWrapper (node:events:632:28)
+    at Parser.emit (node:events:518:28)
+    at Readable.<anonymous> (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\token\token-stream-parser.js:25:12)
+    at Readable.emit (node:events:518:28)
+    at endReadableNT (node:internal/streams/readable:1698:12)
+[31m[Nest] 15208  - [39m06.03.2026 21:00:50 [31m  ERROR[39m [38;5;3m[TypeOrmModule] [39m[31mUnable to connect to the database. Retrying (9)...[39m
+QueryFailedError: Error: Could not create constraint or index. See previous errors.
+    at D:\GitHub\POSAPP\backend\node_modules\typeorm\driver\sqlserver\SqlServerQueryRunner.js:204:30
+    at D:\GitHub\POSAPP\backend\node_modules\mssql\lib\base\request.js:443:25
+    at Request.userCallback (D:\GitHub\POSAPP\backend\node_modules\mssql\lib\tedious\request.js:492:15)
+    at Request.callback (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\request.js:239:14)
+    at Parser.onEndOfMessage (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\connection.js:2662:22)
+    at Object.onceWrapper (node:events:632:28)
+    at Parser.emit (node:events:518:28)
+    at Readable.<anonymous> (D:\GitHub\POSAPP\backend\node_modules\tedious\lib\token\token-stream-parser.js:25:12)
+    at Readable.emit (node:events:518:28)
+    at endReadableNT (node:internal/streams/readable:1698:12)
+[31m[Nest] 15208  - [39m06.03.2026 21:00:50 [31m  ERROR[39m [38;5;3m[ExceptionHandler] [39mQueryFailedError: Error: Could not create constraint or index. See previous errors.
+    at [90mD:\GitHub\POSAPP\backend\[39mnode_modules\[4mtypeorm[24m\driver\sqlserver\SqlServerQueryRunner.js:204:30
+    at [90mD:\GitHub\POSAPP\backend\[39mnode_modules\[4mmssql[24m\lib\base\request.js:443:25
+    at Request.userCallback [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mmssql[24m\lib\tedious\request.js:492:15[90m)[39m
+    at Request.callback [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\request.js:239:14[90m)[39m
+    at Parser.onEndOfMessage [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\connection.js:2662:22[90m)[39m
+[90m    at Object.onceWrapper (node:events:632:28)[39m
+[90m    at Parser.emit (node:events:518:28)[39m
+    at Readable.<anonymous> [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\token\token-stream-parser.js:25:12[90m)[39m
+[90m    at Readable.emit (node:events:518:28)[39m
+[90m    at endReadableNT (node:internal/streams/readable:1698:12)[39m {
+  query: [32m'ALTER TABLE "recipes" ADD CONSTRAINT "FK_9ec0120c33a1c546fe5ae7e004b" FOREIGN KEY ("ingredientId") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE NO ACTION'[39m,
+  parameters: [90mundefined[39m,
+  driverError: RequestError: Could not create constraint or index. See previous errors.
+      at handleError [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mmssql[24m\lib\tedious\request.js:384:15[90m)[39m
+  [90m    at Connection.emit (node:events:518:28)[39m
+      at Connection.emit [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\connection.js:1013:18[90m)[39m
+      at RequestTokenHandler.onErrorMessage [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\token\handler.js:285:21[90m)[39m
+      at Readable.<anonymous> [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\token\token-stream-parser.js:19:33[90m)[39m
+  [90m    at Readable.emit (node:events:518:28)[39m
+  [90m    at addChunk (node:internal/streams/readable:561:12)[39m
+  [90m    at readableAddChunkPushObjectMode (node:internal/streams/readable:538:3)[39m
+  [90m    at Readable.push (node:internal/streams/readable:393:5)[39m
+  [90m    at nextAsync (node:internal/streams/from:194:22)[39m {
+    code: [32m'EREQUEST'[39m,
+    originalError: Error: Could not create constraint or index. See previous errors.
+        at handleError [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mmssql[24m\lib\tedious\request.js:382:19[90m)[39m
+    [90m    at Connection.emit (node:events:518:28)[39m
+        at Connection.emit [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\connection.js:1013:18[90m)[39m
+        at RequestTokenHandler.onErrorMessage [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\token\handler.js:285:21[90m)[39m
+        at Readable.<anonymous> [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\token\token-stream-parser.js:19:33[90m)[39m
+    [90m    at Readable.emit (node:events:518:28)[39m
+    [90m    at addChunk (node:internal/streams/readable:561:12)[39m
+    [90m    at readableAddChunkPushObjectMode (node:internal/streams/readable:538:3)[39m
+    [90m    at Readable.push (node:internal/streams/readable:393:5)[39m
+    [90m    at nextAsync (node:internal/streams/from:194:22)[39m {
+      info: ErrorMessageToken {
+        name: [32m'ERROR'[39m,
+        handlerName: [32m'onErrorMessage'[39m,
+        number: [33m1750[39m,
+        state: [33m1[39m,
+        class: [33m16[39m,
+        message: [32m'Could not create constraint or index. See previous errors.'[39m,
+        serverName: [32m'ORYX'[39m,
+        procName: [32m''[39m,
+        lineNumber: [33m1[39m
+      }
+    },
+    number: [33m1750[39m,
+    lineNumber: [33m1[39m,
+    state: [33m1[39m,
+    class: [33m16[39m,
+    serverName: [32m'ORYX'[39m,
+    procName: [32m''[39m,
+    precedingErrors: [
+      RequestError: Introducing FOREIGN KEY constraint 'FK_9ec0120c33a1c546fe5ae7e004b' on table 'recipes' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints.
+          at handleError [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mmssql[24m\lib\tedious\request.js:384:15[90m)[39m
+      [90m    at Connection.emit (node:events:518:28)[39m
+          at Connection.emit [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\connection.js:1013:18[90m)[39m
+          at RequestTokenHandler.onErrorMessage [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\token\handler.js:285:21[90m)[39m
+          at Readable.<anonymous> [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\token\token-stream-parser.js:19:33[90m)[39m
+      [90m    at Readable.emit (node:events:518:28)[39m
+      [90m    at addChunk (node:internal/streams/readable:561:12)[39m
+      [90m    at readableAddChunkPushObjectMode (node:internal/streams/readable:538:3)[39m
+      [90m    at Readable.push (node:internal/streams/readable:393:5)[39m
+      [90m    at nextAsync (node:internal/streams/from:194:22)[39m {
+        code: [32m'EREQUEST'[39m,
+        originalError: Error: Introducing FOREIGN KEY constraint 'FK_9ec0120c33a1c546fe5ae7e004b' on table 'recipes' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints.
+            at handleError [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mmssql[24m\lib\tedious\request.js:382:19[90m)[39m
+        [90m    at Connection.emit (node:events:518:28)[39m
+            at Connection.emit [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\connection.js:1013:18[90m)[39m
+            at RequestTokenHandler.onErrorMessage [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\token\handler.js:285:21[90m)[39m
+            at Readable.<anonymous> [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\token\token-stream-parser.js:19:33[90m)[39m
+        [90m    at Readable.emit (node:events:518:28)[39m
+        [90m    at addChunk (node:internal/streams/readable:561:12)[39m
+        [90m    at readableAddChunkPushObjectMode (node:internal/streams/readable:538:3)[39m
+        [90m    at Readable.push (node:internal/streams/readable:393:5)[39m
+        [90m    at nextAsync (node:internal/streams/from:194:22)[39m {
+          info: ErrorMessageToken {
+            name: [32m'ERROR'[39m,
+            handlerName: [32m'onErrorMessage'[39m,
+            number: [33m1785[39m,
+            state: [33m0[39m,
+            class: [33m16[39m,
+            message: [32m"Introducing FOREIGN KEY constraint 'FK_9ec0120c33a1c546fe5ae7e004b' on table 'recipes' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints."[39m,
+            serverName: [32m'ORYX'[39m,
+            procName: [32m''[39m,
+            lineNumber: [33m1[39m
+          }
+        },
+        number: [33m1785[39m,
+        lineNumber: [33m1[39m,
+        state: [90mundefined[39m,
+        class: [33m16[39m,
+        serverName: [32m'ORYX'[39m,
+        procName: [32m''[39m
+      }
+    ]
+  },
+  code: [32m'EREQUEST'[39m,
+  originalError: Error: Could not create constraint or index. See previous errors.
+      at handleError [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mmssql[24m\lib\tedious\request.js:382:19[90m)[39m
+  [90m    at Connection.emit (node:events:518:28)[39m
+      at Connection.emit [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\connection.js:1013:18[90m)[39m
+      at RequestTokenHandler.onErrorMessage [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\token\handler.js:285:21[90m)[39m
+      at Readable.<anonymous> [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\token\token-stream-parser.js:19:33[90m)[39m
+  [90m    at Readable.emit (node:events:518:28)[39m
+  [90m    at addChunk (node:internal/streams/readable:561:12)[39m
+  [90m    at readableAddChunkPushObjectMode (node:internal/streams/readable:538:3)[39m
+  [90m    at Readable.push (node:internal/streams/readable:393:5)[39m
+  [90m    at nextAsync (node:internal/streams/from:194:22)[39m {
+    info: ErrorMessageToken {
+      name: [32m'ERROR'[39m,
+      handlerName: [32m'onErrorMessage'[39m,
+      number: [33m1750[39m,
+      state: [33m1[39m,
+      class: [33m16[39m,
+      message: [32m'Could not create constraint or index. See previous errors.'[39m,
+      serverName: [32m'ORYX'[39m,
+      procName: [32m''[39m,
+      lineNumber: [33m1[39m
+    }
+  },
+  number: [33m1750[39m,
+  lineNumber: [33m1[39m,
+  state: [33m1[39m,
+  class: [33m16[39m,
+  serverName: [32m'ORYX'[39m,
+  procName: [32m''[39m,
+  precedingErrors: [
+    RequestError: Introducing FOREIGN KEY constraint 'FK_9ec0120c33a1c546fe5ae7e004b' on table 'recipes' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints.
+        at handleError [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mmssql[24m\lib\tedious\request.js:384:15[90m)[39m
+    [90m    at Connection.emit (node:events:518:28)[39m
+        at Connection.emit [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\connection.js:1013:18[90m)[39m
+        at RequestTokenHandler.onErrorMessage [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\token\handler.js:285:21[90m)[39m
+        at Readable.<anonymous> [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\token\token-stream-parser.js:19:33[90m)[39m
+    [90m    at Readable.emit (node:events:518:28)[39m
+    [90m    at addChunk (node:internal/streams/readable:561:12)[39m
+    [90m    at readableAddChunkPushObjectMode (node:internal/streams/readable:538:3)[39m
+    [90m    at Readable.push (node:internal/streams/readable:393:5)[39m
+    [90m    at nextAsync (node:internal/streams/from:194:22)[39m {
+      code: [32m'EREQUEST'[39m,
+      originalError: Error: Introducing FOREIGN KEY constraint 'FK_9ec0120c33a1c546fe5ae7e004b' on table 'recipes' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints.
+          at handleError [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mmssql[24m\lib\tedious\request.js:382:19[90m)[39m
+      [90m    at Connection.emit (node:events:518:28)[39m
+          at Connection.emit [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\connection.js:1013:18[90m)[39m
+          at RequestTokenHandler.onErrorMessage [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\token\handler.js:285:21[90m)[39m
+          at Readable.<anonymous> [90m(D:\GitHub\POSAPP\backend\[39mnode_modules\[4mtedious[24m\lib\token\token-stream-parser.js:19:33[90m)[39m
+      [90m    at Readable.emit (node:events:518:28)[39m
+      [90m    at addChunk (node:internal/streams/readable:561:12)[39m
+      [90m    at readableAddChunkPushObjectMode (node:internal/streams/readable:538:3)[39m
+      [90m    at Readable.push (node:internal/streams/readable:393:5)[39m
+      [90m    at nextAsync (node:internal/streams/from:194:22)[39m {
+        info: ErrorMessageToken {
+          name: [32m'ERROR'[39m,
+          handlerName: [32m'onErrorMessage'[39m,
+          number: [33m1785[39m,
+          state: [33m0[39m,
+          class: [33m16[39m,
+          message: [32m"Introducing FOREIGN KEY constraint 'FK_9ec0120c33a1c546fe5ae7e004b' on table 'recipes' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints."[39m,
+          serverName: [32m'ORYX'[39m,
+          procName: [32m''[39m,
+          lineNumber: [33m1[39m
+        }
+      },
+      number: [33m1785[39m,
+      lineNumber: [33m1[39m,
+      state: [90mundefined[39m,
+      class: [33m16[39m,
+      serverName: [32m'ORYX'[39m,
+      procName: [32m''[39m
+    }
+  ]
+}

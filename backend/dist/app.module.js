@@ -30,6 +30,9 @@ const finance_module_1 = require("./finance/finance.module");
 const orders_module_1 = require("./orders/orders.module");
 const security_module_1 = require("./auth/security.module");
 const printers_module_1 = require("./printers/printers.module");
+const recipes_module_1 = require("./recipes/recipes.module");
+const wastages_module_1 = require("./wastages/wastages.module");
+const purchase_orders_module_1 = require("./purchase-orders/purchase-orders.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -50,7 +53,7 @@ exports.AppModule = AppModule = __decorate([
                     password: configService.get('DB_PASSWORD', 'YourStrong@Passw0rd'),
                     database: configService.get('DB_DATABASE', 'AntigravityPOS'),
                     autoLoadEntities: true,
-                    synchronize: true,
+                    synchronize: false,
                     options: {
                         encrypt: false,
                         trustServerCertificate: true,
@@ -75,6 +78,9 @@ exports.AppModule = AppModule = __decorate([
             orders_module_1.OrdersModule,
             security_module_1.SecurityModule,
             printers_module_1.PrintersModule,
+            recipes_module_1.RecipesModule,
+            wastages_module_1.WastagesModule,
+            purchase_orders_module_1.PurchaseOrdersModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

@@ -21,6 +21,9 @@ import { FinanceModule } from './finance/finance.module';
 import { OrdersModule } from './orders/orders.module';
 import { SecurityModule } from './auth/security.module';
 import { PrintersModule } from './printers/printers.module';
+import { RecipesModule } from './recipes/recipes.module';
+import { WastagesModule } from './wastages/wastages.module';
+import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
 import { User } from './users/user.entity';
 
 @Module({
@@ -39,7 +42,7 @@ import { User } from './users/user.entity';
         password: configService.get<string>('DB_PASSWORD', 'YourStrong@Passw0rd'),
         database: configService.get<string>('DB_DATABASE', 'AntigravityPOS'),
         autoLoadEntities: true,
-        synchronize: true, // Auto-create tables for MVP
+        synchronize: false, // Auto-create tables for MVP
         options: {
           encrypt: false,
           trustServerCertificate: true,
@@ -64,6 +67,9 @@ import { User } from './users/user.entity';
     OrdersModule,
     SecurityModule,
     PrintersModule,
+    RecipesModule,
+    WastagesModule,
+    PurchaseOrdersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

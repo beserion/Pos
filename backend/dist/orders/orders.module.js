@@ -14,6 +14,8 @@ const order_item_entity_1 = require("./order-item.entity");
 const orders_service_1 = require("./orders.service");
 const orders_controller_1 = require("./orders.controller");
 const security_module_1 = require("../auth/security.module");
+const recipes_module_1 = require("../recipes/recipes.module");
+const stocks_module_1 = require("../stocks/stocks.module");
 let OrdersModule = class OrdersModule {
 };
 exports.OrdersModule = OrdersModule;
@@ -22,6 +24,8 @@ exports.OrdersModule = OrdersModule = __decorate([
         imports: [
             typeorm_1.TypeOrmModule.forFeature([order_entity_1.Order, order_item_entity_1.OrderItem]),
             security_module_1.SecurityModule,
+            recipes_module_1.RecipesModule,
+            stocks_module_1.StocksModule,
         ],
         providers: [orders_service_1.OrdersService],
         controllers: [orders_controller_1.OrdersController],

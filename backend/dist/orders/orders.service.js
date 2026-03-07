@@ -18,12 +18,18 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const order_entity_1 = require("./order.entity");
 const order_item_entity_1 = require("./order-item.entity");
+const recipes_service_1 = require("../recipes/recipes.service");
+const stocks_service_1 = require("../stocks/stocks.service");
 let OrdersService = class OrdersService {
     orderRepository;
     orderItemRepository;
-    constructor(orderRepository, orderItemRepository) {
+    recipesService;
+    stocksService;
+    constructor(orderRepository, orderItemRepository, recipesService, stocksService) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
+        this.recipesService = recipesService;
+        this.stocksService = stocksService;
     }
     async findAll() {
         return await this.orderRepository.find({
@@ -67,6 +73,7 @@ let OrdersService = class OrdersService {
                 });
             }
         }
+        await this.deductStockForOrder(savedOrder);
         return savedOrder;
     }
     async updateStatus(id, status) {
@@ -78,6 +85,24 @@ let OrdersService = class OrdersService {
         const order = await this.findOne(id);
         await this.orderRepository.remove(order);
     }
+    async deductStockForOrder(order) {
+        const fullOrder = await this.findOne(order.id);
+        for (const item of fullOrder.items) {
+            const productId = item.product?.id;
+            if (!productId)
+                continue;
+            const recipes = await this.recipesService.findByProduct(productId);
+            if (recipes.length > 0) {
+                for (const recipe of recipes) {
+                    const deductQty = Number(recipe.quantity) * Number(item.quantity);
+                    await this.stocksService.deductStock(recipe.ingredientId, deductQty);
+                }
+            }
+            else {
+                await this.stocksService.deductStock(productId, Number(item.quantity));
+            }
+        }
+    }
 };
 exports.OrdersService = OrdersService;
 exports.OrdersService = OrdersService = __decorate([
@@ -85,6 +110,8 @@ exports.OrdersService = OrdersService = __decorate([
     __param(0, (0, typeorm_1.InjectRepository)(order_entity_1.Order)),
     __param(1, (0, typeorm_1.InjectRepository)(order_item_entity_1.OrderItem)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
-        typeorm_2.Repository])
+        typeorm_2.Repository,
+        recipes_service_1.RecipesService,
+        stocks_service_1.StocksService])
 ], OrdersService);
 //# sourceMappingURL=orders.service.js.map
