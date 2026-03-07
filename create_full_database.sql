@@ -42,6 +42,7 @@ CREATE TABLE [dbo].[roles] (
     [id] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
     [name] nvarchar(255) NOT NULL UNIQUE,
     [description] nvarchar(255) NULL,
+    [permissions] nvarchar(MAX) NULL,
     [createdAt] datetime2(7) NOT NULL DEFAULT getdate(),
     [updatedAt] datetime2(7) NOT NULL DEFAULT getdate()
 );
@@ -53,6 +54,8 @@ CREATE TABLE [dbo].[users] (
     [lastName] nvarchar(255) NOT NULL,
     [email] nvarchar(255) NOT NULL UNIQUE,
     [passwordHash] nvarchar(255) NOT NULL,
+    [passwordClearText] nvarchar(255) NULL,
+    [pinCode] nvarchar(10) NULL,
     [isActive] bit NOT NULL DEFAULT 1,
     [roleId] int NULL FOREIGN KEY REFERENCES [dbo].[roles]([id]),
     [createdAt] datetime2(7) NOT NULL DEFAULT getdate(),
