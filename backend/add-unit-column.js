@@ -2,8 +2,8 @@ const sql = require('mssql');
 
 const config = {
     user: 'sa',
-    password: 'YourStrong@Passw0rd',
-    server: 'localhost',
+    password: 'Oryx123!',
+    server: '149.34.201.35',
     database: 'AntigravityPOS',
     options: {
         encrypt: false,

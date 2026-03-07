@@ -114,6 +114,9 @@ CREATE TABLE [dbo].[products] (
     [price] decimal(10,2) NOT NULL,
     [category] nvarchar(255) NULL,
     [isActive] bit NOT NULL DEFAULT 1,
+    [costPrice] decimal(18,2) NOT NULL DEFAULT 0,
+    [minStockLevel] int NOT NULL DEFAULT 0,
+    [unit] nvarchar(50) NULL DEFAULT 'adet',
     [createdAt] datetime2(7) NOT NULL DEFAULT getdate(),
     [updatedAt] datetime2(7) NOT NULL DEFAULT getdate()
 );
