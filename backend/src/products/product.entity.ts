@@ -24,6 +24,9 @@ export class Product {
     isActive: boolean;
 
     @Column({ nullable: true })
+    imageUrl: string; // Ürün görseli
+
+    @Column({ nullable: true })
     printerId: number;
 
     @Column('decimal', { precision: 10, scale: 2, default: 0, nullable: true })

@@ -9,7 +9,7 @@ interface Product {
     name: string;
     price: number;
     category: string;
-    image?: string;
+    imageUrl?: string;
 }
 
 interface Zone { id: number; name: string; }
@@ -136,18 +136,25 @@ export default function PosPage() {
                                 <div
                                     key={product.id}
                                     onClick={() => addToCart(product)}
-                                    className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-md p-4 rounded-3xl cursor-pointer shadow-lg hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-300 border border-white/50 dark:border-slate-700/50 hover:border-indigo-300 dark:hover:border-indigo-500/50 group flex flex-col justify-between items-center text-center"
+                                    className="relative h-40 bg-white dark:bg-slate-800 rounded-3xl cursor-pointer shadow-lg hover:shadow-2xl hover:shadow-indigo-500/20 transition-all duration-300 border border-slate-100 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500 overflow-hidden group"
                                 >
-                                    <div className="flex-shrink-0 flex items-center justify-center mb-2 group-hover:scale-110 group-hover:-rotate-3 transition-transform">
-                                        <span className="text-gray-800 dark:text-gray-100 drop-shadow-sm text-5xl">
-                                            {product.category === 'Kahve' ? '☕' : product.category === 'Tatlı' ? '🍰' : '🍹'}
-                                        </span>
+                                    {/* Arka Plan Görseli / Emoji Mapped Area */}
+                                    <div className="absolute inset-0 bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center transition-transform duration-500 group-hover:scale-110">
+                                        {product.imageUrl ? (
+                                            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <span className="text-gray-800 dark:text-gray-100 drop-shadow-sm text-5xl opacity-50">
+                                                {product.category === 'Kahveler' ? '☕' : product.category === 'Tatlılar' ? '🍰' : '🍹'}
+                                            </span>
+                                        )}
+                                        {/* Karanlık Gradyan Katmanı (Yazıların Okunması İçin) */}
+                                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/30 to-transparent"></div>
                                     </div>
-                                    <div className="w-full">
-                                        <h3 className="font-semibold text-slate-800 dark:text-slate-200 mb-1 text-sm line-clamp-2 leading-tight h-10 flex items-center justify-center">{product.name}</h3>
-                                        <div className="mt-1">
-                                            <span className="font-bold text-lg text-indigo-600 dark:text-indigo-400">₺{product.price}</span>
-                                        </div>
+
+                                    {/* Ürün Metin ve Fiyat Alanı */}
+                                    <div className="absolute bottom-0 left-0 right-0 p-3 flex flex-col items-center text-center justify-end z-10 transition-transform">
+                                        <h3 className="font-bold text-white mb-0.5 text-sm line-clamp-2 leading-tight drop-shadow-md">{product.name}</h3>
+                                        <span className="font-extrabold text-white bg-indigo-600/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs shadow-sm shadow-indigo-900/50 mt-1">₺{product.price}</span>
                                     </div>
                                 </div>
                             ))}

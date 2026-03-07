@@ -122,6 +122,8 @@ CREATE TABLE [dbo].[products] (
     [costPrice] decimal(18,2) NOT NULL DEFAULT 0,
     [minStockLevel] int NOT NULL DEFAULT 0,
     [unit] nvarchar(50) NULL DEFAULT 'adet',
+    [printerId] int NULL FOREIGN KEY REFERENCES [dbo].[printers]([id]) ON DELETE SET NULL,
+    [imageUrl] nvarchar(MAX) NULL,
     [createdAt] datetime2(7) NOT NULL DEFAULT getdate(),
     [updatedAt] datetime2(7) NOT NULL DEFAULT getdate()
 );

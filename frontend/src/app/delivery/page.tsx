@@ -315,8 +315,17 @@ export default function DeliveryPage() {
                                             Ata
                                         </button>
                                         <button
-                                            onClick={() => {
-                                                if (confirm('Siparişi iptal etmek istediğinize emin misiniz?')) {
+                                            onClick={async () => {
+                                                const result = await showSwal({
+                                                    title: 'Emin misiniz?',
+                                                    text: 'Siparişi iptal etmek istediğinize emin misiniz?',
+                                                    icon: 'warning',
+                                                    showCancelButton: true,
+                                                    confirmButtonText: 'Evet, İptal Et',
+                                                    cancelButtonText: 'Hayır, Vazgeç',
+                                                    confirmButtonColor: '#ef4444'
+                                                });
+                                                if (result.isConfirmed) {
                                                     handleCancelDelivery(delivery.id);
                                                 }
                                             }}

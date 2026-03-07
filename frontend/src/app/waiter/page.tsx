@@ -6,7 +6,7 @@ import Cookies from 'js-cookie';
 import { useAuth } from '../AuthContext';
 import { showSwal, toastSwal } from '../utils/swal';
 
-interface Product { id: number; name: string; price: number; category: string; }
+interface Product { id: number; name: string; price: number; category: string; imageUrl?: string; }
 interface OrderItem { product: Product; quantity: number; }
 interface Table {
     id: number;
@@ -206,13 +206,26 @@ export default function WaiterPage() {
                                 <button
                                     key={p.id}
                                     onClick={() => addToCart(p)}
-                                    className="bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center text-center active:bg-indigo-50 transition"
+                                    className="relative h-32 bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 dark:border-slate-700 overflow-hidden active:scale-95 transition-all group"
                                 >
-                                    <span className="text-3xl mb-1 opacity-80 transition-opacity">
-                                        ☕
-                                    </span>
-                                    <span className="font-bold text-slate-800 dark:text-slate-200 text-sm leading-tight mb-1">{p.name}</span>
-                                    <span className="text-indigo-500 font-extrabold text-sm">₺{p.price}</span>
+                                    {/* Arka Plan Görseli / Emoji Mapped Area */}
+                                    <div className="absolute inset-0 bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center transition-transform duration-500 group-hover:scale-105">
+                                        {p.imageUrl ? (
+                                            <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <span className="text-3xl mb-1 opacity-50 transition-opacity">
+                                                {p.category === 'Kahveler' ? '☕' : p.category === 'Tatlılar' ? '🍰' : '🍹'}
+                                            </span>
+                                        )}
+                                        {/* Karanlık Gradyan Katmanı */}
+                                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/30 to-transparent"></div>
+                                    </div>
+
+                                    {/* Ürün Metin ve Fiyat Alanı */}
+                                    <div className="absolute bottom-0 left-0 right-0 p-2 flex flex-col items-center text-center justify-end z-10">
+                                        <span className="font-bold text-white text-xs leading-tight mb-0.5 drop-shadow-md line-clamp-2">{p.name}</span>
+                                        <span className="font-extrabold text-white bg-indigo-600/90 backdrop-blur-sm px-2 py-0.5 rounded-full text-[10px] shadow-sm mt-1 border border-indigo-400/30">₺{p.price}</span>
+                                    </div>
                                 </button>
                             ))}
                         </div>

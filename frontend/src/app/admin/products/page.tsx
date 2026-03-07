@@ -13,6 +13,7 @@ interface Product {
     category: string;
     isActive: boolean;
     printerId?: number | null;
+    imageUrl?: string;
 }
 
 interface Printer {
@@ -184,9 +185,13 @@ export default function ProductsAdminPage() {
                                             </td>
                                             <td className="px-8 py-3">
                                                 <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-center font-black text-teal-600 dark:text-teal-400 group-hover:scale-110 transition-transform">
-                                                        <i className="fat fa-bowl-food"></i>
-                                                    </div>
+                                                    {prod.imageUrl ? (
+                                                        <img src={prod.imageUrl} alt={prod.name} className="w-12 h-12 rounded-2xl object-cover border border-slate-100 dark:border-slate-700 shadow-sm transition-transform group-hover:scale-110" />
+                                                    ) : (
+                                                        <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-center font-black text-teal-600 dark:text-teal-400 group-hover:scale-110 transition-transform">
+                                                            <i className="fat fa-bowl-food"></i>
+                                                        </div>
+                                                    )}
                                                     <div>
                                                         <p className="font-black text-slate-800 dark:text-white tracking-tight leading-none text-lg capitalize">{prod.name}</p>
                                                         <p className={`text-[10px] font-bold mt-1.5 uppercase tracking-widest ${prod.isActive ? 'text-emerald-500' : 'text-red-500'}`}>
@@ -296,6 +301,13 @@ export default function ProductsAdminPage() {
                                             <option value="Yan Ürün">Yan Ürün</option>
                                         </select>
                                         <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                    </div>
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Ürün Görsel URL (Opsiyonel)</label>
+                                    <div className="relative">
+                                        <i className="fat fa-image absolute left-4 top-3.5 text-indigo-500/50"></i>
+                                        <input type="text" value={formData.imageUrl || ''} onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder="https://unsplash.com/..." />
                                     </div>
                                 </div>
                                 <div className="md:col-span-2">
