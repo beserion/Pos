@@ -56,7 +56,6 @@
     "Admin": {
         "title": "Configurazione di Sistema",
         "subtitle": "Gestisci centralmente le operazioni di configurazione di base.",
-        "locations": "Gestione Filiali",
         "locationsDesc": "Aggiungi, modifica filiali",
         "zones": "Gestione Zone",
         "zonesDesc": "Sala, giardino ecc.",
@@ -64,8 +63,6 @@
         "tablesDesc": "Layout e definizioni tavoli",
         "employees": "Gestione Personale",
         "employeesDesc": "Titoli e permessi dipendenti",
-        "warehouses": "Gestione Magazzini",
-        "warehousesDesc": "Aree di stock e stoccaggio",
         "products": "Gestione Prodotti",
         "productsDesc": "Menu, categoria, prezzi",
         "ingredients": "Gestione Materie Prime",
@@ -157,15 +154,14 @@
         "cashierSelectionDesc": "Seleziona il tuo nome per accedere",
         "noCashierFound": "Nessun cassiere trovato nel sistema",
         "enterPin": "Inserisci il tuo PIN a 4 cifre",
-        "warehouses": "Magazzini",
-        "warehousesDesc": "Gestione stock e magazzini",
         "newWarehouse": "Nuovo Magazzino",
         "warehouseDeleted": "Magazzino eliminato con successo",
         "warehouseDeleteError": "Errore durante l'eliminazione del magazzino",
         "warehouseInfo": "Info Magazzino",
         "linkedBranch": "Filiale Collegata",
         "headquarters": "SEDE CENTRALE",
-        "noWarehouseFound": "Nessun magazzino trovato"
+        "noWarehouseFound": "Nessun magazzino trovato",
+        "newOrder": "Nuovo Ordine"
     },
     "Locations": {
         "title": "GESTIONE FILIALI",

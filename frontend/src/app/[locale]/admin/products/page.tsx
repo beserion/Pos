@@ -167,19 +167,20 @@ export default function ProductsAdminPage() {
     ];
 
     return (
-        <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative">
+        <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">
             {/* Background Decorations */}
-            <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-indigo-500/5 blur-[120px] pointer-events-none"></div>
-            <div className="absolute bottom-[-10%] left-[-5%] w-[40%] h-[40%] rounded-full bg-purple-500/5 blur-[120px] pointer-events-none"></div>
+            <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-teal-500/5 blur-[120px] pointer-events-none"></div>
+            <div className="absolute bottom-[-10%] left-[-5%] w-[40%] h-[40%] rounded-full bg-blue-500/5 blur-[120px] pointer-events-none"></div>
 
             <div className="w-full px-[50px] py-8 relative z-10">
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-                    <div className="d-flex align-items-center">
+                    <div className="flex items-center">
                         <i className="fat fa-mug-hot me-3 text-teal-600 dark:text-teal-400" style={{ fontSize: '50px' }}></i>
                         <div>
-                            <h3 className="mb-0 fw-bold text-teal-600 dark:text-teal-400 uppercase tracking-[0.25em]" id="title">{t('title')}</h3>
-                            <h5 className="text-muted mb-0 font-medium text-slate-400 dark:text-slate-500">{t('subtitle')}</h5>
+                            <h3 className="mb-0 text-3xl font-extralight text-teal-600 dark:text-teal-400 leading-none uppercase tracking-[0.25em]" id="title">{t('title')}</h3>
+                            <div className="h-1 w-1/2 bg-gradient-to-r from-teal-400 to-transparent rounded-full mt-2 mb-1"></div>
+                            <h5 className="text-muted mb-0 text-lg font-medium text-slate-400 dark:text-slate-500 mt-0.5">{t('subtitle')}</h5>
                         </div>
                     </div>
                     <div className="flex gap-3">
@@ -216,7 +217,7 @@ export default function ProductsAdminPage() {
 
                 {loading ? (
                     <div className="flex flex-col items-center justify-center p-20">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mb-4"></div>
                         <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t('loadingProducts')}</p>
                     </div>
                 ) : (
@@ -236,7 +237,7 @@ export default function ProductsAdminPage() {
                                 </thead>
                                 <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
                                     {products.map(prod => (
-                                        <tr key={prod.id} className="hover:bg-indigo-500/5 dark:hover:bg-indigo-500/10 transition-all group">
+                                        <tr key={prod.id} className="hover:bg-teal-500/5 dark:hover:bg-teal-500/10 transition-all group">
                                             <td className="px-8 py-3">
                                                 <span className="text-sm font-black text-slate-400">#{prod.id}</span>
                                             </td>
@@ -264,7 +265,7 @@ export default function ProductsAdminPage() {
                                             </td>
                                             <td className="px-8 py-3">
                                                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-700">
-                                                    <i className="fat fa-tag text-slate-400 text-xs"></i>
+                                                    <i className="fat fa-tag text-slate-400 text-xs text-teal-500"></i>
                                                     <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
                                                         {categoryOptions.find(opt => opt.value === prod.category) ? t(categoryOptions.find(opt => opt.value === prod.category)!.key) : prod.category || t('categoryOther')}
                                                     </span>
@@ -272,13 +273,13 @@ export default function ProductsAdminPage() {
                                             </td>
                                             <td className="px-8 py-3">
                                                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-700">
-                                                    <i className="fat fa-print text-slate-400 text-xs text-indigo-500"></i>
+                                                    <i className="fat fa-print text-slate-400 text-xs text-blue-500"></i>
                                                     <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
                                                         {printers.find(p => p.id === prod.printerId)?.name || t('printerDefault')}
                                                     </span>
                                                 </div>
                                             </td>
-                                            <td className="px-8 py-3 text-indigo-600 dark:text-indigo-400 font-black">
+                                            <td className="px-8 py-3 text-teal-600 dark:text-teal-400 font-black">
                                                 ₺{prod.price.toFixed(2)}
                                             </td>
                                             <td className="px-8 py-3 text-right">
@@ -312,162 +313,173 @@ export default function ProductsAdminPage() {
 
             {/* Modal */}
             {isModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xl">
-                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-xl shadow-lg overflow-hidden border border-white/20 dark:border-slate-700/50 animate-in fade-in zoom-in duration-300">
-                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20">
-                            <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase mb-0">
-                                <i className={`fat ${formData.id === 0 ? 'fa-plus-circle' : 'fa-pen-to-square'} text-indigo-600`}></i>
-                                {formData.id === 0 ? t('modalNew') : t('modalEdit')}
-                            </h2>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-0">{t('modalSubtitle')}</p>
-                        </div>
-
-                        <div className="flex bg-slate-100 dark:bg-slate-900/50 p-1 mx-8 mt-8 rounded-2xl">
-                            <button type="button" onClick={() => setActiveTab('genel')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'genel' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabGeneral')}</button>
-                            <button type="button" onClick={() => setActiveTab('gorsel')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'gorsel' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabImage')}</button>
-                        </div>
-
-                        <form onSubmit={handleSave} className="p-8">
-                            <div className="text-start w-100">
-                                {activeTab === 'genel' && (
-                                    <div className="row mp-0 g-2">
-                                        <div className="col-12 mb-2">
-                                            <div className="input-group">
-                                                <div className="input-group-text wd-130 font-bold"><span>{t('labelName')} <span className="text-danger">*</span></span></div>
-                                                <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="form-control" placeholder={t('labelName')} />
-                                                <div className="input-group-text wd-50"><i className="fat fa-bowl-food"></i></div>
-                                            </div>
-                                        </div>
-
-                                        <div className="col-md-6 mb-2">
-                                            <div className="input-group">
-                                                <div className="input-group-text wd-130 font-bold"><span>{t('labelSku')} <span className="text-danger">*</span></span></div>
-                                                <input type="text" required value={formData.sku} onChange={(e) => setFormData({ ...formData, sku: e.target.value })} className="form-control uppercase font-mono" placeholder={t('labelSku')} />
-                                                <div className="input-group-text wd-50"><i className="fat fa-barcode-read"></i></div>
-                                            </div>
-                                        </div>
-
-                                        <div className="col-md-6 mb-2">
-                                            <div className="input-group">
-                                                <div className="input-group-text wd-130 font-bold"><span>{t('labelPrice')} <span className="text-danger">*</span></span></div>
-                                                <input type="number" step="0.01" required value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} className="form-control" placeholder="0.00" />
-                                                <div className="input-group-text wd-50"><i className="fat fa-money-bill-1-wave"></i></div>
-                                            </div>
-                                        </div>
-
-                                        <div className="col-12 mb-2">
-                                            <div className="input-group">
-                                                <div className="input-group-text wd-130 font-bold"><span>{t('labelCategory')}</span></div>
-                                                <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="form-select">
-                                                    <option value="">{t('selectCategory')}</option>
-                                                    {categoryOptions.map(cat => (
-                                                        <option key={cat.key} value={cat.value}>{t(cat.key)}</option>
-                                                    ))}
-                                                </select>
-                                                <div className="input-group-text wd-50"><i className="fat fa-folder-tree"></i></div>
-                                            </div>
-                                        </div>
-
-                                        <div className="col-md-4 mb-2">
-                                            <div className="input-group">
-                                                <div className="input-group-text wd-130 font-bold"><span>{t('labelCost')}</span></div>
-                                                <input type="number" step="0.01" value={formData.costPrice} onChange={(e) => setFormData({ ...formData, costPrice: parseFloat(e.target.value) || 0 })} className="form-control" />
-                                                <div className="input-group-text wd-50"><i className="fat fa-tags"></i></div>
-                                            </div>
-                                        </div>
-
-                                        <div className="col-md-4 mb-2">
-                                            <div className="input-group">
-                                                <div className="input-group-text wd-130 font-bold"><span>{t('labelMinStock')}</span></div>
-                                                <input type="number" step="1" value={formData.minStockLevel} onChange={(e) => setFormData({ ...formData, minStockLevel: parseFloat(e.target.value) || 0 })} className="form-control" />
-                                                <div className="input-group-text wd-50"><i className="fat fa-triangle-exclamation"></i></div>
-                                            </div>
-                                        </div>
-
-                                        <div className="col-md-4 mb-2">
-                                            <div className="input-group">
-                                                <div className="input-group-text wd-130 font-bold"><span>{t('labelUnit')}</span></div>
-                                                <select value={formData.unit} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} className="form-select">
-                                                    {unitOptions.map(u => (
-                                                        <option key={u.key} value={u.value}>{t(u.key)}</option>
-                                                    ))}
-                                                </select>
-                                                <div className="input-group-text wd-50"><i className="fat fa-scale-balanced"></i></div>
-                                            </div>
-                                        </div>
-
-                                        <div className="col-12 mb-2">
-                                            <div className="input-group">
-                                                <div className="input-group-text wd-130 font-bold"><span>{t('labelPrinter')}</span></div>
-                                                <select value={formData.printerId || ''} onChange={(e) => setFormData({ ...formData, printerId: e.target.value ? parseInt(e.target.value) : null })} className="form-select">
-                                                    <option value="">{t('selectPrinter')}</option>
-                                                    {printers.map(printer => (
-                                                        <option key={printer.id} value={printer.id}>{printer.name}</option>
-                                                    ))}
-                                                </select>
-                                                <div className="input-group-text wd-50"><i className="fat fa-print"></i></div>
-                                            </div>
-                                        </div>
-
-                                        <div className="col-md-6 mb-2">
-                                            <div className="input-group">
-                                                <div className="input-group-text wd-130 font-bold"><span>{t('labelQuickSale')}</span></div>
-                                                <div className="form-control d-flex align-items-center">
-                                                    <div className="form-check form-switch mb-0">
-                                                        <input type="checkbox" checked={formData.isQuickSale} onChange={(e) => setFormData({ ...formData, isQuickSale: e.target.checked })} className="form-check-input" />
-                                                    </div>
-                                                </div>
-                                                <div className="input-group-text wd-50"><i className="fat fa-bolt"></i></div>
-                                            </div>
-                                        </div>
-
-                                        <div className="col-md-6 mb-2">
-                                            <div className="input-group">
-                                                <div className="input-group-text wd-130 font-bold"><span>{t('labelIngredient')}</span></div>
-                                                <div className="form-control d-flex align-items-center">
-                                                    <div className="form-check form-switch mb-0">
-                                                        <input type="checkbox" checked={formData.isIngredient} onChange={(e) => setFormData({ ...formData, isIngredient: e.target.checked })} className="form-check-input" />
-                                                    </div>
-                                                </div>
-                                                <div className="input-group-text wd-50"><i className="fat fa-leaf"></i></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {activeTab === 'gorsel' && (
-                                    <div className="row mp-0 g-2">
-                                        <div className="col-12 mb-2">
-                                            <div className="input-group">
-                                                <div className="input-group-text wd-130 font-bold"><span>{t('labelImageUrl')}</span></div>
-                                                <input type="text" value={formData.imageUrl || ''} onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })} className="form-control" placeholder="https://..." />
-                                                <div className="input-group-text wd-50"><i className="fat fa-image"></i></div>
-                                            </div>
-                                        </div>
-                                        <div className="col-12 flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-slate-900/30 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-3xl min-h-[250px]">
-                                            {formData.imageUrl ? (
-                                                <img src={formData.imageUrl} alt={t('preview')} className="w-48 h-48 object-cover rounded-2xl shadow-lg" />
-                                            ) : (
-                                                <div className="text-center opacity-40">
-                                                    <i className="fat fa-image text-4xl mb-2"></i>
-                                                    <p className="text-xs font-bold uppercase tracking-widest">{t('noPreview')}</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                <hr className="my-2" />
-                                <div className="d-flex justify-content-between align-items-center">
-                                    <button type="button" className="btn btn-soft-danger btn-label border" onClick={() => setIsModalOpen(false)}>
-                                        <i className="fas fa-times label-icon"></i> {tc('cancel')}
-                                    </button>
-                                    <button type="submit" className="btn btn-soft-success btn-label border">
-                                        <i className="fas fa-save label-icon"></i> {t('saveButton')}
-                                    </button>
-                                </div>
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xl animate-in fade-in zoom-in duration-300">
+                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-4xl shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col max-h-[90vh]">
+                        {/* Modal Header */}
+                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20 shrink-0">
+                            <div>
+                                <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase mb-0">
+                                    <i className={`fat ${formData.id === 0 ? 'fa-plus-circle' : 'fa-pen-to-square'} text-teal-600`}></i>
+                                    {formData.id === 0 ? t('modalNew') : t('modalEdit')}
+                                </h2>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-0">{t('modalSubtitle')}</p>
                             </div>
-                        </form>
+                            <button onClick={() => setIsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white shadow-sm transition-all">&times;</button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto w-full text-start">
+                            <form onSubmit={handleSave} id="productForm">
+                                {/* Tabs */}
+                                <div className="flex bg-slate-100 dark:bg-slate-900/50 p-1 mx-8 mt-8 rounded-2xl shrink-0">
+                                    <button type="button" onClick={() => setActiveTab('genel')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'genel' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabGeneral')}</button>
+                                    <button type="button" onClick={() => setActiveTab('gorsel')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'gorsel' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabImage')}</button>
+                                </div>
+
+                                <div className="p-8 space-y-6">
+                                    {activeTab === 'genel' && (
+                                        <div className="space-y-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelName')}</label>
+                                                <div className="relative">
+                                                    <i className="fat fa-bowl-food absolute left-4 top-4 text-teal-500/50"></i>
+                                                    <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder={t('labelName')} />
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelSku')}</label>
+                                                    <div className="relative">
+                                                        <i className="fat fa-barcode-read absolute left-4 top-4 text-teal-500/50"></i>
+                                                        <input type="text" required value={formData.sku} onChange={(e) => setFormData({ ...formData, sku: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold uppercase font-mono focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder={t('labelSku')} />
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelPrice')}</label>
+                                                    <div className="relative">
+                                                        <i className="fat fa-money-bill-1-wave absolute left-4 top-4 text-teal-500/50"></i>
+                                                        <input type="number" step="0.01" required value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0.00" />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCategory')}</label>
+                                                <div className="relative">
+                                                    <i className="fat fa-folder-tree absolute left-4 top-4 text-teal-500/50"></i>
+                                                    <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                        <option value="">{t('selectCategory')}</option>
+                                                        {categoryOptions.map(cat => (
+                                                            <option key={cat.key} value={cat.value}>{t(cat.key)}</option>
+                                                        ))}
+                                                    </select>
+                                                    <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCost')}</label>
+                                                    <div className="relative">
+                                                        <i className="fat fa-tags absolute left-4 top-4 text-teal-500/50"></i>
+                                                        <input type="number" step="0.01" value={formData.costPrice} onChange={(e) => setFormData({ ...formData, costPrice: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0.00" />
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelMinStock')}</label>
+                                                    <div className="relative">
+                                                        <i className="fat fa-triangle-exclamation absolute left-4 top-4 text-teal-500/50"></i>
+                                                        <input type="number" step="1" value={formData.minStockLevel} onChange={(e) => setFormData({ ...formData, minStockLevel: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0" />
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelUnit')}</label>
+                                                    <div className="relative">
+                                                        <i className="fat fa-scale-balanced absolute left-4 top-4 text-teal-500/50"></i>
+                                                        <select value={formData.unit} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                            {unitOptions.map(u => (
+                                                                <option key={u.key} value={u.value}>{t(u.key)}</option>
+                                                            ))}
+                                                        </select>
+                                                        <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelPrinter')}</label>
+                                                <div className="relative">
+                                                    <i className="fat fa-print absolute left-4 top-4 text-teal-500/50"></i>
+                                                    <select value={formData.printerId || ''} onChange={(e) => setFormData({ ...formData, printerId: e.target.value ? parseInt(e.target.value) : null })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                        <option value="">{t('selectPrinter')}</option>
+                                                        {printers.map(printer => (
+                                                            <option key={printer.id} value={printer.id}>{printer.name}</option>
+                                                        ))}
+                                                    </select>
+                                                    <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelQuickSale')}</label>
+                                                    <div className="relative flex items-center pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl w-full">
+                                                        <i className="fat fa-bolt absolute left-4 top-4 text-teal-500/50"></i>
+                                                        <div className="form-check form-switch mb-0 flex-1 d-flex justify-content-end pr-2">
+                                                            <input className="form-check-input cursor-pointer" type="checkbox" checked={formData.isQuickSale} onChange={(e) => setFormData({ ...formData, isQuickSale: e.target.checked })} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelIngredient')}</label>
+                                                    <div className="relative flex items-center pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl w-full">
+                                                        <i className="fat fa-leaf absolute left-4 top-4 text-teal-500/50"></i>
+                                                        <div className="form-check form-switch mb-0 flex-1 d-flex justify-content-end pr-2">
+                                                            <input className="form-check-input cursor-pointer" type="checkbox" checked={formData.isIngredient} onChange={(e) => setFormData({ ...formData, isIngredient: e.target.checked })} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'gorsel' && (
+                                        <div className="space-y-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelImageUrl')}</label>
+                                                <div className="relative">
+                                                    <i className="fat fa-image absolute left-4 top-4 text-teal-500/50"></i>
+                                                    <input type="text" value={formData.imageUrl || ''} onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="https://..." />
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-slate-900/30 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-3xl min-h-[250px]">
+                                                {formData.imageUrl ? (
+                                                    <img src={formData.imageUrl} alt={t('preview')} className="w-48 h-48 object-cover rounded-2xl shadow-lg" />
+                                                ) : (
+                                                    <div className="text-center opacity-40">
+                                                        <i className="fat fa-image text-4xl mb-2"></i>
+                                                        <p className="text-xs font-bold uppercase tracking-widest">{t('noPreview')}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="pt-6 flex gap-3">
+                                        <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
+                                            <i className="fat fa-xmark text-lg"></i> {tc('cancel')}
+                                        </button>
+                                        <button type="submit" className="flex-[2] py-4 bg-gradient-to-r from-teal-600 to-teal-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-teal-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
+                                            <i className="fat fa-check text-lg"></i> {tc('save')}
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 </div>
             )}

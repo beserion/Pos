@@ -290,12 +290,12 @@ export default function AdminDeliveriesPage() {
                                 </div>
                             </div>
 
-                            <div className="pt-6 flex flex-col gap-3">
-                                <button type="submit" className="w-full py-4 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-indigo-500/20 hover:scale-[1.02] active:scale-95 transition-all">
-                                    {tc('save')}
+                            <div className="pt-6 flex gap-3">
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
+                                    <i className="fat fa-xmark text-lg"></i> {tc('cancel')}
                                 </button>
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="w-full py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors">
-                                    {tc('cancel')}
+                                <button type="submit" className="flex-[2] py-4 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-indigo-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
+                                    <i className="fat fa-check text-lg"></i> {tc('save')}
                                 </button>
                             </div>
                         </form>

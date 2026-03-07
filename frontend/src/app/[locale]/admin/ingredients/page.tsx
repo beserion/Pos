@@ -74,16 +74,16 @@ export default function IngredientsAdminPage() {
             if (formData.id === 0) {
                 const { id, ...postData } = payload;
                 await axios.post('http://localhost:3050/products', postData, config);
-                toastSwal({ title: tc('success'), text: tc('added'), icon: 'success' });
+                toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             } else {
                 await axios.put(`http://localhost:3050/products/${formData.id}`, payload, config);
-                toastSwal({ title: tc('success'), text: tc('saved'), icon: 'success' });
+                toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             }
             setIsModalOpen(false);
             fetchData();
         } catch (error: any) {
             console.error('Error saving ingredient', error);
-            showSwal({ title: tc('error'), text: error?.response?.data?.message || tc('saveError'), icon: 'error' });
+            showSwal({ title: tc('error'), text: error?.response?.data?.message || tc('error'), icon: 'error' });
         }
     };
 
@@ -93,7 +93,7 @@ export default function IngredientsAdminPage() {
             text: t('deleteConfirmText'),
             icon: 'warning',
             showCancelButton: true,
-            confirmButtonText: tc('confirmDelete'),
+            confirmButtonText: tc('delete'),
             cancelButtonText: tc('cancel')
         });
 
@@ -102,11 +102,11 @@ export default function IngredientsAdminPage() {
                 await axios.delete(`http://localhost:3050/products/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
-                toastSwal({ title: tc('deleted'), text: t('deleteSuccess'), icon: 'success' });
+                toastSwal({ title: tc('success'), text: t('deleteSuccess'), icon: 'success' });
                 fetchData();
             } catch (error) {
                 console.error('Error deleting ingredient', error);
-                showSwal({ title: tc('error'), text: tc('deleteError'), icon: 'error' });
+                showSwal({ title: tc('error'), text: tc('error'), icon: 'error' });
             }
         }
     };
@@ -139,7 +139,7 @@ export default function IngredientsAdminPage() {
     };
 
     return (
-        <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative">
+        <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">
             {/* Background Decorations */}
             <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-emerald-500/5 blur-[120px] pointer-events-none"></div>
             <div className="absolute bottom-[-10%] left-[-5%] w-[40%] h-[40%] rounded-full bg-teal-500/5 blur-[120px] pointer-events-none"></div>
@@ -253,7 +253,7 @@ export default function IngredientsAdminPage() {
                                             <td colSpan={6} className="p-20 text-center">
                                                 <div className="flex flex-col items-center opacity-40">
                                                     <i className="fat fa-inbox-out text-6xl mb-4 text-slate-300"></i>
-                                                    <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">{t('notFound')}</p>
+                                                    <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">{tc('notFound')}</p>
                                                 </div>
                                             </td>
                                         </tr>
@@ -268,7 +268,7 @@ export default function IngredientsAdminPage() {
             {/* Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xl">
-                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-xl shadow-lg overflow-hidden border border-white/20 dark:border-slate-700/50 animate-in fade-in zoom-in duration-300">
+                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-4xl shadow-lg overflow-hidden border border-white/20 dark:border-slate-700/50 animate-in fade-in zoom-in duration-300">
                         <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20">
                             <div>
                                 <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase">
@@ -313,7 +313,7 @@ export default function IngredientsAdminPage() {
                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCost')}</label>
                                     <div className="relative">
                                         <i className="fat fa-money-bill-1-wave absolute left-4 top-3.5 text-emerald-500/50"></i>
-                                        <input type="number" step="0.01" required value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-emerald-500/10 outline-none transition-shadow" placeholder="0.00" />
+                                        <input type="number" step="0.01" required value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-emerald-500/10 outline-none transition-shadow" placeholder="0.00" />
                                     </div>
                                 </div>
                                 <div>
@@ -325,11 +325,11 @@ export default function IngredientsAdminPage() {
                                 </div>
                             </div>
                             <div className="pt-6 flex gap-3">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors">
-                                    {tc('cancel')}
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
+                                    <i className="fat fa-xmark text-lg"></i> {tc('cancel')}
                                 </button>
-                                <button type="submit" className="flex-[2] py-4 bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 transition-all">
-                                    {t('saveButton')}
+                                <button type="submit" className="flex-[2] py-4 bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
+                                    <i className="fat fa-check text-lg"></i> {t('saveButton')}
                                 </button>
                             </div>
                         </form>

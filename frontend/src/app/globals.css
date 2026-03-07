@@ -38,9 +38,29 @@ h6,
 }
 
 /* Modal Rule Utilities */
-.wd-130 { width: 130px !important; min-width: 130px; }
-.wd-50 { width: 50px !important; min-width: 50px; }
-.font-bold { font-weight: 700 !important; }
+.wd-130 {
+  width: 130px !important;
+  min-width: 130px;
+}
+
+.wd-50 {
+  width: 50px !important;
+  min-width: 50px;
+}
+
+.font-bold {
+  font-weight: 700 !important;
+}
+
+.input-group {
+  height: 38px;
+}
+
+.input-group .input-group-text,
+.form-control,
+.form-select {
+  height: 38px;
+}
 
 /* Light mode button shadow enhancement */
 @media (prefers-color-scheme: light) {
@@ -95,7 +115,7 @@ h6,
   transition: all 0.2s !important;
 }
 
-.fc-button-primary:not(:disabled).fc-button-active, 
+.fc-button-primary:not(:disabled).fc-button-active,
 .fc-button-primary:not(:disabled):active {
   background-color: #4f46e5 !important;
   border-color: #4f46e5 !important;

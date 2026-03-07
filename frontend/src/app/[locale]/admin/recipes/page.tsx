@@ -160,7 +160,7 @@ export default function RecipesAdminPage() {
                                 {t('title')}
                             </h3>
                             <div className="h-1 w-1/2 bg-gradient-to-r from-orange-400 to-transparent rounded-full mt-2 mb-1"></div>
-                            <h5 className="text-muted mb-0 text-sm font-semibold text-slate-500 dark:text-slate-400 tracking-wide">
+                            <h5 className="text-muted mb-0 text-lg font-medium text-slate-400 dark:text-slate-500 mt-0.5">
                                 {t('subtitle')}
                             </h5>
                         </div>
@@ -179,7 +179,7 @@ export default function RecipesAdminPage() {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                     <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-orange-300 dark:hover:border-orange-500/40 hover:shadow-[0_8px_30px_-5px_rgba(249,115,22,0.3)] hover:scale-[1.02] cursor-pointer">
                         <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Toplam Reçete</p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('totalRecipeItems')}</p>
                             <h3 className="text-3xl font-black text-slate-800 dark:text-white">{recipes.length}</h3>
                         </div>
                         <div className="w-16 h-16 rounded-2xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center text-orange-600 dark:text-orange-400">
@@ -204,7 +204,7 @@ export default function RecipesAdminPage() {
                 {loading ? (
                     <div className="flex flex-col items-center justify-center p-20">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mb-4"></div>
-                        <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Veriler Yükleniyor...</p>
+                        <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t('loadingRecipes')}</p>
                     </div>
                 ) : (
                     <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl rounded-[40px] border border-white dark:border-slate-700/50 overflow-hidden">
@@ -213,10 +213,10 @@ export default function RecipesAdminPage() {
                                 <thead className="sticky top-0 z-10">
                                     <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-700/50">
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest" style={{ width: '40px' }}>ID</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ürün</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">İçerik (Malzeme)</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Miktar / Birim</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">İşlemler</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableProduct')}</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableIngredient')}</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableQuantity')}</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t('tableActions')}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
@@ -225,7 +225,7 @@ export default function RecipesAdminPage() {
                                             <td className="px-8 py-3">
                                                 <span className="text-sm font-black text-slate-400">#{recipe.id}</span>
                                             </td>
-                                            <td className="px-8 py-3">
+                                            <td className="px-8 py-3 border-r border-slate-50/50 dark:border-slate-700/30">
                                                 <div className="flex items-center gap-4">
                                                     <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-center font-black text-orange-600 dark:text-orange-400 group-hover:scale-110 transition-transform">
                                                         <i className="fat fa-bowl-food"></i>
@@ -235,14 +235,14 @@ export default function RecipesAdminPage() {
                                             </td>
                                             <td className="px-8 py-3">
                                                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-700">
-                                                    <i className="fat fa-leaf text-emerald-500 text-xs text-indigo-500"></i>
+                                                    <i className="fat fa-leaf text-emerald-500 text-xs"></i>
                                                     <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
                                                         {recipe.ingredient.name}
                                                     </span>
                                                 </div>
                                             </td>
                                             <td className="px-8 py-3 text-orange-600 dark:text-orange-400 font-black">
-                                                {recipe.quantity} {recipe.unit}
+                                                {recipe.quantity} {getUnitName(recipe.unit)}
                                             </td>
                                             <td className="px-8 py-3 text-right">
                                                 <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
@@ -261,7 +261,7 @@ export default function RecipesAdminPage() {
                                             <td colSpan={5} className="p-20 text-center">
                                                 <div className="flex flex-col items-center opacity-40">
                                                     <i className="fat fa-scroll text-6xl mb-4 text-slate-300"></i>
-                                                    <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">Kayıtlı Reçete Bulunamadı</p>
+                                                    <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">{t('notFound')}</p>
                                                 </div>
                                             </td>
                                         </tr>
@@ -276,76 +276,79 @@ export default function RecipesAdminPage() {
             {/* Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xl">
-                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-xl shadow-lg overflow-hidden border border-white/20 dark:border-slate-700/50 animate-in fade-in zoom-in duration-300">
-                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20">
-                            <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase mb-0">
-                                <i className={`fat ${formData.id === 0 ? 'fa-plus-circle' : 'fa-pen-to-square'} text-orange-600`}></i>
-                                {formData.id === 0 ? 'YENİ REÇETE' : 'REÇETE DÜZENLE'}
-                            </h2>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-0">Ürün içeriğini tanımlayın</p>
+                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-4xl shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-300">
+                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20 shrink-0">
+                            <div>
+                                <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase mb-0">
+                                    <i className={`fat ${formData.id === 0 ? 'fa-plus-circle' : 'fa-pen-to-square'} text-orange-600`}></i>
+                                    {formData.id === 0 ? t('modalNew') : t('modalEdit')}
+                                </h2>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-0">{t('modalSubtitle')}</p>
+                            </div>
+                            <button type="button" onClick={() => setIsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white shadow-sm transition-all">&times;</button>
                         </div>
-                        <form onSubmit={handleSave} className="p-8">
-                            <div className="text-start w-100">
-                                <div className="row mp-0 g-2">
-                                    <div className="col-12 mb-2">
-                                        <div className="input-group">
-                                            <div className="input-group-text wd-130 font-bold"><span>Ana Ürün <span className="text-danger">*</span></span></div>
-                                            <select required value={formData.productId || ''} onChange={(e) => setFormData({ ...formData, productId: parseInt(e.target.value) })} className="form-select">
-                                                <option value="">Ürün Seçiniz</option>
-                                                {products.map(p => (
-                                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                                ))}
-                                            </select>
-                                            <div className="input-group-text wd-50"><i className="fat fa-bowl-food"></i></div>
-                                        </div>
-                                    </div>
+                        <form onSubmit={handleSave} className="flex-1 overflow-y-auto w-full p-8 space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelProduct')}</label>
+                                <div className="relative">
+                                    <i className="fat fa-bowl-food absolute left-4 top-4 text-orange-500/50"></i>
+                                    <select required value={formData.productId || ''} onChange={(e) => setFormData({ ...formData, productId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-orange-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                        <option value="">{t('selectProduct')}</option>
+                                        {products.map(p => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
+                                    </select>
+                                    <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                </div>
+                            </div>
 
-                                    <div className="col-12 mb-2">
-                                        <div className="input-group">
-                                            <div className="input-group-text wd-130 font-bold"><span>Malzeme <span className="text-danger">*</span></span></div>
-                                            <select required value={formData.ingredientId || ''} onChange={(e) => setFormData({ ...formData, ingredientId: parseInt(e.target.value) })} className="form-select">
-                                                <option value="">Malzeme Seçiniz</option>
-                                                {products.filter(p => (p as any).isIngredient).map(i => (
-                                                    <option key={i.id} value={i.id}>{i.name}</option>
-                                                ))}
-                                            </select>
-                                            <div className="input-group-text wd-50"><i className="fat fa-leaf"></i></div>
-                                        </div>
-                                    </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('tableIngredient')}</label>
+                                <div className="relative">
+                                    <i className="fat fa-leaf absolute left-4 top-4 text-emerald-500/50"></i>
+                                    <select required value={formData.ingredientId || ''} onChange={(e) => setFormData({ ...formData, ingredientId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-orange-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                        <option value="">{t('selectIngredient')}</option>
+                                        {products.filter(p => (p as any).isIngredient).map(i => (
+                                            <option key={i.id} value={i.id}>{i.name}</option>
+                                        ))}
+                                    </select>
+                                    <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                </div>
+                            </div>
 
-                                    <div className="col-md-6 mb-2">
-                                        <div className="input-group">
-                                            <div className="input-group-text wd-130 font-bold"><span>Miktar</span></div>
-                                            <input type="number" step="0.001" value={formData.quantity} onChange={(e) => setFormData({ ...formData, quantity: parseFloat(e.target.value) })} className="form-control" />
-                                            <div className="input-group-text wd-50"><i className="fat fa-scale-balanced"></i></div>
-                                        </div>
-                                    </div>
-
-                                    <div className="col-md-6 mb-2">
-                                        <div className="input-group">
-                                            <div className="input-group-text wd-130 font-bold"><span>Birim</span></div>
-                                            <select value={formData.unit} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} className="form-select">
-                                                <option value="kg">Kilogram (kg)</option>
-                                                <option value="gr">Gram (gr)</option>
-                                                <option value="lt">Litre (lt)</option>
-                                                <option value="ml">Mililitre (ml)</option>
-                                                <option value="adet">Adet (pcs)</option>
-                                                <option value="porsiyon">Porsiyon</option>
-                                            </select>
-                                            <div className="input-group-text wd-50"><i className="fat fa-ruler-combined"></i></div>
-                                        </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelQuantity')}</label>
+                                    <div className="relative">
+                                        <i className="fat fa-scale-balanced absolute left-4 top-4 text-orange-500/50"></i>
+                                        <input type="number" step="0.001" value={formData.quantity} onChange={(e) => setFormData({ ...formData, quantity: parseFloat(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-orange-500/10 outline-none transition-shadow" placeholder="0" />
                                     </div>
                                 </div>
 
-                                <hr className="my-2" />
-                                <div className="d-flex justify-content-between align-items-center">
-                                    <button type="button" className="btn btn-soft-danger btn-label border" onClick={() => setIsModalOpen(false)}>
-                                        <i className="fas fa-times label-icon"></i> İptal
-                                    </button>
-                                    <button type="submit" className="btn btn-soft-success btn-label border">
-                                        <i className="fas fa-save label-icon"></i> Kaydet
-                                    </button>
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelUnit')}</label>
+                                    <div className="relative">
+                                        <i className="fat fa-ruler-combined absolute left-4 top-4 text-orange-500/50"></i>
+                                        <select value={formData.unit} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-orange-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                            <option value="kg">{t('unitKg')}</option>
+                                            <option value="gr">{t('unitGr')}</option>
+                                            <option value="lt">{t('unitLt')}</option>
+                                            <option value="ml">{t('unitMl')}</option>
+                                            <option value="adet">{t('unitPiece')}</option>
+                                            <option value="porsiyon">{t('unitPortion')}</option>
+                                        </select>
+                                        <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                    </div>
                                 </div>
+                            </div>
+
+                            <div className="pt-6 flex gap-3">
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
+                                    <i className="fat fa-xmark text-lg"></i> {tc('cancel')}
+                                </button>
+                                <button type="submit" className="flex-[2] py-4 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-orange-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
+                                    <i className="fat fa-check text-lg"></i> {t('saveButton')}
+                                </button>
                             </div>
                         </form>
                     </div>

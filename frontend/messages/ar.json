@@ -64,8 +64,6 @@
         "tablesDesc": "تخطيط وتعريفات الطاولات",
         "employees": "إدارة الموظفين",
         "employeesDesc": "عناوين وصلاحيات الموظفين",
-        "warehouses": "إدارة المستودعات",
-        "warehousesDesc": "مناطق المخزون والتخزين",
         "products": "إدارة المنتجات",
         "productsDesc": "القائمة، الفئات، والتسعير",
         "ingredients": "إدارة المواد الخام",
@@ -157,15 +155,14 @@
         "cashierSelectionDesc": "يرجى اختيار اسمك لتسجيل الدخول",
         "noCashierFound": "لم يتم العثور على كاشير في النظام",
         "enterPin": "أدخل رمز PIN المكون من 4 أرقام",
-        "warehouses": "المستودعات",
-        "warehousesDesc": "إدارة المخزون والمستودعات",
         "newWarehouse": "مستودع جديد",
         "warehouseDeleted": "تم حذف المستودع بنجاح",
         "warehouseDeleteError": "خطأ أثناء حذف المستودع",
         "warehouseInfo": "بيانات المستودع",
         "linkedBranch": "الفرع المرتبط",
         "headquarters": "المقر الرئيسي",
-        "noWarehouseFound": "لم يتم العثور على مستودع"
+        "noWarehouseFound": "لم يتم العثور على مستودع",
+        "newOrder": "طلب جديد"
     },
     "Locations": {
         "title": "إدارة الفروع",

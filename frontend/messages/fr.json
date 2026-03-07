@@ -157,15 +157,14 @@
         "cashierSelectionDesc": "Veuillez choisir votre nom pour vous connecter",
         "noCashierFound": "Aucun caissier trouvé",
         "enterPin": "Entrez votre PIN à 4 chiffres",
-        "warehouses": "Entrepôts",
-        "warehousesDesc": "Gestion des stocks et zones de stockage",
         "newWarehouse": "Nouvel Entrepôt",
         "warehouseDeleted": "Entrepôt supprimé avec succès",
         "warehouseDeleteError": "Erreur lors de la suppression de l'entrepôt",
         "warehouseInfo": "Infos Entrepôt",
         "linkedBranch": "Succursale Liée",
         "headquarters": "SIÈGE SOCIAL",
-        "noWarehouseFound": "Aucun entrepôt trouvé"
+        "noWarehouseFound": "Aucun entrepôt trouvé",
+        "newOrder": "Nouvelle Commande"
     },
     "Locations": {
         "title": "GESTION DES SUCCURSALES",

@@ -156,7 +156,8 @@
         "warehouseInfo": "Информация о складе",
         "linkedBranch": "Связанный филиал",
         "headquarters": "ГЛАВНЫЙ ОФИС",
-        "noWarehouseFound": "Склад не найден"
+        "noWarehouseFound": "Склад не найден",
+        "newOrder": "Новый заказ"
     },
     "Locations": {
         "title": "УПРАВЛЕНИЕ ФИЛИАЛАМИ",

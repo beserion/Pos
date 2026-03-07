@@ -32,7 +32,7 @@ interface Invoice {
 }
 
 export default function CustomerDetailPage() {
-    const { id } = useParams();
+    const { id, locale } = useParams();
     const router = useRouter();
     const { user, loading: authLoading } = useAuth();
     const API_URL = 'http://localhost:3050';
@@ -95,7 +95,7 @@ export default function CustomerDetailPage() {
                     </div>
                     <div>
                         <button
-                            onClick={() => router.push('/customers')}
+                            onClick={() => router.push(`/${locale}/customers`)}
                             className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
                         >
                             <i className="fat fa-reply"></i> Listeye Dön

@@ -157,15 +157,14 @@
         "cashierSelectionDesc": "Παρακαλώ επιλέξτε το όνομά σας για σύνδεση",
         "noCashierFound": "Δεν βρέθηκαν ταμίες στο σύστημα",
         "enterPin": "Εισαγάγετε το 4ψήφιο PIN σας",
-        "warehouses": "Αποθήκες",
-        "warehousesDesc": "Διαχείριση αποθεμάτων και αποθηκών",
         "newWarehouse": "Νέα Αποθήκη",
         "warehouseDeleted": "Η αποθήκη διαγράφηκε επιτυχώς",
         "warehouseDeleteError": "Σφάλμα κατά τη διαγραφή της αποθήκης",
         "warehouseInfo": "Πληροφορίες Αποθήκης",
         "linkedBranch": "Συνδεδεμένο Υποκατάστημα",
         "headquarters": "ΚΕΝΤΡΙΚΑ",
-        "noWarehouseFound": "Δεν βρέθηκε αποθήκη"
+        "noWarehouseFound": "Δεν βρέθηκε αποθήκη",
+        "newOrder": "Νέα Παραγγελία"
     },
     "Locations": {
         "title": "ΔΙΑΧΕΙΡΙΣΗ ΥΠΟΚΑΤΑΣΤΗΜΑΤΩΝ",

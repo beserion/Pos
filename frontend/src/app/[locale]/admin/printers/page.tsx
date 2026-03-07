@@ -16,7 +16,7 @@ interface Printer {
 }
 
 export default function PrintersAdminPage() {
-    const t = useTranslations('Admin');
+    const t = useTranslations('Printers');
     const tc = useTranslations('Common');
     const locale = useLocale();
     const router = useRouter();
@@ -44,7 +44,7 @@ export default function PrintersAdminPage() {
             setPrinters(res.data);
         } catch (error) {
             console.error('Error fetching printers', error);
-            showSwal({ title: 'Hata', text: 'Yazıcılar yüklenirken bir sorun oluştu.', icon: 'error' });
+            showSwal({ title: tc('error'), text: t('loadingError'), icon: 'error' });
         } finally {
             setLoading(false);
         }
@@ -58,28 +58,28 @@ export default function PrintersAdminPage() {
             if (formData.id === 0) {
                 const { id, ...postData } = formData;
                 await axios.post('http://localhost:3050/printers', postData, config);
-                toastSwal({ title: 'Başarılı!', text: 'Yazıcı eklendi.', icon: 'success' });
+                toastSwal({ title: tc('success'), text: t('deleteSuccess'), icon: 'success' });
             } else {
                 const { id, ...putData } = formData;
                 await axios.put(`http://localhost:3050/printers/${id}`, putData, config);
-                toastSwal({ title: 'Başarılı!', text: 'Yazıcı güncellendi.', icon: 'success' });
+                toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             }
             setIsModalOpen(false);
             fetchPrinters();
         } catch (error: any) {
             console.error('Error saving printer', error);
-            showSwal({ title: 'Hata', text: error?.response?.data?.message || 'Yazıcı kaydedilemedi.', icon: 'error' });
+            showSwal({ title: tc('error'), text: error?.response?.data?.message || tc('error'), icon: 'error' });
         }
     };
 
     const handleDelete = async (id: number) => {
         const result = await showSwal({
-            title: 'Emin misiniz?',
-            text: "Bu yazıcıyı silmek istediğinize emin misiniz? Bağlı ürünlerin yazıcı atamaları sıfırlanacaktır.",
+            title: t('deleteConfirmTitle'),
+            text: t('deleteConfirmText'),
             icon: 'warning',
             showCancelButton: true,
-            confirmButtonText: 'Evet, Sil!',
-            cancelButtonText: 'İptal'
+            confirmButtonText: tc('delete'),
+            cancelButtonText: tc('cancel')
         });
 
         if (result.isConfirmed && user?.token) {
@@ -87,11 +87,11 @@ export default function PrintersAdminPage() {
                 await axios.delete(`http://localhost:3050/printers/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
-                toastSwal({ title: 'Silindi!', text: 'Yazıcı başarıyla silindi.', icon: 'success' });
+                toastSwal({ title: tc('delete'), text: t('deleteSuccess'), icon: 'success' });
                 fetchPrinters();
             } catch (error) {
                 console.error('Error deleting printer', error);
-                showSwal({ title: 'Hata', text: 'Yazıcı silinirken bir sorun oluştu.', icon: 'error' });
+                showSwal({ title: tc('error'), text: tc('error'), icon: 'error' });
             }
         }
     };
@@ -111,16 +111,17 @@ export default function PrintersAdminPage() {
             <div className="w-full px-[50px] py-8 relative z-10">
                 {/* Header - formtitle */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-                    <div className="d-flex align-items-center">
+                    <div className="flex items-center">
                         <i className="fat fa-print me-3 text-sky-600 dark:text-sky-400" style={{ fontSize: '50px' }}></i>
                         <div>
-                            <h3 className="mb-0 fw-bold text-sky-600 dark:text-sky-400 uppercase tracking-[0.25em]" id="title">{t('printers')}</h3>
-                            <h5 className="text-muted mb-0 font-medium text-slate-400 dark:text-slate-500">{t('printersDesc')}</h5>
+                            <h3 className="mb-0 text-3xl font-extralight text-sky-600 dark:text-sky-400 leading-none uppercase tracking-[0.25em]" id="title">{t('title')}</h3>
+                            <div className="h-1 w-1/2 bg-gradient-to-r from-sky-400 to-transparent rounded-full mt-2 mb-1"></div>
+                            <h5 className="text-muted mb-0 text-lg font-medium text-slate-400 dark:text-slate-500 mt-0.5">{t('subtitle')}</h5>
                         </div>
                     </div>
                     <div className="flex gap-3">
                         <button onClick={() => openModal()} className="px-6 py-3 bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/20 text-sky-600 dark:text-sky-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-sky-100 dark:hover:bg-sky-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
-                            <i className="fat fa-plus-circle text-lg"></i> Yeni Yazıcı
+                            <i className="fat fa-plus-circle text-lg"></i> {t('newPrinter')}
                         </button>
                         <button onClick={() => router.push(`/${locale}/admin`)} className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center gap-2">
                             <i className="fat fa-reply"></i> {tc('back')}
@@ -132,7 +133,7 @@ export default function PrintersAdminPage() {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                     <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-sky-300 dark:hover:border-sky-500/40 hover:shadow-[0_8px_30px_-5px_rgba(14,165,233,0.3)] hover:scale-[1.02] cursor-pointer">
                         <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Toplam Yazıcı</p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('totalPrinters')}</p>
                             <h3 className="text-3xl font-black text-slate-800 dark:text-white">{printers.length}</h3>
                         </div>
                         <div className="w-16 h-16 rounded-2xl bg-sky-50 dark:bg-sky-500/10 flex items-center justify-center text-sky-600 dark:text-sky-400">
@@ -141,7 +142,7 @@ export default function PrintersAdminPage() {
                     </div>
                     <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-emerald-300 dark:hover:border-emerald-500/40 hover:shadow-[0_8px_30px_-5px_rgba(16,185,129,0.3)] hover:scale-[1.02] cursor-pointer">
                         <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Aktif Yazıcılar</p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('activePrinters')}</p>
                             <h3 className="text-3xl font-black text-slate-800 dark:text-white">{printers.filter(p => p.isActive).length}</h3>
                         </div>
                         <div className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
@@ -153,7 +154,7 @@ export default function PrintersAdminPage() {
                 {loading ? (
                     <div className="flex flex-col items-center justify-center p-20">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-600 mb-4"></div>
-                        <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Veriler Yükleniyor...</p>
+                        <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t('loading')}</p>
                     </div>
                 ) : (
                     <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl rounded-[40px] border border-white dark:border-slate-700/50 overflow-hidden">
@@ -161,11 +162,11 @@ export default function PrintersAdminPage() {
                             <table className="w-full text-left border-collapse">
                                 <thead className="sticky top-0 z-10">
                                     <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-700/50">
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest" style={{ width: '40px' }}>ID</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Yazıcı Bilgisi</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Sistem Adı (Windows)</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Bağlantı (IP)</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">İşlemler</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest" style={{ width: '40px' }}>{t('tableId')}</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableInfo')}</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableSystemName')}</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableIp')}</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t('tableActions')}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
@@ -181,9 +182,9 @@ export default function PrintersAdminPage() {
                                                     </div>
                                                     <div>
                                                         <p className="font-black text-slate-800 dark:text-white tracking-tight leading-none text-lg capitalize">{printer.name}</p>
-                                                        <p className="text-xs font-bold text-slate-500 mt-1">{printer.location || 'Konum Belirtilmemiş'}</p>
+                                                        <p className="text-xs font-bold text-slate-500 mt-1">{printer.location || t('locationNotSpecified')}</p>
                                                         <p className={`text-[10px] font-bold mt-1.5 uppercase tracking-widest ${printer.isActive ? 'text-emerald-500' : 'text-red-500'}`}>
-                                                            {printer.isActive ? 'AKTİF YAZICI' : 'PASİF'}
+                                                            {printer.isActive ? t('statusActive') : t('statusPassive')}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -214,7 +215,7 @@ export default function PrintersAdminPage() {
                                             <td colSpan={5} className="p-20 text-center">
                                                 <div className="flex flex-col items-center opacity-40">
                                                     <i className="fat fa-print text-6xl mb-4 text-slate-300"></i>
-                                                    <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">Kayıtlı Yazıcı Bulunamadı</p>
+                                                    <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">{t('notFound')}</p>
                                                 </div>
                                             </td>
                                         </tr>
@@ -229,68 +230,72 @@ export default function PrintersAdminPage() {
             {/* Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xl">
-                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-xl shadow-lg overflow-hidden border border-white/20 dark:border-slate-700/50 animate-in fade-in zoom-in duration-300">
-                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20">
-                            <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase mb-0">
-                                <i className={`fat ${formData.id === 0 ? 'fa-plus-circle' : 'fa-pen-to-square'} text-sky-600`}></i>
-                                {formData.id === 0 ? 'YENİ YAZICI' : 'YAZICI DÜZENLE'}
-                            </h2>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-0">Yazıcı ağ bilgilerini doldurun</p>
+                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-4xl shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-300">
+                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20 shrink-0">
+                            <div>
+                                <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase mb-0">
+                                    <i className={`fat ${formData.id === 0 ? 'fa-plus-circle' : 'fa-pen-to-square'} text-sky-600`}></i>
+                                    {formData.id === 0 ? t('modalNew') : t('modalEdit')}
+                                </h2>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-0">{t('modalSubtitle')}</p>
+                            </div>
+                            <button type="button" onClick={() => setIsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white shadow-sm transition-all">&times;</button>
                         </div>
 
-                        <form onSubmit={handleSave} className="p-8">
-                            <div className="text-start w-100">
-                                <div className="row mp-0 g-2">
-                                    <div className="col-12 mb-2">
-                                        <div className="input-group">
-                                            <div className="input-group-text wd-130 font-bold"><span>Yazıcı Adı <span className="text-danger">*</span></span></div>
-                                            <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="form-control" placeholder="Örn: Mutfak Yazıcısı, Adisyon vb." />
-                                            <div className="input-group-text wd-50"><i className="fat fa-tag"></i></div>
-                                        </div>
-                                    </div>
-                                    <div className="col-12 mb-2">
-                                        <div className="input-group">
-                                            <div className="input-group-text wd-130 font-bold"><span>Lokasyon</span></div>
-                                            <input type="text" value={formData.location} onChange={(e) => setFormData({ ...formData, location: e.target.value })} className="form-control" placeholder="Örn: Mutfak Sıcak, Bar, Kasa..." />
-                                            <div className="input-group-text wd-50"><i className="fat fa-map-pin"></i></div>
-                                        </div>
-                                    </div>
-                                    <div className="col-12 mb-2">
-                                        <div className="input-group">
-                                            <div className="input-group-text wd-130 font-bold"><span>Sistem Adı</span></div>
-                                            <input type="text" value={formData.printerName} onChange={(e) => setFormData({ ...formData, printerName: e.target.value })} className="form-control" placeholder="Örn: EPSON TM-T20II Receipt" />
-                                            <div className="input-group-text wd-50"><i className="fat fa-desktop"></i></div>
-                                        </div>
-                                    </div>
-                                    <div className="col-12 mb-2">
-                                        <div className="input-group">
-                                            <div className="input-group-text wd-130 font-bold"><span>Bağlantı (IP)</span></div>
-                                            <input type="text" value={formData.ipAddress} onChange={(e) => setFormData({ ...formData, ipAddress: e.target.value })} className="form-control" placeholder="Örn: 192.168.1.100 veya LPT1" />
-                                            <div className="input-group-text wd-50"><i className="fat fa-network-wired"></i></div>
-                                        </div>
-                                    </div>
-                                    <div className="col-12 mb-2">
-                                        <div className="input-group">
-                                            <div className="input-group-text wd-130 font-bold"><span>Durum</span></div>
-                                            <div className="form-control d-flex align-items-center">
-                                                <div className="form-check form-switch mb-0">
-                                                    <input type="checkbox" checked={formData.isActive} onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })} className="form-check-input" />
-                                                </div>
-                                            </div>
-                                            <div className="input-group-text wd-50"><i className="fat fa-power-off"></i></div>
-                                        </div>
+                        <form onSubmit={handleSave} className="flex-1 overflow-y-auto w-full p-8 space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelName')}</label>
+                                <div className="relative">
+                                    <i className="fat fa-tag absolute left-4 top-4 text-sky-500/50"></i>
+                                    <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-sky-500/10 outline-none transition-shadow" placeholder={t('labelName')} />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelLocation')}</label>
+                                    <div className="relative">
+                                        <i className="fat fa-map-pin absolute left-4 top-4 text-sky-500/50"></i>
+                                        <input type="text" value={formData.location} onChange={(e) => setFormData({ ...formData, location: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-sky-500/10 outline-none transition-shadow" placeholder={t('labelLocation')} />
                                     </div>
                                 </div>
 
-                                <hr className="my-2" />
-                                <div className="d-flex justify-content-between align-items-center">
-                                    <button type="button" className="btn btn-soft-danger btn-label border" onClick={() => setIsModalOpen(false)}>
-                                        <i className="fas fa-times label-icon"></i> İptal
-                                    </button>
-                                    <button type="submit" className="btn btn-soft-success btn-label border">
-                                        <i className="fas fa-save label-icon"></i> Kaydet
-                                    </button>
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelSystemName')}</label>
+                                    <div className="relative">
+                                        <i className="fat fa-desktop absolute left-4 top-4 text-sky-500/50"></i>
+                                        <input type="text" value={formData.printerName} onChange={(e) => setFormData({ ...formData, printerName: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-sky-500/10 outline-none transition-shadow" placeholder={t('labelSystemName')} />
+                                    </div>
                                 </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelIp')}</label>
+                                    <div className="relative">
+                                        <i className="fat fa-network-wired absolute left-4 top-4 text-sky-500/50"></i>
+                                        <input type="text" value={formData.ipAddress} onChange={(e) => setFormData({ ...formData, ipAddress: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-sky-500/10 outline-none transition-shadow" placeholder={t('labelIp')} />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{tc('active')}</label>
+                                    <div className="relative flex items-center pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl w-full">
+                                        <i className="fat fa-power-off absolute left-4 top-4 text-sky-500/50"></i>
+                                        <div className="form-check form-switch mb-0 flex-1 d-flex justify-content-end pr-2">
+                                            <input className="form-check-input cursor-pointer" type="checkbox" checked={formData.isActive} onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })} />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="pt-6 flex gap-3">
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
+                                    <i className="fat fa-xmark text-lg"></i> {tc('cancel')}
+                                </button>
+                                <button type="submit" className="flex-[2] py-4 bg-gradient-to-r from-sky-600 to-sky-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-sky-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
+                                    <i className="fat fa-check text-lg"></i> {tc('save')}
+                                </button>
                             </div>
                         </form>
                     </div>

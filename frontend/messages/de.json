@@ -157,15 +157,14 @@
         "cashierSelectionDesc": "Bitte wählen Sie Ihren Namen zum Anmelden",
         "noCashierFound": "Keine Kassierer im System gefunden",
         "enterPin": "Geben Sie Ihre 4-stellige PIN ein",
-        "warehouses": "Lager",
-        "warehousesDesc": "Lager- und Bestandsverwaltung",
         "newWarehouse": "Neues Lager",
         "warehouseDeleted": "Lager erfolgreich gelöscht",
         "warehouseDeleteError": "Fehler beim Löschen des Lagers",
         "warehouseInfo": "Lagerinfo",
         "linkedBranch": "Verknüpfte Filiale",
         "headquarters": "HAUPTSITZ",
-        "noWarehouseFound": "Kein Lager gefunden"
+        "noWarehouseFound": "Kein Lager gefunden",
+        "newOrder": "Neue Bestellung"
     },
     "Locations": {
         "title": "FILIALVERWALTUNG",
