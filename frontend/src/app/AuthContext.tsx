@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const login = async (email: string, pass: string) => {
         try {
-            const response = await axios.post('http://127.0.0.1:3050/auth/login', { email, password: pass });
+            const response = await axios.post('http://localhost:3050/auth/login', { email: email.trim(), password: pass });
             if (response.data.access_token) {
                 const token = response.data.access_token;
                 Cookies.set('token', token, { expires: 1 });
