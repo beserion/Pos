@@ -10,6 +10,7 @@ interface Product {
     price: number;
     category: string;
     imageUrl?: string;
+    isQuickSale?: boolean;
 }
 
 interface Zone { id: number; name: string; }
@@ -72,8 +73,8 @@ export default function PosPage() {
         setIsCheckoutOpen(false);
     };
 
-    const categories = ['Tümü', ...Array.from(new Set(products.map(p => p.category)))];
-    const filteredProducts = selectedCategory === 'Tümü' ? products : products.filter(p => p.category === selectedCategory);
+    const categories = ['Tümü', ...Array.from(new Set(products.filter(p => p.isQuickSale).map(p => p.category)))];
+    const filteredProducts = products.filter(p => p.isQuickSale && (selectedCategory === 'Tümü' || p.category === selectedCategory));
 
     const addToCart = (product: Product) => {
         setCart(prev => {

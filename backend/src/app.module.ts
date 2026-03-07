@@ -25,6 +25,7 @@ import { RecipesModule } from './recipes/recipes.module';
 import { WastagesModule } from './wastages/wastages.module';
 import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
 import { User } from './users/user.entity';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { User } from './users/user.entity';
     RecipesModule,
     WastagesModule,
     PurchaseOrdersModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

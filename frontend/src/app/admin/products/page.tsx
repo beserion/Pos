@@ -17,6 +17,8 @@ interface Product {
     costPrice: number;
     minStockLevel: number;
     unit: string;
+    isQuickSale?: boolean;
+    isIngredient?: boolean;
 }
 
 interface Printer {
@@ -34,6 +36,7 @@ export default function ProductsAdminPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'genel' | 'gorsel'>('genel');
     const [formData, setFormData] = useState<Product>({ id: 0, name: '', sku: '', price: 0, category: '', isActive: true, printerId: null, costPrice: 0, minStockLevel: 0, unit: 'adet' });
+    const [formData, setFormData] = useState<Product>({ id: 0, name: '', sku: '', price: 0, category: '', isActive: true, printerId: null, isQuickSale: false, isIngredient: false });
 
     useEffect(() => {
         if (user?.token) {
@@ -111,6 +114,7 @@ export default function ProductsAdminPage() {
         if (prod) setFormData({ ...prod });
         else setFormData({ id: 0, name: '', sku: '', price: 0, category: '', isActive: true, printerId: null, costPrice: 0, minStockLevel: 0, unit: 'adet' });
         setActiveTab('genel');
+        else setFormData({ id: 0, name: '', sku: '', price: 0, category: '', isActive: true, printerId: null, isQuickSale: false, isIngredient: false });
         setIsModalOpen(true);
     };
 
@@ -406,6 +410,42 @@ export default function ProductsAdminPage() {
                             )}
                             <div className="pt-6 flex gap-3">
                                 <button type="button" onClick={() => setIsModalOpen(false)} className="w-1/2 py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors">
+                                <div className="md:col-span-2">
+                                    <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl transition-all">
+                                        <div className="flex items-center gap-3">
+                                            <i className="fat fa-bolt text-indigo-500 text-xl"></i>
+                                            <div>
+                                                <p className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-tight">Hızlı Satışta Görünsün</p>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">POS ekranında listelenen ürün</p>
+                                            </div>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer scale-110">
+                                            <input type="checkbox" checked={formData.isQuickSale} onChange={(e) => setFormData({ ...formData, isQuickSale: e.target.checked })} className="sr-only peer" />
+                                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div className="md:col-span-2">
+                                    <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl transition-all">
+                                        <div className="flex items-center gap-3">
+                                            <i className="fat fa-leaf text-emerald-500 text-xl"></i>
+                                            <div>
+                                                <p className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-tight">Hammadde (İçerik)</p>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Reçetelerde bileşen olarak kullanılır</p>
+                                            </div>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer scale-110">
+                                            <input type="checkbox" checked={formData.isIngredient} onChange={(e) => setFormData({ ...formData, isIngredient: e.target.checked })} className="sr-only peer" />
+                                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="pt-6 flex flex-col gap-3">
+                                <button type="submit" className="w-full py-4 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-indigo-500/20 hover:scale-[1.02] active:scale-95 transition-all">
+                                    ÜRÜNÜ KAYDET
+                                </button>
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="w-full py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors">
                                     İPTAL ET
                                 </button>
                                 <button type="submit" className="w-1/2 py-4 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-indigo-500/20 hover:scale-[1.02] active:scale-95 transition-all">
