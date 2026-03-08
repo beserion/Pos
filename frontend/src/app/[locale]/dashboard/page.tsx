@@ -90,13 +90,13 @@ export default function DashboardPage() {
                 {/* Form Title Section - Centered Block */}
                 <div className="mb-14 flex justify-center">
                     <div className="flex items-center text-start gap-4">
-                        <i className="fat fa-grid-2 text-indigo-600 dark:text-indigo-400 animate-pulse" style={{ fontSize: '50px' }}></i>
+                        {/* <i className="fat fa-grid-2 text-indigo-600 dark:text-indigo-400 animate-pulse" style={{ fontSize: '50px' }}></i> */}
                         <div>
-                            <div className="relative inline-block pb-3">
+                            <div className="relative inline-flex flex-col items-center pb-3 text-center">
                                 <h3 className="text-3xl mb-0 font-extralight text-indigo-600 dark:text-indigo-400 tracking-[0.2em] leading-none uppercase" id="title">{tDashboard('title')}</h3>
-                                <div className="absolute bottom-0 left-0 w-full h-1.5 bg-gradient-to-r from-transparent via-indigo-500 to-transparent rounded-full opacity-100"></div>
+                                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[80%] h-1.5 bg-gradient-to-r from-transparent via-indigo-500 to-transparent rounded-full opacity-100"></div>
+                                <h5 className="text-slate-400 dark:text-slate-500 text-lg font-medium mt-1">{tDashboard('subtitle')}</h5>
                             </div>
-                            <h5 className="text-slate-400 dark:text-slate-500 text-lg font-medium mt-1">{tDashboard('subtitle')}</h5>
                         </div>
                     </div>
                 </div>

@@ -275,132 +275,135 @@ export default function EmployeesAdminPage() {
             {/* Modal - Upsert */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xl">
-                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-4xl shadow-lg overflow-hidden border border-white/20 dark:border-slate-700/50 animate-in fade-in zoom-in duration-300">
-                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20">
+                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-4xl shadow-lg overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-300">
+                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20 shrink-0 h-[100px]">
                             <div>
-                                <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase">
+                                <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase mb-0">
                                     <i className={`fat ${formData.id === 0 ? 'fa-user-plus' : 'fa-user-pen'} text-indigo-600`}></i>
                                     {formData.id === 0 ? 'YENİ PERSONEL' : 'PERSONEL DÜZENLE'}
                                 </h2>
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Gerekli tüm bilgileri eksiksiz doldurun</p>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-0">Gerekli tüm bilgileri eksiksiz doldurun</p>
                             </div>
-                            <button onClick={() => setIsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white shadow-sm transition-all">&times;</button>
+                            <button type="button" onClick={() => setIsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white shadow-sm transition-all">&times;</button>
                         </div>
-                        <form onSubmit={handleSave} className="p-8">
-                            <div className="grid grid-cols-2 gap-6">
-                                {/* Left: All form fields */}
-                                <div className="space-y-5">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Personel Adı</label>
-                                            <div className="relative">
-                                                <i className="fat fa-user absolute left-4 top-3.5 text-indigo-500/50"></i>
-                                                <input type="text" required value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder="Ahmet" />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Personel Soyadı</label>
-                                            <div className="relative">
-                                                <i className="fat fa-user absolute left-4 top-3.5 text-indigo-500/50"></i>
-                                                <input type="text" required value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder="Yılmaz" />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Ünvan / Rol</label>
-                                        <div className="relative">
-                                            <i className="fat fa-id-badge absolute left-4 top-3.5 text-indigo-500/50"></i>
-                                            <input type="text" required value={formData.roleTitle} onChange={(e) => setFormData({ ...formData, roleTitle: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder="Garson, Kasiyer..." />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Telefon Numarası</label>
-                                        <div className="relative">
-                                            <i className="fat fa-phone absolute left-4 top-3.5 text-indigo-500/50"></i>
-                                            <input type="text" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder="05xx ..." />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Atanacak Şube</label>
-                                        <div className="relative">
-                                            <i className="fat fa-building-circle-check absolute left-4 top-4 text-indigo-500/50"></i>
-                                            <select value={formData.locationId} onChange={(e) => setFormData({ ...formData, locationId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                <option value={0}>Merkez Şube (Atanmamış)</option>
-                                                {locations.map(loc => (
-                                                    <option key={loc.id} value={loc.id}>{loc.name}</option>
-                                                ))}
-                                            </select>
-                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Right: Photo preview + File picker */}
-                                <div className="flex flex-col items-center gap-4">
-                                    <input
-                                        type="file"
-                                        id="photoFileInput"
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={(e) => {
-                                            const file = e.target.files?.[0];
-                                            if (!file) return;
-                                            const reader = new FileReader();
-                                            reader.onloadend = () => {
-                                                setFormData({ ...formData, photoUrl: reader.result as string });
-                                            };
-                                            reader.readAsDataURL(file);
-                                        }}
-                                    />
-                                    <div
-                                        onClick={() => document.getElementById('photoFileInput')?.click()}
-                                        className="w-64 h-64 rounded-[32px] overflow-hidden bg-slate-100 dark:bg-slate-700 border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center shrink-0 cursor-pointer group relative hover:border-indigo-400 transition-colors"
-                                    >
-                                        {formData.photoUrl ? (
-                                            <>
-                                                <img src={formData.photoUrl} alt="Personel" className="w-full h-full object-cover" />
-                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                    <div className="flex flex-col items-center gap-1 text-white">
-                                                        <i className="fat fa-camera text-3xl"></i>
-                                                        <span className="text-[10px] font-black uppercase tracking-widest">Değiştir</span>
+                        <div className="flex-1 overflow-hidden w-full flex flex-col">
+                            <form onSubmit={handleSave} className="flex flex-col h-full w-full">
+                                <div className="flex-1 overflow-y-auto w-full p-8 space-y-6">
+                                    <div className="grid grid-cols-2 gap-6">
+                                        {/* Left: All form fields */}
+                                        <div className="space-y-5">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Personel Adı</label>
+                                                    <div className="relative">
+                                                        <i className="fat fa-user absolute left-4 top-3.5 text-indigo-500/50"></i>
+                                                        <input type="text" required value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder="Ahmet" />
                                                     </div>
                                                 </div>
-                                            </>
-                                        ) : (
-                                            <div className="flex flex-col items-center gap-3 text-slate-300 group-hover:text-indigo-400 transition-colors">
-                                                <i className="fat fa-cloud-arrow-up text-5xl"></i>
-                                                <div className="text-center">
-                                                    <span className="text-[10px] font-black uppercase tracking-widest block">Fotoğraf Seç</span>
-                                                    <span className="text-[10px] font-bold mt-1 block">Tıkla ve yükle</span>
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Personel Soyadı</label>
+                                                    <div className="relative">
+                                                        <i className="fat fa-user absolute left-4 top-3.5 text-indigo-500/50"></i>
+                                                        <input type="text" required value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder="Yılmaz" />
+                                                    </div>
                                                 </div>
                                             </div>
-                                        )}
-                                    </div>
-                                    {formData.photoUrl && (
-                                        <button
-                                            type="button"
-                                            onClick={() => setFormData({ ...formData, photoUrl: '' })}
-                                            className="text-[10px] font-black text-red-400 hover:text-red-600 uppercase tracking-widest flex items-center gap-1 transition-colors"
-                                        >
-                                            <i className="fat fa-trash-can"></i> Fotoğrafı Kaldır
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
 
-                            {/* Full-width bottom buttons */}
-                            <div className="pt-6 flex gap-3">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
-                                    <i className="fat fa-xmark text-lg"></i> İPTAL ET
-                                </button>
-                                <button type="submit" className="flex-[2] py-4 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-indigo-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
-                                    <i className="fat fa-check text-lg"></i> PERSONELİ KAYDET
-                                </button>
-                            </div>
-                        </form>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Ünvan / Rol</label>
+                                                <div className="relative">
+                                                    <i className="fat fa-id-badge absolute left-4 top-3.5 text-indigo-500/50"></i>
+                                                    <input type="text" required value={formData.roleTitle} onChange={(e) => setFormData({ ...formData, roleTitle: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder="Garson, Kasiyer..." />
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Telefon Numarası</label>
+                                                <div className="relative">
+                                                    <i className="fat fa-phone absolute left-4 top-3.5 text-indigo-500/50"></i>
+                                                    <input type="text" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder="05xx ..." />
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Atanacak Şube</label>
+                                                <div className="relative">
+                                                    <i className="fat fa-building-circle-check absolute left-4 top-4 text-indigo-500/50"></i>
+                                                    <select value={formData.locationId} onChange={(e) => setFormData({ ...formData, locationId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                        <option value={0}>Merkez Şube (Atanmamış)</option>
+                                                        {locations.map(loc => (
+                                                            <option key={loc.id} value={loc.id}>{loc.name}</option>
+                                                        ))}
+                                                    </select>
+                                                    <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Right: Photo preview + File picker */}
+                                        <div className="flex flex-col items-center gap-4">
+                                            <input
+                                                type="file"
+                                                id="photoFileInput"
+                                                accept="image/*"
+                                                className="hidden"
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (!file) return;
+                                                    const reader = new FileReader();
+                                                    reader.onloadend = () => {
+                                                        setFormData({ ...formData, photoUrl: reader.result as string });
+                                                    };
+                                                    reader.readAsDataURL(file);
+                                                }}
+                                            />
+                                            <div
+                                                onClick={() => document.getElementById('photoFileInput')?.click()}
+                                                className="w-64 h-64 rounded-[32px] overflow-hidden bg-slate-100 dark:bg-slate-700 border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center shrink-0 cursor-pointer group relative hover:border-indigo-400 transition-colors"
+                                            >
+                                                {formData.photoUrl ? (
+                                                    <>
+                                                        <img src={formData.photoUrl} alt="Personel" className="w-full h-full object-cover" />
+                                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                            <div className="flex flex-col items-center gap-1 text-white">
+                                                                <i className="fat fa-camera text-3xl"></i>
+                                                                <span className="text-[10px] font-black uppercase tracking-widest">Değiştir</span>
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <div className="flex flex-col items-center gap-3 text-slate-300 group-hover:text-indigo-400 transition-colors">
+                                                        <i className="fat fa-cloud-arrow-up text-5xl"></i>
+                                                        <div className="text-center">
+                                                            <span className="text-[10px] font-black uppercase tracking-widest block">Fotoğraf Seç</span>
+                                                            <span className="text-[10px] font-bold mt-1 block">Tıkla ve yükle</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {formData.photoUrl && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, photoUrl: '' })}
+                                                    className="text-[10px] font-black text-red-400 hover:text-red-600 uppercase tracking-widest flex items-center gap-1 transition-colors"
+                                                >
+                                                    <i className="fat fa-trash-can"></i> Fotoğrafı Kaldır
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                </div>
+                                <div className="p-8 pt-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20 shrink-0 flex justify-between h-[100px] items-center">
+                                    <button type="button" onClick={() => setIsModalOpen(false)} className="w-[200px] py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
+                                        <i className="fat fa-xmark text-lg"></i> İPTAL ET
+                                    </button>
+                                    <button type="submit" className="w-[200px] py-4 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-indigo-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
+                                        <i className="fat fa-check text-lg"></i> KAYDET
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 </div>
             )}

@@ -31,7 +31,7 @@ export class Product {
   @Column({ default: true })
   isActive: boolean;
 
-  @Column({ nullable: true })
+  @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
   imageUrl: string; // Ürün görseli
 
   @Column({ nullable: true })

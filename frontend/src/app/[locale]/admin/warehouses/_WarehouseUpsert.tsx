@@ -55,69 +55,70 @@ export default function WarehouseUpsert({ formData, setFormData, locations, onSa
     }, []);
 
     return (
-        <div className="w-full">
-            <form onSubmit={onSave} id="xxxForm">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Left: Form Fields */}
-                    <div className="space-y-6">
-                        <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelName')}</label>
-                            <div className="relative">
-                                <i className="fat fa-tag absolute left-4 top-4 text-sky-500/50"></i>
-                                <input type="text" required value={formData.name || ''} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-sky-500/10 outline-none transition-shadow" placeholder={t('labelName')} />
+        <div className="w-full flex-1 flex flex-col h-full overflow-hidden">
+            <form onSubmit={onSave} id="xxxForm" className="flex flex-col h-full w-full">
+                <div className="flex-1 overflow-y-auto p-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-h-[420px]">
+                        {/* Left: Form Fields */}
+                        <div className="space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelName')}</label>
+                                <div className="relative">
+                                    <i className="fat fa-tag absolute left-4 top-4 text-sky-500/50"></i>
+                                    <input type="text" required value={formData.name || ''} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-sky-500/10 outline-none transition-shadow" placeholder={t('labelName')} />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{tc('linkedBranch')}</label>
+                                <div className="relative">
+                                    <i className="fat fa-building absolute left-4 top-4 text-sky-500/50"></i>
+                                    <select value={formData.locationId || 0} onChange={(e) => setFormData({ ...formData, locationId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-sky-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                        <option value={0}>{tc('headquarters')}</option>
+                                        {locations.map((loc) => (
+                                            <option key={loc.id} value={loc.id}>{loc.name}</option>
+                                        ))}
+                                    </select>
+                                    <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelLocation')}</label>
+                                <div className="relative">
+                                    <i className="fat fa-map-location-dot absolute left-4 top-4 text-sky-500/50"></i>
+                                    <input type="text" value={formData.address || ''} onChange={(e) => setFormData({ ...formData, address: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-sky-500/10 outline-none transition-shadow" placeholder={t('labelLocation')} />
+                                </div>
+                            </div>
+
+                            <div className="flex gap-4 px-1 pt-2">
+                                <p className="text-[10px] font-bold text-slate-500 uppercase">Enlem: <span className="text-sky-600 font-mono">{formData.latitude?.toFixed(6) || '-'}</span></p>
+                                <p className="text-[10px] font-bold text-slate-500 uppercase">Boylam: <span className="text-sky-600 font-mono">{formData.longitude?.toFixed(6) || '-'}</span></p>
                             </div>
                         </div>
 
-                        <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{tc('linkedBranch')}</label>
-                            <div className="relative">
-                                <i className="fat fa-building absolute left-4 top-4 text-sky-500/50"></i>
-                                <select value={formData.locationId || 0} onChange={(e) => setFormData({ ...formData, locationId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-sky-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                    <option value={0}>{tc('headquarters')}</option>
-                                    {locations.map((loc) => (
-                                        <option key={loc.id} value={loc.id}>{loc.name}</option>
-                                    ))}
-                                </select>
-                                <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                        {/* Right: Map */}
+                        <div className="flex flex-col h-full">
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelLocation')} (Harita)</label>
+                            <div className="flex-1 min-h-[340px] rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-inner relative z-0">
+                                <MapContainer center={position || [40.7663, 29.9175]} zoom={13} style={{ height: '100%', width: '100%', minHeight: '340px' }}>
+                                    <TileLayer
+                                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                    />
+                                    <LocationMarker position={position} setPosition={setPosition} setFormData={setFormData} formData={formData} />
+                                </MapContainer>
                             </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelLocation')}</label>
-                            <div className="relative">
-                                <i className="fat fa-map-location-dot absolute left-4 top-4 text-sky-500/50"></i>
-                                <input type="text" value={formData.address || ''} onChange={(e) => setFormData({ ...formData, address: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-sky-500/10 outline-none transition-shadow" placeholder={t('labelLocation')} />
-                            </div>
-                        </div>
-
-                        <div className="flex gap-4 px-1 pt-2">
-                            <p className="text-[10px] font-bold text-slate-500 uppercase">Enlem: <span className="text-sky-600 font-mono">{formData.latitude?.toFixed(6) || '-'}</span></p>
-                            <p className="text-[10px] font-bold text-slate-500 uppercase">Boylam: <span className="text-sky-600 font-mono">{formData.longitude?.toFixed(6) || '-'}</span></p>
-                        </div>
-
-                        <div className="pt-4 flex gap-3">
-                            <button type="button" onClick={onClose} className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
-                                <i className="fat fa-xmark text-lg"></i> {tc('cancel')}
-                            </button>
-                            <button type="submit" className="flex-[2] py-4 bg-gradient-to-r from-sky-600 to-sky-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-sky-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
-                                <i className="fat fa-check text-lg"></i> {tc('save')}
-                            </button>
                         </div>
                     </div>
-
-                    {/* Right: Map */}
-                    <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelLocation')} (Harita)</label>
-                        <div className="h-full min-h-[340px] rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-inner relative z-0">
-                            <MapContainer center={position || [40.7663, 29.9175]} zoom={13} style={{ height: '100%', width: '100%', minHeight: '340px' }}>
-                                <TileLayer
-                                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                                />
-                                <LocationMarker position={position} setPosition={setPosition} setFormData={setFormData} formData={formData} />
-                            </MapContainer>
-                        </div>
-                    </div>
+                </div>
+                <div className="p-8 pt-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20 shrink-0 flex justify-between h-[100px] items-center">
+                    <button type="button" onClick={onClose} className="w-[200px] py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
+                        <i className="fat fa-xmark text-lg"></i> {tc('cancel')}
+                    </button>
+                    <button type="submit" className="w-[200px] py-4 bg-gradient-to-r from-sky-600 to-sky-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-sky-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
+                        <i className="fat fa-check text-lg"></i> {tc('save')}
+                    </button>
                 </div>
             </form>
         </div>

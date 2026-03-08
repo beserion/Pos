@@ -229,8 +229,8 @@ export default function LocationsAdminPage() {
             {/* Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xl animate-in fade-in zoom-in duration-300">
-                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-4xl shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col max-h-[90vh]">
-                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20 shrink-0">
+                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-4xl shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-300">
+                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20 shrink-0 h-[100px]">
                             <div>
                                 <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase mb-0">
                                     <i className={`fat ${formData.id === 0 ? 'fa-plus-circle' : 'fa-pen-to-square'} text-blue-600`}></i>
@@ -238,56 +238,59 @@ export default function LocationsAdminPage() {
                                 </h2>
                                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-0">{tLoc('modalSubtitle')}</p>
                             </div>
-                            <button onClick={() => setIsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white shadow-sm transition-all">&times;</button>
+                            <button type="button" onClick={() => setIsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white shadow-sm transition-all">&times;</button>
                         </div>
-
-                        <form onSubmit={handleSave} className="flex-1 overflow-y-auto w-full p-8 space-y-5">
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-                                <div className="md:col-span-3">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{tLoc('labelName')}</label>
-                                    <div className="relative">
-                                        <i className="fat fa-tag absolute left-4 top-4 text-blue-500/50"></i>
-                                        <input type="text" required value={formData.name || ''} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-blue-500/10 outline-none transition-shadow" placeholder={tLoc('placeholderName') || tLoc('labelName')} />
+                        <div className="flex-1 overflow-hidden w-full flex flex-col">
+                            <form onSubmit={handleSave} className="flex flex-col h-full w-full">
+                                <div className="flex-1 overflow-y-auto w-full p-8 space-y-5">
+                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+                                        <div className="md:col-span-3">
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{tLoc('labelName')}</label>
+                                            <div className="relative">
+                                                <i className="fat fa-tag absolute left-4 top-4 text-blue-500/50"></i>
+                                                <input type="text" required value={formData.name || ''} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-blue-500/10 outline-none transition-shadow" placeholder={tLoc('placeholderName') || tLoc('labelName')} />
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col justify-end">
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{tCommon('active')}</label>
+                                            <div className="h-[54px] px-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl flex items-center gap-3 w-full">
+                                                <i className="fat fa-toggle-on text-blue-500/50"></i>
+                                                <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input type="checkbox" className="sr-only peer" checked={formData.isActive} onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })} />
+                                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                                </label>
+                                                <span className="text-xs font-black text-slate-500 uppercase tracking-widest whitespace-nowrap">{formData.isActive ? tCommon('active') : tCommon('passive')}</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="flex flex-col justify-end">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{tCommon('active')}</label>
-                                    <div className="h-[54px] px-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl flex items-center gap-3 w-full">
-                                        <i className="fat fa-toggle-on text-blue-500/50"></i>
-                                        <label className="relative inline-flex items-center cursor-pointer">
-                                            <input type="checkbox" className="sr-only peer" checked={formData.isActive} onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })} />
-                                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                                        </label>
-                                        <span className="text-xs font-black text-slate-500 uppercase tracking-widest whitespace-nowrap">{formData.isActive ? tCommon('active') : tCommon('passive')}</span>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{tLoc('labelPhone')}</label>
+                                        <div className="relative">
+                                            <i className="fat fa-phone absolute left-4 top-4 text-blue-500/50"></i>
+                                            <input type="text" value={formData.phone || ''} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-blue-500/10 outline-none transition-shadow" placeholder="0xxx ..." />
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
 
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{tLoc('labelPhone')}</label>
-                                <div className="relative">
-                                    <i className="fat fa-phone absolute left-4 top-4 text-blue-500/50"></i>
-                                    <input type="text" value={formData.phone || ''} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-blue-500/10 outline-none transition-shadow" placeholder="0xxx ..." />
-                                </div>
-                            </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{tLoc('labelAddress')}</label>
+                                        <div className="relative">
+                                            <i className="fat fa-map-location-dot absolute left-4 top-4 text-blue-500/50"></i>
+                                            <textarea value={formData.address || ''} onChange={(e) => setFormData({ ...formData, address: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-blue-500/10 outline-none transition-shadow" rows={3} placeholder="Açık adres..."></textarea>
+                                        </div>
+                                    </div>
 
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{tLoc('labelAddress')}</label>
-                                <div className="relative">
-                                    <i className="fat fa-map-location-dot absolute left-4 top-4 text-blue-500/50"></i>
-                                    <textarea value={formData.address || ''} onChange={(e) => setFormData({ ...formData, address: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-blue-500/10 outline-none transition-shadow" rows={3} placeholder="Açık adres..."></textarea>
                                 </div>
-                            </div>
-
-                            <div className="pt-6 flex gap-3">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
-                                    <i className="fat fa-xmark text-lg"></i> {tCommon('cancel')}
-                                </button>
-                                <button type="submit" className="flex-[2] py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-blue-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
-                                    <i className="fat fa-check text-lg"></i> {tCommon('save')}
-                                </button>
-                            </div>
-                        </form>
+                                <div className="p-8 pt-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20 shrink-0 flex justify-between h-[100px] items-center">
+                                    <button type="button" onClick={() => setIsModalOpen(false)} className="w-[200px] py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
+                                        <i className="fat fa-xmark text-lg"></i> {tCommon('cancel')}
+                                    </button>
+                                    <button type="submit" className="w-[200px] py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-blue-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
+                                        <i className="fat fa-check text-lg"></i> {tCommon('save')}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 </div>
             )}
