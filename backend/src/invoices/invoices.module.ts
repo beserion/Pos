@@ -10,4 +10,4 @@ import { Invoice } from './invoice.entity';
   controllers: [InvoicesController],
   exports: [InvoicesService],
 })
-export class InvoicesModule { }
+export class InvoicesModule {}

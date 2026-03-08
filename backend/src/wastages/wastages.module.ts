@@ -7,13 +7,9 @@ import { StocksModule } from '../stocks/stocks.module';
 import { SecurityModule } from '../auth/security.module';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([Wastage]),
-        StocksModule,
-        SecurityModule,
-    ],
-    providers: [WastagesService],
-    controllers: [WastagesController],
-    exports: [WastagesService],
+  imports: [TypeOrmModule.forFeature([Wastage]), StocksModule, SecurityModule],
+  providers: [WastagesService],
+  controllers: [WastagesController],
+  exports: [WastagesService],
 })
-export class WastagesModule { }
+export class WastagesModule {}

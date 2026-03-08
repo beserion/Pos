@@ -16,7 +16,11 @@ async function bootstrap() {
 
   let adminRole = await roleRepo.findOne({ where: { name: 'Admin' } });
   if (!adminRole) {
-    adminRole = roleRepo.create({ name: 'Admin', description: 'Administrator', permissions: ['ALL'] });
+    adminRole = roleRepo.create({
+      name: 'Admin',
+      description: 'Administrator',
+      permissions: ['ALL'],
+    });
     adminRole = await roleRepo.save(adminRole);
   }
 
@@ -29,7 +33,7 @@ async function bootstrap() {
       email: adminEmail,
       passwordHash: 'admin123',
       passwordClearText: 'admin123',
-      role: adminRole
+      role: adminRole,
     });
     console.log('Seed: Admin user created (admin@admin.com / admin123)');
   }

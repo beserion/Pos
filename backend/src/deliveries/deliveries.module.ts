@@ -10,4 +10,4 @@ import { Delivery } from './delivery.entity';
   controllers: [DeliveriesController],
   exports: [DeliveriesService],
 })
-export class DeliveriesModule { }
+export class DeliveriesModule {}

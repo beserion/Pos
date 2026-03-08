@@ -5,8 +5,8 @@ import { User } from '../users/user.entity';
 import { PermissionsGuard } from './permissions.guard';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([User])],
-    providers: [PermissionsGuard, Reflector],
-    exports: [PermissionsGuard],
+  imports: [TypeOrmModule.forFeature([User])],
+  providers: [PermissionsGuard, Reflector],
+  exports: [PermissionsGuard],
 })
-export class SecurityModule { }
+export class SecurityModule {}

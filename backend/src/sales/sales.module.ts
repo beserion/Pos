@@ -11,4 +11,4 @@ import { SaleItem } from './sale-item.entity';
   controllers: [SalesController],
   exports: [SalesService],
 })
-export class SalesModule { }
+export class SalesModule {}

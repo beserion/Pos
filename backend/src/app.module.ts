@@ -42,7 +42,10 @@ import { ReservationsModule } from './reservations/reservations.module';
           type: 'mssql',
           host: configService.get<string>('DB_HOST', 'localhost'),
           username: configService.get<string>('DB_USERNAME', 'sa'),
-          password: configService.get<string>('DB_PASSWORD', 'YourStrong@Passw0rd'),
+          password: configService.get<string>(
+            'DB_PASSWORD',
+            'YourStrong@Passw0rd',
+          ),
           database: configService.get<string>('DB_DATABASE', 'AntigravityPOS'),
           autoLoadEntities: true,
           synchronize: false, // Tables created by SQL script
@@ -54,7 +57,10 @@ import { ReservationsModule } from './reservations/reservations.module';
         };
         // When using a named instance, don't specify port (uses dynamic port via SQL Browser)
         if (!instanceName) {
-          config.port = parseInt(configService.get<string>('DB_PORT', '1433'), 10);
+          config.port = parseInt(
+            configService.get<string>('DB_PORT', '1433'),
+            10,
+          );
         }
         return config;
       },
@@ -86,4 +92,4 @@ import { ReservationsModule } from './reservations/reservations.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule { }
+export class AppModule {}

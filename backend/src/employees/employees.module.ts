@@ -9,6 +9,6 @@ import { EmployeeDocument } from './employee-document.entity';
   imports: [TypeOrmModule.forFeature([Employee, EmployeeDocument])],
   controllers: [EmployeesController],
   providers: [EmployeesService],
-  exports: [EmployeesService]
+  exports: [EmployeesService],
 })
-export class EmployeesModule { }
+export class EmployeesModule {}

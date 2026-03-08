@@ -5,9 +5,9 @@ import { PrintersController } from './printers.controller';
 import { Printer } from './printer.entity';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Printer])],
-    providers: [PrintersService],
-    controllers: [PrintersController],
-    exports: [PrintersService]
+  imports: [TypeOrmModule.forFeature([Printer])],
+  providers: [PrintersService],
+  controllers: [PrintersController],
+  exports: [PrintersService],
 })
-export class PrintersModule { }
+export class PrintersModule {}

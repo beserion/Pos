@@ -7,13 +7,9 @@ import { ProductsModule } from '../products/products.module';
 import { SecurityModule } from '../auth/security.module';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([Recipe]),
-        ProductsModule,
-        SecurityModule,
-    ],
-    providers: [RecipesService],
-    controllers: [RecipesController],
-    exports: [RecipesService],
+  imports: [TypeOrmModule.forFeature([Recipe]), ProductsModule, SecurityModule],
+  providers: [RecipesService],
+  controllers: [RecipesController],
+  exports: [RecipesService],
 })
-export class RecipesModule { }
+export class RecipesModule {}
