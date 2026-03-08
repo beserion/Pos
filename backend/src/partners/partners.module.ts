@@ -10,4 +10,4 @@ import { Partner } from './partner.entity';
   controllers: [PartnersController],
   exports: [PartnersService],
 })
-export class PartnersModule { }
+export class PartnersModule {}

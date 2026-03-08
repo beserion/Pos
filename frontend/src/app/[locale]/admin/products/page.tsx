@@ -20,6 +20,7 @@ interface Product {
     unit: string;
     isQuickSale?: boolean;
     isIngredient?: boolean;
+    recipes?: { ingredientId: number; ingredientName?: string; quantity: number; unit: string }[];
 }
 
 interface Printer {
@@ -38,7 +39,7 @@ export default function ProductsAdminPage() {
     const [loading, setLoading] = useState(true);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState<'genel' | 'gorsel'>('genel');
+    const [activeTab, setActiveTab] = useState<'genel' | 'gorsel' | 'recete'>('genel');
     const [formData, setFormData] = useState<Product>({
         id: 0,
         name: '',
@@ -51,8 +52,11 @@ export default function ProductsAdminPage() {
         minStockLevel: 0,
         unit: 'piece',
         isQuickSale: true,
-        isIngredient: false
+        isIngredient: false,
+        recipes: []
     });
+
+    const [ingredientProduct, setIngredientProduct] = useState({ ingredientId: 0, quantity: 0, unit: 'adet' });
 
     useEffect(() => {
         if (user?.token) {
@@ -126,9 +130,44 @@ export default function ProductsAdminPage() {
         }
     };
 
+    const handleAddIngredient = () => {
+        if (!ingredientProduct.ingredientId || ingredientProduct.quantity <= 0) {
+            toastSwal({ title: tc('error'), text: t('validationError'), icon: 'warning' });
+            return;
+        }
+
+        const ingredient = products.find(p => p.id === ingredientProduct.ingredientId);
+        if (!ingredient) return;
+
+        // Check if already added
+        if (formData.recipes?.some(r => r.ingredientId === ingredientProduct.ingredientId)) {
+            toastSwal({ title: tc('error'), text: 'Bu malzeme zaten eklendi.', icon: 'warning' });
+            return;
+        }
+
+        setFormData(prev => ({
+            ...prev,
+            recipes: [...(prev.recipes || []), {
+                ingredientId: ingredientProduct.ingredientId,
+                ingredientName: ingredient.name,
+                quantity: ingredientProduct.quantity,
+                unit: ingredientProduct.unit
+            }]
+        }));
+
+        setIngredientProduct({ ingredientId: 0, quantity: 0, unit: 'adet' });
+    };
+
+    const handleRemoveIngredient = (ingredientId: number) => {
+        setFormData(prev => ({
+            ...prev,
+            recipes: prev.recipes?.filter(r => r.ingredientId !== ingredientId) || []
+        }));
+    };
+
     const openModal = (prod?: Product) => {
         if (prod) {
-            setFormData({ ...prod });
+            setFormData({ ...prod, recipes: prod.recipes || [] });
         } else {
             setFormData({
                 id: 0,
@@ -142,9 +181,11 @@ export default function ProductsAdminPage() {
                 minStockLevel: 0,
                 unit: 'piece',
                 isQuickSale: true,
-                isIngredient: false
+                isIngredient: false,
+                recipes: []
             });
         }
+        setIngredientProduct({ ingredientId: 0, quantity: 0, unit: 'adet' });
         setActiveTab('genel');
         setIsModalOpen(true);
     };
@@ -333,6 +374,7 @@ export default function ProductsAdminPage() {
                                 <div className="flex bg-slate-100 dark:bg-slate-900/50 p-1 mx-8 mt-8 rounded-2xl shrink-0">
                                     <button type="button" onClick={() => setActiveTab('genel')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'genel' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabGeneral')}</button>
                                     <button type="button" onClick={() => setActiveTab('gorsel')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'gorsel' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabImage')}</button>
+                                    <button type="button" onClick={() => setActiveTab('recete')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'recete' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabRecipe')}</button>
                                 </div>
 
                                 <div className="p-8 space-y-6">
@@ -391,7 +433,7 @@ export default function ProductsAdminPage() {
                                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelMinStock')}</label>
                                                     <div className="relative">
                                                         <i className="fat fa-triangle-exclamation absolute left-4 top-4 text-teal-500/50"></i>
-                                                        <input type="number" step="1" value={formData.minStockLevel} onChange={(e) => setFormData({ ...formData, minStockLevel: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0" />
+                                                        <input type="number" step="1" value={formData.minStockLevel ?? ''} onChange={(e) => setFormData({ ...formData, minStockLevel: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0" />
                                                     </div>
                                                 </div>
 
@@ -466,6 +508,90 @@ export default function ProductsAdminPage() {
                                                     </div>
                                                 )}
                                             </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'recete' && (
+                                        <div className="space-y-6">
+                                            <div className="bg-slate-50 dark:bg-slate-900/30 p-6 rounded-3xl border border-slate-200 dark:border-slate-700">
+                                                <h4 className="text-sm font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest mb-4">{t('newRecipeItem')}</h4>
+                                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                                                    <div className="md:col-span-2">
+                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('tableIngredient')}</label>
+                                                        <div className="relative">
+                                                            <i className="fat fa-leaf absolute left-4 top-[14px] text-teal-500/50 text-sm"></i>
+                                                            <select value={ingredientProduct.ingredientId || ''} onChange={(e) => setIngredientProduct({ ...ingredientProduct, ingredientId: parseInt(e.target.value) })} className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                                <option value="">{t('selectIngredient')}</option>
+                                                                {products.filter(p => p.isIngredient).map(i => (
+                                                                    <option key={i.id} value={i.id}>{i.name}</option>
+                                                                ))}
+                                                            </select>
+                                                            <i className="fat fa-chevron-down absolute right-4 top-[14px] text-slate-400 text-xs pointer-events-none"></i>
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelQuantity')}</label>
+                                                        <div className="relative">
+                                                            <i className="fat fa-scale-balanced absolute left-4 top-[14px] text-teal-500/50 text-sm"></i>
+                                                            <input type="number" step="0.001" value={ingredientProduct.quantity || ''} onChange={(e) => setIngredientProduct({ ...ingredientProduct, quantity: parseFloat(e.target.value) || 0 })} className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0" />
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelUnit')}</label>
+                                                        <div className="relative">
+                                                            <i className="fat fa-ruler-combined absolute left-4 top-[14px] text-teal-500/50 text-sm"></i>
+                                                            <select value={ingredientProduct.unit} onChange={(e) => setIngredientProduct({ ...ingredientProduct, unit: e.target.value })} className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                                <option value="kg">{t('unitKg')}</option>
+                                                                <option value="gr">{t('unitGr')}</option>
+                                                                <option value="lt">{t('unitLt')}</option>
+                                                                <option value="ml">{t('unitMl')}</option>
+                                                                <option value="adet">{t('unitPiece')}</option>
+                                                                <option value="porsiyon">{t('unitPortion')}</option>
+                                                            </select>
+                                                            <i className="fat fa-chevron-down absolute right-4 top-[14px] text-slate-400 text-xs pointer-events-none"></i>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <button type="button" onClick={handleAddIngredient} className="mt-4 w-full py-3 bg-teal-50 dark:bg-teal-500/10 border border-teal-200 dark:border-teal-500/20 text-teal-600 dark:text-teal-400 font-black text-xs uppercase tracking-widest rounded-xl hover:bg-teal-100 dark:hover:bg-teal-500/20 transition-all flex items-center justify-center gap-2">
+                                                    <i className="fat fa-plus"></i> Ekle
+                                                </button>
+                                            </div>
+
+                                            {formData.recipes && formData.recipes.length > 0 ? (
+                                                <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl overflow-hidden">
+                                                    <table className="w-full text-left">
+                                                        <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-700">
+                                                            <tr>
+                                                                <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableIngredient')}</th>
+                                                                <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableQuantity')}</th>
+                                                                <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t('tableActions')}</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                                                            {formData.recipes.map((item, index) => (
+                                                                <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+                                                                    <td className="px-6 py-3 font-bold text-sm text-slate-700 dark:text-slate-300">
+                                                                        {item.ingredientName || products.find(p => p.id === item.ingredientId)?.name || `Malzeme #${item.ingredientId}`}
+                                                                    </td>
+                                                                    <td className="px-6 py-3 font-bold text-sm text-teal-600 dark:text-teal-400">
+                                                                        {item.quantity} {item.unit}
+                                                                    </td>
+                                                                    <td className="px-6 py-3 text-right">
+                                                                        <button type="button" onClick={() => handleRemoveIngredient(item.ingredientId)} className="w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-colors flex items-center justify-center">
+                                                                            <i className="fat fa-trash-can text-sm"></i>
+                                                                        </button>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            ) : (
+                                                <div className="text-center py-8 opacity-40">
+                                                    <i className="fat fa-scroll text-4xl mb-2 text-slate-300"></i>
+                                                    <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Reçete henüz boş.</p>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 

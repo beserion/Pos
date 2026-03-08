@@ -13,14 +13,14 @@ import { User } from '../users/user.entity';
 import { KitchenGateway } from './kitchen.gateway';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([Order, OrderItem, Table, User]),
-        SecurityModule,
-        RecipesModule,
-        StocksModule,
-    ],
-    providers: [OrdersService, KitchenGateway],
-    controllers: [OrdersController],
-    exports: [OrdersService],
+  imports: [
+    TypeOrmModule.forFeature([Order, OrderItem, Table, User]),
+    SecurityModule,
+    RecipesModule,
+    StocksModule,
+  ],
+  providers: [OrdersService, KitchenGateway],
+  controllers: [OrdersController],
+  exports: [OrdersService],
 })
-export class OrdersModule { }
+export class OrdersModule {}

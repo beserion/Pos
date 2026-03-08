@@ -1,38 +1,45 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+} from 'typeorm';
 import { Zone } from '../zones/zone.entity';
 
 @Entity('tables')
 export class Table {
-    @PrimaryGeneratedColumn()
-    id: number;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-    @Column()
-    name: string; // e.g., "Masa 1", "Balkon 3"
+  @Column()
+  name: string; // e.g., "Masa 1", "Balkon 3"
 
-    @Column({ default: 4 })
-    capacity: number;
+  @Column({ default: 4 })
+  capacity: number;
 
-    @Column({ default: 'BOŞ' }) // BOŞ, DOLU, REZERVE
-    status: string;
+  @Column({ default: 'BOŞ' }) // BOŞ, DOLU, REZERVE
+  status: string;
 
-    @ManyToOne(() => Zone, zone => zone.tables, { onDelete: 'CASCADE' })
-    zone: Zone;
+  @ManyToOne(() => Zone, (zone) => zone.tables, { onDelete: 'CASCADE' })
+  zone: Zone;
 
-    @Column({ default: true })
-    isActive: boolean;
+  @Column({ default: true })
+  isActive: boolean;
 
-    @Column({ nullable: true })
-    waiterName: string;
+  @Column({ nullable: true })
+  waiterName: string;
 
-    @Column({ type: 'datetime', nullable: true })
-    orderStartTime: Date;
+  @Column({ type: 'datetime', nullable: true })
+  orderStartTime: Date;
 
-    @Column('decimal', { precision: 12, scale: 2, default: 0 })
-    currentTotal: number;
+  @Column('decimal', { precision: 12, scale: 2, default: 0 })
+  currentTotal: number;
 
-    @CreateDateColumn()
-    createdAt: Date;
+  @CreateDateColumn()
+  createdAt: Date;
 
-    @UpdateDateColumn()
-    updatedAt: Date;
+  @UpdateDateColumn()
+  updatedAt: Date;
 }

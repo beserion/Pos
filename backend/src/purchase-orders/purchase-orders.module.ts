@@ -8,13 +8,13 @@ import { StocksModule } from '../stocks/stocks.module';
 import { SecurityModule } from '../auth/security.module';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([PurchaseOrder, PurchaseOrderItem]),
-        StocksModule,
-        SecurityModule,
-    ],
-    providers: [PurchaseOrdersService],
-    controllers: [PurchaseOrdersController],
-    exports: [PurchaseOrdersService],
+  imports: [
+    TypeOrmModule.forFeature([PurchaseOrder, PurchaseOrderItem]),
+    StocksModule,
+    SecurityModule,
+  ],
+  providers: [PurchaseOrdersService],
+  controllers: [PurchaseOrdersController],
+  exports: [PurchaseOrdersService],
 })
-export class PurchaseOrdersModule { }
+export class PurchaseOrdersModule {}

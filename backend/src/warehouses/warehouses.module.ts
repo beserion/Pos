@@ -5,9 +5,9 @@ import { WarehousesService } from './warehouses.service';
 import { Warehouse } from './warehouse.entity';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Warehouse])],
-    controllers: [WarehousesController],
-    providers: [WarehousesService],
-    exports: [WarehousesService]
+  imports: [TypeOrmModule.forFeature([Warehouse])],
+  controllers: [WarehousesController],
+  providers: [WarehousesService],
+  exports: [WarehousesService],
 })
-export class WarehousesModule { }
+export class WarehousesModule {}
