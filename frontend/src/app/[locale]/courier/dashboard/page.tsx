@@ -1,8 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { useAuth } from '@/app/AuthContext';
-import { showSwal, toastSwal } from '@/app/utils/swal';
+import { useAuth } from '@/app/[locale]/AuthContext';
+import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 
 interface Delivery {
     id: number;
