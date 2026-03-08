@@ -53,13 +53,43 @@ pm2 save
 
 ## 4. IIS Yapılandırması (Reverse Proxy)
 
-Uygulamayı dış dünyaya (80/443 portu) açmak için IIS üzerinde Ters Vekil (Reverse Proxy) kurmalısınız:
+Uygulamayı dış dünyaya (80/443 portu) açmak için IIS üzerinde Ters Vekil (Reverse Proxy) kurmalısınız. İşlemi arayüzden yapamıyorsanız veya sihirbaz çıkmıyorsa, projenizin kök dizinine bir `web.config` dosyası oluşturarak tüm ayarları otomatik yapabilirsiniz.
 
-1. **ARR Etkinleştirme**: IIS Manager -> Server Name -> Application Request Routing Cache -> Server Proxy Settings -> **Enable proxy** seçeneğini işaretleyin.
-2. **Site Oluşturma**: IIS üzerinde yeni bir site oluşturun (örn: `posapp.local`).
-3. **URL Rewrite**: Sitenin içine girin -> URL Rewrite -> Add Rule(s) -> Reverse Proxy:
-    - API istekleri için (`/api`): `localhost:3001` (Backend portu)
-    - Diğer istekler için: `localhost:3000` (Frontend portu)
+### Yöntem 1: web.config ile Kurulum (En Kolayı)
+Sitenizi oluşturduğunuz klasörün (Örn: `C:\inetpub\wwwroot\posapp`) içine `web.config` adında bir dosya oluşturun ve şu kodları yapıştırın:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <system.webServer>
+        <rewrite>
+            <rules>
+                <rule name="API Reverse Proxy" stopProcessing="true">
+                    <match url="^api/(.*)" />
+                    <action type="Rewrite" url="http://localhost:3001/api/{R:1}" />
+                </rule>
+                <rule name="Frontend Reverse Proxy" stopProcessing="true">
+                    <match url="(.*)" />
+                    <action type="Rewrite" url="http://localhost:3000/{R:1}" />
+                </rule>
+            </rules>
+        </rewrite>
+    </system.webServer>
+</configuration>
+```
+*(Not: Bu işlemin çalışması için IIS Manager -> Server Yöneticisine tıklayıp -> Application Request Routing Cache -> sağdaki menüden Server Proxy Settings -> Enable proxy işaretli olmalıdır.)*
+
+### Yöntem 2: IIS Arayüzünden Manuel Kurulum
+Eğer `web.config` kullanmak istemiyorsanız:
+1. **Frontend Kuralı:** Sitenize tıklayın -> URL Rewrite -> Add Rule(s) -> Blank rule:
+   - Name: `Frontend Proxy`
+   - Match URL Pattern: `(.*)`
+   - Action type: `Rewrite`, Rewrite URL: `http://localhost:3000/{R:1}`
+2. **Backend/API Kuralı:** Tekrar Blank rule ekleyin:
+   - Name: `API Proxy`
+   - Match URL Pattern: `^api/(.*)`
+   - Action type: `Rewrite`, Rewrite URL: `http://localhost:3001/api/{R:1}`
+3. **Önemli:** API kuralı, listede Frontend kuralının **ÜSTÜNDE** olmalıdır (sağ menüden "Move Up" yapın).
 
 ## 5. Veritabanı
 
