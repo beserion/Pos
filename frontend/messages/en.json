@@ -15,6 +15,7 @@
         "updated": "Updated",
         "success": "Success",
         "error": "Error",
+        "systemError": "System error",
         "loading": "Loading...",
         "search": "Search...",
         "all": "All",
@@ -161,6 +162,7 @@
         "enterPin": "Enter your 4-digit PIN",
         "newOrder": "New Order",
         "backToAdmin": "Back to Admin",
+        "backToTables": "Back to Tables",
         "refresh": "Refresh",
         "activeOrders": "Active Orders",
         "activeOrdersDesc": "Real-time order status and tracking",
@@ -172,13 +174,13 @@
         "date": "Date",
         "actions": "Actions",
         "viewDetails": "View Details",
-        "close": "Close",
+        "orderDetailClose": "Close",
         "orderDetails": "Order Details",
         "orderId": "Order No",
         "customer": "Customer",
-        "products": "Products",
+        "orderItems": "Products",
         "tax": "Tax",
-        "total": "Total"
+        "orderTotal": "Total"
     },
     "Locations": {
         "title": "BRANCH MANAGEMENT",

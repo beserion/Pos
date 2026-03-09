@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Order } from './order.entity';
@@ -8,6 +8,7 @@ import { StocksService } from '../stocks/stocks.service';
 import { Table } from '../tables/table.entity';
 import { User } from '../users/user.entity';
 import { KitchenGateway } from './kitchen.gateway';
+import { Sale } from '../sales/sale.entity';
 
 @Injectable()
 export class OrdersService {
@@ -19,7 +20,7 @@ export class OrdersService {
     private recipesService: RecipesService,
     private stocksService: StocksService,
     private kitchenGateway: KitchenGateway,
-  ) {}
+  ) { }
 
   async findAll(): Promise<Order[]> {
     return await this.orderRepository.find({
@@ -43,6 +44,17 @@ export class OrdersService {
     });
     if (!order) throw new NotFoundException(`Order with ID ${id} not found`);
     return order;
+  }
+
+  async findActiveOrdersByTable(tableId: number): Promise<Order[]> {
+    return await this.orderRepository.find({
+      where: {
+        table: { id: tableId },
+        status: In(['NEW', 'IN_PREPARATION', 'READY', 'SERVED'])
+      },
+      relations: ['items', 'items.product', 'table', 'waiter'],
+      order: { createdAt: 'ASC' }
+    });
   }
 
   async create(orderData: Partial<Order>): Promise<Order> {
@@ -124,6 +136,97 @@ export class OrdersService {
     }
 
     return updatedOrder;
+  }
+
+  async checkoutTableItems(tableId: number, checkoutData: any, userId: number): Promise<void> {
+    return await this.orderRepository.manager.transaction(async (manager) => {
+      // 1. Fetch active orders
+      const activeOrders = await manager.find(Order, {
+        where: { table: { id: tableId }, status: In(['NEW', 'IN_PREPARATION', 'READY', 'SERVED']) },
+        relations: ['items', 'items.product'],
+        order: { createdAt: 'ASC' }
+      });
+
+      if (activeOrders.length === 0) {
+        throw new BadRequestException('Bu masaya ait aktif sipariş bulunamadı.');
+      }
+
+      // 2. Clone paidItems array to track deduction
+      const remainingToDeduct = checkoutData.paidItems.map((pi: any) => ({ ...pi }));
+
+      for (const order of activeOrders) {
+        let orderModified = false;
+        for (const orderItem of order.items) {
+          const itemToDeduct = remainingToDeduct.find((pi: any) => pi.productId === orderItem.product.id && pi.quantity > 0);
+          if (itemToDeduct) {
+            const deductQty = Math.min(orderItem.quantity, itemToDeduct.quantity);
+            orderItem.quantity -= deductQty;
+            itemToDeduct.quantity -= deductQty;
+            orderModified = true;
+
+            if (orderItem.quantity <= 0) {
+              await manager.remove(OrderItem, orderItem);
+            } else {
+              await manager.save(OrderItem, orderItem);
+            }
+          }
+        }
+
+        if (orderModified) {
+          const remainingItems = order.items.filter(i => i.quantity > 0);
+          if (remainingItems.length === 0) {
+            order.status = 'COMPLETED';
+            order.totalAmount = 0;
+          } else {
+            // Recalculate total amount with 10% defaults (assume 1.1 multiplier based on earlier logic)
+            order.totalAmount = remainingItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0) * 1.1;
+          }
+          await manager.save(Order, order);
+        }
+      }
+
+      // 3. Prevent checkout if user paid items that don't exist in active orders
+      const unfulfilled = remainingToDeduct.filter((i: any) => i.quantity > 0);
+      if (unfulfilled.length > 0) {
+        throw new BadRequestException('Ödenmeye çalışılan bazı ürünler masanın aktif siparişlerinde bulunamadı.');
+      }
+
+      // 4. Create Sale Record
+      const sale = manager.create(Sale, {
+        userId,
+        totalAmount: checkoutData.paidAmountCash + checkoutData.paidAmountCreditCard,
+        status: 'COMPLETED',
+        paymentMethod: checkoutData.paymentMethod,
+        paidAmountCash: checkoutData.paidAmountCash,
+        paidAmountCreditCard: checkoutData.paidAmountCreditCard,
+        items: checkoutData.paidItems.map((pi: any) => ({
+          productId: pi.productId,
+          quantity: pi.quantity,
+          unitPrice: pi.unitPrice,
+          total: pi.total || (pi.quantity * pi.unitPrice)
+        }))
+      });
+      await manager.save(Sale, sale);
+
+      // 5. Check remaining table total and update Table status
+      const updatedOrders = await manager.find(Order, {
+        where: { table: { id: tableId }, status: In(['NEW', 'IN_PREPARATION', 'READY', 'SERVED']) }
+      });
+      const newTableTotal = updatedOrders.reduce((sum, o) => sum + Number(o.totalAmount), 0);
+      const table = await manager.findOne(Table, { where: { id: tableId } });
+
+      if (table) {
+        if (newTableTotal <= 0 && updatedOrders.length === 0) {
+          table.status = 'BOŞ';
+          table.waiterName = '';
+          (table as any).orderStartTime = null;
+          table.currentTotal = 0;
+        } else {
+          table.currentTotal = newTableTotal;
+        }
+        await manager.save(Table, table);
+      }
+    });
   }
 
   async remove(id: number): Promise<void> {

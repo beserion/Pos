@@ -14,22 +14,22 @@ export class Reservation {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column({ nullable: true })
   customerName: string;
 
-  @Column()
+  @Column({ nullable: true })
   customerPhone: string;
 
-  @Column({ type: 'datetime' })
+  @Column({ type: 'datetime', nullable: true })
   reservationTime: Date;
 
   @Column({ default: 1 })
   guestCount: number;
 
-  @ManyToOne(() => Table, { nullable: true, onDelete: 'SET NULL' })
+  @ManyToOne(() => Table, { nullable: true, onDelete: 'NO ACTION' })
   table: Table;
 
-  @ManyToOne(() => Location, { nullable: true, onDelete: 'SET NULL' })
+  @ManyToOne(() => Location, { nullable: true, onDelete: 'NO ACTION' })
   location: Location;
 
   @Column({ nullable: true })

@@ -29,13 +29,13 @@ export class Employee {
   phone: string;
 
   @ManyToOne(() => Location, (location) => location.employees, {
-    onDelete: 'SET NULL',
+    onDelete: 'NO ACTION',
     nullable: true,
   })
   location: Location;
 
   // Link an employee to a system login account if needed
-  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
+  @ManyToOne(() => User, { nullable: true, onDelete: 'NO ACTION' })
   userAccount: User;
 
   @Column({ default: true })

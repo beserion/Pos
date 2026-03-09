@@ -128,6 +128,28 @@ export default function TablesAdminPage() {
         }
     };
 
+    const handlePrintQR = (tbl: Table) => {
+        const qrUrl = `${window.location.origin}/qr-menu/${tbl.id}`;
+        const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrUrl)}&margin=10`;
+
+        showSwal({
+            title: `${tbl.name} - QR Menü`,
+            html: `
+                <div class="flex flex-col items-center justify-center p-2">
+                    <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 mb-4 inline-block">
+                        <img src="${qrApiUrl}" alt="QR Kod" class="w-48 h-48 rounded-xl" />
+                    </div>
+                    <a href="${qrUrl}" target="_blank" class="text-sm font-bold text-indigo-600 hover:text-indigo-800 transition-colors break-all underline-offset-4 decoration-indigo-200 decoration-2">${qrUrl}</a>
+                    <p class="text-xs font-medium text-slate-400 mt-3 max-w-[250px] mx-auto leading-relaxed">Müşteriler telefonlarının kamerasıyla bu kodu okutarak adisyon oluşturmadan dijital menünüze ulaşabilir.</p>
+                </div>
+            `,
+            confirmButtonText: 'Tamam',
+            customClass: {
+                popup: 'rounded-[32px]'
+            }
+        });
+    };
+
     return (
         <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative">
             {/* Background Decorations */}
@@ -247,6 +269,9 @@ export default function TablesAdminPage() {
                                             </td>
                                             <td className="px-8 py-6 text-right">
                                                 <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
+                                                    <button onClick={() => handlePrintQR(tbl)} className="w-10 h-10 bg-white dark:bg-slate-800 text-indigo-600 hover:text-white hover:bg-indigo-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center" title="QR Menü">
+                                                        <i className="fat fa-qrcode text-lg"></i>
+                                                    </button>
                                                     <button onClick={() => openModal(tbl)} className="w-10 h-10 bg-white dark:bg-slate-800 text-blue-600 hover:text-white hover:bg-blue-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center">
                                                         <i className="fat fa-pen-field text-lg"></i>
                                                     </button>

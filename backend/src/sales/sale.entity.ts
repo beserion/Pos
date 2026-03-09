@@ -26,7 +26,13 @@ export class Sale {
   status: string; // PENDING, COMPLETED, CANCELLED
 
   @Column({ nullable: true })
-  paymentMethod: string; // CASH, CREDIT_CARD
+  paymentMethod: string; // CASH, CREDIT_CARD, SPLIT
+
+  @Column('decimal', { precision: 12, scale: 2, default: 0, nullable: true })
+  paidAmountCash: number;
+
+  @Column('decimal', { precision: 12, scale: 2, default: 0, nullable: true })
+  paidAmountCreditCard: number;
 
   @OneToMany(() => SaleItem, (item) => item.sale, { cascade: true })
   items: SaleItem[];

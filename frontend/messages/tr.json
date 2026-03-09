@@ -15,6 +15,7 @@
         "updated": "Güncellendi",
         "success": "Başarılı",
         "error": "Hata",
+        "systemError": "Sistem hatası",
         "loading": "Yükleniyor...",
         "search": "Ara...",
         "all": "Hepsi",
@@ -168,6 +169,7 @@
         "noWarehouseFound": "Depo bulunamadı",
         "newOrder": "Yeni Sipariş",
         "backToAdmin": "Yönetime Dön",
+        "backToTables": "Masalara Dön",
         "refresh": "Yenile",
         "activeOrders": "Aktif Siparişler",
         "activeOrdersDesc": "Anlık sipariş durumu ve takibi",
@@ -179,13 +181,13 @@
         "date": "Tarih",
         "actions": "İşlemler",
         "viewDetails": "Detayları Gör",
-        "close": "Kapat",
+        "orderDetailClose": "Kapat",
         "orderDetails": "Sipariş Detayı",
         "orderId": "Sipariş No",
         "customer": "Müşteri",
-        "products": "Ürünler",
+        "orderItems": "Ürünler",
         "tax": "Vergi",
-        "total": "Toplam"
+        "orderTotal": "Toplam"
     },
     "Locations": {
         "title": "ŞUBE YÖNETİMİ",
