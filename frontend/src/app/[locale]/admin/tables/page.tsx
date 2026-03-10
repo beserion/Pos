@@ -303,7 +303,7 @@ export default function TablesAdminPage() {
             {isModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xl animate-in fade-in zoom-in duration-300">
                     <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-2xl shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col max-h-[90vh]">
-                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20">
+                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20 shrink-0 h-[100px]">
                             <div>
                                 <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase mb-0">
                                     <i className={`fat ${formData.id === 0 ? 'fa-plus-circle' : 'fa-pen-to-square'} text-indigo-600`}></i>
@@ -314,63 +314,68 @@ export default function TablesAdminPage() {
                             <button onClick={() => setIsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white shadow-sm transition-all">&times;</button>
                         </div>
 
-                        <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-8 space-y-5">
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">
-                                    {t('labelZone')} <span className="text-red-400">*</span>
-                                </label>
-                                <div className="relative">
-                                    <i className="fat fa-layer-group absolute left-4 top-4 text-indigo-500/50"></i>
-                                    <select required value={formData.zoneId} onChange={(e) => setFormData({ ...formData, zoneId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                        <option value={0} disabled>{t('selectZone')}</option>
-                                        {zones.map(z => (
-                                            <option key={z.id} value={z.id}>{z.name} ({z.location?.name})</option>
-                                        ))}
-                                    </select>
-                                    <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">
-                                    {t('labelName')} <span className="text-red-400">*</span>
-                                </label>
-                                <div className="relative">
-                                    <i className="fat fa-tag absolute left-4 top-4 text-indigo-500/50"></i>
-                                    <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder={t('placeholderName')} />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCapacity')}</label>
-                                    <div className="relative">
-                                        <i className="fat fa-users absolute left-4 top-4 text-indigo-500/50"></i>
-                                        <input type="number" required min="1" max="50" value={formData.capacity} onChange={(e) => setFormData({ ...formData, capacity: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{tc('active')}</label>
-                                    <div className="h-[54px] px-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl flex items-center gap-3">
-                                        <i className="fat fa-toggle-on text-indigo-500/50"></i>
-                                        <label className="relative inline-flex items-center cursor-pointer">
-                                            <input type="checkbox" className="sr-only peer" checked={formData.isActive} onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })} />
-                                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        <div className="flex-1 overflow-hidden w-full flex flex-col">
+                            <form onSubmit={handleSave} className="flex flex-col h-full w-full">
+                                <div className="flex-1 overflow-y-auto p-8 space-y-5">
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">
+                                            {t('labelZone')} <span className="text-red-400">*</span>
                                         </label>
-                                        <span className="text-xs font-black text-slate-500 uppercase tracking-widest">{formData.isActive ? tc('active') : tc('passive')}</span>
+                                        <div className="relative">
+                                            <i className="fat fa-layer-group absolute left-4 top-4 text-indigo-500/50"></i>
+                                            <select required value={formData.zoneId} onChange={(e) => setFormData({ ...formData, zoneId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                <option value={0} disabled>{t('selectZone')}</option>
+                                                {zones.map(z => (
+                                                    <option key={z.id} value={z.id}>{z.name} ({z.location?.name})</option>
+                                                ))}
+                                            </select>
+                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
 
-                            <div className="pt-4 flex gap-3">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
-                                    <i className="fat fa-xmark text-lg"></i> {tc('cancel')}
-                                </button>
-                                <button type="submit" disabled={formData.zoneId === 0} className="flex-[2] py-4 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-indigo-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
-                                    <i className="fat fa-check text-lg"></i> {tc('save')}
-                                </button>
-                            </div>
-                        </form>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">
+                                            {t('labelName')} <span className="text-red-400">*</span>
+                                        </label>
+                                        <div className="relative">
+                                            <i className="fat fa-tag absolute left-4 top-4 text-indigo-500/50"></i>
+                                            <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder={t('placeholderName')} />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCapacity')}</label>
+                                            <div className="relative">
+                                                <i className="fat fa-users absolute left-4 top-4 text-indigo-500/50"></i>
+                                                <input type="number" required min="1" max="50" value={formData.capacity} onChange={(e) => setFormData({ ...formData, capacity: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{tc('active')}</label>
+                                            <div className="h-[54px] px-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl flex items-center gap-3">
+                                                <i className="fat fa-toggle-on text-indigo-500/50"></i>
+                                                <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input type="checkbox" className="sr-only peer" checked={formData.isActive} onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })} />
+                                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                                                </label>
+                                                <span className="text-xs font-black text-slate-500 uppercase tracking-widest">{formData.isActive ? tc('active') : tc('passive')}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                </div>
+
+                                <div className="p-8 pt-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20 shrink-0 flex justify-between h-[100px] items-center">
+                                    <button type="button" onClick={() => setIsModalOpen(false)} className="w-[200px] py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
+                                        <i className="fat fa-xmark text-lg"></i> {tc('cancel')}
+                                    </button>
+                                    <button type="submit" disabled={formData.zoneId === 0} className="w-[200px] py-4 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-indigo-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
+                                        <i className="fat fa-check text-lg"></i> {tc('save')}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 </div>
             )}

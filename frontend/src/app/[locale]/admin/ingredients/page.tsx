@@ -268,71 +268,75 @@ export default function IngredientsAdminPage() {
             {/* Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xl">
-                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-4xl shadow-lg overflow-hidden border border-white/20 dark:border-slate-700/50 animate-in fade-in zoom-in duration-300">
-                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20">
+                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-4xl shadow-lg overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-300">
+                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20 shrink-0 h-[100px]">
                             <div>
-                                <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase">
+                                <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase mb-0">
                                     <i className={`fat ${formData.id === 0 ? 'fa-plus-circle' : 'fa-pen-to-square'} text-emerald-600`}></i>
                                     {formData.id === 0 ? t('modalNew') : t('modalEdit')}
                                 </h2>
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">{t('modalSubtitle')}</p>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-0">{t('modalSubtitle')}</p>
                             </div>
-                            <button onClick={() => setIsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white shadow-sm transition-all">&times;</button>
+                            <button type="button" onClick={() => setIsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white shadow-sm transition-all">&times;</button>
                         </div>
-                        <form onSubmit={handleSave} className="p-8 space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                <div className="md:col-span-2">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelName')}</label>
-                                    <div className="relative">
-                                        <i className="fat fa-leaf absolute left-4 top-3.5 text-emerald-500/50"></i>
-                                        <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-emerald-500/10 outline-none transition-shadow" placeholder={t('labelName')} />
+                        <div className="flex-1 overflow-hidden w-full flex flex-col">
+                            <form onSubmit={handleSave} className="flex flex-col h-full w-full">
+                                <div className="flex-1 overflow-y-auto w-full p-8 space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        <div className="md:col-span-2">
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelName')}</label>
+                                            <div className="relative">
+                                                <i className="fat fa-leaf absolute left-4 top-3.5 text-emerald-500/50"></i>
+                                                <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-emerald-500/10 outline-none transition-shadow" placeholder={t('labelName')} />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelSku')}</label>
+                                            <div className="relative">
+                                                <i className="fat fa-barcode-read absolute left-4 top-3.5 text-emerald-500/50"></i>
+                                                <input type="text" required value={formData.sku} onChange={(e) => setFormData({ ...formData, sku: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-emerald-500/10 outline-none transition-shadow uppercase font-mono" placeholder={t('labelSku')} />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelUnit')}</label>
+                                            <div className="relative">
+                                                <i className="fat fa-scale-balanced absolute left-4 top-4 text-emerald-500/50"></i>
+                                                <select value={formData.unit || 'gr'} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-emerald-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                    <option value="gr">{t('unitGr')}</option>
+                                                    <option value="kg">{t('unitKg')}</option>
+                                                    <option value="ml">{t('unitMl')}</option>
+                                                    <option value="lt">{t('unitLt')}</option>
+                                                    <option value="adet">{t('unitPiece')}</option>
+                                                </select>
+                                                <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCost')}</label>
+                                            <div className="relative">
+                                                <i className="fat fa-money-bill-1-wave absolute left-4 top-3.5 text-emerald-500/50"></i>
+                                                <input type="number" step="0.01" required value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-emerald-500/10 outline-none transition-shadow" placeholder="0.00" />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCategoryAuto')}</label>
+                                            <div className="relative">
+                                                <i className="fat fa-tag absolute left-4 top-3.5 text-slate-400"></i>
+                                                <input type="text" readOnly value={tp('labelIngredient')} className="w-full pl-12 pr-4 py-3.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-500 dark:text-slate-400 font-bold outline-none" />
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelSku')}</label>
-                                    <div className="relative">
-                                        <i className="fat fa-barcode-read absolute left-4 top-3.5 text-emerald-500/50"></i>
-                                        <input type="text" required value={formData.sku} onChange={(e) => setFormData({ ...formData, sku: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-emerald-500/10 outline-none transition-shadow uppercase font-mono" placeholder={t('labelSku')} />
-                                    </div>
+                                <div className="p-8 pt-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20 shrink-0 flex justify-between h-[100px] items-center">
+                                    <button type="button" onClick={() => setIsModalOpen(false)} className="w-[200px] py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
+                                        <i className="fat fa-xmark text-lg"></i> {tc('cancel')}
+                                    </button>
+                                    <button type="submit" className="w-[200px] py-4 bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
+                                        <i className="fat fa-check text-lg"></i> {tc('save')}
+                                    </button>
                                 </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelUnit')}</label>
-                                    <div className="relative">
-                                        <i className="fat fa-scale-balanced absolute left-4 top-4 text-emerald-500/50"></i>
-                                        <select value={formData.unit || 'gr'} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-emerald-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                            <option value="gr">{t('unitGr')}</option>
-                                            <option value="kg">{t('unitKg')}</option>
-                                            <option value="ml">{t('unitMl')}</option>
-                                            <option value="lt">{t('unitLt')}</option>
-                                            <option value="adet">{t('unitPiece')}</option>
-                                        </select>
-                                        <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCost')}</label>
-                                    <div className="relative">
-                                        <i className="fat fa-money-bill-1-wave absolute left-4 top-3.5 text-emerald-500/50"></i>
-                                        <input type="number" step="0.01" required value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-emerald-500/10 outline-none transition-shadow" placeholder="0.00" />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCategoryAuto')}</label>
-                                    <div className="relative">
-                                        <i className="fat fa-tag absolute left-4 top-3.5 text-slate-400"></i>
-                                        <input type="text" readOnly value={tp('labelIngredient')} className="w-full pl-12 pr-4 py-3.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-500 dark:text-slate-400 font-bold outline-none" />
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="pt-6 flex gap-3">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
-                                    <i className="fat fa-xmark text-lg"></i> {tc('cancel')}
-                                </button>
-                                <button type="submit" className="flex-[2] py-4 bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
-                                    <i className="fat fa-check text-lg"></i> {t('saveButton')}
-                                </button>
-                            </div>
-                        </form>
+                            </form>
+                        </div>
                     </div>
                 </div>
             )}

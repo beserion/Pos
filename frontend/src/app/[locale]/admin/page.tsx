@@ -20,9 +20,9 @@ export default function AdminPage() {
         { title: tAdmin('deliveries'), subtitle: tAdmin('deliveriesDesc'), path: `/${locale}/admin/deliveries`, icon: 'fa-truck-fast', color: 'text-indigo-500' },
         { title: tAdmin('couriers'), subtitle: tAdmin('couriersDesc'), path: `/${locale}/admin/couriers`, icon: 'fa-user-helmet-safety', color: 'text-orange-500' },
         { title: tAdmin('orders'), subtitle: tAdmin('ordersDesc'), path: `/${locale}/admin/orders`, icon: 'fa-bowl-food', color: 'text-rose-500' },
-        { title: tAdmin('printers'), subtitle: tAdmin('printersDesc'), path: `/${locale}/admin/printers`, icon: 'fa-print', color: 'text-sky-500' },
         { title: tAdmin('users'), subtitle: tAdmin('usersDesc'), path: `/${locale}/admin/users`, icon: 'fa-user-shield', color: 'text-cyan-500' },
-        { title: tAdmin('roles'), subtitle: tAdmin('rolesDesc'), path: `/${locale}/admin/roles`, icon: 'fa-user-tag', color: 'text-pink-500' }
+        { title: tAdmin('roles'), subtitle: tAdmin('rolesDesc'), path: `/${locale}/admin/roles`, icon: 'fa-user-tag', color: 'text-pink-500' },
+        { title: tAdmin('printers'), subtitle: tAdmin('printersDesc'), path: `/${locale}/admin/printers`, icon: 'fa-print', color: 'text-sky-500' },
     ];
 
     return (

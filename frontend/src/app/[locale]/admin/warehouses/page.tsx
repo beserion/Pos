@@ -235,7 +235,7 @@ export default function WarehousesAdminPage() {
                                 <button onClick={() => setIsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white shadow-sm transition-all">&times;</button>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto p-8">
+                            <div className="flex-1 overflow-hidden w-full flex flex-col">
                                 <WarehouseUpsert
                                     formData={formData}
                                     setFormData={setFormData}
