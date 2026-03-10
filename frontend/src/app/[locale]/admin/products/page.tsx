@@ -491,21 +491,54 @@ export default function ProductsAdminPage() {
 
                                     {activeTab === 'gorsel' && (
                                         <div className="space-y-6">
-                                            <div>
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelImageUrl')}</label>
-                                                <div className="relative">
-                                                    <i className="fat fa-image absolute left-4 top-4 text-teal-500/50"></i>
-                                                    <input type="text" value={formData.imageUrl || ''} onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="https://..." />
+                                            <div className="flex flex-col items-center gap-4 py-4">
+                                                <input
+                                                    type="file"
+                                                    id="productPhotoInput"
+                                                    accept="image/*"
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (!file) return;
+                                                        const reader = new FileReader();
+                                                        reader.onloadend = () => {
+                                                            setFormData({ ...formData, imageUrl: reader.result as string });
+                                                        };
+                                                        reader.readAsDataURL(file);
+                                                    }}
+                                                />
+                                                <div
+                                                    onClick={() => document.getElementById('productPhotoInput')?.click()}
+                                                    className="w-64 h-64 rounded-[32px] overflow-hidden bg-slate-100 dark:bg-slate-700 border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center shrink-0 cursor-pointer group relative hover:border-teal-400 transition-colors"
+                                                >
+                                                    {formData.imageUrl ? (
+                                                        <>
+                                                            <img src={formData.imageUrl} alt={t('preview')} className="w-full h-full object-cover" />
+                                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                                <div className="flex flex-col items-center gap-1 text-white">
+                                                                    <i className="fat fa-camera text-3xl"></i>
+                                                                    <span className="text-[10px] font-black uppercase tracking-widest">{tc('edit')}</span>
+                                                                </div>
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <div className="flex flex-col items-center gap-3 text-slate-300 group-hover:text-teal-400 transition-colors">
+                                                            <i className="fat fa-cloud-arrow-up text-5xl"></i>
+                                                            <div className="text-center">
+                                                                <span className="text-[10px] font-black uppercase tracking-widest block">Fotoğraf Seç</span>
+                                                                <span className="text-[10px] font-bold mt-1 block">Tıkla ve yükle</span>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            </div>
-                                            <div className="flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-slate-900/30 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-3xl min-h-[250px]">
-                                                {formData.imageUrl ? (
-                                                    <img src={formData.imageUrl} alt={t('preview')} className="w-48 h-48 object-cover rounded-2xl shadow-lg" />
-                                                ) : (
-                                                    <div className="text-center opacity-40">
-                                                        <i className="fat fa-image text-4xl mb-2"></i>
-                                                        <p className="text-xs font-bold uppercase tracking-widest">{t('noPreview')}</p>
-                                                    </div>
+                                                {formData.imageUrl && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData({ ...formData, imageUrl: '' })}
+                                                        className="text-[10px] font-black text-red-400 hover:text-red-600 uppercase tracking-widest flex items-center gap-1 transition-colors mt-2"
+                                                    >
+                                                        <i className="fat fa-trash-can"></i> Fotoğrafı Kaldır
+                                                    </button>
                                                 )}
                                             </div>
                                         </div>
