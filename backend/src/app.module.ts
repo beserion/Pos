@@ -48,7 +48,7 @@ import { ReservationsModule } from './reservations/reservations.module';
           ),
           database: configService.get<string>('DB_DATABASE', 'AntigravityPOS'),
           autoLoadEntities: true,
-          synchronize: false, // Tables created by SQL script
+          synchronize: true, // Otomatik veritabanı yansıması (eksik kolonların oluşturulması için)
           options: {
             encrypt: false,
             trustServerCertificate: true,
@@ -92,4 +92,4 @@ import { ReservationsModule } from './reservations/reservations.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }
