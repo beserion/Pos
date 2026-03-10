@@ -1,8 +1,13 @@
-import { redirect } from 'next/navigation';
+'use client';
+import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import axios from 'axios';
+import Cookies from 'js-cookie';
+import { useAuth } from '../AuthContext';
+import { useLocale, useTranslations } from 'next-intl';
+import { showSwal } from '../utils/swal';
+import { printReceipt } from '../utils/print';
 
-export default async function QuickSaleProxy({ params }: { params: Promise<{ locale: string }> }) {
-    const { locale } = await params;
-    redirect(`/${locale}/pos?view=quicksale`);
 interface Product {
     id: number;
     name: string;
@@ -11,7 +16,6 @@ interface Product {
     imageUrl: string;
     isQuickSale: boolean;
     sku: string;
-    printerId?: number;
 }
 
 interface CartItem {
@@ -19,7 +23,7 @@ interface CartItem {
     quantity: number;
 }
 
-export default function QuickSalePage() {
+export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => void }) {
     const router = useRouter();
     const locale = useLocale();
     const t = useTranslations('Admin');
@@ -33,8 +37,6 @@ export default function QuickSalePage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [cart, setCart] = useState<CartItem[]>([]);
     const [loading, setLoading] = useState(true);
-
-    const [previewData, setPreviewData] = useState<{ printData: any, kitchenPrintData: any | null } | null>(null);
 
     const fetchData = async () => {
         try {
@@ -137,26 +139,43 @@ export default function QuickSalePage() {
                 receiptNumber: res.data?.id?.toString() || Math.floor(100000 + Math.random() * 900000).toString()
             };
 
-            // Prepare Kitchen Print Data
-            const kitchenItems = cart.filter(item => item.product.printerId);
-            let kitchenPrintData = null;
-            if (kitchenItems.length > 0) {
-                kitchenPrintData = {
-                    orderType: 'HIZLI SATIŞ SİPARİŞİ',
-                    receiptNumber: printData.receiptNumber,
-                    date: printData.date,
-                    items: kitchenItems.map(item => ({
-                        name: item.product.name,
-                        quantity: item.quantity,
-                        printerId: item.product.printerId
-                    }))
-                };
+            // 1. Attempt Network Printing (Kasa Printer via Backend API)
+            try {
+                const printRes = await axios.post(`${API_URL}/printers/print-receipt`, printData, { headers });
+
+                if (printRes.data.success) {
+                    showSwal({
+                        title: 'Başarılı',
+                        text: 'Satış tamamlandı ve fiy Kasa yazıcısından yazdırılıyor.',
+                        icon: 'success',
+                        timer: 1500,
+                        showConfirmButton: false
+                    });
+                } else {
+                    // 2. Fallback to Browser Print if Kasa Printer fails or isn't found
+                    printReceipt(printData);
+
+                    showSwal({
+                        title: 'Başarılı (Alternatif Yazdırma)',
+                        text: 'Satış tamamlandı. ' + printRes.data.message + ' Tarayıcıdan yazdırılıyor.',
+                        icon: 'warning',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                }
+            } catch (printError) {
+                // Fallback to browser print if API request totally fails
+                printReceipt(printData);
+                showSwal({
+                    title: 'Satış Başarılı',
+                    text: 'Satış kaydedildi ancak ağ yazıcısına ulaşılamadı. Tarayıcıdan yazdırılıyor.',
+                    icon: 'warning',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
             }
 
-            // Instead of auto-printing, trigger the preview modal
-            setPreviewData({ printData, kitchenPrintData });
             setCart([]);
-
         } catch (error: any) {
             showSwal({
                 title: 'Hata',
@@ -164,81 +183,6 @@ export default function QuickSalePage() {
                 icon: 'error'
             });
         }
-    };
-
-    const handleNetworkPrint = async () => {
-        if (!previewData) return;
-        setPreviewData(null);
-
-        const token = Cookies.get('token');
-        const headers = { Authorization: `Bearer ${token}` };
-
-        try {
-            const printRes = await axios.post(`${API_URL}/printers/print-receipt`, previewData.printData, { headers });
-            if (printRes.data.success) {
-                showSwal({
-                    title: 'Başarılı',
-                    text: 'Satış tamamlandı ve fiş Kasa yazıcısından yazdırılıyor.',
-                    icon: 'success',
-                    timer: 1500,
-                    showConfirmButton: false
-                });
-            } else {
-                printReceipt(previewData.printData);
-                showSwal({
-                    title: 'Ağ Yazıcısı Hatası',
-                    text: printRes.data.message + ' Tarayıcıdan yazdırılıyor.',
-                    icon: 'warning',
-                    timer: 2000,
-                    showConfirmButton: false
-                });
-            }
-
-            if (previewData.kitchenPrintData) {
-                try {
-                    const kitchenRes = await axios.post(`${API_URL}/printers/print-kitchen`, previewData.kitchenPrintData, { headers });
-                    if (!kitchenRes.data.success) {
-                        console.warn('Mutfak yazdırılamadı:', kitchenRes.data.message);
-                    }
-                } catch (kErr) {
-                    console.error('Mutfak yazdırma hatası:', kErr);
-                }
-            }
-        } catch (printError) {
-            printReceipt(previewData.printData);
-            showSwal({
-                title: 'Satış Başarılı',
-                text: 'Ağ yazıcısına ulaşılamadı. Tarayıcıdan yazdırılıyor.',
-                icon: 'warning',
-                timer: 2000,
-                showConfirmButton: false
-            });
-        }
-    };
-
-    const handleBrowserPrint = () => {
-        if (!previewData) return;
-        const data = previewData;
-        setPreviewData(null);
-        printReceipt(data.printData);
-        showSwal({
-            title: 'Başarılı',
-            text: 'Tarayıcı önizlemesi hazırlanıyor...',
-            icon: 'info',
-            timer: 1500,
-            showConfirmButton: false
-        });
-    };
-
-    const handleCloseWithoutPrint = () => {
-        setPreviewData(null);
-        showSwal({
-            title: 'Başarılı',
-            text: 'Satış kaydedildi.',
-            icon: 'success',
-            timer: 1000,
-            showConfirmButton: false
-        });
     };
 
     if (loading || authLoading) return <div className="h-screen flex items-center justify-center bg-slate-900 text-white">{tc('loading')}</div>;
@@ -268,6 +212,9 @@ export default function QuickSalePage() {
                                 placeholder={tc('search')}
                             />
                         </div>
+                        <button onClick={onSwitchToPos} className="h-12 px-6 rounded-2xl bg-indigo-600 text-white font-bold uppercase tracking-wider flex items-center gap-2 hover:bg-indigo-500 transition shadow-lg shadow-indigo-500/30">
+                            <i className="fat fa-cash-register"></i> Kasa
+                        </button>
                         <button onClick={() => router.push(`/${locale}/dashboard`)} className="w-12 h-12 rounded-2xl bg-slate-800 text-slate-400 flex items-center justify-center hover:bg-slate-700 transition">
                             <i className="fat fa-reply"></i>
                         </button>
@@ -377,54 +324,6 @@ export default function QuickSalePage() {
                     </div>
                 </div>
             </div>
-            {/* Print Options Modal */}
-            {previewData && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
-                    <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col p-6 animate-in fade-in zoom-in duration-200">
-                        <div className="text-center mb-6">
-                            <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
-                                🎉
-                            </div>
-                            <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Satış Tamamlandı</h2>
-                            <p className="text-slate-500 dark:text-slate-400">₺{(previewData.printData?.totalAmount || 0).toFixed(2)} tahsil edildi.</p>
-                            <p className="text-sm font-semibold text-indigo-500 mt-2">Fişi nasıl yazdırmak istersiniz?</p>
-                        </div>
-
-                        <div className="space-y-3">
-                            <button
-                                onClick={handleNetworkPrint}
-                                className="w-full py-4 px-6 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white rounded-2xl font-bold flex flex-col items-center justify-center transition-all active:scale-95 shadow-lg shadow-indigo-500/30"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <i className="fat fa-print text-xl"></i>
-                                    Kasa Fişini Yazdır
-                                </div>
-                                {previewData.kitchenPrintData && (
-                                    <span className="text-xs font-normal text-indigo-100 mt-1">
-                                        (İlgili ürünler otomatik Mutfak/Bar'a iletilecek)
-                                    </span>
-                                )}
-                            </button>
-
-                            <button
-                                onClick={handleBrowserPrint}
-                                className="w-full py-4 px-6 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all active:scale-95"
-                            >
-                                <i className="fat fa-desktop text-xl"></i>
-                                Tarayıcıda Aç (Önizleme / A4)
-                            </button>
-
-                            <button
-                                onClick={handleCloseWithoutPrint}
-                                className="w-full py-4 px-6 border-2 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:text-rose-500 text-slate-500 dark:text-slate-400 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all active:scale-95"
-                            >
-                                <i className="fat fa-times-circle text-xl"></i>
-                                Yazdırmadan Kapat
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

@@ -473,6 +473,117 @@ export default function ProductsAdminPage() {
                                                 </div>
 
                                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelPrinter')}</label>
+                                                <div className="relative">
+                                                    <i className="fat fa-print absolute left-4 top-4 text-teal-500/50"></i>
+                                                    <select value={formData.printerId || ''} onChange={(e) => setFormData({ ...formData, printerId: e.target.value ? parseInt(e.target.value) : null })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                        <option value="">{t('selectPrinter')}</option>
+                                                        {printers.map(printer => (
+                                                            <option key={printer.id} value={printer.id}>{printer.name}</option>
+                                                        ))}
+                                                    </select>
+                                                    <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelQuickSale')}</label>
+                                                    <div className="relative flex items-center pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl w-full">
+                                                        <i className="fat fa-bolt absolute left-4 top-4 text-teal-500/50"></i>
+                                                        <div className="form-check form-switch mb-0 flex-1 d-flex justify-content-end pr-2">
+                                                            <input className="form-check-input cursor-pointer" type="checkbox" checked={formData.isQuickSale} onChange={(e) => setFormData({ ...formData, isQuickSale: e.target.checked })} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelIngredient')}</label>
+                                                    <div className="relative flex items-center pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl w-full">
+                                                        <i className="fat fa-leaf absolute left-4 top-4 text-teal-500/50"></i>
+                                                        <div className="form-check form-switch mb-0 flex-1 d-flex justify-content-end pr-2">
+                                                            <input className="form-check-input cursor-pointer" type="checkbox" checked={formData.isIngredient} onChange={(e) => setFormData({ ...formData, isIngredient: e.target.checked })} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'gorsel' && (
+                                        <div className="space-y-6">
+                                            <div className="flex flex-col items-center gap-4 py-4">
+                                                <input
+                                                    type="file"
+                                                    id="productPhotoInput"
+                                                    accept="image/*"
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (!file) return;
+                                                        const reader = new FileReader();
+                                                        reader.onloadend = () => {
+                                                            setFormData({ ...formData, imageUrl: reader.result as string });
+                                                        };
+                                                        reader.readAsDataURL(file);
+                                                    }}
+                                                />
+                                                <div
+                                                    onClick={() => document.getElementById('productPhotoInput')?.click()}
+                                                    className="w-64 h-64 rounded-[32px] overflow-hidden bg-slate-100 dark:bg-slate-700 border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center shrink-0 cursor-pointer group relative hover:border-teal-400 transition-colors"
+                                                >
+                                                    {formData.imageUrl ? (
+                                                        <>
+                                                            <img src={formData.imageUrl} alt={t('preview')} className="w-full h-full object-cover" />
+                                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                                <div className="flex flex-col items-center gap-1 text-white">
+                                                                    <i className="fat fa-camera text-3xl"></i>
+                                                                    <span className="text-[10px] font-black uppercase tracking-widest">{tc('edit')}</span>
+                                                                </div>
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <div className="flex flex-col items-center gap-3 text-slate-300 group-hover:text-teal-400 transition-colors">
+                                                            <i className="fat fa-cloud-arrow-up text-5xl"></i>
+                                                            <div className="text-center">
+                                                                <span className="text-[10px] font-black uppercase tracking-widest block">Fotoğraf Seç</span>
+                                                                <span className="text-[10px] font-bold mt-1 block">Tıkla ve yükle</span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                {formData.imageUrl && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData({ ...formData, imageUrl: '' })}
+                                                        className="text-[10px] font-black text-red-400 hover:text-red-600 uppercase tracking-widest flex items-center gap-1 transition-colors mt-2"
+                                                    >
+                                                        <i className="fat fa-trash-can"></i> Fotoğrafı Kaldır
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'recete' && (
+                                        <div className="space-y-6">
+                                            <div className="bg-slate-50 dark:bg-slate-900/30 p-6 rounded-3xl border border-slate-200 dark:border-slate-700">
+                                                <h4 className="text-sm font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest mb-4">{t('newRecipeItem')}</h4>
+                                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                                                    <div className="md:col-span-2">
+                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('tableIngredient')}</label>
+                                                        <div className="relative">
+                                                            <i className="fat fa-leaf absolute left-4 top-[14px] text-teal-500/50 text-sm"></i>
+                                                            <select value={ingredientProduct.ingredientId || ''} onChange={(e) => setIngredientProduct({ ...ingredientProduct, ingredientId: parseInt(e.target.value) })} className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                                <option value="">{t('selectIngredient')}</option>
+                                                                {products.filter(p => p.isIngredient).map(i => (
+                                                                    <option key={i.id} value={i.id}>{i.name}</option>
+                                                                ))}
+                                                            </select>
+                                                            <i className="fat fa-chevron-down absolute right-4 top-[14px] text-slate-400 text-xs pointer-events-none"></i>
+                                                        </div>
+                                                    </div>
                                                     <div>
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCost')}</label>
                                                         <div className="relative">
