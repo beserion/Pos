@@ -8,7 +8,7 @@ import { showSwal, toastSwal } from '../utils/swal';
 import { io } from 'socket.io-client';
 import { useTranslations, useLocale } from 'next-intl';
 
-interface Product { id: number; name: string; price: number; category: string; imageUrl?: string; }
+interface Product { id: number; name: string; price: number; category: string; imageUrl?: string; printerId?: number; }
 interface OrderItem { product: Product; quantity: number; }
 interface Table {
     id: number;
@@ -184,13 +184,36 @@ export default function WaiterPage() {
                 }))
             };
 
-            await axios.post(`${API_URL}/orders`, orderPayload, {
+            const orderRes = await axios.post(`${API_URL}/orders`, orderPayload, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
+            // Trigger kitchen printing for items that have a printer assigned
+            const kitchenItems = cart.filter(item => item.product.printerId);
+            if (kitchenItems.length > 0) {
+                const kitchenPrintData = {
+                    orderType: 'MASA SİPARİŞİ',
+                    receiptNumber: `SİP-${orderRes.data?.id || '00'}`,
+                    date: new Date(),
+                    items: kitchenItems.map(item => ({
+                        name: item.product.name,
+                        quantity: item.quantity,
+                        printerId: item.product.printerId
+                    }))
+                };
+
+                try {
+                    await axios.post(`${API_URL}/printers/print-kitchen`, kitchenPrintData, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                } catch (printErr: any) {
+                    console.error('Mutfak yazıcı hatası:', printErr);
+                }
+            }
+
             toastSwal({
                 icon: 'success',
-                title: `${selectedTable.name} Siparişi Mutfaga İletildi!`
+                title: `${selectedTable.name} Siparişi İşleme Alındı!`
             });
             setCart([]);
             setSelectedTable(null);

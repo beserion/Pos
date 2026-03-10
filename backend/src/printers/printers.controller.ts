@@ -12,7 +12,7 @@ import { Printer } from './printer.entity';
 
 @Controller('printers')
 export class PrintersController {
-  constructor(private readonly printersService: PrintersService) {}
+  constructor(private readonly printersService: PrintersService) { }
 
   @Get()
   findAll(): Promise<Printer[]> {
@@ -47,5 +47,12 @@ export class PrintersController {
     @Body() data: any,
   ): Promise<{ success: boolean; message: string }> {
     return this.printersService.printReceipt(data);
+  }
+
+  @Post('print-kitchen')
+  printKitchen(
+    @Body() data: any,
+  ): Promise<{ success: boolean; message: string }> {
+    return this.printersService.printKitchen(data);
   }
 }
