@@ -50,8 +50,12 @@ export class OrdersController {
 
   @Post()
   @Permissions('ADD_ORDERS')
-  create(@Body() orderData: Partial<Order>) {
-    return this.ordersService.create(orderData);
+  async create(@Body() orderData: Partial<Order>) {
+    try {
+      return await this.ordersService.create(orderData);
+    } catch (err: any) {
+      throw new (require('@nestjs/common').HttpException)(err.message || 'Error', 500);
+    }
   }
 
   @Post('table/:tableId/checkout')

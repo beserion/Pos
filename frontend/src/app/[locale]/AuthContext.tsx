@@ -60,8 +60,8 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
                 setUser({ ...response.data.user, token });
             }
         } catch (error) {
-            console.error('PIN Login error', error);
-            throw error;
+            console.warn('PIN Login failure:', error);
+            return null;
         }
     };
 
@@ -78,8 +78,8 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
             }
             return null;
         } catch (error) {
-            console.error('PIN Login Only error', error);
-            throw error;
+            console.warn('PIN Login Only failure:', error);
+            return null;
         }
     };
 

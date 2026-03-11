@@ -46,7 +46,7 @@ export class PurchaseOrder {
   @Column({ default: 'UNPAID' })
   paymentStatus: string; // UNPAID, PARTIAL, PAID
 
-  @Column({ nullable: true })
+  @Column({ type: 'nvarchar', length: 50, nullable: true })
   paymentMethod: string | null; // KASA, BANKA, KREDI_KARTI
 
   @OneToMany(() => PurchaseOrderItem, (item) => item.purchaseOrder, {
