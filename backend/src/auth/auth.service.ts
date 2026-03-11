@@ -14,7 +14,7 @@ export class AuthService {
     @Inject(forwardRef(() => UsersService))
     private usersService: UsersService,
     private jwtService: JwtService,
-  ) {}
+  ) { }
 
   async validateUser(email: string, pass: string): Promise<any> {
     const user = await this.usersService.findByEmail(email);
@@ -38,6 +38,14 @@ export class AuthService {
 
   async loginWithPin(userId: number, pinCode: string) {
     const user = await this.usersService.findByPin(userId, pinCode);
+    if (user) {
+      return this.login(user); // returns token and user data
+    }
+    return null;
+  }
+
+  async loginWithPinOnly(pinCode: string) {
+    const user = await this.usersService.findByPinOnly(pinCode);
     if (user) {
       return this.login(user); // returns token and user data
     }

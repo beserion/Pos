@@ -29,4 +29,7 @@ export class OrderItem {
 
   @Column({ nullable: true })
   note: string;
+
+  @Column({ default: false })
+  isPaid: boolean;
 }

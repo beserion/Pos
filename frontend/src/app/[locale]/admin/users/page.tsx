@@ -179,7 +179,7 @@ export default function UsersAdminPage() {
 
                 {/* KPI Bar */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-cyan-300 dark:hover:border-cyan-500/40 hover:shadow-[0_8px_30px_-5px_rgba(6,182,212,0.3)] hover:scale-[1.02] cursor-pointer">
+                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-slate-200 dark:border-slate-700 flex items-center justify-between transition-all hover:border-cyan-300 dark:hover:border-cyan-500/40 shadow-sm hover:shadow-[0_20px_40px_-15px_rgba(6,182,212,0.2)] hover:scale-[1.02] cursor-pointer">
                         <div>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('totalUsers')}</p>
                             <h3 className="text-3xl font-black text-slate-800 dark:text-white">{users.length}</h3>
@@ -188,7 +188,7 @@ export default function UsersAdminPage() {
                             <i className="fat fa-user-group text-3xl"></i>
                         </div>
                     </div>
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-emerald-300 dark:hover:border-emerald-500/40 hover:shadow-[0_8px_30px_-5px_rgba(16,185,129,0.3)] hover:scale-[1.02] cursor-pointer">
+                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-slate-200 dark:border-slate-700 flex items-center justify-between transition-all hover:border-emerald-300 dark:hover:border-emerald-500/40 shadow-sm hover:shadow-[0_20px_40px_-15px_rgba(16,185,129,0.2)] hover:scale-[1.02] cursor-pointer">
                         <div>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('activeAdmins')}</p>
                             <h3 className="text-3xl font-black text-slate-800 dark:text-white">{users.filter(u => u.role?.name?.toLowerCase() === 'admin').length}</h3>
@@ -205,7 +205,7 @@ export default function UsersAdminPage() {
                         <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t('loading')}</p>
                     </div>
                 ) : (
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl rounded-[40px] border border-white dark:border-slate-700/50 overflow-hidden">
+                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl rounded-[40px] border border-slate-200 dark:border-slate-700/50 shadow-xl overflow-hidden mb-8">
                         <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 340px)' }}>
                             <table className="w-full text-left border-collapse">
                                 <thead className="sticky top-0 z-10">

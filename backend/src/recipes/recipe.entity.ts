@@ -7,15 +7,15 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { Product } from '../products/product.entity';
+import type { Product } from '../products/product.entity';
 
 @Entity('recipes')
 export class Recipe {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => Product, (product) => product.recipes, {
-    onDelete: 'CASCADE',
+  @ManyToOne('Product', 'recipes', {
+    onDelete: 'NO ACTION',
   })
   @JoinColumn({ name: 'productId' })
   product: Product;
@@ -23,18 +23,18 @@ export class Recipe {
   @Column()
   productId: number;
 
-  @ManyToOne(() => Product, { onDelete: 'NO ACTION', nullable: true })
+  @ManyToOne('Product', { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'ingredientId' })
   ingredient: Product;
 
-  @Column()
+  @Column({ nullable: true })
   ingredientId: number;
 
   @Column('decimal', { precision: 10, scale: 3 })
   quantity: number;
 
   @Column({ default: 'adet' })
-  unit: string; // gr, kg, ml, lt, adet
+  unit: string;
 
   @CreateDateColumn()
   createdAt: Date;

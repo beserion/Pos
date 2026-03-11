@@ -82,7 +82,7 @@ export default function EmployeesAdminPage() {
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             } else {
                 await axios.put(`http://localhost:3050/employees/${formData.id}`, payload, config);
-                toastSwal({ title: 'Başarılı!', text: 'Çalışan güncellendi.', icon: 'success' });
+                toastSwal({ title: tc('success'), text: tc('updated'), icon: 'success' });
             }
             setIsModalOpen(false);
             fetchData();
@@ -107,11 +107,11 @@ export default function EmployeesAdminPage() {
                 await axios.delete(`http://localhost:3050/employees/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
-                toastSwal({ title: 'Silindi!', text: 'Çalışan başarıyla silindi.', icon: 'success' });
+                toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
                 fetchData();
             } catch (error) {
                 console.error('Error deleting employee', error);
-                showSwal({ title: 'Hata', text: 'Çalışan silinirken bir sorun oluştu.', icon: 'error' });
+                showSwal({ title: tc('error'), text: tc('error'), icon: 'error' });
             }
         }
     };
@@ -141,46 +141,46 @@ export default function EmployeesAdminPage() {
                     </div>
                     <div className="flex gap-3">
                         <button onClick={() => openModal()} className="px-6 py-3 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
-                            <i className="fat fa-user-plus text-lg"></i> Yeni Çalışan
+                            <i className="fat fa-user-plus text-lg"></i> {t('newEmployee')}
                         </button>
                         <button onClick={() => router.push(`/${locale}/admin`)} className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center gap-2">
-                            <i className="fat fa-reply"></i> Geri Dön
+                            <i className="fat fa-reply"></i> {tc('back')}
                         </button>
                     </div>
                 </div>
 
                 {/* KPI Bar - cardrighticon */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:shadow-[0_8px_30px_-5px_rgba(99,102,241,0.3)] hover:scale-[1.02] cursor-pointer">
+                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-slate-200 dark:border-slate-700 flex items-center justify-between transition-all hover:border-indigo-300 dark:hover:border-indigo-500/40 shadow-sm hover:shadow-[0_20px_40px_-15px_rgba(99,102,241,0.2)] hover:scale-[1.02] cursor-pointer">
                         <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Toplam Personel</p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('totalEmployees')}</p>
                             <h3 className="text-3xl font-black text-slate-800 dark:text-white">{employees.length}</h3>
                         </div>
                         <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
                             <i className="fat fa-user-group text-3xl"></i>
                         </div>
                     </div>
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-amber-300 dark:hover:border-amber-500/40 hover:shadow-[0_8px_30px_-5px_rgba(245,158,11,0.3)] hover:scale-[1.02] cursor-pointer">
+                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-slate-200 dark:border-slate-700 flex items-center justify-between transition-all hover:border-amber-300 dark:hover:border-amber-500/40 shadow-sm hover:shadow-[0_20px_40px_-15px_rgba(245,158,11,0.2)] hover:scale-[1.02] cursor-pointer">
                         <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Garsonlar</p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('waiters')}</p>
                             <h3 className="text-3xl font-black text-slate-800 dark:text-white">{employees.filter(e => e.roleTitle.toLowerCase().includes('garson')).length}</h3>
                         </div>
                         <div className="w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center text-amber-600 dark:text-amber-400">
                             <i className="fat fa-bell-concierge text-3xl"></i>
                         </div>
                     </div>
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-orange-300 dark:hover:border-orange-500/40 hover:shadow-[0_8px_30px_-5px_rgba(249,115,22,0.3)] hover:scale-[1.02] cursor-pointer">
+                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-slate-200 dark:border-slate-700 flex items-center justify-between transition-all hover:border-orange-300 dark:hover:border-orange-500/40 shadow-sm hover:shadow-[0_20px_40px_-15px_rgba(249,115,22,0.2)] hover:scale-[1.02] cursor-pointer">
                         <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Kuryeler</p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('courierCount')}</p>
                             <h3 className="text-3xl font-black text-slate-800 dark:text-white">{employees.filter(e => e.roleTitle.toLowerCase().includes('kurye') || e.roleTitle.toLowerCase().includes('motor')).length}</h3>
                         </div>
                         <div className="w-16 h-16 rounded-2xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center text-orange-600 dark:text-orange-400">
                             <i className="fat fa-moped text-3xl"></i>
                         </div>
                     </div>
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-emerald-300 dark:hover:border-emerald-500/40 hover:shadow-[0_8px_30px_-5px_rgba(16,185,129,0.3)] hover:scale-[1.02] cursor-pointer">
+                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-slate-200 dark:border-slate-700 flex items-center justify-between transition-all hover:border-emerald-300 dark:hover:border-emerald-500/40 shadow-sm hover:shadow-[0_20px_40px_-15px_rgba(16,185,129,0.2)] hover:scale-[1.02] cursor-pointer">
                         <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Aktif Şube</p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('activeBranch')}</p>
                             <h3 className="text-3xl font-black text-slate-800 dark:text-white">{locations.length}</h3>
                         </div>
                         <div className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
@@ -190,22 +190,22 @@ export default function EmployeesAdminPage() {
                 </div>
 
                 {/* Employee List Table */}
-                <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl rounded-[40px] border border-white dark:border-slate-700/50 overflow-hidden">
-                    {loading ? (
-                        <div className="flex flex-col items-center justify-center p-20">
-                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-                            <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Veriler Hazırlanıyor...</p>
-                        </div>
-                    ) : (
+                {loading ? (
+                    <div className="flex flex-col items-center justify-center p-20">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+                        <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t('loadingData')}</p>
+                    </div>
+                ) : (
+                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl rounded-[40px] border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden mb-8">
                         <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 340px)' }}>
                             <table className="w-full text-left border-collapse">
                                 <thead className="sticky top-0 z-10">
                                     <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-700/50">
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Çalışan Bilgisi</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ünvan / Rol</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Bağlı Şube</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">İletişim</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">İşlemler</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('employeeInfo')}</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('roleTitle')}</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">{tc('linkedBranch')}</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('phone')}</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{tc('actions')}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
@@ -222,7 +222,7 @@ export default function EmployeesAdminPage() {
                                                     </div>
                                                     <div>
                                                         <p className="font-black text-slate-800 dark:text-white tracking-tight leading-none text-lg capitalize">{e.firstName} {e.lastName}</p>
-                                                        <p className="text-[10px] font-bold text-slate-400 mt-1.5 uppercase tracking-widest">Personel ID: #{e.id}</p>
+                                                        <p className="text-[10px] font-bold text-slate-400 mt-1.5 uppercase tracking-widest">{t('personnelId')}: #{e.id}</p>
                                                     </div>
                                                 </div>
                                             </td>
@@ -234,13 +234,13 @@ export default function EmployeesAdminPage() {
                                             <td className="px-8 py-3 text-center">
                                                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-700">
                                                     <i className="fat fa-building text-slate-400 text-xs"></i>
-                                                    <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{e.location?.name || 'GENEL'}</span>
+                                                    <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{e.location?.name || tc('headquarters')}</span>
                                                 </div>
                                             </td>
                                             <td className="px-8 py-3">
                                                 <p className="text-sm font-bold text-slate-600 dark:text-slate-400 flex items-center gap-2">
                                                     <i className="fat fa-phone text-slate-300"></i>
-                                                    {e.phone || 'Girilmemiş'}
+                                                    {e.phone || t('noPhone')}
                                                 </p>
                                             </td>
                                             <td className="px-8 py-3 text-right">
@@ -260,7 +260,7 @@ export default function EmployeesAdminPage() {
                                             <td colSpan={5} className="p-20 text-center">
                                                 <div className="flex flex-col items-center opacity-40">
                                                     <i className="fat fa-user-slash text-6xl mb-4 text-slate-300"></i>
-                                                    <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">Kayıtlı Çalışan Bulunamadı</p>
+                                                    <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">{t('noEmployeeFound')}</p>
                                                 </div>
                                             </td>
                                         </tr>
@@ -268,8 +268,8 @@ export default function EmployeesAdminPage() {
                                 </tbody>
                             </table>
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
 
             {/* Modal - Upsert */}
@@ -280,9 +280,9 @@ export default function EmployeesAdminPage() {
                             <div>
                                 <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase mb-0">
                                     <i className={`fat ${formData.id === 0 ? 'fa-user-plus' : 'fa-user-pen'} text-indigo-600`}></i>
-                                    {formData.id === 0 ? 'YENİ PERSONEL' : 'PERSONEL DÜZENLE'}
+                                    {formData.id === 0 ? t('modalNewEmployee') : t('modalEditEmployee')}
                                 </h2>
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-0">Gerekli tüm bilgileri eksiksiz doldurun</p>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-0">{t('modalEmployeeSubtitle')}</p>
                             </div>
                             <button type="button" onClick={() => setIsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white shadow-sm transition-all">&times;</button>
                         </div>
@@ -294,23 +294,23 @@ export default function EmployeesAdminPage() {
                                         <div className="space-y-5">
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>
-                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Personel Adı</label>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelEmployeeName')}</label>
                                                     <div className="relative">
                                                         <i className="fat fa-user absolute left-4 top-3.5 text-indigo-500/50"></i>
-                                                        <input type="text" required value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder="Ahmet" />
+                                                        <input type="text" required value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder={t('labelEmployeeName')} />
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Personel Soyadı</label>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelEmployeeSurname')}</label>
                                                     <div className="relative">
                                                         <i className="fat fa-user absolute left-4 top-3.5 text-indigo-500/50"></i>
-                                                        <input type="text" required value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder="Yılmaz" />
+                                                        <input type="text" required value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder={t('labelEmployeeSurname')} />
                                                     </div>
                                                 </div>
                                             </div>
 
                                             <div>
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Ünvan / Rol</label>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('roleTitle')}</label>
                                                 <div className="relative">
                                                     <i className="fat fa-id-badge absolute left-4 top-3.5 text-indigo-500/50"></i>
                                                     <input type="text" required value={formData.roleTitle} onChange={(e) => setFormData({ ...formData, roleTitle: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder="Garson, Kasiyer..." />
@@ -318,7 +318,7 @@ export default function EmployeesAdminPage() {
                                             </div>
 
                                             <div>
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Telefon Numarası</label>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('phone')}</label>
                                                 <div className="relative">
                                                     <i className="fat fa-phone absolute left-4 top-3.5 text-indigo-500/50"></i>
                                                     <input type="text" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder="05xx ..." />
@@ -326,11 +326,11 @@ export default function EmployeesAdminPage() {
                                             </div>
 
                                             <div>
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Atanacak Şube</label>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{tc('linkedBranch')}</label>
                                                 <div className="relative">
                                                     <i className="fat fa-building-circle-check absolute left-4 top-4 text-indigo-500/50"></i>
                                                     <select value={formData.locationId} onChange={(e) => setFormData({ ...formData, locationId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                        <option value={0}>Merkez Şube (Atanmamış)</option>
+                                                        <option value={0}>{t('branchUnassigned')}</option>
                                                         {locations.map(loc => (
                                                             <option key={loc.id} value={loc.id}>{loc.name}</option>
                                                         ))}
@@ -367,7 +367,7 @@ export default function EmployeesAdminPage() {
                                                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                                             <div className="flex flex-col items-center gap-1 text-white">
                                                                 <i className="fat fa-camera text-3xl"></i>
-                                                                <span className="text-[10px] font-black uppercase tracking-widest">Değiştir</span>
+                                                                <span className="text-[10px] font-black uppercase tracking-widest">{t('photoSelect')}</span>
                                                             </div>
                                                         </div>
                                                     </>
@@ -375,8 +375,8 @@ export default function EmployeesAdminPage() {
                                                     <div className="flex flex-col items-center gap-3 text-slate-300 group-hover:text-indigo-400 transition-colors">
                                                         <i className="fat fa-cloud-arrow-up text-5xl"></i>
                                                         <div className="text-center">
-                                                            <span className="text-[10px] font-black uppercase tracking-widest block">Fotoğraf Seç</span>
-                                                            <span className="text-[10px] font-bold mt-1 block">Tıkla ve yükle</span>
+                                                            <span className="text-[10px] font-black uppercase tracking-widest block">{t('photoSelect')}</span>
+                                                            <span className="text-[10px] font-bold mt-1 block">{t('photoSelect')}</span>
                                                         </div>
                                                     </div>
                                                 )}
@@ -387,7 +387,7 @@ export default function EmployeesAdminPage() {
                                                     onClick={() => setFormData({ ...formData, photoUrl: '' })}
                                                     className="text-[10px] font-black text-red-400 hover:text-red-600 uppercase tracking-widest flex items-center gap-1 transition-colors"
                                                 >
-                                                    <i className="fat fa-trash-can"></i> Fotoğrafı Kaldır
+                                                    <i className="fat fa-trash-can"></i> {t('photoRemove')}
                                                 </button>
                                             )}
                                         </div>
@@ -396,10 +396,10 @@ export default function EmployeesAdminPage() {
                                 </div>
                                 <div className="p-8 pt-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20 shrink-0 flex justify-between h-[100px] items-center">
                                     <button type="button" onClick={() => setIsModalOpen(false)} className="w-[200px] py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
-                                        <i className="fat fa-xmark text-lg"></i> İPTAL ET
+                                        <i className="fat fa-xmark text-lg"></i> {tc('cancel')}
                                     </button>
                                     <button type="submit" className="w-[200px] py-4 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-indigo-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
-                                        <i className="fat fa-check text-lg"></i> KAYDET
+                                        <i className="fat fa-check text-lg"></i> {tc('save')}
                                     </button>
                                 </div>
                             </form>

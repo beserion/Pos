@@ -16,7 +16,7 @@ import { PurchaseOrder } from './purchase-order.entity';
 @Controller('purchase-orders')
 @UseGuards(JwtAuthGuard)
 export class PurchaseOrdersController {
-  constructor(private readonly poService: PurchaseOrdersService) {}
+  constructor(private readonly poService: PurchaseOrdersService) { }
 
   @Get()
   @Permissions('VIEW_PURCHASE_ORDERS')
@@ -52,6 +52,12 @@ export class PurchaseOrdersController {
   @Permissions('EDIT_PURCHASE_ORDERS')
   receive(@Param('id') id: string) {
     return this.poService.receive(+id);
+  }
+
+  @Put(':id/receive-invoice')
+  @Permissions('EDIT_PURCHASE_ORDERS')
+  receiveWithInvoice(@Param('id') id: string, @Body() invoiceData: any) {
+    return this.poService.receiveWithInvoice(+id, invoiceData);
   }
 
   @Delete(':id')

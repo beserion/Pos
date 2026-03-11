@@ -5,8 +5,9 @@ import axios from 'axios';
 import Cookies from 'js-cookie';
 import { useAuth } from '../AuthContext';
 import { useLocale, useTranslations } from 'next-intl';
-import { showSwal } from '../utils/swal';
+import { showSwal, toastSwal } from '../utils/swal';
 import { printReceipt } from '../utils/print';
+import { useTheme } from 'next-themes';
 
 interface Product {
     id: number;
@@ -16,6 +17,7 @@ interface Product {
     imageUrl: string;
     isQuickSale: boolean;
     sku: string;
+    barcode?: string;
 }
 
 interface CartItem {
@@ -29,6 +31,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     const t = useTranslations('Admin');
     const tc = useTranslations('Common');
     const { user, loading: authLoading } = useAuth();
+    const { theme, setTheme } = useTheme();
     const API_URL = 'http://localhost:3050';
 
     const [products, setProducts] = useState<Product[]>([]);
@@ -42,7 +45,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
         try {
             const token = Cookies.get('token');
             const headers = { Authorization: `Bearer ${token}` };
-            const res = await axios.get(`${API_URL}/products`, { headers });
+            const res = await axios.get(`${API_URL}/products/quicksale`, { headers });
 
             const allProducts = res.data;
             setProducts(allProducts);
@@ -185,10 +188,10 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
         }
     };
 
-    if (loading || authLoading) return <div className="h-screen flex items-center justify-center bg-slate-900 text-white">{tc('loading')}</div>;
+    if (loading || authLoading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-white transition-colors">{tc('loading')}</div>;
 
     return (
-        <div className="h-screen bg-slate-900 text-slate-100 flex overflow-hidden">
+        <div className="h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 flex overflow-hidden transition-colors duration-300">
             {/* Left Side: Product Selection (70%) */}
             <div className="flex-1 flex flex-col p-6 overflow-hidden">
                 <div className="flex justify-between items-center mb-6">
@@ -203,19 +206,52 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                     </div>
 
                     <div className="flex gap-3">
+                        {/* Barcode Scanner Input */}
                         <div className="relative">
-                            <i className="fat fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                            <i className="fat fa-barcode absolute left-4 top-1/2 -translate-y-1/2 text-orange-500"></i>
+                            <input
+                                autoFocus
+                                className="bg-white dark:bg-slate-800 border-2 border-orange-500/30 rounded-2xl py-3 pl-12 pr-4 text-sm font-black text-orange-500 placeholder:text-orange-500/50 focus:ring-4 ring-orange-500/20 transition-all outline-none w-48 shadow-lg shadow-orange-500/5"
+                                placeholder="BARKOD OKUT"
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        const barcode = (e.target as HTMLInputElement).value;
+                                        if (barcode) {
+                                            const product = products.find(p => p.barcode === barcode || p.sku === barcode);
+                                            if (product) {
+                                                addToCart(product);
+                                                toastSwal({ icon: 'success', title: `${product.name} eklendi` });
+                                            } else {
+                                                toastSwal({ icon: 'error', title: 'Ürün bulunamadı' });
+                                            }
+                                            (e.target as HTMLInputElement).value = '';
+                                        }
+                                    }
+                                }}
+                            />
+                        </div>
+
+                        <div className="relative">
+                            <i className="fat fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
                             <input
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
-                                className="bg-slate-800 border-none rounded-2xl py-3 pl-12 pr-4 text-sm font-bold focus:ring-2 ring-orange-500/50 transition-all outline-none w-64"
+                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-none rounded-2xl py-3 pl-12 pr-4 text-sm font-bold text-slate-800 dark:text-white focus:ring-2 ring-orange-500/50 transition-all outline-none w-64"
                                 placeholder={tc('search')}
                             />
                         </div>
+                        {/* Theme Toggle */}
+                        <button
+                            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                            className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-transparent text-slate-600 dark:text-slate-300 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-700 transition shadow-sm"
+                            title={theme === 'dark' ? 'Açık Tema' : 'Koyu Tema'}
+                        >
+                            <i className={`fat ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-lg`}></i>
+                        </button>
                         <button onClick={onSwitchToPos} className="h-12 px-6 rounded-2xl bg-indigo-600 text-white font-bold uppercase tracking-wider flex items-center gap-2 hover:bg-indigo-500 transition shadow-lg shadow-indigo-500/30">
                             <i className="fat fa-cash-register"></i> Kasa
                         </button>
-                        <button onClick={() => router.push(`/${locale}/dashboard`)} className="w-12 h-12 rounded-2xl bg-slate-800 text-slate-400 flex items-center justify-center hover:bg-slate-700 transition">
+                        <button onClick={() => router.push(`/${locale}/dashboard`)} className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-transparent text-slate-500 dark:text-slate-400 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-700 transition shadow-sm">
                             <i className="fat fa-reply"></i>
                         </button>
                     </div>
@@ -227,7 +263,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                         <button
                             key={cat}
                             onClick={() => setSelectedCategory(cat)}
-                            className={`px-6 h-12 rounded-xl text-xs font-bold uppercase tracking-widest transition-all whitespace-nowrap flex items-center justify-center ${selectedCategory === cat ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                            className={`px-6 h-12 rounded-xl text-xs font-bold uppercase tracking-widest transition-all whitespace-nowrap flex items-center justify-center ${selectedCategory === cat ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm'}`}
                         >
                             {cat === 'all' ? tc('all') : cat}
                         </button>
@@ -240,7 +276,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                         <button
                             key={product.id}
                             onClick={() => addToCart(product)}
-                            className="group relative bg-slate-800 border border-slate-700/50 rounded-2xl overflow-hidden shadow-lg shadow-black/20 hover:border-orange-500/50 hover:shadow-orange-500/20 transition-all duration-300 flex flex-col justify-end p-2"
+                            className="group relative bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-2xl overflow-hidden shadow-md dark:shadow-black/20 hover:border-orange-500/50 hover:shadow-orange-500/20 transition-all duration-300 flex flex-col justify-end p-2"
                             style={{ height: '160px', minHeight: '160px', maxHeight: '160px' }}
                         >
                             {/* Background Image or Icon */}
@@ -248,7 +284,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                                 {product.imageUrl ? (
                                     <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                                 ) : (
-                                    <i className="fat fa-box-open text-[40px] text-slate-700 group-hover:text-orange-500/50 transition-colors duration-500"></i>
+                                    <i className="fat fa-box-open text-[40px] text-slate-300 dark:text-slate-700 group-hover:text-orange-500/50 transition-colors duration-500"></i>
                                 )}
                             </div>
 
@@ -272,26 +308,26 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
             </div>
 
             {/* Right Side: Cart (30%) */}
-            <div className="w-[400px] bg-slate-800 border-l border-slate-700 flex flex-col">
-                <div className="p-6 border-b border-slate-700 flex justify-between items-center">
-                    <h4 className="font-black uppercase tracking-widest text-slate-400">{t('orderDetail') || 'Sipariş Detayı'}</h4>
+            <div className="w-[450px] bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 flex flex-col transition-colors duration-300">
+                <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                    <h4 className="font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{t('orderDetail') || 'Sipariş Detayı'}</h4>
                     <button onClick={() => setCart([])} className="text-[10px] font-black uppercase text-rose-500 hover:text-rose-400 transition">{t('clearCart') || 'Temizle'}</button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
                     {cart.map(item => (
-                        <div key={item.product.id} className="bg-slate-900/50 rounded-2xl p-4 border border-slate-700 shadow-sm flex items-center justify-between group">
+                        <div key={item.product.id} className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between group">
                             <div className="flex-1">
-                                <div className="text-xs font-black text-white uppercase line-clamp-1">{item.product.name}</div>
+                                <div className="text-xs font-black text-slate-800 dark:text-white uppercase line-clamp-1">{item.product.name}</div>
                                 <div className="text-[10px] font-bold text-slate-500 mt-1">
                                     {item.product.price.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺ x {item.quantity}
                                 </div>
                             </div>
 
                             <div className="flex items-center gap-2">
-                                <div className="flex items-center bg-slate-900 rounded-xl border border-slate-700 p-1">
+                                <div className="flex items-center bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-1">
                                     <button onClick={() => updateQuantity(item.product.id, -1)} className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-orange-500"><i className="fat fa-minus"></i></button>
-                                    <span className="w-8 text-center text-xs font-black text-white">{item.quantity}</span>
+                                    <span className="w-8 text-center text-xs font-black text-slate-800 dark:text-white">{item.quantity}</span>
                                     <button onClick={() => updateQuantity(item.product.id, 1)} className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-orange-500"><i className="fat fa-plus"></i></button>
                                 </div>
                                 <button onClick={() => removeFromCart(item.product.id)} className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"><i className="fat fa-trash"></i></button>
@@ -300,10 +336,10 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                     ))}
                 </div>
 
-                <div className="p-6 bg-slate-900/50 border-t border-slate-700 space-y-4">
-                    <div className="flex justify-between items-center bg-slate-900/80 p-6 rounded-3xl border border-orange-500/20 shadow-2xl">
-                        <span className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">{t('total') || 'Toplam'}</span>
-                        <span className="text-3xl font-black text-white">{totalAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} <span className="text-orange-500 text-lg uppercase tracking-tight">₺</span></span>
+                <div className="p-6 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700 space-y-4">
+                    <div className="flex justify-between items-center bg-white dark:bg-slate-900/80 p-6 rounded-3xl border border-orange-500/20 shadow-lg">
+                        <span className="text-sm font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em]">{t('total') || 'Toplam'}</span>
+                        <span className="text-3xl font-black text-slate-800 dark:text-white">{totalAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} <span className="text-orange-500 text-lg uppercase tracking-tight">₺</span></span>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 pb-4">

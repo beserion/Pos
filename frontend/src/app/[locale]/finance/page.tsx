@@ -4,7 +4,7 @@ import { useAuth } from '../AuthContext';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import Cookies from 'js-cookie';
-import { useLocale } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { showSwal, toastSwal } from '../utils/swal';
 
 interface Transaction {
@@ -32,6 +32,8 @@ export default function FinancePage() {
     const { user, loading } = useAuth();
     const router = useRouter();
     const locale = useLocale();
+    const tCommon = useTranslations('Common');
+    const tFinance = useTranslations('Finance');
     const API_URL = 'http://localhost:3050';
 
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -138,70 +140,70 @@ export default function FinancePage() {
                     <div className="flex items-center">
                         <i className="fat fa-coins me-3 text-amber-500 dark:text-amber-400" style={{ fontSize: '50px' }}></i>
                         <div>
-                            <h3 className="mb-0 text-3xl font-extralight text-amber-500 dark:text-amber-400 leading-none uppercase tracking-[0.25em]">FİNANS</h3>
-                            <h5 className="text-muted mb-0 text-lg font-medium text-slate-400 dark:text-slate-500 mt-0.5">Hesap hareketleri, kasa, banka ve kart işlemleri.</h5>
+                            <h3 className="mb-0 text-3xl font-extralight text-amber-500 dark:text-amber-400 leading-none uppercase tracking-[0.25em]">{tFinance('title')}</h3>
+                            <h5 className="text-muted mb-0 text-lg font-medium text-slate-400 dark:text-slate-500 mt-0.5">{tFinance('subtitle')}</h5>
                         </div>
                     </div>
                     <div className="flex gap-3">
                         <button onClick={openCreateModal} className="px-6 py-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-600 dark:text-amber-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
-                            <i className="fat fa-plus-circle text-lg"></i> Yeni Hareket
+                            <i className="fat fa-plus-circle text-lg"></i> {tFinance('newTransaction')}
                         </button>
                         <button onClick={() => router.push(`/${locale}/dashboard`)} className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center gap-2">
-                            <i className="fat fa-reply"></i> Geri Dön
+                            <i className="fat fa-reply"></i> {tCommon('back')}
                         </button>
                     </div>
                 </div>
 
                 {/* KPI Cards */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 mb-8">
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-5 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-emerald-300 dark:hover:border-emerald-500/40 hover:shadow-[0_8px_30px_-5px_rgba(16,185,129,0.3)] hover:scale-[1.02] cursor-pointer">
+                    <div className="bg-white/90 dark:bg-slate-800/60 backdrop-blur-xl p-5 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-emerald-300 dark:hover:border-emerald-500/40 shadow-xl shadow-slate-200/50 dark:shadow-none hover:shadow-[0_8px_30px_-5px_rgba(16,185,129,0.3)] hover:scale-[1.02] cursor-pointer">
                         <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Toplam Gelir</p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{tFinance('totalIncome')}</p>
                             <h3 className="text-xl font-black text-emerald-600 dark:text-emerald-400">₺{(summary?.totalIncome || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</h3>
                         </div>
                         <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
                             <i className="fat fa-arrow-trend-up text-2xl"></i>
                         </div>
                     </div>
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-5 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-red-300 dark:hover:border-red-500/40 hover:shadow-[0_8px_30px_-5px_rgba(239,68,68,0.3)] hover:scale-[1.02] cursor-pointer">
+                    <div className="bg-white/90 dark:bg-slate-800/60 backdrop-blur-xl p-5 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-red-300 dark:hover:border-red-500/40 shadow-xl shadow-slate-200/50 dark:shadow-none hover:shadow-[0_8px_30px_-5px_rgba(239,68,68,0.3)] hover:scale-[1.02] cursor-pointer">
                         <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Toplam Gider</p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{tFinance('totalExpense')}</p>
                             <h3 className="text-xl font-black text-red-600 dark:text-red-400">₺{(summary?.totalExpense || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</h3>
                         </div>
                         <div className="w-12 h-12 rounded-2xl bg-red-50 dark:bg-red-500/10 flex items-center justify-center text-red-600 dark:text-red-400 shrink-0">
                             <i className="fat fa-arrow-trend-down text-2xl"></i>
                         </div>
                     </div>
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-5 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-blue-300 dark:hover:border-blue-500/40 hover:shadow-[0_8px_30px_-5px_rgba(59,130,246,0.3)] hover:scale-[1.02] cursor-pointer">
+                    <div className="bg-white/90 dark:bg-slate-800/60 backdrop-blur-xl p-5 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-blue-300 dark:hover:border-blue-500/40 shadow-xl shadow-slate-200/50 dark:shadow-none hover:shadow-[0_8px_30px_-5px_rgba(59,130,246,0.3)] hover:scale-[1.02] cursor-pointer">
                         <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Net Bakiye</p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{tFinance('netBalance')}</p>
                             <h3 className={`text-xl font-black ${(summary?.balance || 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>₺{(summary?.balance || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</h3>
                         </div>
                         <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
                             <i className="fat fa-scale-balanced text-2xl"></i>
                         </div>
                     </div>
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-5 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-slate-300 dark:hover:border-slate-500/40 hover:shadow-[0_8px_30px_-5px_rgba(100,116,139,0.3)] hover:scale-[1.02] cursor-pointer">
+                    <div className="bg-white/90 dark:bg-slate-800/60 backdrop-blur-xl p-5 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-slate-300 dark:hover:border-slate-500/40 shadow-xl shadow-slate-200/50 dark:shadow-none hover:shadow-[0_8px_30px_-5px_rgba(100,116,139,0.3)] hover:scale-[1.02] cursor-pointer">
                         <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Kasa</p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{tFinance('kasa')}</p>
                             <h3 className="text-xl font-black text-slate-800 dark:text-slate-100">₺{(summary?.kasa || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</h3>
                         </div>
                         <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center text-slate-500 dark:text-slate-400 shrink-0">
                             <i className="fat fa-cash-register text-2xl"></i>
                         </div>
                     </div>
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-5 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-slate-300 dark:hover:border-slate-500/40 hover:shadow-[0_8px_30px_-5px_rgba(100,116,139,0.3)] hover:scale-[1.02] cursor-pointer">
+                    <div className="bg-white/90 dark:bg-slate-800/60 backdrop-blur-xl p-5 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-slate-300 dark:hover:border-slate-500/40 shadow-xl shadow-slate-200/50 dark:shadow-none hover:shadow-[0_8px_30px_-5px_rgba(100,116,139,0.3)] hover:scale-[1.02] cursor-pointer">
                         <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Banka</p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{tFinance('banka')}</p>
                             <h3 className="text-xl font-black text-slate-800 dark:text-slate-100">₺{(summary?.banka || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</h3>
                         </div>
                         <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center text-slate-500 dark:text-slate-400 shrink-0">
                             <i className="fat fa-building-columns text-2xl"></i>
                         </div>
                     </div>
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-5 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-slate-300 dark:hover:border-slate-500/40 hover:shadow-[0_8px_30px_-5px_rgba(100,116,139,0.3)] hover:scale-[1.02] cursor-pointer">
+                    <div className="bg-white/90 dark:bg-slate-800/60 backdrop-blur-xl p-5 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-slate-300 dark:hover:border-slate-500/40 shadow-xl shadow-slate-200/50 dark:shadow-none hover:shadow-[0_8px_30px_-5px_rgba(100,116,139,0.3)] hover:scale-[1.02] cursor-pointer">
                         <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Kart</p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{tFinance('creditCard')}</p>
                             <h3 className="text-xl font-black text-slate-800 dark:text-slate-100">₺{(summary?.kart || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</h3>
                         </div>
                         <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center text-slate-500 dark:text-slate-400 shrink-0">
@@ -211,29 +213,29 @@ export default function FinancePage() {
                 </div>
 
                 {/* Table */}
-                <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl rounded-[40px] border border-white dark:border-slate-700/50 overflow-hidden">
+                <div className="bg-white/90 dark:bg-slate-800/60 backdrop-blur-xl rounded-[40px] border border-white dark:border-slate-700/50 overflow-hidden shadow-2xl shadow-slate-200/50 dark:shadow-none">
                     <div className="p-6 border-b border-slate-100 dark:border-slate-700/50 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
-                        <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Hesap Hareketleri</h2>
-                        <span className="text-sm font-bold text-slate-400">{transactions.length} kayıt</span>
+                        <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">{tFinance('tableTitle')}</h2>
+                        <span className="text-sm font-bold text-slate-400">{transactions.length} {tFinance('recordCount')}</span>
                     </div>
                     <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 360px)' }}>
                         <table className="w-full text-left border-collapse">
                             <thead className="sticky top-0 z-10">
                                 <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-700/50">
-                                    <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Tarih</th>
-                                    <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Açıklama</th>
-                                    <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Kategori</th>
-                                    <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ödeme Yöntemi</th>
-                                    <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Tür</th>
-                                    <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Tutar</th>
-                                    <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">İşlemler</th>
+                                    <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{tFinance('tableDate')}</th>
+                                    <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{tFinance('tableDescription')}</th>
+                                    <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{tFinance('tableCategory')}</th>
+                                    <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{tFinance('tablePaymentMethod')}</th>
+                                    <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{tFinance('tableType')}</th>
+                                    <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{tFinance('tableAmount')}</th>
+                                    <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{tFinance('tableActions')}</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
                                 {dataLoading ? (
                                     <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-400"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-yellow-500 mx-auto"></div></td></tr>
                                 ) : transactions.length === 0 ? (
-                                    <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-400">Henüz hesap hareketi bulunmuyor.</td></tr>
+                                    <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-400">{tFinance('noRecord')}</td></tr>
                                 ) : transactions.map((tx) => (
                                     <tr key={tx.id} className="hover:bg-amber-500/5 dark:hover:bg-amber-500/10 transition-all">
                                         <td className="px-8 py-3 text-slate-500 dark:text-slate-400 text-sm">{new Date(tx.createdAt).toLocaleDateString('tr-TR')} <span className="text-xs text-slate-400">{new Date(tx.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</span></td>
@@ -247,7 +249,7 @@ export default function FinancePage() {
                                         </td>
                                         <td className="px-8 py-3">
                                             <span className={`inline-flex px-3 py-1 text-xs font-bold rounded-full border ${tx.type === 'INCOME' ? 'bg-emerald-100/80 border-emerald-200 dark:bg-emerald-500/10 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400' : 'bg-red-100/80 border-red-200 dark:bg-red-500/10 dark:border-red-500/20 text-red-700 dark:text-red-400'}`}>
-                                                {tx.type === 'INCOME' ? 'Gelir' : 'Gider'}
+                                                {tx.type === 'INCOME' ? tFinance('income') : tFinance('expense')}
                                             </span>
                                         </td>
                                         <td className={`px-8 py-3 text-right font-black ${tx.type === 'INCOME' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
@@ -288,50 +290,50 @@ export default function FinancePage() {
                         <div className="p-6 space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tür *</label>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">{tFinance('labelType')} *</label>
                                     <select value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value })} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-yellow-500/20 outline-none">
-                                        <option value="INCOME">Gelir</option>
-                                        <option value="EXPENSE">Gider</option>
+                                        <option value="INCOME">{tFinance('income')}</option>
+                                        <option value="EXPENSE">{tFinance('expense')}</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tutar (₺) *</label>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">{tFinance('labelAmount')} *</label>
                                     <input type="number" step="0.01" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-yellow-500/20 outline-none" placeholder="0.00" />
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Açıklama *</label>
-                                <input type="text" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-yellow-500/20 outline-none" placeholder="Hareket açıklaması" />
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">{tFinance('labelDescription')} *</label>
+                                <input type="text" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-yellow-500/20 outline-none" placeholder={tFinance('labelDescription')} />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Ödeme Yöntemi</label>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">{tFinance('labelPaymentMethod')}</label>
                                     <select value={formData.paymentMethod} onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-yellow-500/20 outline-none">
-                                        <option value="KASA">Kasa</option>
-                                        <option value="BANKA">Banka</option>
-                                        <option value="KREDI_KARTI">Kredi Kartı</option>
+                                        <option value="KASA">{tFinance('kasa')}</option>
+                                        <option value="BANKA">{tFinance('banka')}</option>
+                                        <option value="KREDI_KARTI">{tFinance('creditCard')}</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Kategori</label>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">{tFinance('labelCategory')}</label>
                                     <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-yellow-500/20 outline-none">
-                                        <option value="Satış">Satış</option>
-                                        <option value="Tahsilat">Tahsilat</option>
-                                        <option value="Alım">Alım</option>
-                                        <option value="Gider">Gider</option>
-                                        <option value="Maaş">Maaş</option>
-                                        <option value="Kira">Kira</option>
-                                        <option value="Diğer">Diğer</option>
+                                        <option value="Satış">{tFinance('catSale')}</option>
+                                        <option value="Tahsilat">{tFinance('catCollection')}</option>
+                                        <option value="Alım">{tFinance('catPurchase')}</option>
+                                        <option value="Gider">{tFinance('catExpense')}</option>
+                                        <option value="Maaş">{tFinance('catSalary')}</option>
+                                        <option value="Kira">{tFinance('catRent')}</option>
+                                        <option value="Diğer">{tFinance('catOther')}</option>
                                     </select>
                                 </div>
                             </div>
                         </div>
                         <div className="p-6 border-t border-slate-100 dark:border-slate-700 flex justify-between">
                             <button onClick={() => setIsModalOpen(false)} className="px-6 py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold hover:bg-slate-200 transition-colors">
-                                İptal
+                                {tCommon('cancel')}
                             </button>
                             <button onClick={handleSave} className="px-8 py-3 bg-gradient-to-r from-yellow-500 to-amber-500 text-white rounded-xl font-bold shadow-lg shadow-yellow-500/20 hover:scale-105 transition-all">
-                                {editingTx ? 'Güncelle' : 'Kaydet'}
+                                {editingTx ? tFinance('updateButton') : tFinance('saveButton')}
                             </button>
                         </div>
                     </div>

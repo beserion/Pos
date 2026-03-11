@@ -7,6 +7,7 @@ import { OrdersController } from './orders.controller';
 import { SecurityModule } from '../auth/security.module';
 import { RecipesModule } from '../recipes/recipes.module';
 import { StocksModule } from '../stocks/stocks.module';
+import { FinanceModule } from '../finance/finance.module';
 
 import { Table } from '../tables/table.entity';
 import { User } from '../users/user.entity';
@@ -18,9 +19,10 @@ import { KitchenGateway } from './kitchen.gateway';
     SecurityModule,
     RecipesModule,
     StocksModule,
+    FinanceModule,
   ],
   providers: [OrdersService, KitchenGateway],
   controllers: [OrdersController],
   exports: [OrdersService],
 })
-export class OrdersModule {}
+export class OrdersModule { }

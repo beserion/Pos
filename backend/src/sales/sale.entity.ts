@@ -22,6 +22,12 @@ export class Sale {
   @Column('decimal', { precision: 12, scale: 2, default: 0 })
   totalAmount: number;
 
+  @Column('decimal', { precision: 12, scale: 2, default: 0 })
+  discountAmount: number;
+
+  @Column('decimal', { precision: 12, scale: 2, default: 0 })
+  serviceFee: number;
+
   @Column({ default: 'COMPLETED' })
   status: string; // PENDING, COMPLETED, CANCELLED
 

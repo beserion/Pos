@@ -14,7 +14,7 @@ import { Permissions } from '../auth/permissions.decorator';
 import { Order } from './order.entity';
 
 @Controller('orders')
-@UseGuards(JwtAuthGuard)
+// @UseGuards(JwtAuthGuard)
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) { }
 
@@ -28,6 +28,12 @@ export class OrdersController {
   @Permissions('VIEW_ORDERS')
   findKitchenOrders() {
     return this.ordersService.findKitchenOrders();
+  }
+
+  @Get('kitchen/counts')
+  @Permissions('VIEW_ORDERS')
+  getKitchenCounts() {
+    return this.ordersService.getKitchenCounts();
   }
 
   @Get(':id')
@@ -69,6 +75,40 @@ export class OrdersController {
   @Permissions('EDIT_ORDERS')
   updateStatus(@Param('id') id: number, @Body('status') status: string) {
     return this.ordersService.updateStatus(id, status);
+  }
+
+  @Put('items/:itemId/pay')
+  @Permissions('EDIT_ORDERS')
+  markItemAsPaid(
+    @Param('itemId') itemId: number,
+    @Body('paymentMethod') paymentMethod: string,
+    @Body('partnerId') partnerId: number,
+  ) {
+    return this.ordersService.markItemAsPaid(itemId, paymentMethod || 'KASA', partnerId);
+  }
+
+  @Put('items/pay-batch')
+  @Permissions('EDIT_ORDERS')
+  markItemsAsPaid(
+    @Body('itemIds') itemIds: number[],
+    @Body('paymentMethod') paymentMethod: string,
+    @Body('partnerId') partnerId: number,
+  ) {
+    return this.ordersService.markItemsAsPaid(itemIds, paymentMethod || 'KASA', partnerId);
+  }
+
+  @Post('table/:tableId/cancel')
+  @Permissions('EDIT_ORDERS')
+  async cancelTableOrders(@Param('tableId') tableId: number) {
+    try {
+      await this.ordersService.cancelTableOrders(tableId);
+      return { success: true };
+    } catch (error: any) {
+      throw new (require('@nestjs/common').InternalServerErrorException)({
+        message: 'Cancellation failed',
+        errorDetails: error.message,
+      });
+    }
   }
 
   @Delete(':id')

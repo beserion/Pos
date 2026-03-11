@@ -6,10 +6,13 @@ import {
   UpdateDateColumn,
   OneToMany,
   ManyToOne,
+  ManyToMany,
+  JoinTable,
 } from 'typeorm';
-import { Stock } from '../stocks/stock.entity';
-import { Printer } from '../printers/printer.entity';
-import { Recipe } from '../recipes/recipe.entity';
+import type { Stock } from '../stocks/stock.entity';
+import type { Printer } from '../printers/printer.entity';
+import type { Recipe } from '../recipes/recipe.entity';
+import type { Modifier } from '../modifiers/modifier.entity';
 
 @Entity('products')
 export class Product {
@@ -20,7 +23,10 @@ export class Product {
   name: string;
 
   @Column({ unique: true })
-  sku: string; // Stock Keeping Unit / Barkod
+  sku: string;
+
+  @Column({ nullable: true, unique: true })
+  barcode: string;
 
   @Column('decimal', { precision: 10, scale: 2 })
   price: number;
@@ -32,38 +38,45 @@ export class Product {
   isActive: boolean;
 
   @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
-  @Column({ type: 'text', nullable: true })
-  imageUrl: string; // Ürün görseli
+  imageUrl: string;
 
   @Column({ nullable: true })
   printerId: number;
 
   @Column('decimal', { precision: 10, scale: 2, default: 0, nullable: true })
-  costPrice: number; // Hammadde birim maliyet fiyatı
+  costPrice: number;
 
   @Column('decimal', { precision: 10, scale: 2, default: 0, nullable: true })
-  minStockLevel: number; // Minimum stok seviyesi
+  minStockLevel: number;
 
   @Column({ default: 'adet', nullable: true })
-  unit: string; // gr, kg, ml, lt, adet
+  unit: string;
 
   @Column({ default: false })
-  isQuickSale: boolean; // Hızlı satış menüsünde görünüp görünmeyeceği
+  isQuickSale: boolean;
 
   @Column({ default: false })
-  isIngredient: boolean; // Hammadde (reçete bileşeni) olup olmadığı
+  isIngredient: boolean;
 
-  @ManyToOne(() => Printer, (printer) => printer.products, {
+  @ManyToOne('Printer', 'products', {
     nullable: true,
     onDelete: 'SET NULL',
   })
   printer: Printer;
 
-  @OneToMany(() => Stock, (stock) => stock.product)
+  @OneToMany('Stock', 'product')
   stocks: Stock[];
 
-  @OneToMany(() => Recipe, (recipe) => recipe.product)
+  @OneToMany('Recipe', 'product')
   recipes: Recipe[];
+
+  @ManyToMany('Modifier', { cascade: true })
+  @JoinTable({
+    name: 'product_modifiers',
+    joinColumn: { name: 'productsId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'modifiersId', referencedColumnName: 'id' }
+  })
+  modifiers: Modifier[];
 
   @CreateDateColumn()
   createdAt: Date;

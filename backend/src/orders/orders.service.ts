@@ -9,6 +9,7 @@ import { Table } from '../tables/table.entity';
 import { User } from '../users/user.entity';
 import { KitchenGateway } from './kitchen.gateway';
 import { Sale } from '../sales/sale.entity';
+import { FinanceService } from '../finance/finance.service';
 
 @Injectable()
 export class OrdersService {
@@ -20,41 +21,140 @@ export class OrdersService {
     private recipesService: RecipesService,
     private stocksService: StocksService,
     private kitchenGateway: KitchenGateway,
+    private financeService: FinanceService,
   ) { }
 
+  // Helper to fetch and map products bypassing TypeORM eager relation Cartesian explosion
+  private async mapProductsToOrders(orders: Order[]): Promise<Order[]> {
+    if (orders.length === 0) return orders;
+    const orderItemIds = orders.flatMap(o => o.items?.map(i => i.id) || []);
+
+    if (orderItemIds.length > 0) {
+      const rawProducts: any[] = await this.orderRepository.query(`
+          SELECT oi.id as orderItemId, p.*
+          FROM order_items oi
+          JOIN products p ON oi.productId = p.id
+          WHERE oi.id IN (${orderItemIds.join(',')})
+      `);
+
+      orders.forEach(o => {
+        o.items?.forEach(item => {
+          const match = rawProducts.find(rp => rp.orderItemId === item.id);
+          if (match) {
+            item.product = match as any; // Map all product fields dynamically
+          }
+        });
+      });
+    }
+    return orders;
+  }
+
   async findAll(): Promise<Order[]> {
-    return await this.orderRepository.find({
-      relations: ['items', 'items.product', 'table', 'waiter'],
+    const orders = await this.orderRepository.find({
+      relations: ['items', 'table', 'waiter'],
       order: { createdAt: 'DESC' },
     });
+    return this.mapProductsToOrders(orders);
   }
 
   async findKitchenOrders(): Promise<Order[]> {
-    return await this.orderRepository.find({
+    const orders = await this.orderRepository.find({
       where: { status: In(['NEW', 'IN_PREPARATION']) },
-      relations: ['items', 'items.product', 'table'],
+      relations: ['items', 'table', 'waiter'],
       order: { createdAt: 'ASC' },
     });
+    return this.mapProductsToOrders(orders);
+  }
+
+  async getKitchenCounts(): Promise<{ pending: number; finished: number; total: number }> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const result = await this.orderRepository.createQueryBuilder('order')
+      .select('order.status', 'status')
+      .addSelect('COUNT(DISTINCT order.id)', 'count')
+      .innerJoin('order.items', 'item')
+      .innerJoin('item.product', 'product')
+      .where('order.createdAt >= :today', { today })
+      .andWhere('product.printerId IS NOT NULL')
+      .groupBy('order.status')
+      .getRawMany();
+
+    let pending = 0;
+    let finished = 0;
+    let total = 0;
+
+    result.forEach(row => {
+      const count = parseInt(row.count, 10);
+      total += count;
+      if (['NEW', 'IN_PREPARATION'].includes(row.status)) {
+        pending += count;
+      } else if (['READY', 'SERVED'].includes(row.status)) {
+        finished += count;
+      }
+    });
+
+    return { pending, finished, total };
   }
 
   async findOne(id: number): Promise<Order> {
     const order = await this.orderRepository.findOne({
       where: { id },
-      relations: ['items', 'items.product', 'table', 'waiter'],
+      relations: ['items', 'table', 'waiter'],
     });
     if (!order) throw new NotFoundException(`Order with ID ${id} not found`);
-    return order;
+    const mapped = await this.mapProductsToOrders([order]);
+    return mapped[0];
   }
 
   async findActiveOrdersByTable(tableId: number): Promise<Order[]> {
-    return await this.orderRepository.find({
+    const orders = await this.orderRepository.find({
       where: {
         table: { id: tableId },
         status: In(['NEW', 'IN_PREPARATION', 'READY', 'SERVED'])
       },
-      relations: ['items', 'items.product', 'table', 'waiter'],
+      relations: ['items', 'table', 'waiter'],
       order: { createdAt: 'ASC' }
     });
+    return this.mapProductsToOrders(orders);
+  }
+
+  async markItemAsPaid(itemId: number, paymentMethod: string = 'KASA', partnerId?: number): Promise<OrderItem> {
+    const item = await this.orderItemRepository.findOne({ where: { id: itemId } });
+    if (!item) throw new NotFoundException(`OrderItem with ID ${itemId} not found`);
+    item.isPaid = true;
+    const saved = await this.orderItemRepository.save(item);
+
+    // Write INCOME transaction to account_transactions
+    await this.financeService.create({
+      amount: Number(item.quantity) * Number(item.unitPrice),
+      type: 'INCOME',
+      description: `Masa Ödemesi - Kalem #${item.id}`,
+      sourceType: 'ORDER_ITEM',
+      sourceId: item.id,
+      paymentMethod,
+      category: 'Satış',
+      ...(partnerId ? { partnerId } : {}),
+    });
+
+    return saved;
+  }
+
+  async markItemsAsPaid(itemIds: number[], paymentMethod: string = 'KASA', partnerId?: number): Promise<void> {
+    await this.orderItemRepository.update(itemIds, { isPaid: true });
+    const items = await this.orderItemRepository.findByIds(itemIds);
+    for (const item of items) {
+      await this.financeService.create({
+        amount: Number(item.quantity) * Number(item.unitPrice),
+        type: 'INCOME',
+        description: `Masa Ödemesi - Kalem #${item.id}`,
+        sourceType: 'ORDER_ITEM',
+        sourceId: item.id,
+        paymentMethod,
+        category: 'Satış',
+        ...(partnerId ? { partnerId } : {}),
+      });
+    }
   }
 
   async create(orderData: Partial<Order>): Promise<Order> {
@@ -194,7 +294,9 @@ export class OrdersService {
       // 4. Create Sale Record
       const sale = manager.create(Sale, {
         userId,
-        totalAmount: checkoutData.paidAmountCash + checkoutData.paidAmountCreditCard,
+        totalAmount: (checkoutData.paidAmountCash + checkoutData.paidAmountCreditCard),
+        discountAmount: checkoutData.discountAmount || 0,
+        serviceFee: checkoutData.serviceFee || 0,
         status: 'COMPLETED',
         paymentMethod: checkoutData.paymentMethod,
         paidAmountCash: checkoutData.paidAmountCash,
@@ -224,6 +326,26 @@ export class OrdersService {
         } else {
           table.currentTotal = newTableTotal;
         }
+        await manager.save(Table, table);
+      }
+    });
+  }
+
+  async cancelTableOrders(tableId: number): Promise<void> {
+    await this.orderRepository.manager.transaction(async (manager) => {
+      // 1. Mark active orders as CANCELLED
+      await manager.update(Order,
+        { table: { id: tableId }, status: In(['NEW', 'IN_PREPARATION', 'READY', 'SERVED']) },
+        { status: 'CANCELLED' }
+      );
+
+      // 2. Reset table
+      const table = await manager.findOne(Table, { where: { id: tableId } });
+      if (table) {
+        table.status = 'BOŞ';
+        table.waiterName = '';
+        (table as any).orderStartTime = null;
+        table.currentTotal = 0;
         await manager.save(Table, table);
       }
     });

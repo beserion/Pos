@@ -16,12 +16,18 @@ import { Permissions } from '../auth/permissions.decorator';
 @Controller('products')
 @UseGuards(JwtAuthGuard)
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(private readonly productsService: ProductsService) { }
 
   @Get()
   @Permissions('VIEW_PRODUCTS')
-  findAll() {
+  async findAll() {
     return this.productsService.findAll();
+  }
+
+  @Get('quicksale')
+  @Permissions('VIEW_PRODUCTS')
+  async findAllQuickSale() {
+    return this.productsService.findAllQuickSale();
   }
 
   @Get(':id')

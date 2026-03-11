@@ -10,7 +10,7 @@ export class RecipesService {
     @InjectRepository(Recipe)
     private recipeRepository: Repository<Recipe>,
     private productsService: ProductsService,
-  ) {}
+  ) { }
 
   async findAll(): Promise<Recipe[]> {
     return await this.recipeRepository.find({

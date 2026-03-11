@@ -8,6 +8,7 @@ interface AuthContextType {
     user: any;
     login: (email: string, pass: string) => Promise<void>;
     loginPin: (userId: number, pin: string) => Promise<void>;
+    loginPinOnly: (pin: string) => Promise<any>;
     logout: () => void;
     loading: boolean;
 }
@@ -20,10 +21,13 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
     const router = useRouter();
 
     useEffect(() => {
-        const token = Cookies.get('token');
+        const token = Cookies.get('token') || localStorage.getItem('token');
         if (token) {
             setUser({ token });
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            if (!localStorage.getItem('token')) {
+                localStorage.setItem('token', token);
+            }
         }
         setLoading(false);
     }, []);
@@ -34,6 +38,7 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
             if (response.data.access_token) {
                 const token = response.data.access_token;
                 Cookies.set('token', token, { expires: 1 });
+                localStorage.setItem('token', token);
                 axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
                 setUser({ ...response.data.user, token });
                 window.location.href = `/${locale}/dashboard`;
@@ -50,6 +55,7 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
             if (response.data.access_token) {
                 const token = response.data.access_token;
                 Cookies.set('token', token, { expires: 1 });
+                localStorage.setItem('token', token);
                 axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
                 setUser({ ...response.data.user, token });
             }
@@ -59,15 +65,34 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
         }
     };
 
+    const loginPinOnly = async (pin: string) => {
+        try {
+            const response = await axios.post('http://localhost:3050/auth/login-pin-only', { pinCode: pin });
+            if (response.data.access_token) {
+                const token = response.data.access_token;
+                Cookies.set('token', token, { expires: 1 });
+                localStorage.setItem('token', token);
+                axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+                setUser({ ...response.data.user, token });
+                return response.data.user;
+            }
+            return null;
+        } catch (error) {
+            console.error('PIN Login Only error', error);
+            throw error;
+        }
+    };
+
     const logout = () => {
         Cookies.remove('token');
+        localStorage.removeItem('token');
         delete axios.defaults.headers.common['Authorization'];
         setUser(null);
         router.push(`/${locale}/login`);
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, loginPin, logout, loading }}>
+        <AuthContext.Provider value={{ user, login, loginPin, loginPinOnly, logout, loading }}>
             {children}
         </AuthContext.Provider>
     );

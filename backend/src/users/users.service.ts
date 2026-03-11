@@ -13,7 +13,7 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
-  ) {}
+  ) { }
 
   async findAll(): Promise<User[]> {
     return await this.userRepository.find({ relations: ['role'] });
@@ -59,6 +59,13 @@ export class UsersService {
   async findByPin(id: number, pinCode: string): Promise<User | null> {
     return await this.userRepository.findOne({
       where: { id, pinCode },
+      relations: ['role'],
+    });
+  }
+
+  async findByPinOnly(pinCode: string): Promise<User | null> {
+    return await this.userRepository.findOne({
+      where: { pinCode },
       relations: ['role'],
     });
   }

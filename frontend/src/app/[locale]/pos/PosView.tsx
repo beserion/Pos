@@ -17,7 +17,7 @@ interface Product {
 interface Zone { id: number; name: string; }
 interface Table { id: number; name: string; status: string; waiterName?: string; orderStartTime?: string; currentTotal?: number; zone: { id: number } }
 
-export default function PosView({ onSwitchToQuickSale }: { onSwitchToQuickSale: () => void }) {
+export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { onSwitchToQuickSale: () => void, onSwitchToTakeOrder: () => void }) {
     const { user, loginPin, logout, loading } = useAuth();
     const router = useRouter();
     const locale = useLocale();
@@ -28,7 +28,7 @@ export default function PosView({ onSwitchToQuickSale }: { onSwitchToQuickSale: 
     const [tables, setTables] = useState<Table[]>([]);
     const [zones, setZones] = useState<Zone[]>([]);
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
-    const [selectedZone, setSelectedZone] = useState<number | null>(null);
+    const [selectedZone, setSelectedZone] = useState<number | 'ALL'>('ALL');
     const [cart, setCart] = useState<{ product: Product; quantity: number }[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string>('Tümü');
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -41,35 +41,69 @@ export default function PosView({ onSwitchToQuickSale }: { onSwitchToQuickSale: 
     const [isPinRequired, setIsPinRequired] = useState(true);
     const [activeOrderIds, setActiveOrderIds] = useState<number[]>([]);
     const [selectedPosItems, setSelectedPosItems] = useState<number[]>([]);
+    const [discount, setDiscount] = useState<number>(0);
+    const [serviceFee, setServiceFee] = useState<number>(0);
 
     const API_URL = 'http://localhost:3050';
 
     const fetchCashiers = async () => {
         try {
-            const token = localStorage.getItem('token') || (user as any)?.token;
+            const token = (user as any)?.token || localStorage.getItem('token');
+            if (!token) return;
             const res = await fetch(`${API_URL}/auth/cashiers`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            const data = await res.json();
-            setCashiers(data);
-        } catch (e) {
-            console.error('Error fetching cashiers:', e);
+            if (res.ok) {
+                const data = await res.json();
+                setCashiers(data);
+            }
+        } catch (error) {
+            console.error('Error fetching cashiers:', error);
         }
     };
 
     const fetchData = async () => {
         try {
-            const token = localStorage.getItem('token') || (user as any)?.token;
-            if (!token) return;
+            const token = (user as any)?.token || localStorage.getItem('token');
+            if (!token) {
+                console.warn('PosView: No token found for fetchData');
+                return;
+            }
+
             const [productsRes, tablesRes, zonesRes] = await Promise.all([
-                fetch(`${API_URL}/products`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-                fetch(`${API_URL}/tables`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-                fetch(`${API_URL}/zones`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json())
+                fetch(`${API_URL}/products`, { headers: { Authorization: `Bearer ${token}` } }),
+                fetch(`${API_URL}/tables`, { headers: { Authorization: `Bearer ${token}` } }),
+                fetch(`${API_URL}/zones`, { headers: { Authorization: `Bearer ${token}` } })
             ]);
-            setProducts(productsRes);
-            setTables(tablesRes);
-            setZones(zonesRes);
-            if (zonesRes.length > 0) setSelectedZone(zonesRes[0].id);
+
+            if (!productsRes.ok || !tablesRes.ok || !zonesRes.ok) {
+                console.error('PosView: Fetch failed', {
+                    productsStatus: productsRes.status,
+                    tablesStatus: tablesRes.status,
+                    zonesStatus: zonesRes.status
+                });
+                return;
+            }
+
+            const [productsData, tablesData, zonesData] = await Promise.all([
+                productsRes.json(),
+                tablesRes.json(),
+                zonesRes.json()
+            ]);
+
+            console.log('PosView: Data loaded', {
+                productsCount: productsData.length,
+                tablesCount: tablesData.length,
+                zonesCount: zonesData.length
+            });
+
+            setProducts(productsData);
+            setTables(tablesData);
+            setZones(zonesData);
+
+            if (zonesData.length > 0 && selectedZone === null) {
+                setSelectedZone(zonesData[0].id);
+            }
         } catch (error) {
             console.error('Error fetching POS data:', error);
         } finally {
@@ -87,13 +121,13 @@ export default function PosView({ onSwitchToQuickSale }: { onSwitchToQuickSale: 
 
     useEffect(() => {
         const fetchTableOrders = async () => {
-            if (!selectedTable || selectedTable.status === 'BOŞ' || selectedTable.status === 'REZERVE') {
+            if (!selectedTable || (selectedTable.status === 'BOŞ' && !selectedTable.currentTotal)) {
                 setCart([]);
                 setActiveOrderIds([]);
                 return;
             }
             try {
-                const token = localStorage.getItem('token') || (user as any)?.token;
+                const token = (user as any)?.token || localStorage.getItem('token');
                 const res = await fetch(`${API_URL}/orders/table/${selectedTable.id}/active`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
@@ -170,7 +204,13 @@ export default function PosView({ onSwitchToQuickSale }: { onSwitchToQuickSale: 
         }
 
         const selectedTotalAmount = itemsToPay.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-        const selectedGrandTotal = Number((selectedTotalAmount * 1.1).toFixed(2));
+        const vatAmount = selectedTotalAmount * 0.1;
+
+        // Apply general adjustments to the current selected payment.
+        const appliedDiscount = discount || 0;
+        const appliedServiceFee = serviceFee || 0;
+
+        const selectedGrandTotal = Number((selectedTotalAmount + vatAmount + appliedServiceFee - appliedDiscount).toFixed(2));
 
         try {
             const token = localStorage.getItem('token') || (user as any)?.token;
@@ -181,6 +221,8 @@ export default function PosView({ onSwitchToQuickSale }: { onSwitchToQuickSale: 
                 paymentMethod: finalPMethod,
                 paidAmountCash: paymentMethod === 'Nakit' ? selectedGrandTotal : cashAmount,
                 paidAmountCreditCard: paymentMethod === 'Kart' ? selectedGrandTotal : creditAmount,
+                discountAmount: appliedDiscount,
+                serviceFee: appliedServiceFee,
                 paidItems: itemsToPay.map(item => ({
                     productId: item.product.id,
                     quantity: item.quantity,
@@ -212,6 +254,8 @@ export default function PosView({ onSwitchToQuickSale }: { onSwitchToQuickSale: 
                 setActiveOrderIds([]);
                 setSelectedPosItems([]);
                 setSplitAmounts({ cash: 0, creditCard: 0 });
+                setDiscount(0);
+                setServiceFee(0);
                 fetchData();
             } else {
                 const errorData = await saleRes.json();
@@ -228,10 +272,46 @@ export default function PosView({ onSwitchToQuickSale }: { onSwitchToQuickSale: 
     };
 
 
-
-    const totalAmount = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-
     if (loading || !user) return null;
+
+
+
+    const subTotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+    const vatAmount = subTotal * 0.1;
+    const totalBeforeAdjustments = subTotal + vatAmount;
+    const grandTotal = Number((totalBeforeAdjustments + serviceFee - discount).toFixed(2));
+
+    const handleCancelAdisyon = async () => {
+        if (!selectedTable) return;
+        const result = await showSwal({
+            title: 'Emin misiniz?',
+            text: "Bu işlem masadaki tüm adisyonu iptal edecektir!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Evet, İptal Et',
+            cancelButtonText: 'Hayır'
+        });
+
+        if (result.isConfirmed) {
+            try {
+                const token = localStorage.getItem('token') || (user as any)?.token;
+                const res = await fetch(`${API_URL}/orders/table/${selectedTable.id}/cancel`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    toastSwal({ icon: 'success', title: 'Adisyon iptal edildi.' });
+                    setSelectedTable(null);
+                    setCart([]);
+                    fetchData();
+                } else {
+                    toastSwal({ icon: 'error', title: 'İşlem başarısız.' });
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+    };
 
     return (
         <div className="flex h-screen bg-slate-50 dark:bg-slate-800 font-sans overflow-hidden transition-colors duration-300 relative">
@@ -257,6 +337,12 @@ export default function PosView({ onSwitchToQuickSale }: { onSwitchToQuickSale: 
                             <i className="fat fa-reply"></i> Çıkış
                         </button>
                         <button
+                            onClick={onSwitchToTakeOrder}
+                            className="text-white hover:bg-teal-600 flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-colors bg-teal-500 backdrop-blur-md px-4 py-2 rounded-full border border-teal-400 shadow-sm"
+                        >
+                            <i className="fat fa-desktop"></i> POS PC
+                        </button>
+                        <button
                             onClick={onSwitchToQuickSale}
                             className="text-white hover:bg-orange-600 flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-colors bg-orange-500 backdrop-blur-md px-4 py-2 rounded-full border border-orange-400 shadow-sm"
                         >
@@ -272,68 +358,82 @@ export default function PosView({ onSwitchToQuickSale }: { onSwitchToQuickSale: 
                 </div>
 
                 {/* Zone Seçimi */}
-                <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-none">
-                    {Array.isArray(zones) && zones.map(z => (
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none flex-1">
                         <button
-                            key={z.id}
-                            onClick={() => setSelectedZone(z.id)}
-                            className={`px-5 py-2.5 rounded-full font-bold whitespace-nowrap transition-all shadow-sm ${selectedZone === z.id ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}`}
+                            onClick={() => setSelectedZone('ALL')}
+                            className={`px-5 py-2.5 rounded-full font-bold whitespace-nowrap transition-all shadow-sm ${selectedZone === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}`}
                         >
-                            {z.name}
+                            Tümü
                         </button>
-                    ))}
+                        {Array.isArray(zones) && zones.map(z => (
+                            <button
+                                key={z.id}
+                                onClick={() => setSelectedZone(z.id)}
+                                className={`px-5 py-2.5 rounded-full font-bold whitespace-nowrap transition-all shadow-sm ${selectedZone === z.id ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}`}
+                            >
+                                {z.name}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                    {Array.isArray(tables) && tables.filter(t => t.zone?.id === selectedZone).map(table => (
-                        <div
-                            key={table.id}
-                            onClick={() => setSelectedTable(selectedTable?.id === table.id ? null : table)}
-                            className={`relative p-6 rounded-[32px] cursor-pointer shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border flex flex-col items-center justify-center text-center gap-2 group ${selectedTable?.id === table.id ? 'ring-4 ring-indigo-500 scale-105 ' : ''}${table.status === 'BOŞ' ? 'bg-white/60 dark:bg-slate-800/60 border-white dark:border-slate-700' :
-                                table.status === 'REZERVE' ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30' :
-                                    'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30'}`}
-                        >
-                            <div className="absolute top-4 right-4 animate-pulse">
-                                <div className={`w-2 h-2 rounded-full ${table.status === 'BOŞ' ? 'bg-emerald-500' : table.status === 'REZERVE' ? 'bg-amber-500' : 'bg-rose-500'}`}></div>
+                    {Array.isArray(tables) && tables
+                        .filter(t => {
+                            const zoneMatch = selectedZone === 'ALL' || t.zone?.id === selectedZone || (t as any).zoneId === selectedZone;
+                            const isOccupied = t.status === 'DOLU' || t.status === 'REZERVE' || (t.currentTotal && t.currentTotal > 0);
+                            return zoneMatch && isOccupied;
+                        })
+                        .map(table => (
+                            <div
+                                key={table.id}
+                                onClick={() => setSelectedTable(selectedTable?.id === table.id ? null : table)}
+                                className={`relative p-6 rounded-[32px] cursor-pointer shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border flex flex-col items-center justify-center text-center gap-2 group ${selectedTable?.id === table.id ? 'ring-4 ring-indigo-500 scale-105 ' : ''}${table.status === 'BOŞ' ? 'bg-white/60 dark:bg-slate-800/60 border-white dark:border-slate-700' :
+                                    table.status === 'REZERVE' ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30' :
+                                        'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30'}`}
+                            >
+                                <div className="absolute top-4 right-4 animate-pulse">
+                                    <div className={`w-2 h-2 rounded-full ${table.status === 'BOŞ' ? 'bg-emerald-500' : table.status === 'REZERVE' ? 'bg-amber-500' : 'bg-rose-500'}`}></div>
+                                </div>
+
+                                <span className="text-4xl mb-1 group-hover:scale-110 transition-transform">
+                                    {table.status === 'BOŞ' ? '🪑' : table.status === 'REZERVE' ? '📅' : '🍽️'}
+                                </span>
+                                <span className="font-extrabold text-slate-800 dark:text-white uppercase tracking-tighter text-lg">{table.name}</span>
+
+                                {table.status === 'DOLU' ? (
+                                    <div className="flex flex-col items-center gap-1 mt-1 border-t border-rose-200 dark:border-rose-500/20 pt-3 w-full">
+                                        <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">
+                                            <span className="opacity-70">👤</span>
+                                            <span>{table.waiterName || 'Garson'}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                                            <span className="opacity-70">🕒</span>
+                                            <span>{formatTime(table.orderStartTime)}</span>
+                                        </div>
+                                        <div className="mt-2 text-rose-700 dark:text-rose-300 font-extrabold text-sm drop-shadow-sm">
+                                            ₺{(Number(table.currentTotal || 0) * 1.1).toFixed(2)}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center gap-1 mt-1 opacity-40">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('emptyTable') || 'BOŞ MASA'}</span>
+                                    </div>
+                                )}
+
+                                <span className={`text-[9px] font-black px-3 py-1 rounded-full mt-2 uppercase tracking-tighter ${table.status === 'BOŞ' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' :
+                                    table.status === 'REZERVE' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' :
+                                        'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'}`}>
+                                    {table.status}
+                                </span>
                             </div>
-
-                            <span className="text-4xl mb-1 group-hover:scale-110 transition-transform">
-                                {table.status === 'BOŞ' ? '🪑' : table.status === 'REZERVE' ? '📅' : '🍽️'}
-                            </span>
-                            <span className="font-extrabold text-slate-800 dark:text-white uppercase tracking-tighter text-lg">{table.name}</span>
-
-                            {table.status === 'DOLU' ? (
-                                <div className="flex flex-col items-center gap-1 mt-1 border-t border-rose-200 dark:border-rose-500/20 pt-3 w-full">
-                                    <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">
-                                        <span className="opacity-70">👤</span>
-                                        <span>{table.waiterName || 'Garson'}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
-                                        <span className="opacity-70">🕒</span>
-                                        <span>{formatTime(table.orderStartTime)}</span>
-                                    </div>
-                                    <div className="mt-2 text-rose-700 dark:text-rose-300 font-extrabold text-sm drop-shadow-sm">
-                                        ₺{table.currentTotal || '0.00'}
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="flex flex-col items-center gap-1 mt-1 opacity-40">
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('emptyTable') || 'BOŞ MASA'}</span>
-                                </div>
-                            )}
-
-                            <span className={`text-[9px] font-black px-3 py-1 rounded-full mt-2 uppercase tracking-tighter ${table.status === 'BOŞ' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' :
-                                table.status === 'REZERVE' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' :
-                                    'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'}`}>
-                                {table.status}
-                            </span>
-                        </div>
-                    ))}
+                        ))}
                 </div>
             </div>
 
             {/* Sağ Pane - Adisyon (Cart) */}
-            <div className="w-[400px] min-w-[400px] bg-white/70 dark:bg-slate-900/70 backdrop-blur-2xl border-l border-white/50 dark:border-slate-700/50 flex flex-col shadow-[-10px_0_30px_-15px_rgba(0,0,0,0.1)] z-20 transition-colors">
+            <div className="w-[450px] min-w-[450px] bg-white/70 dark:bg-slate-900/70 backdrop-blur-2xl border-l border-white/50 dark:border-slate-700/50 flex flex-col shadow-[-10px_0_30px_-15px_rgba(0,0,0,0.1)] z-20 transition-colors">
                 <div className="p-6 border-b border-slate-100/50 dark:border-slate-700/50">
                     <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center justify-between">
                         {t('orderDetail') || 'Adisyon'}
@@ -370,35 +470,78 @@ export default function PosView({ onSwitchToQuickSale }: { onSwitchToQuickSale: 
                 <div className="p-6 bg-slate-100/60 dark:bg-slate-800/60 backdrop-blur-xl border-t border-white/50 dark:border-slate-700/50 m-4 rounded-3xl transition-colors shadow-inner">
                     <div className="flex justify-between mb-2 text-slate-500 dark:text-slate-400 text-sm">
                         <span>{t('subtotal') || 'Ara Toplam'}</span>
-                        <span>₺{totalAmount}</span>
+                        <span>₺{subTotal.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between mb-4 text-slate-500 dark:text-slate-400 text-sm">
+                    <div className="flex justify-between mb-2 text-slate-500 dark:text-slate-400 text-sm">
                         <span>KDV (%10)</span>
-                        <span>₺{(totalAmount * 0.1).toFixed(2)}</span>
+                        <span>₺{vatAmount.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between mb-6">
+
+                    <div className="grid grid-cols-2 gap-3 mb-4 mt-2">
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">İndirim (₺)</label>
+                            <input
+                                type="number"
+                                value={discount || ''}
+                                onChange={(e) => setDiscount(Number(e.target.value) || 0)}
+                                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                                placeholder="0.00"
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">Servis (₺)</label>
+                            <input
+                                type="number"
+                                value={serviceFee || ''}
+                                onChange={(e) => setServiceFee(Number(e.target.value) || 0)}
+                                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                                placeholder="0.00"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex justify-between mb-6 border-t border-slate-200 dark:border-slate-700 pt-4">
                         <span className="text-lg font-bold text-slate-800 dark:text-slate-100">{t('total') || 'Genel Toplam'}</span>
-                        <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-600 dark:from-indigo-400 dark:to-blue-400">₺{(totalAmount * 1.1).toFixed(2)}</span>
+                        <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-600 dark:from-indigo-400 dark:to-blue-400">₺{grandTotal.toFixed(2)}</span>
                     </div>
-                    <div className="w-full">
+
+                    <div className="grid grid-cols-2 gap-3 mb-3">
                         <button
-                            onClick={() => {
-                                setIsCheckoutOpen(true);
-                                setSelectedPosItems(cart.map(i => i.product.id));
-                            }}
-                            className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold text-lg shadow-lg shadow-blue-500/30 transition-all active:scale-[0.98] disabled:opacity-50 disabled:grayscale"
-                            disabled={cart.length === 0}
+                            onClick={() => setSelectedTable(null)}
+                            className="py-3 rounded-2xl bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-bold text-sm shadow-sm transition-all active:scale-[0.98]"
+                            disabled={!selectedTable}
                         >
-                            {t('collectPayment') || 'Ödeme Al'}
+                            <i className="fat fa-pause mr-2"></i> Beklet
+                        </button>
+                        <button
+                            onClick={handleCancelAdisyon}
+                            className="py-3 rounded-2xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-400 font-bold text-sm shadow-sm transition-all active:scale-[0.98]"
+                            disabled={!selectedTable || cart.length === 0}
+                        >
+                            <i className="fat fa-trash mr-2"></i> İptal
                         </button>
                     </div>
+
+                    <button
+                        onClick={() => {
+                            setIsCheckoutOpen(true);
+                            setSelectedPosItems(cart.map(i => i.product.id));
+                        }}
+                        className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold text-lg shadow-lg shadow-blue-500/30 transition-all active:scale-[0.98] disabled:opacity-50 disabled:grayscale"
+                        disabled={cart.length === 0}
+                    >
+                        {t('collectPayment') || 'Ödeme Al'}
+                    </button>
                 </div>
             </div>
 
             {/* Payment Modal */}
             {isCheckoutOpen && !isSplitPaymentOpen && (() => {
                 const selectedTotalAmount = cart.filter(i => selectedPosItems.includes(i.product.id)).reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-                const selectedGrandTotal = Number((selectedTotalAmount * 1.1).toFixed(2));
+                const appliedDiscount = discount || 0;
+                const appliedServiceFee = serviceFee || 0;
+                const selectedGrandTotal = Number((selectedTotalAmount * 1.1 + appliedServiceFee - appliedDiscount).toFixed(2));
+
                 return (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
                         <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-md shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden border border-white/20 dark:border-slate-700/50 transform transition-all flex flex-col max-h-[90vh]">
@@ -482,77 +625,81 @@ export default function PosView({ onSwitchToQuickSale }: { onSwitchToQuickSale: 
             })()}
 
             {/* Split Payment Modal */}
-            {isSplitPaymentOpen && (() => {
-                const selectedTotalAmount = cart.filter(i => selectedPosItems.includes(i.product.id)).reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-                const selectedGrandTotal = Number((selectedTotalAmount * 1.1).toFixed(2));
-                return (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-                        <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-sm shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden border border-white/20 dark:border-slate-700/50 transform transition-all">
-                            <div className="p-6 text-center">
-                                <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <span className="text-3xl">🔀</span>
-                                </div>
-                                <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Tutar Bölme (Müşterek)</h2>
-                                <p className="text-slate-500 dark:text-slate-400 mb-4">Seçili Satırlar: ₺{selectedGrandTotal.toFixed(2)}</p>
-
-                                <div className="space-y-4 text-left">
-                                    <div>
-                                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Nakit Alınan (₺)</label>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            value={splitAmounts.cash}
-                                            onChange={(e) => {
-                                                const val = parseFloat(e.target.value) || 0;
-                                                let newCash = val;
-                                                if (newCash > selectedGrandTotal) newCash = selectedGrandTotal;
-                                                setSplitAmounts({ cash: newCash, creditCard: Number((selectedGrandTotal - newCash).toFixed(2)) });
-                                            }}
-                                            className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-lg dark:text-white"
-                                        />
+            {
+                isSplitPaymentOpen && (() => {
+                    const selectedTotalAmount = cart.filter(i => selectedPosItems.includes(i.product.id)).reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+                    const appliedDiscount = discount || 0;
+                    const appliedServiceFee = serviceFee || 0;
+                    const selectedGrandTotal = Number((selectedTotalAmount * 1.1 + appliedServiceFee - appliedDiscount).toFixed(2));
+                    return (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+                            <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-sm shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden border border-white/20 dark:border-slate-700/50 transform transition-all">
+                                <div className="p-6 text-center">
+                                    <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <span className="text-3xl">🔀</span>
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Kredi Kartı Alınan (₺)</label>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            value={splitAmounts.creditCard}
-                                            onChange={(e) => {
-                                                const val = parseFloat(e.target.value) || 0;
-                                                let newCC = val;
-                                                if (newCC > selectedGrandTotal) newCC = selectedGrandTotal;
-                                                setSplitAmounts({ creditCard: newCC, cash: Number((selectedGrandTotal - newCC).toFixed(2)) });
-                                            }}
-                                            className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-lg dark:text-white"
-                                        />
-                                    </div>
-                                </div>
+                                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Tutar Bölme (Müşterek)</h2>
+                                    <p className="text-slate-500 dark:text-slate-400 mb-4">Seçili Satırlar: ₺{selectedGrandTotal.toFixed(2)}</p>
 
-                                <div className="flex gap-3 mt-6">
-                                    <button
-                                        onClick={() => {
-                                            setIsSplitPaymentOpen(false);
-                                            setIsCheckoutOpen(true); // Geri dönünce ana checkout açılsın
-                                            setSplitAmounts({ cash: 0, creditCard: 0 });
-                                        }}
-                                        className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-                                    >
-                                        Geri
-                                    </button>
-                                    <button
-                                        onClick={() => handleCheckout('Parçalı', splitAmounts.cash, splitAmounts.creditCard)}
-                                        className="flex-1 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold shadow-lg shadow-blue-500/30 transition-all"
-                                    >
-                                        Tahsili Onayla
-                                    </button>
+                                    <div className="space-y-4 text-left">
+                                        <div>
+                                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Nakit Alınan (₺)</label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                value={splitAmounts.cash}
+                                                onChange={(e) => {
+                                                    const val = parseFloat(e.target.value) || 0;
+                                                    let newCash = val;
+                                                    if (newCash > selectedGrandTotal) newCash = selectedGrandTotal;
+                                                    setSplitAmounts({ cash: newCash, creditCard: Number((selectedGrandTotal - newCash).toFixed(2)) });
+                                                }}
+                                                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-lg dark:text-white"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Kredi Kartı Alınan (₺)</label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                value={splitAmounts.creditCard}
+                                                onChange={(e) => {
+                                                    const val = parseFloat(e.target.value) || 0;
+                                                    let newCC = val;
+                                                    if (newCC > selectedGrandTotal) newCC = selectedGrandTotal;
+                                                    setSplitAmounts({ creditCard: newCC, cash: Number((selectedGrandTotal - newCC).toFixed(2)) });
+                                                }}
+                                                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-lg dark:text-white"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-3 mt-6">
+                                        <button
+                                            onClick={() => {
+                                                setIsSplitPaymentOpen(false);
+                                                setIsCheckoutOpen(true); // Geri dönünce ana checkout açılsın
+                                                setSplitAmounts({ cash: 0, creditCard: 0 });
+                                            }}
+                                            className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                                        >
+                                            Geri
+                                        </button>
+                                        <button
+                                            onClick={() => handleCheckout('Parçalı', splitAmounts.cash, splitAmounts.creditCard)}
+                                            className="flex-1 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold shadow-lg shadow-blue-500/30 transition-all"
+                                        >
+                                            Tahsili Onayla
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                );
-            })()}
+                    );
+                })()
+            }
 
             {/* Geri Dön Butonu - Float */}
             {/* <button
@@ -563,89 +710,91 @@ export default function PosView({ onSwitchToQuickSale }: { onSwitchToQuickSale: 
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
             </button> */}
             {/* PIN Entry Overlay */}
-            {isPinRequired && (
-                <div className="fixed inset-0 z-[100] bg-slate-900 flex items-center justify-center p-4">
-                    <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-[40px] shadow-2xl p-8 flex flex-col items-center">
-                        <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-500/20 rounded-full flex items-center justify-center mb-6">
-                            <span className="text-4xl">🔐</span>
-                        </div>
+            {
+                isPinRequired && (
+                    <div className="fixed inset-0 z-[100] bg-slate-900 flex items-center justify-center p-4">
+                        <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-[40px] shadow-2xl p-8 flex flex-col items-center">
+                            <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-500/20 rounded-full flex items-center justify-center mb-6">
+                                <span className="text-4xl">🔐</span>
+                            </div>
 
-                        {!pinCashier ? (
-                            <>
-                                <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-2 uppercase tracking-tight">{t('cashierSelection') || 'Kasiyer Seçimi'}</h2>
-                                <p className="text-slate-500 dark:text-slate-400 mb-8">{t('cashierSelectionDesc') || 'Lütfen giriş yapmak için adınızı seçin.'}</p>
-                                <div className="grid grid-cols-2 w-full gap-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
-                                    {cashiers.map(c => (
+                            {!pinCashier ? (
+                                <>
+                                    <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-2 uppercase tracking-tight">{t('cashierSelection') || 'Kasiyer Seçimi'}</h2>
+                                    <p className="text-slate-500 dark:text-slate-400 mb-8">{t('cashierSelectionDesc') || 'Lütfen giriş yapmak için adınızı seçin.'}</p>
+                                    <div className="grid grid-cols-2 w-full gap-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+                                        {cashiers.map(c => (
+                                            <button
+                                                key={c.id}
+                                                onClick={() => setPinCashier(c)}
+                                                className="w-full py-4 px-6 rounded-2xl bg-slate-50 dark:bg-slate-900/50 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500 text-left font-bold text-slate-800 dark:text-slate-200 transition-all flex items-center justify-between group"
+                                            >
+                                                <span>{c.firstName} {c.lastName}</span>
+                                                <span className="opacity-0 group-hover:opacity-100 transition-opacity">➡️</span>
+                                            </button>
+                                        ))}
+                                        {cashiers.length === 0 && (
+                                            <p className="text-center text-slate-500 italic py-4">{t('noCashierFound') || 'Sistemde kasiyer bulunamadı.'}</p>
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <button
+                                        onClick={() => setPinCashier(null)}
+                                        className="absolute top-10 left-10 text-slate-400 hover:text-indigo-500 flex items-center gap-2 font-bold"
+                                    >
+                                        {tc('back')}
+                                    </button>
+                                    <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-2 uppercase tracking-tight">{pinCashier.firstName} {pinCashier.lastName}</h2>
+                                    <p className="text-slate-500 dark:text-slate-400 mb-8">{t('enterPin') || '4 haneli PIN kodunuzu girin.'}</p>
+
+                                    <div className="flex gap-4 mb-10">
+                                        {[0, 1, 2, 3].map(i => (
+                                            <div
+                                                key={i}
+                                                className={`w-4 h-4 rounded-full border-2 border-indigo-400 ${pinCode.length > i ? 'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]' : 'bg-transparent'}`}
+                                            />
+                                        ))}
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-6 w-full max-w-[280px]">
+                                        {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(n => (
+                                            <button
+                                                key={n}
+                                                onClick={() => handlePinClick(n)}
+                                                className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-700 text-2xl font-black text-slate-800 dark:text-white transition-all active:scale-90"
+                                            >
+                                                {n}
+                                            </button>
+                                        ))}
+                                        <div />
                                         <button
-                                            key={c.id}
-                                            onClick={() => setPinCashier(c)}
-                                            className="w-full py-4 px-6 rounded-2xl bg-slate-50 dark:bg-slate-900/50 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500 text-left font-bold text-slate-800 dark:text-slate-200 transition-all flex items-center justify-between group"
-                                        >
-                                            <span>{c.firstName} {c.lastName}</span>
-                                            <span className="opacity-0 group-hover:opacity-100 transition-opacity">➡️</span>
-                                        </button>
-                                    ))}
-                                    {cashiers.length === 0 && (
-                                        <p className="text-center text-slate-500 italic py-4">{t('noCashierFound') || 'Sistemde kasiyer bulunamadı.'}</p>
-                                    )}
-                                </div>
-                            </>
-                        ) : (
-                            <>
-                                <button
-                                    onClick={() => setPinCashier(null)}
-                                    className="absolute top-10 left-10 text-slate-400 hover:text-indigo-500 flex items-center gap-2 font-bold"
-                                >
-                                    {tc('back')}
-                                </button>
-                                <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-2 uppercase tracking-tight">{pinCashier.firstName} {pinCashier.lastName}</h2>
-                                <p className="text-slate-500 dark:text-slate-400 mb-8">{t('enterPin') || '4 haneli PIN kodunuzu girin.'}</p>
-
-                                <div className="flex gap-4 mb-10">
-                                    {[0, 1, 2, 3].map(i => (
-                                        <div
-                                            key={i}
-                                            className={`w-4 h-4 rounded-full border-2 border-indigo-400 ${pinCode.length > i ? 'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]' : 'bg-transparent'}`}
-                                        />
-                                    ))}
-                                </div>
-
-                                <div className="grid grid-cols-3 gap-6 w-full max-w-[280px]">
-                                    {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(n => (
-                                        <button
-                                            key={n}
-                                            onClick={() => handlePinClick(n)}
+                                            onClick={() => handlePinClick('0')}
                                             className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-700 text-2xl font-black text-slate-800 dark:text-white transition-all active:scale-90"
                                         >
-                                            {n}
+                                            0
                                         </button>
-                                    ))}
-                                    <div />
-                                    <button
-                                        onClick={() => handlePinClick('0')}
-                                        className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-700 text-2xl font-black text-slate-800 dark:text-white transition-all active:scale-90"
-                                    >
-                                        0
-                                    </button>
-                                    <button
-                                        onClick={() => setPinCode('')}
-                                        className="w-16 h-16 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-500 transition-colors"
-                                    >
-                                        {tc('delete')}
-                                    </button>
-                                </div>
-                            </>
-                        )}
+                                        <button
+                                            onClick={() => setPinCode('')}
+                                            className="w-16 h-16 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-500 transition-colors"
+                                        >
+                                            {tc('delete')}
+                                        </button>
+                                    </div>
+                                </>
+                            )}
 
-                        <button
-                            onClick={() => router.push(`/${locale}/dashboard`)}
-                            className="mt-10 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold text-sm uppercase tracking-widest"
-                        >
-                            İptal
-                        </button>
+                            <button
+                                onClick={() => router.push(`/${locale}/dashboard`)}
+                                className="mt-10 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold text-sm uppercase tracking-widest"
+                            >
+                                İptal
+                            </button>
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 }

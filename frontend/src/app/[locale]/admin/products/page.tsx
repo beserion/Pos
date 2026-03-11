@@ -10,6 +10,7 @@ interface Product {
     id: number;
     name: string;
     sku: string;
+    barcode?: string;
     price: number;
     category: string;
     isActive: boolean;
@@ -21,6 +22,13 @@ interface Product {
     isQuickSale?: boolean;
     isIngredient?: boolean;
     recipes?: { ingredientId: number; ingredientName?: string; quantity: number; unit: string }[];
+    modifiers?: Modifier[];
+}
+
+interface Modifier {
+    id: number;
+    name: string;
+    groupName?: string;
 }
 
 interface Printer {
@@ -38,14 +46,16 @@ export default function ProductsAdminPage() {
     const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [printers, setPrinters] = useState<Printer[]>([]);
+    const [allModifiers, setAllModifiers] = useState<Modifier[]>([]);
     const [loading, setLoading] = useState(true);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState<'genel' | 'gorsel' | 'recete'>('genel');
+    const [activeTab, setActiveTab] = useState<'genel' | 'gorsel' | 'recete' | 'ozellik'>('genel');
     const [formData, setFormData] = useState<Product>({
         id: 0,
         name: '',
         sku: '',
+        barcode: '',
         price: 0,
         category: '',
         isActive: true,
@@ -55,7 +65,8 @@ export default function ProductsAdminPage() {
         unit: 'piece',
         isQuickSale: true,
         isIngredient: false,
-        recipes: []
+        recipes: [],
+        modifiers: []
     });
 
     const [ingredientProduct, setIngredientProduct] = useState({ ingredientId: 0, quantity: 0, unit: 'adet' });
@@ -71,13 +82,15 @@ export default function ProductsAdminPage() {
     const fetchData = async () => {
         if (!user?.token) return;
         try {
-            const [prodRes, printRes] = await Promise.all([
+            const [prodRes, printRes, modRes] = await Promise.all([
                 axios.get('http://localhost:3050/products', { headers: { Authorization: `Bearer ${user.token}` } }),
-                axios.get('http://localhost:3050/printers', { headers: { Authorization: `Bearer ${user.token}` } })
+                axios.get('http://localhost:3050/printers', { headers: { Authorization: `Bearer ${user.token}` } }),
+                axios.get('http://localhost:3050/modifiers', { headers: { Authorization: `Bearer ${user.token}` } })
             ]);
             setProducts(prodRes.data);
             setFilteredProducts(prodRes.data);
             setPrinters(printRes.data);
+            setAllModifiers(modRes.data);
         } catch (error) {
             console.error('Error fetching data', error);
             showSwal({ title: tc('error'), text: tc('loadingError'), icon: 'error' });
@@ -91,6 +104,7 @@ export default function ProductsAdminPage() {
         const filtered = products.filter(p =>
             p.name.toLowerCase().includes(lowerQuery) ||
             p.sku.toLowerCase().includes(lowerQuery) ||
+            p.barcode?.toLowerCase().includes(lowerQuery) ||
             p.category?.toLowerCase().includes(lowerQuery)
         );
         setFilteredProducts(filtered);
@@ -180,12 +194,13 @@ export default function ProductsAdminPage() {
 
     const openModal = (prod?: Product) => {
         if (prod) {
-            setFormData({ ...prod, recipes: prod.recipes || [] });
+            setFormData({ ...prod, recipes: prod.recipes || [], modifiers: prod.modifiers || [] });
         } else {
             setFormData({
                 id: 0,
                 name: '',
                 sku: '',
+                barcode: '',
                 price: 0,
                 category: '',
                 isActive: true,
@@ -195,7 +210,8 @@ export default function ProductsAdminPage() {
                 unit: 'piece',
                 isQuickSale: true,
                 isIngredient: false,
-                recipes: []
+                recipes: [],
+                modifiers: []
             });
         }
         setIngredientProduct({ ingredientId: 0, quantity: 0, unit: 'adet' });
@@ -426,6 +442,7 @@ export default function ProductsAdminPage() {
                                     <button type="button" onClick={() => setActiveTab('genel')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'genel' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabGeneral')}</button>
                                     <button type="button" onClick={() => setActiveTab('gorsel')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'gorsel' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabImage')}</button>
                                     <button type="button" onClick={() => setActiveTab('recete')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'recete' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabRecipe')}</button>
+                                    <button type="button" onClick={() => setActiveTab('ozellik')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'ozellik' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Özellikler</button>
                                 </div>
 
                                 <div className="p-8 pb-4 flex-1 overflow-y-auto">
@@ -450,166 +467,55 @@ export default function ProductsAdminPage() {
                                                     </div>
 
                                                     <div>
+                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">BARKOD</label>
+                                                        <div className="relative">
+                                                            <i className="fat fa-barcode absolute left-4 top-4 text-teal-500/50"></i>
+                                                            <input type="text" value={formData.barcode || ''} onChange={(e) => setFormData({ ...formData, barcode: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Barkod okutun veya girin" />
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                    <div>
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelPrice')}</label>
                                                         <div className="relative">
                                                             <i className="fat fa-money-bill-1-wave absolute left-4 top-4 text-teal-500/50"></i>
                                                             <input type="number" step="0.01" required value={formData.price} onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0.00" />
                                                         </div>
                                                     </div>
-                                                </div>
 
-                                                <div>
-                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCategory')}</label>
-                                                    <div className="relative">
-                                                        <i className="fat fa-folder-tree absolute left-4 top-4 text-teal-500/50"></i>
-                                                        <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                            <option value="">{t('selectCategory')}</option>
-                                                            {categoryOptions.map(cat => (
-                                                                <option key={cat.key} value={cat.value}>{t(cat.key)}</option>
-                                                            ))}
-                                                        </select>
-                                                        <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                                    </div>
-                                                </div>
-
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                            <div>
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelPrinter')}</label>
-                                                <div className="relative">
-                                                    <i className="fat fa-print absolute left-4 top-4 text-teal-500/50"></i>
-                                                    <select value={formData.printerId || ''} onChange={(e) => setFormData({ ...formData, printerId: e.target.value ? parseInt(e.target.value) : null })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                        <option value="">{t('selectPrinter')}</option>
-                                                        {printers.map(printer => (
-                                                            <option key={printer.id} value={printer.id}>{printer.name}</option>
-                                                        ))}
-                                                    </select>
-                                                    <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                                </div>
-                                            </div>
-
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                                <div>
-                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelQuickSale')}</label>
-                                                    <div className="relative flex items-center pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl w-full">
-                                                        <i className="fat fa-bolt absolute left-4 top-4 text-teal-500/50"></i>
-                                                        <div className="form-check form-switch mb-0 flex-1 d-flex justify-content-end pr-2">
-                                                            <input className="form-check-input cursor-pointer" type="checkbox" checked={formData.isQuickSale} onChange={(e) => setFormData({ ...formData, isQuickSale: e.target.checked })} />
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div>
-                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelIngredient')}</label>
-                                                    <div className="relative flex items-center pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl w-full">
-                                                        <i className="fat fa-leaf absolute left-4 top-4 text-teal-500/50"></i>
-                                                        <div className="form-check form-switch mb-0 flex-1 d-flex justify-content-end pr-2">
-                                                            <input className="form-check-input cursor-pointer" type="checkbox" checked={formData.isIngredient} onChange={(e) => setFormData({ ...formData, isIngredient: e.target.checked })} />
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {activeTab === 'gorsel' && (
-                                        <div className="space-y-6">
-                                            <div className="flex flex-col items-center gap-4 py-4">
-                                                <input
-                                                    type="file"
-                                                    id="productPhotoInput"
-                                                    accept="image/*"
-                                                    className="hidden"
-                                                    onChange={(e) => {
-                                                        const file = e.target.files?.[0];
-                                                        if (!file) return;
-                                                        const reader = new FileReader();
-                                                        reader.onloadend = () => {
-                                                            setFormData({ ...formData, imageUrl: reader.result as string });
-                                                        };
-                                                        reader.readAsDataURL(file);
-                                                    }}
-                                                />
-                                                <div
-                                                    onClick={() => document.getElementById('productPhotoInput')?.click()}
-                                                    className="w-64 h-64 rounded-[32px] overflow-hidden bg-slate-100 dark:bg-slate-700 border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center shrink-0 cursor-pointer group relative hover:border-teal-400 transition-colors"
-                                                >
-                                                    {formData.imageUrl ? (
-                                                        <>
-                                                            <img src={formData.imageUrl} alt={t('preview')} className="w-full h-full object-cover" />
-                                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                                <div className="flex flex-col items-center gap-1 text-white">
-                                                                    <i className="fat fa-camera text-3xl"></i>
-                                                                    <span className="text-[10px] font-black uppercase tracking-widest">{tc('edit')}</span>
-                                                                </div>
-                                                            </div>
-                                                        </>
-                                                    ) : (
-                                                        <div className="flex flex-col items-center gap-3 text-slate-300 group-hover:text-teal-400 transition-colors">
-                                                            <i className="fat fa-cloud-arrow-up text-5xl"></i>
-                                                            <div className="text-center">
-                                                                <span className="text-[10px] font-black uppercase tracking-widest block">Fotoğraf Seç</span>
-                                                                <span className="text-[10px] font-bold mt-1 block">Tıkla ve yükle</span>
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCategory')}</label>
+                                                            <div className="relative">
+                                                                <i className="fat fa-folder-tree absolute left-4 top-4 text-teal-500/50"></i>
+                                                                <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                                    <option value="">{t('selectCategory')}</option>
+                                                                    {categoryOptions.map(cat => (
+                                                                        <option key={cat.key} value={cat.value}>{t(cat.key)}</option>
+                                                                    ))}
+                                                                </select>
+                                                                <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
                                                             </div>
                                                         </div>
-                                                    )}
-                                                </div>
-                                                {formData.imageUrl && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setFormData({ ...formData, imageUrl: '' })}
-                                                        className="text-[10px] font-black text-red-400 hover:text-red-600 uppercase tracking-widest flex items-center gap-1 transition-colors mt-2"
-                                                    >
-                                                        <i className="fat fa-trash-can"></i> Fotoğrafı Kaldır
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {activeTab === 'recete' && (
-                                        <div className="space-y-6">
-                                            <div className="bg-slate-50 dark:bg-slate-900/30 p-6 rounded-3xl border border-slate-200 dark:border-slate-700">
-                                                <h4 className="text-sm font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest mb-4">{t('newRecipeItem')}</h4>
-                                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                                                    <div className="md:col-span-2">
-                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('tableIngredient')}</label>
-                                                        <div className="relative">
-                                                            <i className="fat fa-leaf absolute left-4 top-[14px] text-teal-500/50 text-sm"></i>
-                                                            <select value={ingredientProduct.ingredientId || ''} onChange={(e) => setIngredientProduct({ ...ingredientProduct, ingredientId: parseInt(e.target.value) })} className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                                <option value="">{t('selectIngredient')}</option>
-                                                                {products.filter(p => p.isIngredient).map(i => (
-                                                                    <option key={i.id} value={i.id}>{i.name}</option>
-                                                                ))}
-                                                            </select>
-                                                            <i className="fat fa-chevron-down absolute right-4 top-[14px] text-slate-400 text-xs pointer-events-none"></i>
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelMinStock')}</label>
+                                                            <div className="relative">
+                                                                <i className="fat fa-triangle-exclamation absolute left-4 top-4 text-teal-500/50"></i>
+                                                                <input type="number" step="1" value={formData.minStockLevel ?? ''} onChange={(e) => setFormData({ ...formData, minStockLevel: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0" />
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCost')}</label>
-                                                        <div className="relative">
-                                                            <i className="fat fa-tags absolute left-4 top-4 text-teal-500/50"></i>
-                                                            <input type="number" step="0.01" value={formData.costPrice} onChange={(e) => setFormData({ ...formData, costPrice: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0.00" />
-                                                        </div>
-                                                    </div>
-
-                                                    <div>
-                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelMinStock')}</label>
-                                                        <div className="relative">
-                                                            <i className="fat fa-triangle-exclamation absolute left-4 top-4 text-teal-500/50"></i>
-                                                            <input type="number" step="1" value={formData.minStockLevel ?? ''} onChange={(e) => setFormData({ ...formData, minStockLevel: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0" />
-                                                        </div>
-                                                    </div>
-
-                                                    <div>
-                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelUnit')}</label>
-                                                        <div className="relative">
-                                                            <i className="fat fa-scale-balanced absolute left-4 top-4 text-teal-500/50"></i>
-                                                            <select value={formData.unit} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                                {unitOptions.map(u => (
-                                                                    <option key={u.key} value={u.value}>{t(u.key)}</option>
-                                                                ))}
-                                                            </select>
-                                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelUnit')}</label>
+                                                            <div className="relative">
+                                                                <i className="fat fa-scale-balanced absolute left-4 top-4 text-teal-500/50"></i>
+                                                                <select value={formData.unit || ''} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                                    {unitOptions.map(u => (
+                                                                        <option key={u.key} value={u.value}>{t(u.key)}</option>
+                                                                    ))}
+                                                                </select>
+                                                                <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -631,32 +537,22 @@ export default function ProductsAdminPage() {
 
                                                     <div>
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelQuickSale')}</label>
-                                                        <label className={`relative flex items-center justify-between pl-12 pr-4 py-3.5 border rounded-2xl w-full cursor-pointer transition-all duration-300 ${formData.isQuickSale ? 'bg-teal-50 dark:bg-teal-500/10 border-teal-200 dark:border-teal-500/30 shadow-[0_4px_12px_-2px_rgba(20,184,166,0.15)]' : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800/80'}`}>
-                                                            <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center justify-center w-6 h-6 rounded-full transition-colors duration-300">
-                                                                <i className={`fat fa-bolt text-sm ${formData.isQuickSale ? 'text-teal-500' : 'text-slate-400'}`}></i>
-                                                            </div>
-                                                            <span className={`font-bold text-sm transition-colors duration-300 select-none ${formData.isQuickSale ? 'text-teal-700 dark:text-teal-300' : 'text-slate-600 dark:text-slate-400'}`}>
-                                                                {t('labelQuickSale')}
-                                                            </span>
-                                                            <div className="form-check form-switch mb-0 flex items-center justify-end">
+                                                        <div className="relative flex items-center pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl w-full">
+                                                            <i className="fat fa-bolt absolute left-4 top-4 text-teal-500/50"></i>
+                                                            <div className="form-check form-switch mb-0 flex-1 flex justify-end pr-2">
                                                                 <input className="form-check-input cursor-pointer scale-110" type="checkbox" checked={formData.isQuickSale} onChange={(e) => setFormData({ ...formData, isQuickSale: e.target.checked })} />
                                                             </div>
-                                                        </label>
+                                                        </div>
                                                     </div>
 
                                                     <div>
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelIngredient')}</label>
-                                                        <label className={`relative flex items-center justify-between pl-12 pr-4 py-3.5 border rounded-2xl w-full cursor-pointer transition-all duration-300 ${formData.isIngredient ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30 shadow-[0_4px_12px_-2px_rgba(16,185,129,0.15)]' : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800/80'}`}>
-                                                            <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center justify-center w-6 h-6 rounded-full transition-colors duration-300">
-                                                                <i className={`fat fa-leaf text-sm ${formData.isIngredient ? 'text-emerald-500' : 'text-slate-400'}`}></i>
-                                                            </div>
-                                                            <span className={`font-bold text-sm transition-colors duration-300 select-none ${formData.isIngredient ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-400'}`}>
-                                                                {t('labelIngredient')}
-                                                            </span>
-                                                            <div className="form-check form-switch mb-0 flex items-center justify-end">
+                                                        <div className="relative flex items-center pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl w-full">
+                                                            <i className="fat fa-leaf absolute left-4 top-4 text-teal-500/50"></i>
+                                                            <div className="form-check form-switch mb-0 flex-1 flex justify-end pr-2">
                                                                 <input className="form-check-input cursor-pointer scale-110" type="checkbox" checked={formData.isIngredient} onChange={(e) => setFormData({ ...formData, isIngredient: e.target.checked })} />
                                                             </div>
-                                                        </label>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -743,54 +639,41 @@ export default function ProductsAdminPage() {
                                                             </div>
                                                         </div>
                                                         <div>
-                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelQuantity')}</label>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCost')}</label>
                                                             <div className="relative">
-                                                                <i className="fat fa-scale-balanced absolute left-4 top-[14px] text-teal-500/50 text-sm"></i>
-                                                                <input type="number" step="0.001" value={ingredientProduct.quantity || ''} onChange={(e) => setIngredientProduct({ ...ingredientProduct, quantity: parseFloat(e.target.value) || 0 })} className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0" />
+                                                                <i className="fat fa-tags absolute left-4 top-[14px] text-teal-500/50 text-sm"></i>
+                                                                <input type="number" step="0.01" value={formData.costPrice} onChange={(e) => setFormData({ ...formData, costPrice: parseFloat(e.target.value) || 0 })} className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0.00" />
                                                             </div>
                                                         </div>
                                                         <div>
-                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelUnit')}</label>
-                                                            <div className="relative">
-                                                                <i className="fat fa-ruler-combined absolute left-4 top-[14px] text-teal-500/50 text-sm"></i>
-                                                                <select value={ingredientProduct.unit} onChange={(e) => setIngredientProduct({ ...ingredientProduct, unit: e.target.value })} className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                                    <option value="kg">{t('unitKg')}</option>
-                                                                    <option value="gr">{t('unitGr')}</option>
-                                                                    <option value="lt">{t('unitLt')}</option>
-                                                                    <option value="ml">{t('unitMl')}</option>
-                                                                    <option value="adet">{t('unitPiece')}</option>
-                                                                    <option value="porsiyon">{t('unitPortion')}</option>
-                                                                </select>
-                                                                <i className="fat fa-chevron-down absolute right-4 top-[14px] text-slate-400 text-xs pointer-events-none"></i>
-                                                            </div>
+                                                            <button type="button" onClick={handleAddIngredient} className="w-full py-2.5 bg-teal-50 dark:bg-teal-500/10 border border-teal-200 dark:border-teal-500/20 text-teal-600 dark:text-teal-400 font-black text-xs uppercase tracking-widest rounded-xl hover:bg-teal-100 dark:hover:bg-teal-500/20 transition-all shadow-sm">
+                                                                <i className="fat fa-plus mr-1"></i> {tc('add')}
+                                                            </button>
                                                         </div>
                                                     </div>
-                                                    <button type="button" onClick={handleAddIngredient} className="mt-4 w-full py-3 bg-teal-50 dark:bg-teal-500/10 border border-teal-200 dark:border-teal-500/20 text-teal-600 dark:text-teal-400 font-black text-xs uppercase tracking-widest rounded-xl hover:bg-teal-100 dark:hover:bg-teal-500/20 transition-all flex items-center justify-center gap-2">
-                                                        <i className="fat fa-plus"></i> Ekle
-                                                    </button>
                                                 </div>
 
                                                 {formData.recipes && formData.recipes.length > 0 ? (
-                                                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl overflow-hidden">
-                                                        <table className="w-full text-left">
-                                                            <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-700">
-                                                                <tr>
-                                                                    <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableIngredient')}</th>
-                                                                    <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableQuantity')}</th>
-                                                                    <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t('tableActions')}</th>
+                                                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl overflow-hidden shadow-sm">
+                                                        <table className="w-full text-left border-collapse">
+                                                            <thead>
+                                                                <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+                                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableIngredient')}</th>
+                                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Miktar</th>
+                                                                    <th className="px-6 py-4"></th>
                                                                 </tr>
                                                             </thead>
-                                                            <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
-                                                                {formData.recipes.map((item, index) => (
-                                                                    <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+                                                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                                                {formData.recipes.map((item, idx) => (
+                                                                    <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
                                                                         <td className="px-6 py-3 font-bold text-sm text-slate-700 dark:text-slate-300">
-                                                                            {item.ingredientName || products.find(p => p.id === item.ingredientId)?.name || `Malzeme #${item.ingredientId}`}
+                                                                            {item.ingredientName || products.find(p => p.id === item.ingredientId)?.name}
                                                                         </td>
                                                                         <td className="px-6 py-3 font-bold text-sm text-teal-600 dark:text-teal-400">
                                                                             {item.quantity} {item.unit}
                                                                         </td>
                                                                         <td className="px-6 py-3 text-right">
-                                                                            <button type="button" onClick={() => handleRemoveIngredient(item.ingredientId)} className="w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-colors flex items-center justify-center">
+                                                                            <button type="button" onClick={() => handleRemoveIngredient(item.ingredientId)} className="w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-colors flex items-center justify-center inline-flex">
                                                                                 <i className="fat fa-trash-can text-sm"></i>
                                                                             </button>
                                                                         </td>
@@ -805,6 +688,64 @@ export default function ProductsAdminPage() {
                                                         <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Reçete henüz boş.</p>
                                                     </div>
                                                 )}
+                                            </div>
+                                        )}
+
+                                        {activeTab === 'ozellik' && (
+                                            <div className="space-y-6">
+                                                <div className="bg-slate-50 dark:bg-slate-900/30 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 min-h-[420px]">
+                                                    <h4 className="text-sm font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest mb-6">UYGULANABİLİR ÖZELLİKLER</h4>
+
+                                                    {allModifiers.length > 0 ? (
+                                                        <div className="space-y-6">
+                                                            {Object.entries(
+                                                                allModifiers.reduce((acc, mod) => {
+                                                                    const group = mod.groupName || 'Grupsuz Özellikler';
+                                                                    if (!acc[group]) acc[group] = [];
+                                                                    acc[group].push(mod);
+                                                                    return acc;
+                                                                }, {} as Record<string, Modifier[]>)
+                                                            ).map(([groupName, mods]) => (
+                                                                <div key={groupName} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                                                    <h5 className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                                                        <i className="fat fa-layer-group text-teal-500/50"></i> {groupName}
+                                                                    </h5>
+                                                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                                                        {mods.map(mod => {
+                                                                            const isSelected = formData.modifiers?.some(m => m.id === mod.id);
+                                                                            return (
+                                                                                <label key={mod.id} className={`flex items-center p-3 rounded-xl border cursor-pointer transition-all ${isSelected ? 'bg-teal-50 border-teal-500 dark:bg-teal-900/20 dark:border-teal-500/50 shadow-sm' : 'bg-slate-50 border-slate-200 hover:border-teal-300 dark:bg-slate-900/50 dark:border-slate-700'}`}>
+                                                                                    <div className="relative flex items-center justify-center w-5 h-5 mr-3">
+                                                                                        <input
+                                                                                            type="checkbox"
+                                                                                            className="peer appearance-none w-5 h-5 border-2 border-slate-300 dark:border-slate-600 rounded-md checked:bg-teal-500 checked:border-teal-500 transition-all cursor-pointer"
+                                                                                            checked={isSelected}
+                                                                                            onChange={(e) => {
+                                                                                                if (e.target.checked) {
+                                                                                                    setFormData(prev => ({ ...prev, modifiers: [...(prev.modifiers || []), mod] }));
+                                                                                                } else {
+                                                                                                    setFormData(prev => ({ ...prev, modifiers: prev.modifiers?.filter(m => m.id !== mod.id) || [] }));
+                                                                                                }
+                                                                                            }}
+                                                                                        />
+                                                                                        <i className="fat fa-check absolute pointer-events-none text-white text-[10px] opacity-0 peer-checked:opacity-100 transition-opacity"></i>
+                                                                                    </div>
+                                                                                    <span className={`text-sm font-bold ${isSelected ? 'text-teal-700 dark:text-teal-400' : 'text-slate-600 dark:text-slate-300'}`}>{mod.name}</span>
+                                                                                </label>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-center py-12 opacity-50">
+                                                            <i className="fat fa-tags text-4xl mb-3 text-slate-400"></i>
+                                                            <p className="font-bold text-sm tracking-widest uppercase">SİSTEMDE HİÇ ÖZELLİK BULUNAMADI.</p>
+                                                            <p className="text-xs mt-1">Lütfen önce Ürün Özellikleri sayfasından özellik tanımlayınız.</p>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         )}
                                     </div>

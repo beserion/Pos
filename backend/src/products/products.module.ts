@@ -5,11 +5,12 @@ import { ProductsController } from './products.controller';
 import { SecurityModule } from '../auth/security.module';
 import { Product } from './product.entity';
 import { Recipe } from '../recipes/recipe.entity';
+import { Modifier } from '../modifiers/modifier.entity';
 
 import { ProductsPublicController } from './products-public.controller';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Product, Recipe]), SecurityModule],
+  imports: [TypeOrmModule.forFeature([Product, Recipe, Modifier]), SecurityModule],
   providers: [ProductsService],
   controllers: [ProductsController, ProductsPublicController],
   exports: [ProductsService],

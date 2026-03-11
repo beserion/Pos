@@ -134,6 +134,16 @@ export default function DashboardPage() {
                         onClick={() => router.push(`/${locale}/quick-sale`)}
                     />
 
+                    {/* POS PC (Stand) Card */}
+                    <DashboardCard
+                        title="POS PC"
+                        description="Sipariş Al (Stand PC)"
+                        icon="fa-desktop"
+                        color="from-rose-500 to-pink-600"
+                        bg="bg-rose-500"
+                        onClick={() => router.push(`/${locale}/pos?view=takeorder`)}
+                    />
+
                     {/* Delivery Card */}
                     <DashboardCard
                         title={tDashboard('delivery')}
@@ -142,57 +152,6 @@ export default function DashboardPage() {
                         color="from-amber-500 to-orange-600"
                         bg="bg-amber-500"
                         onClick={() => router.push(`/${locale}/delivery`)}
-                    />
-
-                    {/* Cariler Card */}
-                    <DashboardCard
-                        title={tDashboard('customers')}
-                        description={tDashboard('customersDesc')}
-                        icon="fa-users"
-                        color="from-purple-500 to-violet-600"
-                        bg="bg-purple-500"
-                        onClick={() => router.push(`/${locale}/customers`)}
-                    />
-
-
-                    {/* Finans Card */}
-                    <DashboardCard
-                        title={tDashboard('finance')}
-                        description={tDashboard('financeDesc')}
-                        icon="fa-coins"
-                        color="from-yellow-500 to-amber-600"
-                        bg="bg-yellow-500"
-                        onClick={() => router.push(`/${locale}/finance`)}
-                    />
-
-                    {/* Siparişler Card */}
-                    <DashboardCard
-                        title={tDashboard('orders')}
-                        description={tDashboard('ordersDesc')}
-                        icon="fa-basket-shopping"
-                        color="from-teal-500 to-cyan-600"
-                        bg="bg-teal-500"
-                        onClick={() => router.push(`/${locale}/admin/orders`)}
-                    />
-
-                    {/* Inventory Card */}
-                    <DashboardCard
-                        title={tDashboard('inventory')}
-                        description={tDashboard('inventoryDesc')}
-                        icon="fa-boxes-stacked"
-                        color="from-emerald-500 to-teal-600"
-                        bg="bg-emerald-500"
-                        onClick={() => router.push(`/${locale}/inventory`)}
-                    />
-
-                    {/* Waiter Card */}
-                    <DashboardCard
-                        title={tDashboard('waiter')}
-                        description={tDashboard('waiterDesc')}
-                        icon="fa-user-nurse" // Alternative for waiter
-                        color="from-rose-500 to-pink-600"
-                        bg="bg-rose-500"
-                        onClick={() => router.push(`/${locale}/waiter`)}
                     />
 
                     {/* Kitchen Card */}
@@ -205,6 +164,46 @@ export default function DashboardPage() {
                         onClick={() => router.push(`/${locale}/kitchen`)}
                     />
 
+                    {/* Siparişler Card */}
+                    <DashboardCard
+                        title={tDashboard('orders')}
+                        description={tDashboard('ordersDesc')}
+                        icon="fa-basket-shopping"
+                        color="from-teal-500 to-cyan-600"
+                        bg="bg-teal-500"
+                        onClick={() => router.push(`/${locale}/admin/orders`)}
+                    />
+
+                    {/* Cariler Card */}
+                    <DashboardCard
+                        title={tDashboard('customers')}
+                        description={tDashboard('customersDesc')}
+                        icon="fa-users"
+                        color="from-purple-500 to-violet-600"
+                        bg="bg-purple-500"
+                        onClick={() => router.push(`/${locale}/customers`)}
+                    />
+
+                    {/* Finans Card */}
+                    <DashboardCard
+                        title={tDashboard('finance')}
+                        description={tDashboard('financeDesc')}
+                        icon="fa-coins"
+                        color="from-yellow-500 to-amber-600"
+                        bg="bg-yellow-500"
+                        onClick={() => router.push(`/${locale}/finance`)}
+                    />
+
+                    {/* Inventory Card */}
+                    <DashboardCard
+                        title={tDashboard('inventory')}
+                        description={tDashboard('inventoryDesc')}
+                        icon="fa-boxes-stacked"
+                        color="from-emerald-500 to-teal-600"
+                        bg="bg-emerald-500"
+                        onClick={() => router.push(`/${locale}/inventory`)}
+                    />
+
                     {/* Reports Card */}
                     <DashboardCard
                         title={tDashboard('reports')}
@@ -214,7 +213,6 @@ export default function DashboardPage() {
                         bg="bg-cyan-500"
                         onClick={() => router.push(`/${locale}/reports`)}
                     />
-
 
                     {/* Settings Card */}
                     <DashboardCard
@@ -245,8 +243,8 @@ function DashboardCard({ title, description, icon, color, bg, onClick }: CardPro
     return (
         <div
             onClick={onClick}
-            className="group relative h-48 bg-white dark:bg-slate-800/40 backdrop-blur-xl border border-white/50 dark:border-white/5 rounded-[40px] shadow-[0_15px_40px_-10px_rgba(0,0,0,0.15)] hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] dark:shadow-black/40 hover:-translate-y-2 transition-all duration-500 cursor-pointer overflow-hidden p-8"
-        >
+            className="group relative h-48 bg-white dark:bg-slate-800/40 backdrop-blur-xl border border-white/50 dark:border-white/5 rounded-[40px] shadow-[0_15px_40px_-10px_rgba(0,0,0,0.15)] hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] dark:shadow-black/40 hover:-translate-y-2 transition-all duration-500 cursor-pointer overflow-hidden p-8">
+
             {/* Background Glow */}
             <div className={`absolute -right-10 -bottom-10 w-40 h-40 rounded-full bg-gradient-to-tr ${color} opacity-10 group-hover:opacity-20 blur-3xl transition-all duration-700`}></div>
 

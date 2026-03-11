@@ -23,6 +23,12 @@ export class Order {
   @Column('decimal', { precision: 12, scale: 2, default: 0 })
   totalAmount: number;
 
+  @Column('decimal', { precision: 12, scale: 2, default: 0 })
+  discountAmount: number;
+
+  @Column('decimal', { precision: 12, scale: 2, default: 0 })
+  serviceFee: number;
+
   @ManyToOne(() => Table, { nullable: true })
   @JoinColumn({ name: 'tableId' })
   table: Table;

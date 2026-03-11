@@ -1,4 +1,4 @@
-import {
+﻿import {
   Entity,
   Column,
   PrimaryGeneratedColumn,
@@ -31,6 +31,23 @@ export class PurchaseOrder {
 
   @Column({ nullable: true })
   note: string;
+
+  // Invoice (Fatura) fields — stored as NVARCHAR for MSSQL compatibility
+  @Column({ nullable: true, type: 'nvarchar', length: 100 })
+  invoiceNumber: string | null;
+
+  // Store invoice date as string (YYYY-MM-DD) to avoid MSSQL date type issues
+  @Column({ nullable: true, type: 'nvarchar', length: 20 })
+  invoiceDateStr: string | null;
+
+  @Column('decimal', { precision: 12, scale: 2, nullable: true })
+  invoiceAmount: number;
+
+  @Column({ default: 'UNPAID' })
+  paymentStatus: string; // UNPAID, PARTIAL, PAID
+
+  @Column({ nullable: true })
+  paymentMethod: string | null; // KASA, BANKA, KREDI_KARTI
 
   @OneToMany(() => PurchaseOrderItem, (item) => item.purchaseOrder, {
     cascade: true,

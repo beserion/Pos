@@ -15,14 +15,18 @@ export default function AdminPage() {
         { title: tAdmin('employees'), subtitle: tAdmin('employeesDesc'), path: `/${locale}/admin/employees`, icon: 'fa-users-gear', color: 'text-emerald-500' },
         { title: tAdmin('warehouses'), subtitle: tAdmin('warehousesDesc'), path: `/${locale}/admin/warehouses`, icon: 'fa-warehouse-full', color: 'text-amber-500' },
         { title: tAdmin('products'), subtitle: tAdmin('productsDesc'), path: `/${locale}/admin/products`, icon: 'fa-mug-hot', color: 'text-teal-500' },
+        { title: tAdmin('modifiers'), subtitle: tAdmin('modifiersDesc'), path: `/${locale}/admin/modifiers`, icon: 'fa-tags', color: 'text-amber-500' },
         { title: tAdmin('ingredients'), subtitle: tAdmin('ingredientsDesc'), path: `/${locale}/admin/ingredients`, icon: 'fa-leaf', color: 'text-emerald-500' },
         // { title: tAdmin('recipes'), subtitle: tAdmin('recipesDesc'), path: `/${locale}/admin/recipes`, icon: 'fa-blender', color: 'text-orange-500' },
         { title: tAdmin('deliveries'), subtitle: tAdmin('deliveriesDesc'), path: `/${locale}/admin/deliveries`, icon: 'fa-truck-fast', color: 'text-indigo-500' },
         { title: tAdmin('couriers'), subtitle: tAdmin('couriersDesc'), path: `/${locale}/admin/couriers`, icon: 'fa-user-helmet-safety', color: 'text-orange-500' },
+        { title: tAdmin('cari'), subtitle: tAdmin('cariDesc'), path: `/${locale}/cari`, icon: 'fa-users-between-lines', color: 'text-indigo-500' },
+        { title: tAdmin('purchaseOrders'), subtitle: tAdmin('purchaseOrdersDesc'), path: `/${locale}/admin/purchase-orders`, icon: 'fa-cart-shopping', color: 'text-amber-500' },
         { title: tAdmin('orders'), subtitle: tAdmin('ordersDesc'), path: `/${locale}/admin/orders`, icon: 'fa-bowl-food', color: 'text-rose-500' },
         { title: tAdmin('users'), subtitle: tAdmin('usersDesc'), path: `/${locale}/admin/users`, icon: 'fa-user-shield', color: 'text-cyan-500' },
         { title: tAdmin('roles'), subtitle: tAdmin('rolesDesc'), path: `/${locale}/admin/roles`, icon: 'fa-user-tag', color: 'text-pink-500' },
         { title: tAdmin('printers'), subtitle: tAdmin('printersDesc'), path: `/${locale}/admin/printers`, icon: 'fa-print', color: 'text-sky-500' },
+        { title: tAdmin('tablet'), subtitle: tAdmin('tabletDesc'), path: `/${locale}/waiter`, icon: 'fa-tablet-screen-button', color: 'text-rose-500' },
     ];
 
     return (

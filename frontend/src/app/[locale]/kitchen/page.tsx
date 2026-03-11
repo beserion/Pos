@@ -7,6 +7,7 @@ import { useAuth } from '../AuthContext';
 import { useLocale } from 'next-intl';
 import { toastSwal, showSwal } from '../utils/swal';
 import { io } from 'socket.io-client';
+import { useTheme } from 'next-themes';
 
 interface OrderItem {
     id: number;
@@ -18,6 +19,7 @@ interface OrderItem {
 interface OrderTicket {
     id: number;
     table?: { name: string };
+    waiter?: { firstName: string, lastName: string };
     items: OrderItem[];
     status: string;
     createdAt: string;
@@ -27,8 +29,10 @@ export default function KitchenDisplayPage() {
     const { user, loading } = useAuth();
     const router = useRouter();
     const locale = useLocale();
+    const { theme, setTheme } = useTheme();
     const [currentTime, setCurrentTime] = useState(new Date());
     const [tickets, setTickets] = useState<OrderTicket[]>([]);
+    const [counts, setCounts] = useState({ pending: 0, finished: 0, total: 0 });
 
     const API_URL = 'http://localhost:3050';
 
@@ -39,6 +43,11 @@ export default function KitchenDisplayPage() {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setTickets(res.data);
+
+            const countsRes = await axios.get(`${API_URL}/orders/kitchen/counts`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setCounts(countsRes.data);
         } catch (error) {
             console.error('Error fetching kitchen orders:', error);
         }
@@ -111,21 +120,48 @@ export default function KitchenDisplayPage() {
     };
 
     return (
-        <div className="h-screen bg-slate-900 font-sans text-slate-200 flex flex-col overflow-hidden">
-            <header className="bg-slate-950 p-4 border-b border-slate-800 shadow-md flex justify-between items-center z-10 flex-none">
+        <div className="h-screen bg-slate-50 dark:bg-slate-900 font-sans text-slate-800 dark:text-slate-200 flex flex-col overflow-hidden transition-colors duration-300">
+            <header className="bg-white dark:bg-slate-950 p-4 border-b border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-md flex justify-between items-center z-10 flex-none transition-colors duration-300">
                 <div className="flex items-center gap-3">
                     <span className="text-3xl">👨‍🍳</span>
                     <div>
-                        <h1 className="text-xl font-extrabold text-white tracking-wide uppercase">Mutfak KDS</h1>
-                        <p className="text-emerald-400 text-sm font-bold animate-pulse">Aktif Siparişler</p>
+                        <h1 className="text-xl font-extrabold text-slate-800 dark:text-white tracking-wide uppercase">Mutfak KDS</h1>
+                        <p className="text-emerald-500 dark:text-emerald-400 text-sm font-bold animate-pulse">Aktif Siparişler</p>
                     </div>
                 </div>
-                <div className="flex gap-4">
-                    <div className="bg-slate-800 border border-slate-700 px-4 py-2 rounded-xl text-center">
-                        <span className="block text-xs text-slate-400 uppercase tracking-widest font-bold">Bekleyen</span>
-                        <span className="text-xl font-black text-rose-400">{tickets.filter(t => t.status === 'NEW').length}</span>
+                <div className="flex gap-4 items-center">
+                    <div className="flex bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm h-11 transition-colors duration-300">
+                        <div className="flex items-center justify-between gap-3 px-4 bg-slate-50 dark:bg-slate-800/80 border-r border-slate-200 dark:border-slate-700 w-32">
+                            <i className="fat fa-fire text-amber-500 text-xl"></i>
+                            <div className="flex flex-col items-end justify-center text-right">
+                                <span className="text-[9px] text-slate-500 dark:text-slate-400 uppercase tracking-widest font-bold leading-none mb-1">Bekleyen</span>
+                                <span className="text-lg font-black text-amber-600 dark:text-amber-500 leading-none">{counts.pending}</span>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 px-4 bg-slate-50 dark:bg-slate-800/80 border-r border-slate-200 dark:border-slate-700 w-32">
+                            <i className="fat fa-check-circle text-emerald-500 dark:text-emerald-400 text-xl"></i>
+                            <div className="flex flex-col items-end justify-center text-right">
+                                <span className="text-[9px] text-slate-500 dark:text-slate-400 uppercase tracking-widest font-bold leading-none mb-1">Biten</span>
+                                <span className="text-lg font-black text-emerald-600 dark:text-emerald-400 leading-none">{counts.finished}</span>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 px-4 bg-slate-50 dark:bg-slate-800/80 w-32">
+                            <i className="fat fa-bars-staggered text-indigo-500 dark:text-indigo-400 text-xl"></i>
+                            <div className="flex flex-col items-end justify-center text-right">
+                                <span className="text-[9px] text-slate-500 dark:text-slate-400 uppercase tracking-widest font-bold leading-none mb-1">Toplam</span>
+                                <span className="text-lg font-black text-indigo-600 dark:text-indigo-400 leading-none">{counts.total}</span>
+                            </div>
+                        </div>
                     </div>
-                    <button onClick={() => router.push(`/${locale}/dashboard`)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition flex items-center gap-2">
+                    {/* Theme Toggle */}
+                    <button
+                        onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                        className="w-11 h-11 flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition shadow-sm"
+                        title={theme === 'dark' ? 'Açık Tema' : 'Koyu Tema'}
+                    >
+                        <i className={`fat ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-lg`}></i>
+                    </button>
+                    <button onClick={() => router.push(`/${locale}/dashboard`)} className="px-4 h-11 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition flex items-center gap-2 shadow-sm">
                         <i className="fat fa-reply"></i> Çıkış
                     </button>
                 </div>
@@ -141,51 +177,65 @@ export default function KitchenDisplayPage() {
                         return (
                             <div
                                 key={ticket.id}
-                                className={`bg-slate-800 border-t-4 rounded-xl shadow-xl overflow-hidden flex flex-col transition-all group ${ticket.status === 'READY' ? 'border-emerald-500 opacity-60 scale-95' :
-                                    isSevere ? 'border-rose-600 shadow-rose-900/50' :
-                                        isWarning ? 'border-amber-500' : 'border-slate-600'
+                                className={`bg-white dark:bg-slate-800 border-t-4 rounded-xl shadow-md dark:shadow-xl overflow-hidden flex flex-col transition-all group ${ticket.status === 'READY' ? 'border-emerald-500 opacity-60 scale-95' :
+                                    isSevere ? 'border-rose-500 dark:border-rose-600 shadow-rose-200 dark:shadow-rose-900/50' :
+                                        isWarning ? 'border-amber-500' : 'border-slate-300 dark:border-slate-600'
                                     }`}
                             >
-                                <div className="p-4 bg-slate-800/80 border-b border-slate-700 flex justify-between items-start">
+                                <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 flex justify-between items-start">
                                     <div>
-                                        <h2 className="text-3xl font-black text-white">{ticket.table?.name || 'Paket'}</h2>
-                                        <p className="text-slate-400 text-sm mt-1">Sipariş No: #{ticket.id}</p>
+                                        <h2 className="text-3xl font-black text-slate-800 dark:text-white">{ticket.table?.name || 'Paket'}</h2>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <p className="text-slate-500 dark:text-slate-400 text-sm font-bold">#{ticket.id}</p>
+                                            <span className="text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full border border-slate-300 dark:border-slate-600 flex items-center gap-1">
+                                                <i className="fat fa-user text-[10px]"></i>
+                                                {ticket.waiter?.firstName ? `${ticket.waiter.firstName} ${ticket.waiter.lastName}` : 'Terminal/POS'}
+                                            </span>
+                                        </div>
                                     </div>
-                                    <div className={`text-right ${isSevere ? 'text-rose-400 font-bold animate-pulse' : isWarning ? 'text-amber-400 font-bold' : 'text-slate-300'}`}>
+                                    <div className={`text-right ${isSevere ? 'text-rose-500 dark:text-rose-400 font-bold animate-pulse' : isWarning ? 'text-amber-500 dark:text-amber-400 font-bold' : 'text-slate-500 dark:text-slate-300'}`}>
                                         <span className="block text-xs uppercase tracking-wider mb-1">Süre</span>
                                         <span className="text-xl">{formatElapsedTime(ticket.createdAt)}</span>
                                     </div>
                                 </div>
 
-                                <div className="p-4 flex-1 bg-slate-800/40">
-                                    <ul className="space-y-3">
+                                <div className="p-4 flex-1 bg-white dark:bg-slate-800/40">
+                                    <ul className="space-y-5">
                                         {ticket.items.map((item, idx) => (
-                                            <li key={idx} className="flex gap-3 text-lg group-hover:bg-slate-700/50 p-2 rounded -mx-2 transition-colors">
-                                                <span className="font-black text-indigo-400">{item.quantity}x</span>
+                                            <li key={idx} className="flex gap-4 text-lg group-hover:bg-slate-50 dark:group-hover:bg-slate-700/50 p-3 rounded-lg -mx-2 transition-colors border border-transparent dark:hover:border-slate-600/50">
+                                                <span className="font-black text-indigo-500 dark:text-indigo-400 text-xl">{item.quantity}x</span>
                                                 <div>
-                                                    <span className="font-bold text-white block">{item.product?.name}</span>
-                                                    {item.note && <span className="text-sm text-amber-400 font-medium block mt-1 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Not: {item.note}</span>}
+                                                    <span className="font-bold text-slate-800 dark:text-white block text-xl">{item.product?.name}</span>
+                                                    {item.note && <span className="text-sm text-amber-600 dark:text-amber-400 font-medium block mt-1 bg-amber-100 dark:bg-amber-500/10 px-2 py-0.5 rounded border border-amber-300 dark:border-amber-500/20">Not: {item.note}</span>}
                                                 </div>
                                             </li>
                                         ))}
                                     </ul>
                                 </div>
 
-                                <div className="p-3 bg-slate-900/50 border-t border-slate-800 grid grid-cols-2 gap-2">
+                                <div className="p-3 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-800 grid grid-cols-2 gap-2">
                                     {ticket.status === 'NEW' ? (
                                         <button
                                             onClick={() => updateTicketStatus(ticket.id, 'IN_PREPARATION')}
-                                            className="col-span-2 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-lg rounded-xl shadow-lg transition-transform active:scale-95"
+                                            className="col-span-2 py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg transition shadow-sm"
                                         >
-                                            Hazırlanıyor (Başla)
+                                            <i className="fat fa-fire-burner mr-2"></i> Hazırlamaya Başla
                                         </button>
                                     ) : (
-                                        <button
-                                            onClick={() => updateTicketStatus(ticket.id, 'READY')}
-                                            className="col-span-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-lg rounded-xl shadow-lg shadow-emerald-500/20 transition-transform active:scale-95 flex items-center justify-center gap-2"
-                                        >
-                                            <span>✅</span> Hazır (Bitti)
-                                        </button>
+                                        <>
+                                            <button
+                                                onClick={() => updateTicketStatus(ticket.id, 'READY')}
+                                                className="py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-lg transition shadow-sm flex items-center justify-center gap-2"
+                                            >
+                                                <i className="fat fa-bell-concierge"></i> Bitti
+                                            </button>
+                                            <button
+                                                onClick={() => updateTicketStatus(ticket.id, 'NEW')}
+                                                className="py-3 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 font-bold rounded-lg transition flex items-center justify-center gap-2"
+                                            >
+                                                <i className="fat fa-rotate-left"></i> Geri
+                                            </button>
+                                        </>
                                     )}
                                 </div>
                             </div>

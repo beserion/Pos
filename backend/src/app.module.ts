@@ -27,6 +27,31 @@ import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
 import { User } from './users/user.entity';
 import { ReportsModule } from './reports/reports.module';
 import { ReservationsModule } from './reservations/reservations.module';
+import { ModifiersModule } from './modifiers/modifiers.module';
+import { Role } from './roles/role.entity';
+import { Product } from './products/product.entity';
+import { Stock } from './stocks/stock.entity';
+import { Sale } from './sales/sale.entity';
+import { SaleItem } from './sales/sale-item.entity';
+import { Invoice } from './invoices/invoice.entity';
+import { Delivery } from './deliveries/delivery.entity';
+import { Location } from './locations/location.entity';
+import { Table } from './tables/table.entity';
+import { Employee } from './employees/employee.entity';
+import { EmployeeDocument } from './employees/employee-document.entity';
+import { Zone } from './zones/zone.entity';
+import { Partner } from './partners/partner.entity';
+import { Warehouse } from './warehouses/warehouse.entity';
+import { AccountTransaction } from './finance/account-transaction.entity';
+import { Order } from './orders/order.entity';
+import { OrderItem } from './orders/order-item.entity';
+import { Printer } from './printers/printer.entity';
+import { Recipe } from './recipes/recipe.entity';
+import { Wastage } from './wastages/wastage.entity';
+import { PurchaseOrder } from './purchase-orders/purchase-order.entity';
+import { PurchaseOrderItem } from './purchase-orders/purchase-order-item.entity';
+import { Reservation } from './reservations/reservation.entity';
+import { Modifier } from './modifiers/modifier.entity';
 
 @Module({
   imports: [
@@ -47,14 +72,47 @@ import { ReservationsModule } from './reservations/reservations.module';
             'YourStrong@Passw0rd',
           ),
           database: configService.get<string>('DB_DATABASE', 'AntigravityPOS'),
-          autoLoadEntities: true,
-          synchronize: true, // Otomatik veritabanı yansıması (eksik kolonların oluşturulması için)
+          entities: [
+            User,
+            Role,
+            Printer,
+            Product,
+            Recipe,
+            Order,
+            OrderItem,
+            Table,
+            Location,
+            Zone,
+            AccountTransaction,
+            Partner,
+            PurchaseOrder,
+            PurchaseOrderItem,
+            Modifier,
+            Wastage,
+            Stock,
+            Sale,
+            SaleItem,
+            Invoice,
+            Delivery,
+            Employee,
+            EmployeeDocument,
+            Reservation,
+            Warehouse,
+          ],
+          synchronize: false, // Migrations managed manually via migrate-remote.js
           options: {
             encrypt: false,
             trustServerCertificate: true,
             ...(instanceName ? { instanceName } : {}),
           },
         };
+        console.log('[AppModule] Connecting to DB:', {
+          host: config.host,
+          database: config.database,
+          username: config.username,
+          port: config.port,
+          instance: instanceName
+        });
         // When using a named instance, don't specify port (uses dynamic port via SQL Browser)
         if (!instanceName) {
           config.port = parseInt(
@@ -88,6 +146,7 @@ import { ReservationsModule } from './reservations/reservations.module';
     PurchaseOrdersModule,
     ReportsModule,
     ReservationsModule,
+    ModifiersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

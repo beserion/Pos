@@ -9,7 +9,7 @@ import { AuthService } from './auth.service';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService) { }
 
   @Post('login')
   async login(@Body() body: any) {
@@ -36,6 +36,15 @@ export class AuthController {
       body.userId,
       body.pinCode,
     );
+    if (!result) {
+      throw new UnauthorizedException('Hatalı Şifre');
+    }
+    return result;
+  }
+
+  @Post('login-pin-only')
+  async loginPinOnly(@Body() body: any) {
+    const result = await this.authService.loginWithPinOnly(body.pinCode);
     if (!result) {
       throw new UnauthorizedException('Hatalı Şifre');
     }
