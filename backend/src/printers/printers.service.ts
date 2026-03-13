@@ -63,9 +63,19 @@ export class PrintersService {
       const { ThermalPrinter, PrinterTypes, CharacterSet, BreakLine } =
         await import('node-thermal-printer');
 
+      let printerInterface = `tcp://${printer.ipAddress}`;
+      
+      // If ipAddress doesn't look like an IP (e.g., no dots or starts with printer:), 
+      // treat it as a local printer name
+      if (printer.ipAddress && !printer.ipAddress.includes('.') && !printer.ipAddress.startsWith('tcp://')) {
+        printerInterface = `printer:${printer.ipAddress}`;
+      } else if (printer.ipAddress.startsWith('printer:')) {
+        printerInterface = printer.ipAddress;
+      }
+
       const thermalPrinter = new ThermalPrinter({
         type: PrinterTypes.EPSON,
-        interface: `tcp://${printer.ipAddress}`,
+        interface: printerInterface,
         characterSet: CharacterSet.PC857_TURKISH,
         removeSpecialCharacters: false,
         lineCharacter: '=',
@@ -75,12 +85,16 @@ export class PrintersService {
         },
       });
 
-      const isConnected = await thermalPrinter.isPrinterConnected();
-      if (!isConnected) {
-        return {
-          success: false,
-          message: `Yazıcıya bağlanılamadı: ${printer.ipAddress}`,
-        };
+      // Skip connectivity check for local printers as it's often unreliable 
+      // with standard drivers. For TCP, we still check.
+      if (printerInterface.startsWith('tcp://')) {
+        const isConnected = await thermalPrinter.isPrinterConnected();
+        if (!isConnected) {
+          return {
+            success: false,
+            message: `Ag yazıcısına bağlanılamadı: ${printer.ipAddress}`,
+          };
+        }
       }
 
       thermalPrinter.alignCenter();
@@ -125,6 +139,7 @@ export class PrintersService {
       thermalPrinter.alignCenter();
       thermalPrinter.println('Mali Degeri Yoktur - Bilgi Fisidir');
       thermalPrinter.cut();
+      thermalPrinter.beep();
 
       await thermalPrinter.execute();
       thermalPrinter.clear();

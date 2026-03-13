@@ -46,6 +46,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [cart, setCart] = useState<OrderItem[]>([]);
     const [existingOrders, setExistingOrders] = useState<ExistingOrder[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string>('Tümü');
+    const [searchQuery, setSearchQuery] = useState('');
     const [dataLoading, setDataLoading] = useState(true);
 
     const [waiters, setWaiters] = useState<any[]>([]);
@@ -265,7 +266,11 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         }
     };
 
-    const filteredProducts = selectedCategory === 'Tümü' ? products : products.filter(p => p.category === selectedCategory);
+    const filteredProducts = products.filter(p => {
+        const matchesCategory = selectedCategory === 'Tümü' || p.category === selectedCategory;
+        const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesCategory && matchesSearch;
+    });
     const cartTotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
     const allExistingItems = existingOrders.flatMap(o => o.items);
     const paidItems = allExistingItems.filter(i => i.isPaid);
@@ -445,6 +450,28 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                             <h2 className="text-2xl font-black text-slate-800 dark:text-white pb-2 border-b border-slate-200 dark:border-slate-700 mb-4 inline-block">
                                 {selectedTable?.name} Seçiliyor
                             </h2>
+
+                            <div className="relative mb-4">
+                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <i className="fat fa-magnifying-glass text-slate-400"></i>
+                                </div>
+                                <input
+                                    type="text"
+                                    placeholder="Ürün Ara..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="block w-full pl-12 pr-4 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-md text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all font-bold shadow-sm"
+                                />
+                                {searchQuery && (
+                                    <button
+                                        onClick={() => setSearchQuery('')}
+                                        className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-rose-500 transition-colors"
+                                    >
+                                        <i className="fat fa-circle-xmark"></i>
+                                    </button>
+                                )}
+                            </div>
+
                             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
                                 {categories.map(c => (
                                     <button

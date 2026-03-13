@@ -149,32 +149,23 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 if (printRes.data.success) {
                     showSwal({
                         title: 'Başarılı',
-                        text: 'Satış tamamlandı ve fiy Kasa yazıcısından yazdırılıyor.',
+                        text: 'Satış tamamlandı ve fiş yazıcıya gönderildi.',
                         icon: 'success',
                         timer: 1500,
                         showConfirmButton: false
                     });
                 } else {
-                    // 2. Fallback to Browser Print if Kasa Printer fails or isn't found
-                    printReceipt(printData);
-
                     showSwal({
-                        title: 'Başarılı (Alternatif Yazdırma)',
-                        text: 'Satış tamamlandı. ' + printRes.data.message + ' Tarayıcıdan yazdırılıyor.',
-                        icon: 'warning',
-                        timer: 2000,
-                        showConfirmButton: false
+                        title: 'Yazdırma Sorunu',
+                        text: 'Satış tamamlandı ancak: ' + printRes.data.message,
+                        icon: 'warning'
                     });
                 }
-            } catch (printError) {
-                // Fallback to browser print if API request totally fails
-                printReceipt(printData);
+            } catch (printError: any) {
                 showSwal({
                     title: 'Satış Başarılı',
-                    text: 'Satış kaydedildi ancak ağ yazıcısına ulaşılamadı. Tarayıcıdan yazdırılıyor.',
-                    icon: 'warning',
-                    timer: 2000,
-                    showConfirmButton: false
+                    text: 'Satış kaydedildi ancak yazıcı bağlantı hatası oluştu: ' + (printError.response?.data?.message || printError.message),
+                    icon: 'warning'
                 });
             }
 
