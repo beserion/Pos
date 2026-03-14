@@ -87,17 +87,13 @@ export default function DashboardPage() {
             {/* Main Content Area */}
             <main className="relative z-10 w-full px-[50px] py-12">
 
-                {/* Form Title Section - Centered Block */}
-                <div className="mb-14 flex justify-center">
-                    <div className="flex items-center text-start gap-4">
-                        {/* <i className="fat fa-grid-2 text-indigo-600 dark:text-indigo-400 animate-pulse" style={{ fontSize: '50px' }}></i> */}
-                        <div>
-                            <div className="relative inline-flex flex-col items-center pb-3 text-center">
-                                <h3 className="text-3xl mb-0 font-extralight text-indigo-600 dark:text-indigo-400 tracking-[0.2em] leading-none uppercase" id="title">{tDashboard('title')}</h3>
-                                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[80%] h-1.5 bg-gradient-to-r from-transparent via-indigo-500 to-transparent rounded-full opacity-100"></div>
-                                <h5 className="text-slate-400 dark:text-slate-500 text-lg font-medium mt-1">{tDashboard('subtitle')}</h5>
-                            </div>
-                        </div>
+                {/* Form Title Section */}
+                <div className="flex items-center mb-10">
+                    <i className="fat fa-house me-3 text-indigo-600 dark:text-indigo-400" style={{ fontSize: '50px' }}></i>
+                    <div>
+                        <h3 className="mb-0 text-3xl font-extralight text-indigo-600 dark:text-indigo-400 leading-none uppercase tracking-[0.25em]" id="title">{tDashboard('title')}</h3>
+                        <div className="h-1 w-1/2 bg-gradient-to-r from-indigo-400 to-transparent rounded-full mt-2 mb-1"></div>
+                        <h5 className="text-muted mb-0 text-lg font-medium text-slate-400 dark:text-slate-500 mt-0.5">{tDashboard('subtitle')}</h5>
                     </div>
                 </div>
 

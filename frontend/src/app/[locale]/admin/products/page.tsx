@@ -352,7 +352,14 @@ export default function ProductsAdminPage() {
                                             <td className="px-8 py-3">
                                                 <div className="flex items-center gap-4">
                                                     {prod.imageUrl ? (
-                                                        <img src={prod.imageUrl} alt={prod.name} className="w-12 h-12 rounded-2xl object-cover border border-slate-100 dark:border-slate-700 shadow-sm transition-transform group-hover:scale-110" />
+                                                        <img 
+                                                            src={prod.imageUrl.startsWith('http') || prod.imageUrl.startsWith('data:') || prod.imageUrl.startsWith('/') 
+                                                                ? prod.imageUrl 
+                                                                : `/uploads/products/${prod.imageUrl}`
+                                                            } 
+                                                            alt={prod.name} 
+                                                            className="w-12 h-12 rounded-2xl object-cover border border-slate-100 dark:border-slate-700 shadow-sm transition-transform group-hover:scale-110" 
+                                                        />
                                                     ) : (
                                                         <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-center font-black text-teal-600 dark:text-teal-400 group-hover:scale-110 transition-transform">
                                                             <i className="fat fa-bowl-food"></i>
@@ -601,7 +608,14 @@ export default function ProductsAdminPage() {
                                                 >
                                                     {formData.imageUrl ? (
                                                         <div className="relative group w-48 h-48">
-                                                            <img src={formData.imageUrl} alt={t('preview')} className="w-full h-full object-cover rounded-2xl shadow-lg" />
+                                                            <img 
+                                                                src={formData.imageUrl.startsWith('http') || formData.imageUrl.startsWith('data:') || formData.imageUrl.startsWith('/') 
+                                                                    ? formData.imageUrl 
+                                                                    : `/uploads/products/${formData.imageUrl}`
+                                                                } 
+                                                                alt={t('preview')} 
+                                                                className="w-full h-full object-cover rounded-2xl shadow-lg" 
+                                                            />
                                                             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex items-center justify-center backdrop-blur-sm">
                                                                 <div className="text-white text-center">
                                                                     <i className="fat fa-camera text-2xl mb-2"></i>

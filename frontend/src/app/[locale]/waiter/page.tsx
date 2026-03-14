@@ -327,7 +327,14 @@ export default function WaiterPage() {
                                     {/* Arka Plan Görseli / Emoji Mapped Area */}
                                     <div className="absolute inset-0 bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center transition-transform duration-500 group-hover:scale-105">
                                         {p.imageUrl ? (
-                                            <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                                            <img 
+                                                src={p.imageUrl.startsWith('http') || p.imageUrl.startsWith('data:') || p.imageUrl.startsWith('/') 
+                                                    ? p.imageUrl 
+                                                    : `/uploads/products/${p.imageUrl}`
+                                                } 
+                                                alt={p.name} 
+                                                className="w-full h-full object-cover" 
+                                            />
                                         ) : (
                                             <span className="text-3xl mb-1 opacity-50 transition-opacity">
                                                 {p.category === 'Kahveler' ? '☕' : p.category === 'Tatlılar' ? '🍰' : '🍹'}

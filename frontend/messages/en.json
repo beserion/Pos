@@ -22,7 +22,9 @@
         "linkedBranch": "Linked Branch",
         "headquarters": "Headquarters",
         "status": "Status",
-        "actions": "Actions"
+        "actions": "Actions",
+        "notFound": "No records found",
+        "loadingError": "An error occurred while loading data"
     },
     "Dashboard": {
         "title": "Management Panel",

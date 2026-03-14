@@ -221,16 +221,6 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                                 }}
                             />
                         </div>
-
-                        <div className="relative">
-                            <i className="fat fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                            <input
-                                value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
-                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-none rounded-2xl py-3 pl-12 pr-4 text-sm font-bold text-slate-800 dark:text-white focus:ring-2 ring-orange-500/50 transition-all outline-none w-64"
-                                placeholder={tc('search')}
-                            />
-                        </div>
                         {/* Theme Toggle */}
                         <button
                             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -248,17 +238,29 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                     </div>
                 </div>
 
-                {/* Categories */}
-                <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
-                    {categories.map(cat => (
-                        <button
-                            key={cat}
-                            onClick={() => setSelectedCategory(cat)}
-                            className={`px-6 h-12 rounded-xl text-xs font-bold uppercase tracking-widest transition-all whitespace-nowrap flex items-center justify-center ${selectedCategory === cat ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm'}`}
-                        >
-                            {cat === 'all' ? tc('all') : cat}
-                        </button>
-                    ))}
+                {/* Categories & Search */}
+                <div className="flex flex-col md:flex-row items-center gap-4 mb-6">
+                    <div className="flex-1 flex gap-2 overflow-x-auto pb-2 scrollbar-hide w-full">
+                        {categories.map(cat => (
+                            <button
+                                key={cat}
+                                onClick={() => setSelectedCategory(cat)}
+                                className={`px-6 h-12 rounded-xl text-xs font-bold uppercase tracking-widest transition-all whitespace-nowrap flex items-center justify-center ${selectedCategory === cat ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm'}`}
+                            >
+                                {cat === 'all' ? tc('all') : cat}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="relative shrink-0 w-full md:w-64">
+                        <i className="fat fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-none rounded-2xl py-3 pl-12 pr-4 text-sm font-bold text-slate-800 dark:text-white focus:ring-2 ring-orange-500/50 transition-all outline-none"
+                            placeholder={tc('search')}
+                        />
+                    </div>
                 </div>
 
                 {/* Product Grid */}
@@ -273,7 +275,14 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                             {/* Background Image or Icon */}
                             <div className="absolute inset-0 z-0 bg-slate-800 flex items-center justify-center">
                                 {product.imageUrl ? (
-                                    <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                    <img 
+                                        src={product.imageUrl.startsWith('http') || product.imageUrl.startsWith('data:') || product.imageUrl.startsWith('/') 
+                                            ? product.imageUrl 
+                                            : `/uploads/products/${product.imageUrl}`
+                                        } 
+                                        alt={product.name} 
+                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+                                    />
                                 ) : (
                                     <i className="fat fa-box-open text-[40px] text-slate-300 dark:text-slate-700 group-hover:text-orange-500/50 transition-colors duration-500"></i>
                                 )}

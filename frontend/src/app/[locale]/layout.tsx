@@ -29,9 +29,7 @@ export default async function RootLayout({
 
   return (
     <html lang={locale} dir={isRTL ? 'rtl' : 'ltr'} suppressHydrationWarning>
-      <head>
-        <link rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v6.5.1/css/all.css" />
-      </head>
+      <head />
       <body className="antialiased text-slate-900 dark:text-slate-100 bg-slate-50 dark:bg-slate-900 transition-colors duration-300 overflow-x-hidden" suppressHydrationWarning={true}>
         <NextIntlClientProvider locale={locale} messages={messages}>
           <NextThemeProvider attribute="class" defaultTheme="light" enableSystem>

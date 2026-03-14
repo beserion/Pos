@@ -22,7 +22,9 @@
         "linkedBranch": "Bağlı Şube",
         "headquarters": "Merkez",
         "status": "Durum",
-        "actions": "İşlemler"
+        "actions": "İşlemler",
+        "notFound": "Kayıt bulunamadı",
+        "loadingError": "Veriler yüklenirken hata oluştu"
     },
     "Dashboard": {
         "title": "Yönetim Paneli",
