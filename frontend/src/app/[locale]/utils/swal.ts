@@ -3,7 +3,7 @@ import Swal from 'sweetalert2';
 export const showSwal = (options: any) => {
     return Swal.fire({
         customClass: {
-            popup: '!bg-white dark:!bg-slate-900 !rounded-[32px] border border-slate-200 dark:border-slate-800 shadow-2xl shadow-indigo-500/10',
+            popup: '!bg-white dark:!bg-slate-900 !rounded-[32px] border border-slate-200 dark:border-indigo-600/30 shadow-2xl shadow-indigo-500/10 dark:!shadow-[0_40px_120px_-20px_rgba(79,70,229,0.45)]',
             title: '!text-slate-800 dark:!text-white font-extrabold text-2xl tracking-tight',
             htmlContainer: '!text-slate-500 dark:!text-slate-400 font-medium text-sm mt-2',
             icon: '!border-white dark:!border-slate-800',
@@ -20,15 +20,16 @@ export const showSwal = (options: any) => {
 export const toastSwal = (options: any) => {
     return Swal.mixin({
         toast: true,
-        position: 'top-end',
+        position: 'bottom-end',
         showConfirmButton: false,
         timer: 3000,
         timerProgressBar: true,
         customClass: {
-            popup: '!bg-white dark:!bg-slate-900 border border-slate-200 dark:border-slate-700 border-l-4 !border-l-indigo-500 shadow-xl shadow-slate-900/10 !rounded-2xl',
+            container: '!z-[10000]',
+            popup: '!bg-white dark:!bg-slate-900 border border-slate-200 dark:border-slate-700 border-l-4 !border-l-amber-500 shadow-xl shadow-slate-900/10 !rounded-2xl',
             title: '!text-slate-800 dark:!text-white font-bold text-sm tracking-tight',
             htmlContainer: '!text-slate-500 dark:!text-slate-400 font-medium text-xs',
-            timerProgressBar: 'bg-indigo-500'
+            timerProgressBar: 'bg-amber-500'
         },
         ...options
     }).fire();

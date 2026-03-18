@@ -17,8 +17,69 @@ export class StocksService {
     private productRepository: Repository<Product>,
   ) {}
 
-  async findAll(): Promise<Stock[]> {
-    return await this.stockRepository.find({ relations: ['product'] });
+  async findAll(
+    page: number = 1,
+    limit: number = 10,
+    search?: string,
+    location?: string,
+  ): Promise<{ data: Stock[]; total: number; lastPage: number; stats: any }> {
+    const query = this.stockRepository
+      .createQueryBuilder('stock')
+      .leftJoinAndSelect('stock.product', 'product');
+
+    if (search) {
+      query.andWhere(
+        '(product.name LIKE :search OR product.sku LIKE :search OR stock.location LIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+    
+    if (location) {
+      query.andWhere('stock.location = :location', { location });
+    }
+
+    const [data, total] = await query
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    // Stats calculation (requires looking at all active products/stocks)
+    // For large datasets, this might need optimization or a separate query, 
+    // but for now we follow the existing pattern in checkLowStock logic.
+    const allProducts = await this.productRepository.find({
+      where: { isActive: true },
+      relations: ['stocks'],
+    });
+
+    let totalProducts = 0;
+    let warningCount = 0;
+    let emptyCount = 0;
+
+    for (const prod of allProducts) {
+      totalProducts++;
+      const minLevel = Number(prod.minStockLevel || 5);
+      const totalStock = (prod.stocks || []).reduce(
+        (sum, s) => sum + Number(s.quantity),
+        0,
+      );
+
+      if (totalStock <= 0) {
+        emptyCount++;
+      } else if (totalStock <= minLevel) {
+        warningCount++;
+      }
+    }
+
+    return {
+      data,
+      total,
+      lastPage: Math.ceil(total / limit),
+      stats: {
+        total: totalProducts,
+        warning: warningCount,
+        empty: emptyCount,
+      },
+    };
   }
 
   async findOne(id: number): Promise<Stock> {

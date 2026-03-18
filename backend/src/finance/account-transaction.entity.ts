@@ -8,6 +8,8 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from '../users/user.entity';
+import { CompanyAccount } from './company-account.entity';
+import { Partner } from '../partners/partner.entity';
 
 @Entity('account_transactions')
 export class AccountTransaction {
@@ -40,7 +42,24 @@ export class AccountTransaction {
   user: User;
 
   @Column({ nullable: true })
+  userId: number;
+
+  @ManyToOne(() => Partner, { nullable: true })
+  @JoinColumn({ name: 'partnerId' })
+  partner: Partner;
+
+  @Column({ nullable: true })
   partnerId: number;
+
+  @ManyToOne(() => CompanyAccount, { nullable: true })
+  @JoinColumn({ name: 'companyAccountId' })
+  companyAccount: CompanyAccount;
+
+  @Column({ nullable: true })
+  companyAccountId: number;
+
+  @Column({ nullable: true })
+  documentNumber: string;
 
   @CreateDateColumn()
   createdAt: Date;

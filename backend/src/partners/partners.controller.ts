@@ -29,15 +29,19 @@ export class PartnersController {
   @Get()
   @ApiOperation({
     summary:
-      'Get all partners, optionally filtered by type (CUSTOMER or SUPPLIER)',
+      'Get partners with pagination and search, optionally filtered by type (CUSTOMER or SUPPLIER)',
   })
-  @ApiQuery({
-    name: 'type',
-    required: false,
-    description: 'Filter by partner type (CUSTOMER or SUPPLIER)',
-  })
-  findAll(@Query('type') type?: string) {
-    return this.partnersService.findAll(type);
+  @ApiQuery({ name: 'type', required: false })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  findAll(
+    @Query('type') type?: string,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10,
+    @Query('search') search?: string,
+  ) {
+    return this.partnersService.findAll(type, +page, +limit, search);
   }
 
   @Get(':id')

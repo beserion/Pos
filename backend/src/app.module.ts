@@ -43,6 +43,7 @@ import { Zone } from './zones/zone.entity';
 import { Partner } from './partners/partner.entity';
 import { Warehouse } from './warehouses/warehouse.entity';
 import { AccountTransaction } from './finance/account-transaction.entity';
+import { CompanyAccount } from './finance/company-account.entity';
 import { Order } from './orders/order.entity';
 import { OrderItem } from './orders/order-item.entity';
 import { Printer } from './printers/printer.entity';
@@ -53,8 +54,11 @@ import { PurchaseOrderItem } from './purchase-orders/purchase-order-item.entity'
 import { Reservation } from './reservations/reservation.entity';
 import { Modifier } from './modifiers/modifier.entity';
 
+import { ScheduleModule } from '@nestjs/schedule';
+
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
     }),
@@ -84,6 +88,7 @@ import { Modifier } from './modifiers/modifier.entity';
             Location,
             Zone,
             AccountTransaction,
+            CompanyAccount,
             Partner,
             PurchaseOrder,
             PurchaseOrderItem,
@@ -101,7 +106,7 @@ import { Modifier } from './modifiers/modifier.entity';
           ],
           synchronize: false, // Migrations managed manually via migrate-remote.js
           options: {
-            encrypt: false,
+            encrypt: true,
             trustServerCertificate: true,
             ...(instanceName ? { instanceName } : {}),
           },

@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { PurchaseOrdersService } from './purchase-orders.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -20,8 +21,20 @@ export class PurchaseOrdersController {
 
   @Get()
   @Permissions('VIEW_PURCHASE_ORDERS')
-  findAll() {
-    return this.poService.findAll();
+  findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.poService.findAll(
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 20,
+      search,
+      startDate,
+      endDate,
+    );
   }
 
   @Get(':id')

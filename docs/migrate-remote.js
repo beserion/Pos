@@ -1,4 +1,4 @@
-require('dotenv').config();
+try { require('dotenv').config(); } catch (e) { /* ignore */ }
 const mssql = require('mssql');
 
 const cfg = {
@@ -63,6 +63,13 @@ async function migrate() {
                 createdAt DATETIME2 NOT NULL DEFAULT GETDATE(),
                 updatedAt DATETIME2 NOT NULL DEFAULT GETDATE()
             )`,
+        // ERP Evolution: costPrice fields
+        `IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='products' AND COLUMN_NAME='costPrice')
+            ALTER TABLE products ADD costPrice DECIMAL(10,2) NOT NULL DEFAULT 0`,
+        `IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='order_items' AND COLUMN_NAME='costPrice')
+            ALTER TABLE order_items ADD costPrice DECIMAL(10,2) NOT NULL DEFAULT 0`,
+        `IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='sale_items' AND COLUMN_NAME='costPrice')
+            ALTER TABLE sale_items ADD costPrice DECIMAL(10,2) NOT NULL DEFAULT 0`,
     ];
 
     for (const sql of migrations) {

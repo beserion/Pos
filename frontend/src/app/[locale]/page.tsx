@@ -1,7 +1,12 @@
-import { redirect } from 'next/navigation';
+import { LocaleRedirect } from './LocaleRedirect';
 
-export default async function Home({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale } = await params;
-  // Ana sayfaya (localhost:3000/[locale]) girildiğinde otomatik olarak /[locale]/login sayfasına yönlendir.
-  redirect(`/${locale}/login`);
+const locales = ['tr', 'en', 'de', 'fr', 'it', 'ar', 'ru', 'el'];
+
+export function generateStaticParams() {
+    return locales.map((locale) => ({ locale }));
+}
+
+export default async function LocaleIndexPage({ params }: { params: Promise<{ locale: string }> }) {
+    const { locale } = await params;
+    return <LocaleRedirect locale={locale} />;
 }

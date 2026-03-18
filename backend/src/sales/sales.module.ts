@@ -4,11 +4,26 @@ import { SalesService } from './sales.service';
 import { SalesController } from './sales.controller';
 import { Sale } from './sale.entity';
 import { SaleItem } from './sale-item.entity';
+import { SecurityModule } from '../auth/security.module';
+import { RecipesModule } from '../recipes/recipes.module';
+import { StocksModule } from '../stocks/stocks.module';
+import { FinanceModule } from '../finance/finance.module';
+import { PartnersModule } from '../partners/partners.module';
+import { Table } from '../tables/table.entity';
+import { User } from '../users/user.entity';
+import { KitchenGateway } from '../orders/kitchen.gateway';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Sale, SaleItem])],
-  providers: [SalesService],
+  imports: [
+    TypeOrmModule.forFeature([Sale, SaleItem, Table, User]),
+    SecurityModule,
+    RecipesModule,
+    StocksModule,
+    FinanceModule,
+    PartnersModule,
+  ],
+  providers: [SalesService, KitchenGateway],
   controllers: [SalesController],
   exports: [SalesService],
 })
-export class SalesModule {}
+export class SalesModule { }

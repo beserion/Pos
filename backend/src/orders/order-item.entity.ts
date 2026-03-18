@@ -21,6 +21,9 @@ export class OrderItem {
   @JoinColumn({ name: 'productId' })
   product: Product;
 
+  @Column({ nullable: true })
+  productId: number;
+
   @Column('decimal', { precision: 10, scale: 2 })
   quantity: number;
 
@@ -28,8 +31,8 @@ export class OrderItem {
   unitPrice: number;
 
   @Column({ nullable: true })
-  note: string;
+  unit: string; // kg, lt, adet, vb.
 
-  @Column({ default: false })
-  isPaid: boolean;
+  @Column({ nullable: true })
+  note: string;
 }

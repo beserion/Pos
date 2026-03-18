@@ -21,11 +21,44 @@ export class PurchaseOrdersService {
     private financeService: FinanceService,
   ) { }
 
-  async findAll(): Promise<PurchaseOrder[]> {
-    return await this.poRepository.find({
-      relations: ['supplier', 'items', 'items.product'],
-      order: { createdAt: 'DESC' },
-    });
+  async findAll(
+    page: number = 1,
+    limit: number = 20,
+    search?: string,
+    startDate?: string,
+    endDate?: string,
+  ): Promise<{ data: PurchaseOrder[]; total: number; page: number; lastPage: number }> {
+    const query = this.poRepository.createQueryBuilder('po')
+      .leftJoinAndSelect('po.supplier', 'supplier')
+      .leftJoinAndSelect('po.items', 'items')
+      .leftJoinAndSelect('items.product', 'product');
+
+    if (search) {
+      query.andWhere('(supplier.name LIKE :search OR po.note LIKE :search OR po.invoiceNumber LIKE :search)', { search: `%${search}%` });
+    }
+
+    if (startDate) {
+      query.andWhere('po.createdAt >= :startDate', { startDate });
+    }
+
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      query.andWhere('po.createdAt <= :endDate', { endDate: end });
+    }
+
+    const [data, total] = await query
+      .orderBy('po.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    return {
+      data,
+      total,
+      page,
+      lastPage: Math.ceil(total / limit),
+    };
   }
 
   async findOne(id: number): Promise<PurchaseOrder> {

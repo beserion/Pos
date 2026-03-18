@@ -6,6 +6,7 @@ import {
   Param,
   Put,
   Delete,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { StocksService } from './stocks.service';
@@ -17,9 +18,19 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 export class StocksController {
   constructor(private readonly stocksService: StocksService) {}
 
+  @Get('low-stock')
+  getLowStock() {
+    return this.stocksService.checkLowStock();
+  }
+
   @Get()
-  findAll() {
-    return this.stocksService.findAll();
+  findAll(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('search') search?: string,
+    @Query('location') location?: string,
+  ) {
+    return this.stocksService.findAll(page, limit, search, location);
   }
 
   @Get(':id')

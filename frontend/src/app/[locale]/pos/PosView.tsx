@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { useRouter } from 'next/navigation';
 import { showSwal, toastSwal } from '../utils/swal';
 import { useLocale, useTranslations } from 'next-intl';
+import { useTheme } from 'next-themes';
 
 interface Product {
     id: number;
@@ -23,6 +24,8 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const locale = useLocale();
     const t = useTranslations('Admin');
     const tc = useTranslations('Common');
+    const { theme, setTheme } = useTheme();
+    const [mounted, setMounted] = useState(false);
 
     const [products, setProducts] = useState<Product[]>([]);
     const [tables, setTables] = useState<Table[]>([]);
@@ -44,7 +47,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const [discount, setDiscount] = useState<number>(0);
     const [serviceFee, setServiceFee] = useState<number>(0);
 
-    const API_URL = 'http://localhost:3050';
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
 
     const fetchCashiers = async () => {
         try {
@@ -112,13 +115,28 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     };
 
     useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    useEffect(() => {
         if (!loading && !user) router.push(`/${locale}/login`);
         if (user) {
             fetchData();
             fetchCashiers();
+
+            // Check for shared POS session
+            const cachedSession = sessionStorage.getItem('posActiveSession');
+            if (cachedSession) {
+                try {
+                    const sessionData = JSON.parse(cachedSession);
+                    setPinCashier(sessionData);
+                    setIsPinRequired(false);
+                } catch (e) {
+                    console.error('Error parsing POS session:', e);
+                }
+            }
         }
     }, [user, loading, router]);
-
     useEffect(() => {
         const fetchTableOrders = async () => {
             if (!selectedTable || (selectedTable.status === 'BOŞ' && !selectedTable.currentTotal)) {
@@ -128,11 +146,12 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             }
             try {
                 const token = (user as any)?.token || localStorage.getItem('token');
-                const res = await fetch(`${API_URL}/orders/table/${selectedTable.id}/active`, {
+                const res = await fetch(`${API_URL}/sales?tableId=${selectedTable.id}&status=ACTIVE`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 if (res.ok) {
-                    const orders = await res.json();
+                    const result = await res.json();
+                    const orders = result.data || [];
                     let newCart: { product: Product; quantity: number }[] = [];
                     const orderIds: number[] = [];
 
@@ -162,13 +181,14 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
         };
         fetchTableOrders();
     }, [selectedTable]);
-
     const handlePinSubmit = async (val: string) => {
         if (!pinCashier) return;
         try {
             await loginPin(pinCashier.id, val);
             setIsPinRequired(false);
             setPinCode('');
+            // Save to shared session
+            sessionStorage.setItem('posActiveSession', JSON.stringify(pinCashier));
             toastSwal({ icon: 'success', title: `${tc('success')}, ${pinCashier.firstName}` });
         } catch (e) {
             setPinCode('');
@@ -218,6 +238,8 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
             const saleData = {
                 userId: user?.id || user?.sub,
+                tableId: selectedTable.id,
+                tableName: selectedTable.name,
                 paymentMethod: finalPMethod,
                 paidAmountCash: paymentMethod === 'Nakit' ? selectedGrandTotal : cashAmount,
                 paidAmountCreditCard: paymentMethod === 'Kart' ? selectedGrandTotal : creditAmount,
@@ -231,7 +253,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 }))
             };
 
-            const saleRes = await fetch(`${API_URL}/orders/table/${selectedTable.id}/checkout`, {
+            const saleRes = await fetch(`${API_URL}/sales`, { // PosView now creates a Sale directly
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -295,7 +317,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
         if (result.isConfirmed) {
             try {
                 const token = localStorage.getItem('token') || (user as any)?.token;
-                const res = await fetch(`${API_URL}/orders/table/${selectedTable.id}/cancel`, {
+                const res = await fetch(`${API_URL}/sales/table/${selectedTable.id}/cancel`, { // I need to add this endpoint to SalesController or handle via Status
                     method: 'POST',
                     headers: { Authorization: `Bearer ${token}` }
                 });
@@ -315,45 +337,60 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
     return (
         <div className="flex h-screen bg-slate-50 dark:bg-slate-800 font-sans overflow-hidden transition-colors duration-300 relative">
-            {/* Dekoratif Glassmorphism Arka Planlar */}
-            <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-500/10 dark:bg-blue-600/10 blur-[120px] z-0 pointer-events-none transition-colors duration-500"></div>
-            <div className="absolute bottom-[20%] left-[20%] w-[40%] h-[40%] rounded-full bg-purple-500/10 dark:bg-purple-600/10 blur-[100px] z-0 pointer-events-none transition-colors duration-500"></div>
+            {/* Dekoratif Glassmorphism Arabulucu Arka Planlar */}
+            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-500/10 dark:bg-indigo-600/15 blur-[120px] z-0 pointer-events-none transition-all duration-700 animate-pulse"></div>
+            <div className="absolute bottom-[-10%] right-[30%] w-[30%] h-[30%] rounded-full bg-blue-500/10 dark:bg-blue-600/10 blur-[100px] z-0 pointer-events-none transition-all duration-700"></div>
+            <div className="absolute top-[20%] right-[-5%] w-[25%] h-[25%] rounded-full bg-purple-500/5 dark:bg-purple-600/10 blur-[80px] z-0 pointer-events-none transition-all duration-700 animate-bounce-slow"></div>
+            
+            {/* Corporate Pattern Overlay */}
+            <div className="absolute inset-0 z-0 opacity-[0.03] dark:opacity-[0.05] pointer-events-none" 
+                 style={{ backgroundImage: 'radial-gradient(#4f46e5 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
 
             {/* Sol Pane - Masa Seçimi */}
             <div className="flex-1 flex flex-col p-6 overflow-y-auto w-full md:w-auto relative z-10">
                 <div className="mb-6 flex items-center justify-between">
-                    <div>
-                        <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-400">{t('selectTable') || 'Masa Seçimi'}</h1>
-                        <p className="text-slate-500 dark:text-slate-400 mt-1">{t('selectTableDesc') || 'İşlem yapmak istediğiniz masayı seçin'}</p>
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 text-indigo-500 flex items-center justify-center">
+                            <i className="fat fa-cash-register text-2xl"></i>
+                        </div>
+                        <div>
+                            <h3 className="text-2xl font-black uppercase tracking-wider text-indigo-500">{'KASA POS'}</h3>
+                            <h5 className="text-slate-500 text-xs font-medium uppercase tracking-widest leading-tight">{t('selectTableDesc') || 'İşlem yapmak istediğiniz masayı seçin'}</h5>
+                        </div>
                     </div>
                     <div className="flex items-center gap-3">
+
                         <button
-                            onClick={() => {
-                                setIsPinRequired(true);
-                                setPinCashier(null);
-                            }}
-                            className="text-slate-500 hover:text-rose-600 flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-colors bg-white/60 dark:bg-slate-800/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/50 dark:border-slate-700/50 shadow-sm"
-                        >
-                            <i className="fat fa-reply"></i> Çıkış
+                            onClick={() => { setIsPinRequired(true); setPinCashier(null); }}
+                            className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-all bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 backdrop-blur-md px-5 py-2.5 rounded-full border border-rose-500/20 shadow-sm active:scale-95">
+                            <i className="fat fa-users text-rose-500"></i> Kasiyer
                         </button>
+
                         <button
                             onClick={onSwitchToTakeOrder}
-                            className="text-white hover:bg-teal-600 flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-colors bg-teal-500 backdrop-blur-md px-4 py-2 rounded-full border border-teal-400 shadow-sm"
-                        >
-                            <i className="fat fa-desktop"></i> POS PC
+                            className="group flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-all bg-teal-500/10 hover:bg-teal-500/20 text-teal-600 dark:text-teal-400 backdrop-blur-md px-5 py-2.5 rounded-full border border-teal-500/20 shadow-sm active:scale-95">
+                            <i className="fat fa-desktop text-teal-500 group-hover:animate-pulse"></i> POS PC
                         </button>
+
                         <button
                             onClick={onSwitchToQuickSale}
-                            className="text-white hover:bg-orange-600 flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-colors bg-orange-500 backdrop-blur-md px-4 py-2 rounded-full border border-orange-400 shadow-sm"
-                        >
-                            <i className="fat fa-bolt"></i> Hızlı Satış
+                            className="group flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-all bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 backdrop-blur-md px-5 py-2.5 rounded-full border border-orange-500/20 shadow-sm active:scale-95">
+                            <i className="fat fa-bolt text-orange-500 group-hover:animate-pulse"></i> Hızlı Satış
                         </button>
-                        <button
-                            onClick={() => router.push(`/${locale}/dashboard`)}
-                            className="text-slate-500 hover:text-indigo-600 flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-colors bg-white/60 dark:bg-slate-800/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/50 dark:border-slate-700/50 shadow-sm"
-                        >
-                            <i className="fat fa-reply"></i> {tc('back')}
+
+                        <button onClick={() => router.push(`/${locale}/dashboard`)} className="px-6 py-3 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black text-xs uppercase tracking-widest border border-slate-200 dark:border-slate-700 transition flex items-center gap-2">
+                            <i className="fat fa-home"></i> Ana Menü
                         </button>
+
+                        {mounted && (
+                            <button
+                                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                                className="w-10 h-10 flex items-center justify-center rounded-2xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 transition-all text-xl"
+                                title={theme === 'dark' ? 'Açık Tema' : 'Koyu Tema'}
+                            >
+                                <i className={`fat ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-indigo-500`}></i>
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -389,9 +426,14 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                             <div
                                 key={table.id}
                                 onClick={() => setSelectedTable(selectedTable?.id === table.id ? null : table)}
-                                className={`relative p-6 rounded-[32px] cursor-pointer shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border flex flex-col items-center justify-center text-center gap-2 group ${selectedTable?.id === table.id ? 'ring-4 ring-indigo-500 scale-105 ' : ''}${table.status === 'BOŞ' ? 'bg-white/60 dark:bg-slate-800/60 border-white dark:border-slate-700' :
-                                    table.status === 'REZERVE' ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30' :
-                                        'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30'}`}
+                                className={`relative p-6 rounded-[32px] cursor-pointer shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border flex flex-col items-center justify-center text-center gap-2 group 
+                                    ${selectedTable?.id === table.id 
+                                        ? 'ring-4 ring-indigo-500 scale-105 bg-indigo-50/90 dark:bg-indigo-500/30 border-indigo-400/50 dark:border-indigo-400/50' 
+                                        : table.status === 'BOŞ' 
+                                            ? 'bg-white/40 dark:bg-slate-800/40 border-white/50 dark:border-slate-700/50' 
+                                            : table.status === 'REZERVE' 
+                                                ? 'bg-amber-100/60 dark:bg-amber-500/20 border-amber-300 dark:border-amber-400/40 shadow-amber-500/10' 
+                                                : 'bg-rose-100/80 dark:bg-rose-600/20 border-rose-300/50 dark:border-rose-500/50 shadow-rose-500/20'}`}
                             >
                                 <div className="absolute top-4 right-4 animate-pulse">
                                     <div className={`w-2 h-2 rounded-full ${table.status === 'BOŞ' ? 'bg-emerald-500' : table.status === 'REZERVE' ? 'bg-amber-500' : 'bg-rose-500'}`}></div>
@@ -749,7 +791,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                     <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-2 uppercase tracking-tight">{pinCashier.firstName} {pinCashier.lastName}</h2>
                                     <p className="text-slate-500 dark:text-slate-400 mb-8">{t('enterPin') || '4 haneli PIN kodunuzu girin.'}</p>
 
-                                    <div className="flex gap-4 mb-10">
+                                    <div className="flex items-center justify-center gap-4 mb-10">
                                         {[0, 1, 2, 3].map(i => (
                                             <div
                                                 key={i}

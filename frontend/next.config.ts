@@ -4,13 +4,14 @@ const withNextIntl = createNextIntlPlugin('./src/i18n.ts');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone' as const,
+  output: (process.env.NEXT_OUTPUT as 'standalone' | 'export') || 'export',
   typescript: {
     ignoreBuildErrors: true,
   },
-  eslint: {
-    ignoreDuringBuilds: true,
+  images: {
+    unoptimized: true,
   },
+  trailingSlash: true,
 };
 
 export default withNextIntl(nextConfig);

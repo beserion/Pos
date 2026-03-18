@@ -32,4 +32,12 @@ export class KitchenGateway
   notifyOrderReady(order: any) {
     this.server.emit('orderReady', order);
   }
+
+  notifyOrderUpdated(order: any) {
+    this.server.emit('orderUpdated', order);
+  }
+
+  notifySaleUpdate(sale: any) {
+    this.server.emit('salesUpdate', sale);
+  }
 }

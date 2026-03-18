@@ -9,6 +9,7 @@
         "delete": "Sil",
         "edit": "Düzenle",
         "add": "Ekle",
+        "close": "Kapat",
         "active": "Aktif",
         "passive": "Pasif",
         "saved": "Kaydedildi",
@@ -17,14 +18,18 @@
         "error": "Hata",
         "systemError": "Sistem hatası",
         "loading": "Yükleniyor...",
-        "search": "Ara...",
+        "partners": "Cariler",
+        "search": "Ara",
         "all": "Hepsi",
         "linkedBranch": "Bağlı Şube",
         "headquarters": "Merkez",
         "status": "Durum",
         "actions": "İşlemler",
         "notFound": "Kayıt bulunamadı",
-        "loadingError": "Veriler yüklenirken hata oluştu"
+        "loadingError": "Veriler yüklenirken hata oluştu",
+        "details": "Detay",
+        "page": "Sayfa",
+        "clear": "Temizle"
     },
     "Dashboard": {
         "title": "Yönetim Paneli",
@@ -77,6 +82,8 @@
         "recipesDesc": "Hammadde kullanım talimatları",
         "couriers": "Kurye Yönetimi",
         "couriersDesc": "Kurye atama ve takibi",
+        "salesManagement": "Satış Yönetimi",
+        "salesManagementDesc": "Masa ve Hızlı Satışlar",
         "orders": "Sipariş Yönetimi",
         "ordersDesc": "Tüm sipariş detayları",
         "printers": "Yazıcı Yönetimi",
@@ -99,6 +106,8 @@
         "tabletDesc": "Garson Sipariş Arayüzü",
         "deliveries": "Paket Servisleri",
         "deliveriesDesc": "Aktif ve geçmiş teslimat takibi",
+        "companyAccounts": "Firma Hesapları",
+        "companyAccountsDesc": "Banka, kasa ve kart bakiye yönetimi",
         "quickSale": "Hızlı Satış",
         "quickSaleDesc": "Hızlı satış arayüzü",
         "orderDetail": "Adisyon Detayı",
@@ -146,6 +155,7 @@
         "statusPreparing": "Hazırlanıyor",
         "statusReady": "Hazır",
         "statusServed": "Servis Edildi",
+        "statusCompleted": "Tamamlandı",
         "statusCancelled": "İptal Edildi",
         "loadingOrders": "Siparişler yükleniyor...",
         "filterNotFound": "Filtrelere uygun sipariş bulunamadı",
@@ -225,7 +235,11 @@
         "customer": "Müşteri",
         "orderItems": "Ürünler",
         "tax": "Vergi",
-        "orderTotal": "Toplam"
+        "orderTotal": "Toplam",
+        "firstPage": "İlk Sayfa",
+        "lastPage": "Son Sayfa",
+        "labelBarcode": "Barkod",
+        "labelDescription": "Açıklama"
     },
     "Locations": {
         "title": "ŞUBE YÖNETİMİ",
@@ -258,11 +272,14 @@
         "subtitle": "Şubelerinize ait salon, teras veya bölümleri düzenleyin.",
         "newZone": "Yeni Bölüm",
         "totalZones": "Toplam Bölüm",
+        "totalTables": "Toplam Masa",
         "activeBranchCount": "Aktif Şube Sayısı",
         "tableId": "ID",
         "tableBranch": "Bağlı Şube",
         "tableName": "Bölüm Adı",
         "tableDesc": "Açıklama",
+        "tableTableCount": "Masa Sayısı",
+        "tableCapacity": "Toplam Kapasite",
         "tableActions": "İşlemler",
         "activeStatus": "AKTİF BÖLÜM",
         "noDescription": "Açıklama girilmemiş.",
@@ -593,5 +610,15 @@
         "catOther": "Diğer",
         "saveButton": "Kaydet",
         "updateButton": "Güncelle"
+    },
+    "QRMenu": {
+        "title": "Dijital Menü",
+        "welcome": "Hoş Geldiniz",
+        "table": "Masa",
+        "noDescription": "Nefis lezzet",
+        "all": "Hepsi",
+        "loading": "Menü Hazırlanıyor...",
+        "footer": "Menü Sistemi by PosNetX",
+        "priceSymbol": "₺"
     }
 }

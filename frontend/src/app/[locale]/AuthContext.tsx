@@ -34,7 +34,9 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
 
     const login = async (email: string, pass: string) => {
         try {
-            const response = await axios.post('http://localhost:3050/auth/login', { email: email.trim(), password: pass });
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+            console.log(`Attempting login to ${apiBase}/auth/login`);
+            const response = await axios.post(`${apiBase}/auth/login`, { email: email.trim(), password: pass });
             if (response.data.access_token) {
                 const token = response.data.access_token;
                 Cookies.set('token', token, { expires: 1 });
@@ -43,15 +45,16 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
                 setUser({ ...response.data.user, token });
                 window.location.href = `/${locale}/dashboard`;
             }
-        } catch (error) {
-            console.error('Login error', error);
+        } catch (error: any) {
+            console.error('Login error details:', error.response?.data || error.message);
             throw error;
         }
     };
 
     const loginPin = async (userId: number, pin: string) => {
         try {
-            const response = await axios.post('http://localhost:3050/auth/login-pin', { userId, pinCode: pin });
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+            const response = await axios.post(`${apiBase}/auth/login-pin`, { userId, pinCode: pin });
             if (response.data.access_token) {
                 const token = response.data.access_token;
                 Cookies.set('token', token, { expires: 1 });
@@ -61,13 +64,13 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
             }
         } catch (error) {
             console.warn('PIN Login failure:', error);
-            return null;
         }
     };
 
     const loginPinOnly = async (pin: string) => {
         try {
-            const response = await axios.post('http://localhost:3050/auth/login-pin-only', { pinCode: pin });
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+            const response = await axios.post(`${apiBase}/auth/login-pin-only`, { pinCode: pin });
             if (response.data.access_token) {
                 const token = response.data.access_token;
                 Cookies.set('token', token, { expires: 1 });

@@ -90,9 +90,26 @@ export class ReportsService {
       data: [kasa, banka, kart],
     };
 
+    // 4. Calculate COGS (Cost of Goods Sold)
+    let cogs = 0;
+    try {
+      const salesCostRes = await this.dataSource.query(`
+        SELECT SUM(CAST(quantity AS DECIMAL(18,2)) * CAST(costPrice AS DECIMAL(18,2))) as totalCost FROM sale_items
+      `);
+      cogs = Number(salesCostRes[0]?.totalCost || 0);
+    } catch (e) {
+      console.error('Error calculating COGS:', e);
+    }
+
+    const netProfit = totalIncome - cogs - totalExpense;
+    const grossProfit = totalIncome - cogs;
+
     return {
       totalIncome,
       totalExpense,
+      cogs,
+      grossProfit,
+      netProfit,
       kasa,
       banka,
       kart,

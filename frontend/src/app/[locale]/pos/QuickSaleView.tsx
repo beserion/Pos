@@ -32,7 +32,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     const tc = useTranslations('Common');
     const { user, loading: authLoading } = useAuth();
     const { theme, setTheme } = useTheme();
-    const API_URL = 'http://localhost:3050';
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
 
     const [products, setProducts] = useState<Product[]>([]);
     const [categories, setCategories] = useState<string[]>([]);
@@ -40,6 +40,11 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [searchQuery, setSearchQuery] = useState('');
     const [cart, setCart] = useState<CartItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'CASH' | 'CREDIT_CARD'>('CASH');
+    const [pinCashier, setPinCashier] = useState<any | null>(null);
+    const [pinCode, setPinCode] = useState('');
+    const [isPinRequired, setIsPinRequired] = useState(true);
+    const { loginPinOnly } = useAuth();
 
     const fetchData = async () => {
         try {
@@ -61,8 +66,44 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     useEffect(() => {
         if (!authLoading && !user) router.push(`/${locale}/login`);
-        if (user) fetchData();
+        if (user) {
+            fetchData();
+            const cachedCashier = sessionStorage.getItem('posActiveSession');
+            if (cachedCashier) {
+                setPinCashier(JSON.parse(cachedCashier));
+                setIsPinRequired(false);
+            }
+        }
     }, [user, authLoading, locale]);
+
+    const handlePinSubmit = async (val: string) => {
+        try {
+            const loggedInUser = await loginPinOnly(val);
+            if (loggedInUser) {
+                setPinCashier(loggedInUser);
+                setIsPinRequired(false);
+                setPinCode('');
+                sessionStorage.setItem('posActiveSession', JSON.stringify(loggedInUser));
+                toastSwal({ icon: 'success', title: `${loggedInUser.firstName}` });
+            } else {
+                setPinCode('');
+                showSwal({ icon: 'error', title: t('invalidPin') || 'Hatalı PIN', text: t('invalidPinDesc') || 'Lütfen tekrar deneyin.' });
+            }
+        } catch (e) {
+            setPinCode('');
+            showSwal({ icon: 'error', title: t('invalidPin') || 'Hatalı PIN', text: t('invalidPinDesc') || 'Lütfen tekrar deneyin.' });
+        }
+    };
+
+    const handlePinClick = (num: string) => {
+        const newPin = pinCode + num;
+        if (newPin.length <= 4) {
+            setPinCode(newPin);
+            if (newPin.length === 4) {
+                handlePinSubmit(newPin);
+            }
+        }
+    };
 
     const filteredProducts = useMemo(() => {
         return products.filter(p => {
@@ -102,7 +143,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
         return cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
     }, [cart]);
 
-    const handleCompleteSale = async (paymentMethod: string) => {
+    const handleCompleteSale = async (paymentMethod: string, shouldPrint: boolean = true) => {
         if (cart.length === 0) {
             showSwal({ title: 'Hata', text: 'Sepetiniz boş.', icon: 'error' });
             return;
@@ -116,6 +157,8 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 totalAmount,
                 paymentMethod,
                 status: 'COMPLETED',
+                tableName: 'QUICKSALE',
+                waiterId: pinCashier?.id || user?.id,
                 items: cart.map(item => ({
                     productId: item.product.id,
                     quantity: item.quantity,
@@ -129,7 +172,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
             // Prepare Print Data
             const printData = {
                 companyName: 'ANTIGRAVITY POS',
-                cashierName: user?.name || 'Kasiyer',
+                cashierName: pinCashier?.firstName || user?.name || 'Kasiyer',
                 date: new Date(),
                 items: cart.map(item => ({
                     name: item.product.name,
@@ -142,30 +185,40 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 receiptNumber: res.data?.id?.toString() || Math.floor(100000 + Math.random() * 900000).toString()
             };
 
-            // 1. Attempt Network Printing (Kasa Printer via Backend API)
-            try {
-                const printRes = await axios.post(`${API_URL}/printers/print-receipt`, printData, { headers });
+            // 1. Attempt Network Printing (Kasa Printer via Backend API) if requested
+            if (shouldPrint) {
+                try {
+                    const printRes = await axios.post(`${API_URL}/printers/print-receipt`, printData, { headers });
 
-                if (printRes.data.success) {
+                    if (printRes.data.success) {
+                        showSwal({
+                            title: 'Başarılı',
+                            text: 'Satış tamamlandı ve fiş yazıcıya gönderildi.',
+                            icon: 'success',
+                            timer: 1500,
+                            showConfirmButton: false
+                        });
+                    } else {
+                        showSwal({
+                            title: 'Yazdırma Sorunu',
+                            text: 'Satış tamamlandı ancak: ' + printRes.data.message,
+                            icon: 'warning'
+                        });
+                    }
+                } catch (printError: any) {
                     showSwal({
-                        title: 'Başarılı',
-                        text: 'Satış tamamlandı ve fiş yazıcıya gönderildi.',
-                        icon: 'success',
-                        timer: 1500,
-                        showConfirmButton: false
-                    });
-                } else {
-                    showSwal({
-                        title: 'Yazdırma Sorunu',
-                        text: 'Satış tamamlandı ancak: ' + printRes.data.message,
+                        title: 'Satış Başarılı',
+                        text: 'Satış kaydedildi ancak yazıcı bağlantı hatası oluştu: ' + (printError.response?.data?.message || printError.message),
                         icon: 'warning'
                     });
                 }
-            } catch (printError: any) {
+            } else {
                 showSwal({
-                    title: 'Satış Başarılı',
-                    text: 'Satış kaydedildi ancak yazıcı bağlantı hatası oluştu: ' + (printError.response?.data?.message || printError.message),
-                    icon: 'warning'
+                    title: 'Başarılı',
+                    text: 'Satış başarıyla kaydedildi.',
+                    icon: 'success',
+                    timer: 1500,
+                    showConfirmButton: false
                 });
             }
 
@@ -197,13 +250,14 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                     </div>
 
                     <div className="flex gap-3">
+
                         {/* Barcode Scanner Input */}
                         <div className="relative">
                             <i className="fat fa-barcode absolute left-4 top-1/2 -translate-y-1/2 text-orange-500"></i>
                             <input
                                 autoFocus
-                                className="bg-white dark:bg-slate-800 border-2 border-orange-500/30 rounded-2xl py-3 pl-12 pr-4 text-sm font-black text-orange-500 placeholder:text-orange-500/50 focus:ring-4 ring-orange-500/20 transition-all outline-none w-48 shadow-lg shadow-orange-500/5"
-                                placeholder="BARKOD OKUT"
+                                className="bg-white dark:bg-slate-800 border-2 border-orange-500/30 rounded-2xl py-3 pl-12 pr-4 text-sm font-black text-orange-500 placeholder:text-orange-500/50 focus:ring-4 ring-orange-500/20 transition-all outline-none w-48 shadow-lg shadow-orange-500/5 h-12"
+                                placeholder="BARKOD"
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
                                         const barcode = (e.target as HTMLInputElement).value;
@@ -221,25 +275,41 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                                 }}
                             />
                         </div>
+                        {/* Search Input Moved Here */}
+                        <div className="relative">
+                            <i className="fat fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                            <input
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                className="w-64 h-12 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-2xl py-3 pl-12 pr-4 text-sm font-bold text-slate-800 dark:text-white focus:ring-4 ring-orange-500/20 transition-all outline-none shadow-sm"
+                                placeholder={tc('search')}
+                            />
+                        </div>
+                        {/* Sales Button */}
+                        {/* <button onClick={() => router.push(`/${locale}/admin/sales`)} className="h-12 px-6 rounded-2xl bg-orange-500/10 text-orange-500 font-bold uppercase tracking-wider flex items-center gap-2 hover:bg-orange-500/20 transition-all border border-orange-500/20 active:scale-95 shadow-sm">
+                            <i className="fat fa-basket-shopping text-orange-500"></i> Satışlar
+                        </button> */}
+
                         {/* Theme Toggle */}
+                        <button onClick={onSwitchToPos} className="h-12 px-6 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider flex items-center gap-2 hover:bg-indigo-500/20 transition-all border border-indigo-500/20 active:scale-95 shadow-sm">
+                            <i className="fat fa-cash-register text-indigo-500"></i> Kasa
+                        </button>
+
+                        <button onClick={() => router.push(`/${locale}/dashboard`)} className="px-6 py-3 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black text-xs uppercase tracking-widest border border-slate-200 dark:border-slate-700 transition flex items-center gap-2">
+                            <i className="fat fa-home"></i> Ana Menü
+                        </button>
                         <button
                             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                            className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-transparent text-slate-600 dark:text-slate-300 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-700 transition shadow-sm"
+                            className="w-12 h-12 flex items-center justify-center rounded-2xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 transition-all text-xl"
                             title={theme === 'dark' ? 'Açık Tema' : 'Koyu Tema'}
                         >
-                            <i className={`fat ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-lg`}></i>
-                        </button>
-                        <button onClick={onSwitchToPos} className="h-12 px-6 rounded-2xl bg-indigo-600 text-white font-bold uppercase tracking-wider flex items-center gap-2 hover:bg-indigo-500 transition shadow-lg shadow-indigo-500/30">
-                            <i className="fat fa-cash-register"></i> Kasa
-                        </button>
-                        <button onClick={() => router.push(`/${locale}/dashboard`)} className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-transparent text-slate-500 dark:text-slate-400 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-700 transition shadow-sm">
-                            <i className="fat fa-reply"></i>
+                            <i className={`fat ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-orange-500`}></i>
                         </button>
                     </div>
                 </div>
 
-                {/* Categories & Search */}
-                <div className="flex flex-col md:flex-row items-center gap-4 mb-6">
+                {/* Categories */}
+                <div className="flex items-center gap-4 mb-6">
                     <div className="flex-1 flex gap-2 overflow-x-auto pb-2 scrollbar-hide w-full">
                         {categories.map(cat => (
                             <button
@@ -251,20 +321,10 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                             </button>
                         ))}
                     </div>
-
-                    <div className="relative shrink-0 w-full md:w-64">
-                        <i className="fat fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                        <input
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                            className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-none rounded-2xl py-3 pl-12 pr-4 text-sm font-bold text-slate-800 dark:text-white focus:ring-2 ring-orange-500/50 transition-all outline-none"
-                            placeholder={tc('search')}
-                        />
-                    </div>
                 </div>
 
                 {/* Product Grid */}
-                <div className="flex-1 overflow-y-auto grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 auto-rows-max custom-scrollbar pr-2 pb-6">
+                <div className="flex-1 overflow-y-auto grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 auto-rows-max custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-200px)]">
                     {filteredProducts.map(product => (
                         <button
                             key={product.id}
@@ -275,13 +335,13 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                             {/* Background Image or Icon */}
                             <div className="absolute inset-0 z-0 bg-slate-800 flex items-center justify-center">
                                 {product.imageUrl ? (
-                                    <img 
-                                        src={product.imageUrl.startsWith('http') || product.imageUrl.startsWith('data:') || product.imageUrl.startsWith('/') 
-                                            ? product.imageUrl 
+                                    <img
+                                        src={product.imageUrl.startsWith('http') || product.imageUrl.startsWith('data:') || product.imageUrl.startsWith('/')
+                                            ? product.imageUrl
                                             : `/uploads/products/${product.imageUrl}`
-                                        } 
-                                        alt={product.name} 
-                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+                                        }
+                                        alt={product.name}
+                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                                     />
                                 ) : (
                                     <i className="fat fa-box-open text-[40px] text-slate-300 dark:text-slate-700 group-hover:text-orange-500/50 transition-colors duration-500"></i>
@@ -342,24 +402,99 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                         <span className="text-3xl font-black text-slate-800 dark:text-white">{totalAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} <span className="text-orange-500 text-lg uppercase tracking-tight">₺</span></span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 pb-4">
+                    <div className="grid grid-cols-2 gap-3 pb-2">
                         <button
-                            onClick={() => handleCompleteSale('CASH')}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl py-4 flex flex-col items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/20 active:scale-95"
+                            onClick={() => setSelectedPaymentMethod('CASH')}
+                            className={`rounded-2xl py-3 flex flex-col items-center justify-center gap-1 transition-all border-2 ${selectedPaymentMethod === 'CASH' ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg shadow-emerald-600/20' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'}`}
                         >
-                            <i className="fat fa-money-bill-wave text-2xl"></i>
-                            <span className="text-xs font-black uppercase tracking-widest">{t('paymentCash') || 'Nakit'}</span>
+                            <i className="fat fa-money-bill-wave text-xl"></i>
+                            <span className="text-[10px] font-black uppercase tracking-widest">{t('paymentCash') || 'Nakit'}</span>
                         </button>
                         <button
-                            onClick={() => handleCompleteSale('CREDIT_CARD')}
-                            className="bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl py-4 flex flex-col items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/20 active:scale-95"
+                            onClick={() => setSelectedPaymentMethod('CREDIT_CARD')}
+                            className={`rounded-2xl py-3 flex flex-col items-center justify-center gap-1 transition-all border-2 ${selectedPaymentMethod === 'CREDIT_CARD' ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg shadow-indigo-600/20' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'}`}
                         >
-                            <i className="fat fa-credit-card text-2xl"></i>
-                            <span className="text-xs font-black uppercase tracking-widest">{t('paymentCreditCard') || 'Kredi Kartı'}</span>
+                            <i className="fat fa-credit-card text-xl"></i>
+                            <span className="text-[10px] font-black uppercase tracking-widest">{t('paymentCreditCard') || 'Kredi Kartı'}</span>
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 pb-4">
+                        <button
+                            onClick={() => handleCompleteSale(selectedPaymentMethod, false)}
+                            className="bg-slate-500/10 hover:bg-slate-500/20 text-slate-600 dark:text-slate-400 rounded-2xl py-4 flex flex-col items-center justify-center gap-1 transition-all border border-slate-500/20 active:scale-95 shadow-sm"
+                        >
+                            <i className="fat fa-save text-xl text-slate-500"></i>
+                            <span className="text-xs font-black uppercase tracking-widest">Kaydet</span>
+                        </button>
+                        <button
+                            onClick={() => handleCompleteSale(selectedPaymentMethod, true)}
+                            className="bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded-2xl py-4 flex flex-col items-center justify-center gap-1 transition-all border border-orange-500/20 active:scale-95 shadow-sm"
+                        >
+                            <div className="flex gap-2 items-center">
+                                <i className="fat fa-save text-xl text-orange-500"></i>
+                                <i className="fat fa-print text-xl text-orange-500"></i>
+                            </div>
+                            <span className="text-xs font-black uppercase tracking-widest">Fiş Yazdır</span>
                         </button>
                     </div>
                 </div>
             </div>
+
+            {/* PIN Entry Overlay */}
+            {isPinRequired && (
+                <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4">
+                    <div className="w-full max-w-md flex flex-col items-center">
+                        <div className="w-24 h-24 bg-orange-500/20 rounded-[32px] flex items-center justify-center mb-8 border border-orange-500/20 shadow-2xl shadow-orange-500/10">
+                            <i className="fat fa-bolt text-5xl text-orange-500"></i>
+                        </div>
+
+                        <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-tighter">HIZLI SATIŞ GİRİŞİ</h2>
+                        <p className="text-slate-400 font-bold mb-10 tracking-widest text-xs uppercase">Devam etmek için 4 haneli PIN kodunuzu girin</p>
+
+                        <div className="flex items-center justify-center gap-5 mb-12">
+                            {[0, 1, 2, 3].map(i => (
+                                <div
+                                    key={i}
+                                    className={`w-5 h-5 rounded-full border-2 transition-all duration-300 ${pinCode.length > i ? 'bg-orange-500 border-orange-500 shadow-[0_0_20px_rgba(249,115,22,0.6)] scale-110' : 'bg-transparent border-slate-700'}`}
+                                />
+                            ))}
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-6 w-full max-w-[320px]">
+                            {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(n => (
+                                <button
+                                    key={n}
+                                    onClick={() => handlePinClick(n)}
+                                    className="w-20 h-20 rounded-[28px] bg-white/5 hover:bg-white/10 text-3xl font-black text-white transition-all active:scale-90 border border-white/5 shadow-xl backdrop-blur-sm"
+                                >
+                                    {n}
+                                </button>
+                            ))}
+                            <div />
+                            <button
+                                onClick={() => handlePinClick('0')}
+                                className="w-20 h-20 rounded-[28px] bg-white/5 hover:bg-white/10 text-3xl font-black text-white transition-all active:scale-90 border border-white/5 shadow-xl backdrop-blur-sm"
+                            >
+                                0
+                            </button>
+                            <button
+                                onClick={() => setPinCode('')}
+                                className="w-20 h-20 rounded-[28px] flex items-center justify-center text-slate-400 hover:text-rose-400 transition-colors bg-white/5 hover:bg-rose-500/10 border border-white/5"
+                            >
+                                <i className="fat fa-delete-left text-2xl"></i>
+                            </button>
+                        </div>
+
+                        <button
+                            onClick={() => router.push(`/${locale}/dashboard`)}
+                            className="mt-12 text-slate-500 hover:text-white font-bold text-sm uppercase tracking-widest flex items-center gap-2 transition-colors py-3 px-6 rounded-full hover:bg-white/5"
+                        >
+                            <i className="fat fa-reply"></i> İptal - Panoya Dön
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

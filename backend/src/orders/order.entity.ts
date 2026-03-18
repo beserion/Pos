@@ -9,39 +9,47 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { OrderItem } from './order-item.entity';
-import { Table } from '../tables/table.entity';
-import { User } from '../users/user.entity';
+import { Partner } from '../partners/partner.entity';
 
 @Entity('orders')
 export class Order {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ default: 'NEW' })
-  status: string; // 'NEW', 'IN_PREPARATION', 'READY', 'SERVED', 'CANCELLED'
+  @ManyToOne(() => Partner, { nullable: true })
+  @JoinColumn({ name: 'supplierId' })
+  supplier: Partner;
+
+  @Column({ nullable: true })
+  supplierId: number;
+
+  @Column({ default: 'DRAFT' })
+  status: string; // DRAFT, SENT, RECEIVED, CANCELLED
 
   @Column('decimal', { precision: 12, scale: 2, default: 0 })
   totalAmount: number;
 
-  @Column('decimal', { precision: 12, scale: 2, default: 0 })
-  discountAmount: number;
+  @Column({ nullable: true })
+  note: string;
 
-  @Column('decimal', { precision: 12, scale: 2, default: 0 })
-  serviceFee: number;
+  // Invoice (Fatura) fields
+  @Column({ nullable: true, type: 'nvarchar', length: 100 })
+  invoiceNumber: string | null;
 
-  @ManyToOne(() => Table, { nullable: true })
-  @JoinColumn({ name: 'tableId' })
-  table: Table;
+  @Column({ nullable: true, type: 'nvarchar', length: 20 })
+  invoiceDateStr: string | null;
 
-  @ManyToOne(() => User, { nullable: true })
-  @JoinColumn({ name: 'waiterId' })
-  waiter: User;
+  @Column('decimal', { precision: 12, scale: 2, nullable: true })
+  invoiceAmount: number;
+
+  @Column({ default: 'UNPAID' })
+  paymentStatus: string; // UNPAID, PARTIAL, PAID
+
+  @Column({ type: 'nvarchar', length: 50, nullable: true })
+  paymentMethod: string | null; // KASA, BANKA, KREDI_KARTI
 
   @OneToMany(() => OrderItem, (item) => item.order, { cascade: true })
   items: OrderItem[];
-
-  @Column({ nullable: true })
-  note: string;
 
   @CreateDateColumn()
   createdAt: Date;

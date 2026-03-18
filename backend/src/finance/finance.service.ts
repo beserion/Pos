@@ -2,19 +2,67 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AccountTransaction } from './account-transaction.entity';
+import { PartnersService } from '../partners/partners.service';
+import { CompanyAccountService } from './company-account.service';
 
 @Injectable()
 export class FinanceService {
   constructor(
     @InjectRepository(AccountTransaction)
     private transactionRepository: Repository<AccountTransaction>,
+    private partnersService: PartnersService,
+    private companyAccountService: CompanyAccountService,
   ) {}
 
-  async findAll(): Promise<AccountTransaction[]> {
-    return await this.transactionRepository.find({
-      relations: ['user'],
-      order: { createdAt: 'DESC' },
-    });
+  async findAll(
+    page: number = 1,
+    limit: number = 20,
+    search?: string,
+    startDate?: string,
+    endDate?: string,
+    type?: string,
+    paymentMethod?: string,
+  ): Promise<{ data: AccountTransaction[]; total: number; page: number; lastPage: number }> {
+    const query = this.transactionRepository.createQueryBuilder('transaction')
+      .leftJoinAndSelect('transaction.user', 'user')
+      .orderBy('transaction.createdAt', 'DESC');
+
+    if (search) {
+      query.andWhere(
+        '(transaction.description LIKE :search OR transaction.category LIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    if (startDate) {
+      query.andWhere('transaction.createdAt >= :startDate', { startDate: new Date(startDate) });
+    }
+
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      query.andWhere('transaction.createdAt <= :endDate', { endDate: end });
+    }
+
+    if (type && type !== 'ALL') {
+      query.andWhere('transaction.type = :type', { type });
+    }
+
+    if (paymentMethod && paymentMethod !== 'ALL') {
+      query.andWhere('transaction.paymentMethod = :paymentMethod', { paymentMethod });
+    }
+
+    const [transactions, total] = await query
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    return {
+      data: transactions,
+      total,
+      page,
+      lastPage: Math.ceil(total / limit),
+    };
   }
 
   async findOne(id: number): Promise<AccountTransaction> {
@@ -28,7 +76,50 @@ export class FinanceService {
 
   async create(data: Partial<AccountTransaction>): Promise<AccountTransaction> {
     const transaction = this.transactionRepository.create(data);
-    return await this.transactionRepository.save(transaction);
+    const saved = await this.transactionRepository.save(transaction);
+
+    // Update Company Account Balance
+    if (saved.companyAccountId) {
+      await this.companyAccountService.updateBalance(
+        saved.companyAccountId,
+        saved.amount,
+        saved.type as 'INCOME' | 'EXPENSE',
+      );
+    }
+
+    if (saved.partnerId) {
+      try {
+        // ERP Logic mapping:
+        // A Sale (Gelir) increases what the customer owes (Borçlandırma -> DEBIT)
+        // A Payment (Gelir) decreases what the customer owes (Tahsilat -> CREDIT)
+        // A Purchase (Gider) increases what we owe the supplier (Borçlanma -> DEBIT)
+        
+        let erpType: 'DEBIT' | 'CREDIT' | 'INCOME' | 'EXPENSE' = saved.type as any;
+        
+        if (saved.type === 'INCOME') {
+          // If it's a Sale, it's a Debit to the customer
+          if (saved.category === 'Satış' || saved.sourceType === 'ORDER' || saved.sourceType === 'SALE') {
+            erpType = 'DEBIT';
+          } else {
+            // Otherwise assume it's a collection/payment received
+            erpType = 'CREDIT';
+          }
+        } else if (saved.type === 'EXPENSE') {
+          // Purchases increase our debt to supplier (Debit for the ledger account)
+          erpType = 'DEBIT';
+        }
+
+        await this.partnersService.updateBalance(
+          saved.partnerId,
+          saved.amount,
+          erpType,
+        );
+      } catch (err) {
+        console.error('Error updating partner balance:', err);
+      }
+    }
+
+    return saved;
   }
 
   async update(
@@ -41,7 +132,18 @@ export class FinanceService {
   }
 
   async remove(id: number): Promise<void> {
-    await this.findOne(id);
+    const tx = await this.findOne(id);
+    
+    // Reverse the balance before deleting
+    if (tx.companyAccountId) {
+      const reverseType = tx.type === 'INCOME' ? 'EXPENSE' : 'INCOME';
+      await this.companyAccountService.updateBalance(
+        tx.companyAccountId,
+        tx.amount,
+        reverseType
+      );
+    }
+
     await this.transactionRepository.delete(id);
   }
 

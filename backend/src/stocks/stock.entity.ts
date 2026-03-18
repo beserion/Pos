@@ -29,6 +29,12 @@ export class Stock {
   @Column({ nullable: true })
   lotNumber: string;
 
+  @Column({ nullable: true })
+  barcode: string;
+
+  @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
+  description: string;
+
   @Column({ type: 'date', nullable: true })
   expirationDate: Date;
 

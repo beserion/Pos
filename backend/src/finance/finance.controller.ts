@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { FinanceService } from './finance.service';
@@ -18,8 +19,16 @@ export class FinanceController {
   constructor(private readonly financeService: FinanceService) {}
 
   @Get('transactions')
-  getTransactions() {
-    return this.financeService.findAll();
+  getTransactions(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 20,
+    @Query('search') search?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('type') type?: string,
+    @Query('paymentMethod') paymentMethod?: string,
+  ) {
+    return this.financeService.findAll(+page, +limit, search, startDate, endDate, type, paymentMethod);
   }
 
   @Get('summary')
