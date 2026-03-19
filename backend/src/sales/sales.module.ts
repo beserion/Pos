@@ -9,6 +9,7 @@ import { RecipesModule } from '../recipes/recipes.module';
 import { StocksModule } from '../stocks/stocks.module';
 import { FinanceModule } from '../finance/finance.module';
 import { PartnersModule } from '../partners/partners.module';
+import { PrintersModule } from '../printers/printers.module';
 import { Table } from '../tables/table.entity';
 import { User } from '../users/user.entity';
 import { KitchenGateway } from '../orders/kitchen.gateway';
@@ -21,6 +22,7 @@ import { KitchenGateway } from '../orders/kitchen.gateway';
     StocksModule,
     FinanceModule,
     PartnersModule,
+    PrintersModule,
   ],
   providers: [SalesService, KitchenGateway],
   controllers: [SalesController],

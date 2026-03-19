@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "electron:dev": "electron .",
-    "electron:build": "next build && electron-builder",
+    "electron:build": "set NEXT_OUTPUT=standalone && next build && electron-builder",
     "android:build": "next build && npx cap copy && npx cap sync",
     "android:open": "npx cap open android"
   },
@@ -64,7 +64,10 @@
       "output": "dist"
     },
     "win": {
-      "target": "zip",
+      "target": [
+        "nsis",
+        "zip"
+      ],
       "icon": "public/favicon.ico",
       "asar": false
     },

@@ -369,7 +369,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                         <button
                             onClick={onSwitchToTakeOrder}
                             className="group flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-all bg-teal-500/10 hover:bg-teal-500/20 text-teal-600 dark:text-teal-400 backdrop-blur-md px-5 py-2.5 rounded-full border border-teal-500/20 shadow-sm active:scale-95">
-                            <i className="fat fa-desktop text-teal-500 group-hover:animate-pulse"></i> POS PC
+                            <i className="fat fa-desktop text-teal-500 group-hover:animate-pulse"></i> Sipariş Ekranı
                         </button>
 
                         <button

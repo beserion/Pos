@@ -105,6 +105,8 @@
         "tabletDesc": "Waiter Order Interface",
         "deliveries": "Delivery Services",
         "deliveriesDesc": "Active and past delivery tracking",
+        "companyAccounts": "Company Accounts",
+        "companyAccountsDesc": "Bank, cash and card balance management",
         "quickSale": "Quick Sale",
         "quickSaleDesc": "Quick sale interface",
         "orderDetail": "Order Detail",

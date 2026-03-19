@@ -76,6 +76,8 @@
         "recipesDesc": "Anweisungen zur Verwendung von Rohstoffen",
         "deliveries": "Lieferverfolgung",
         "deliveriesDesc": "Externe Bestellvorgänge",
+        "companyAccounts": "Firma-Konten",
+        "companyAccountsDesc": "Verwaltung von Bank-, Kassen- und Kartenbeständen",
         "couriers": "Kurierverwaltung",
         "couriersDesc": "Kurierzuweisung und -verfolgung",
         "orders": "Bestellverwaltung",
@@ -452,7 +454,8 @@
         "deleteError": "Fehler beim Löschen der Rolle"
     },
     "Finance": {
-        "subtitle": "Kontobewegungen, Kassen-, Bank- und Kartentransaktionen.",
+        "title": "FINANZE",
+        "subtitle": "Account movements, cash, bank and card transactions.",
         "newTransaction": "Neue Buchung",
         "totalIncome": "Gesamteinnahmen",
         "totalExpense": "Gesamtausgaben",
@@ -489,5 +492,40 @@
         "catOther": "Sonstiges",
         "saveButton": "Speichern",
         "updateButton": "Aktualisieren"
+    },
+    "Warehouses": {
+        "title": "LAGERVERWALTUNG",
+        "subtitle": "Verwalten Sie Bestands-Lagereinrichtungen und Terminal-Definitionen.",
+        "newWarehouse": "Neues Lager",
+        "totalWarehouses": "Lager Gesamt",
+        "activeWarehouses": "Aktive Lager",
+        "loading": "Lager werden geladen...",
+        "tableId": "ID",
+        "tableName": "Lagername",
+        "tableLocation": "Standort / Adresse",
+        "tableActions": "Aktionen",
+        "statusActive": "AKTIV",
+        "statusPassive": "PASSIV",
+        "modalNew": "NEUES LAGER HINZÜFUGEN",
+        "modalEdit": "LAGER BEARBEITEN",
+        "modalSubtitle": "Lager- und Bestandszentrumsinformationen definieren",
+        "labelName": "Lagername",
+        "labelLocation": "Zugeordnete Filiale",
+        "labelAddress": "Adresse / Standort",
+        "placeholderName": "z.B. Zentrallager",
+        "saveButton": "LAGER SPEICHERN",
+        "deleteConfirmTitle": "Sind Sie sicher?",
+        "deleteConfirmText": "Möchten Sie dieses Lager wirklich löschen?",
+        "deleteSuccess": "Lager erfolgreich gelöscht."
+    },
+    "QRMenu": {
+        "title": "Digitales Menü",
+        "welcome": "Willkommen",
+        "table": "Tisch",
+        "noDescription": "Köstliches Essen",
+        "all": "Alle",
+        "loading": "Menü wird vorbereitet...",
+        "footer": "Menü-System von PosNetX",
+        "priceSymbol": "€"
     }
 }

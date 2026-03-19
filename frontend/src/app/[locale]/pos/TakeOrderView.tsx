@@ -1,11 +1,12 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../AuthContext';
 import { useRouter } from 'next/navigation';
 import { showSwal, toastSwal } from '../utils/swal';
 import { useLocale, useTranslations } from 'next-intl';
 import Cookies from 'js-cookie';
 import { useTheme } from 'next-themes';
+import { useParameters } from '../utils/useParameters';
 
 interface Modifier {
     id: number;
@@ -22,11 +23,11 @@ interface Product {
     printerId?: number;
     modifiers?: Modifier[];
 }
-interface OrderItem { product: Product; quantity: number; note?: string; }
+interface OrderItem { product: Product; quantity: number; note?: string; isWaiting?: boolean; }
 interface ExistingOrder {
     id: number;
     totalAmount: number;
-    items: { id: number; product: { id: number; name: string; price: number }; quantity: number; unitPrice: number; isPaid: boolean; }[];
+    items: { id: number; product: { id: number; name: string; price: number }; quantity: number; unitPrice: number; isPaid: boolean; isWaiting: boolean; isMarshed: boolean; }[];
 }
 interface Zone { id: number; name: string; }
 interface Table { id: number; name: string; status: string; waiterName?: string; orderStartTime?: string; currentTotal?: number; zone: { id: number } }
@@ -62,10 +63,11 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [isSending, setIsSending] = useState(false);
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+    const { params } = useParameters();
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         try {
-            const token = Cookies.get('token') || (user as any)?.token;
+            const token = Cookies.get('token') || localStorage.getItem('token');
             if (!token) return;
             const [productsRes, tablesRes, zonesRes] = await Promise.all([
                 fetch(`${API_URL}/products`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
@@ -81,7 +83,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         } finally {
             setDataLoading(false);
         }
-    };
+    }, [API_URL]);
 
     useEffect(() => {
         setMounted(true);
@@ -89,9 +91,8 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     useEffect(() => {
         if (!loading && !user) router.push(`/${locale}/login`);
-        if (user) {
+        if (!loading && user) {
             fetchData();
-            // Check for shared POS session
             const cachedSession = sessionStorage.getItem('posActiveSession');
             if (cachedSession) {
                 try {
@@ -103,7 +104,34 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                 }
             }
         }
-    }, [user, loading, router]);
+    }, [user, loading]); // router kasıtlı olarak çıkarıldı — her render'da yeni ref döner, sonsuz döngüye yol açar
+
+    // ─── Hareketsizlik zamanlayıcısı ─────────────────────────────────
+    useEffect(() => {
+        const timeoutMinutes = params.screen_timeout;
+        if (!timeoutMinutes || timeoutMinutes <= 0) return; // 0 = kapalı
+
+        const timeoutMs = timeoutMinutes * 1000; // artık saniye cinsinden
+        let timer: ReturnType<typeof setTimeout>;
+
+        const resetTimer = () => {
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                // Zaman aşımı — PIN ekranına kilitle
+                setIsPinRequired(true);
+                sessionStorage.removeItem('posActiveSession');
+            }, timeoutMs);
+        };
+
+        const events = ['mousemove', 'mousedown', 'touchstart', 'keydown', 'click', 'scroll'];
+        events.forEach(e => window.addEventListener(e, resetTimer, { passive: true }));
+        resetTimer(); // İlk başlatma
+
+        return () => {
+            clearTimeout(timer);
+            events.forEach(e => window.removeEventListener(e, resetTimer));
+        };
+    }, [params.screen_timeout]); // isPinRequired'a bağlı değil — her pin girişinde yeniden başlar
 
     const handlePinSubmit = async (val: string) => {
         try {
@@ -176,7 +204,8 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             if (existing) {
                 return prev.map(item => (item.product.id === product.id && item.note === note) ? { ...item, quantity: item.quantity + 1 } : item);
             }
-            return [...prev, { product, quantity: 1, note }];
+            // mars_default_items parametresi aktifse eklenen ürünler varsayılan beklet konumunda açılsın
+            return [...prev, { product, quantity: 1, note, isWaiting: params.mars_default_items || false }];
         });
     };
 
@@ -223,7 +252,8 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                     productId: item.product.id,
                     quantity: item.quantity,
                     unitPrice: item.product.price,
-                    note: item.note
+                    note: item.note,
+                    isWaiting: item.isWaiting || false
                 }))
             };
 
@@ -252,7 +282,8 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                     items: kitchenItems.map(item => ({
                         name: item.product.name,
                         quantity: item.quantity,
-                        printerId: item.product.printerId
+                        printerId: item.product.printerId,
+                        isWaiting: item.isWaiting || false
                     }))
                 };
 
@@ -379,6 +410,20 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             showSwal({ icon: 'error', title: 'Hata', text: 'Ödeme işaretlenemedi.' });
         }
     };
+    const marsItem = async (itemId: number) => {
+        const token = localStorage.getItem('token') || (user as any)?.token;
+        try {
+            const res = await fetch(`${API_URL}/sales/items/${itemId}/mars`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) throw new Error('Mars failed');
+            toastSwal({ icon: 'success', title: 'MARŞ VERİLDİ', text: 'Üretim mutfağa bildirildi.' });
+            await handleTableClick(selectedTable!);
+        } catch (err) {
+            showSwal({ icon: 'error', title: 'Hata', text: 'Marş verilemedi.' });
+        }
+    };
     const payMultipleItems = async () => {
         const token = localStorage.getItem('token') || (user as any)?.token;
         const unpaidItems = existingOrders.flatMap(o => o.items).filter(i => !i.isPaid);
@@ -497,7 +542,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                         </div>
                         <div>
                             <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 leading-tight">
-                                POS PC (Masa{selectedTable ? ` - ${selectedTable.name}` : ''})
+                                Sipariş Ekranı{selectedTable ? ` — ${selectedTable.name}` : ''}
                             </h1>
                             <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-widest mt-1">Sipariş eklemek istediğiniz masayı ve ürünleri seçin.</p>
                         </div>
@@ -728,8 +773,21 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                                 onClick={() => payItem(item.id)}
                                                 className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1"
                                             >
-                                                <i className="fat fa-circle-check text-[10px]"></i> Ödendi İşaretle
+                                                <i className="fat fa-circle-check text-[10px]"></i> Öde
                                             </button>
+                                        )}
+                                        {item.isWaiting && !item.isMarshed && (
+                                            <button
+                                                onClick={() => marsItem(item.id)}
+                                                className="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400 hover:text-rose-700 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 border border-rose-200 dark:border-rose-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1 animate-pulse"
+                                            >
+                                                <i className="fat fa-fire-flame-curved text-[10px]"></i> MARŞ VER
+                                            </button>
+                                        )}
+                                        {item.isWaiting && item.isMarshed && (
+                                            <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-full flex items-center gap-1">
+                                               <i className="fat fa-check text-[10px]"></i> Marshed
+                                            </span>
                                         )}
                                     </div>
                                 </div>
@@ -773,6 +831,19 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                             <button onClick={() => removeEntireItem(item)} className="w-8 h-8 flex items-center justify-center text-rose-500 hover:text-rose-600 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 rounded-md transition-colors" title="Ürünü İptal Et">
                                                 <i className="fat fa-trash"></i>
                                             </button>
+                                            {params.mars_enabled && (
+                                            <button
+                                                onClick={() => {
+                                                    setCart(prev => prev.map((it, idx) => 
+                                                        idx === index ? { ...it, isWaiting: !it.isWaiting } : it
+                                                    ));
+                                                }}
+                                                className={`w-8 h-8 flex items-center justify-center rounded-md transition-all ${item.isWaiting ? 'bg-amber-500 text-white shadow-lg' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`}
+                                                title={item.isWaiting ? 'Beklesin Olarak İşaretli' : 'Beklesin Olarak İşaretle'}
+                                            >
+                                                <i className="fat fa-clock"></i>
+                                            </button>
+                                            )}
                                             <div className="flex items-center gap-3 bg-slate-100 dark:bg-slate-700/50 rounded-lg p-1">
                                                 <button onClick={() => removeFromCart(item)} className="w-7 h-7 flex items-center justify-center text-red-500 font-bold hover:bg-white dark:hover:bg-slate-600 rounded-md transition-colors">-</button>
                                                 <span className="font-bold text-sm min-w-[1rem] text-center dark:text-white">{item.quantity}</span>

@@ -28,6 +28,7 @@ import { User } from './users/user.entity';
 import { ReportsModule } from './reports/reports.module';
 import { ReservationsModule } from './reservations/reservations.module';
 import { ModifiersModule } from './modifiers/modifiers.module';
+import { ParametersModule } from './parameters/parameters.module';
 import { Role } from './roles/role.entity';
 import { Product } from './products/product.entity';
 import { Stock } from './stocks/stock.entity';
@@ -53,6 +54,7 @@ import { PurchaseOrder } from './purchase-orders/purchase-order.entity';
 import { PurchaseOrderItem } from './purchase-orders/purchase-order-item.entity';
 import { Reservation } from './reservations/reservation.entity';
 import { Modifier } from './modifiers/modifier.entity';
+import { Parameter } from './parameters/parameter.entity';
 
 import { ScheduleModule } from '@nestjs/schedule';
 
@@ -103,6 +105,7 @@ import { ScheduleModule } from '@nestjs/schedule';
             EmployeeDocument,
             Reservation,
             Warehouse,
+            Parameter,
           ],
           synchronize: false, // Migrations managed manually via migrate-remote.js
           options: {
@@ -152,6 +155,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     ReportsModule,
     ReservationsModule,
     ModifiersModule,
+    ParametersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,6 +1,6 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { useAuth } from '../AuthContext';
@@ -11,18 +11,21 @@ import { useTheme } from 'next-themes';
 
 interface Product { id: number; name: string; price: number; category: string; imageUrl?: string; printerId?: number; }
 interface OrderItem { product: Product; quantity: number; }
+interface SaleItem { id: number; productName: string; quantity: number; unitPrice: number; total: number; status: string; }
+interface TableSale { id: number; totalAmount: number; status: string; items: SaleItem[]; }
 interface Table {
     id: number;
     name: string;
     status: string;
     zone: { id: number };
     waiterName?: string;
+    waiterId?: number;
     orderStartTime?: string;
 }
 interface Zone { id: number; name: string; }
 
 export function PageClient() {
-    const { user, loginPin, loading } = useAuth();
+    const { user, loginPin, loginPinOnly, loading } = useAuth();
     const router = useRouter();
     const locale = useLocale();
     const t = useTranslations('Common');
@@ -38,10 +41,14 @@ export function PageClient() {
     const [cart, setCart] = useState<OrderItem[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string>('Tümü');
 
-    const [waiters, setWaiters] = useState<any[]>([]);
-    const [pinWaiter, setPinWaiter] = useState<any | null>(null);
     const [pinCode, setPinCode] = useState('');
     const [isPinRequired, setIsPinRequired] = useState(true);
+    const [isReadOnly, setIsReadOnly] = useState(false);
+    const [tableOrders, setTableOrders] = useState<TableSale[]>([]); // Dolu masanın siparişleri
+    const [tableOrdersLoading, setTableOrdersLoading] = useState(false);
+
+    const searchParams = useSearchParams();
+    const bypass = searchParams.get('bypass') === '1';
 
     const API_URL = 'http://localhost:3050';
 
@@ -68,31 +75,18 @@ export function PageClient() {
         }
     };
 
-    const fetchWaiters = async () => {
-        try {
-            const token = Cookies.get('token') || localStorage.getItem('token');
-            const res = await axios.get(`${API_URL}/auth/waiters`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setWaiters(res.data);
-        } catch (e) {
-            console.error('Error fetching waiters:', e);
-        }
-    };
 
     useEffect(() => {
         setMounted(true);
-        // Default to dark mode for waiter if not already set or as per user request
-        if (!localStorage.getItem('theme')) {
-            setTheme('dark');
-        }
-    }, [setTheme]);
+        if (!localStorage.getItem('theme')) setTheme('dark');
+        // /waiter/login'den yönlendirildiyse PIN ekranını atla
+        if (bypass) setIsPinRequired(false);
+    }, [setTheme, bypass]);
 
     useEffect(() => {
         if (!loading && !user) router.push(`/${locale}/waiter/login`);
         if (user) {
             fetchData();
-            fetchWaiters();
 
             // WebSocket Connection for Real-time alerts
             const socket = io(API_URL);
@@ -131,13 +125,14 @@ export function PageClient() {
     }, [user, loading, router]);
 
     const handlePinSubmit = async (val: string) => {
-        if (!pinWaiter) return;
         try {
-            await loginPin(pinWaiter.id, val);
-            setIsPinRequired(false);
-            setPinCode('');
-            toastSwal({ icon: 'success', title: `Hoşgeldin, ${pinWaiter.firstName}` });
-        } catch (e) {
+            const res = await loginPinOnly(val);
+            if (res) {
+                setIsPinRequired(false);
+                setPinCode('');
+                toastSwal({ icon: 'success', title: `Hoşgeldin, ${res.firstName}` });
+            } else throw new Error('no user');
+        } catch {
             setPinCode('');
             showSwal({ icon: 'error', title: 'Hatalı PIN', text: 'Lütfen tekrar deneyin.' });
         }
@@ -156,12 +151,17 @@ export function PageClient() {
     const categories = ['Tümü', ...Array.from(new Set(products.map(p => p.category)))];
 
     const handleTableClick = (table: Table) => {
+        const activeWaiterId = user?.id;
+        // DOLU masa ve farklı garsona aitse → sadece görüntüle
+        const readOnly = table.status === 'DOLU' && !!table.waiterId && table.waiterId !== activeWaiterId;
+        setIsReadOnly(readOnly);
         setSelectedTable(table);
         setActiveTab('menu');
         setCart([]);
     };
 
     const addToCart = (product: Product) => {
+        if (isReadOnly) return;
         setCart(prev => {
             const existing = prev.find(item => item.product.id === product.id);
             if (existing) {
@@ -172,6 +172,7 @@ export function PageClient() {
     };
 
     const removeFromCart = (product: Product) => {
+        if (isReadOnly) return;
         setCart(prev => {
             const existing = prev.find(item => item.product.id === product.id);
             if (existing && existing.quantity === 1) return prev.filter(i => i.product.id !== product.id);
@@ -269,7 +270,6 @@ export function PageClient() {
                     {!isPinRequired && (
                         <button onClick={() => {
                             setIsPinRequired(true);
-                            setPinWaiter(null);
                         }} className="text-white hover:text-rose-200 text-sm font-medium transition flex items-center gap-2">
                             <i className="fat fa-reply"></i> Çıkış
                         </button>
@@ -340,12 +340,24 @@ export function PageClient() {
                             </div>
                         </div>
 
+                        {/* Read-only uyarı banneri */}
+                        {isReadOnly && (
+                            <div className="mb-4 px-4 py-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center gap-3">
+                                <i className="fat fa-eye text-amber-400 text-lg" />
+                                <div>
+                                    <p className="text-amber-400 font-black text-sm uppercase tracking-wide">Görüntüleme Modu</p>
+                                    <p className="text-amber-400/70 text-xs font-medium">Bu masa <b>{selectedTable?.waiterName}</b> tarafından açıldı. Ekleme / silme yapamazsınız.</p>
+                                </div>
+                            </div>
+                        )}
                         <div className="grid grid-cols-2 gap-3 mb-6">
                             {filteredProducts.map(p => (
                                 <button
                                     key={p.id}
                                     onClick={() => addToCart(p)}
-                                    className="relative h-32 bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 dark:border-slate-700 overflow-hidden active:scale-95 transition-all group"
+                                    disabled={isReadOnly}
+                                    className={`relative h-32 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden transition-all group
+                                        ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-md active:scale-95'}`}
                                 >
                                     {/* Arka Plan Görseli / Emoji Mapped Area */}
                                     <div className="absolute inset-0 bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center transition-transform duration-500 group-hover:scale-105">
@@ -379,7 +391,7 @@ export function PageClient() {
                 )}
             </div>
 
-            {activeTab === 'menu' && cart.length > 0 && (
+            {activeTab === 'menu' && cart.length > 0 && !isReadOnly && (
                 <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 p-4 border-t border-slate-200 dark:border-slate-700 shadow-2xl rounded-t-3xl z-30 animate-in slide-in-from-bottom">
                     <div className="max-h-48 overflow-y-auto mb-4 space-y-2 pr-2">
                         {cart.map((item, idx) => (
@@ -407,88 +419,48 @@ export function PageClient() {
                 </div>
             )}
 
-            {/* PIN Entry Overlay */}
+            {/* PIN Entry Overlay — Sadece PIN, garson seçimi yok */}
             {isPinRequired && (
                 <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4">
                     <div className="w-full max-w-md bg-slate-900 rounded-[40px] shadow-2xl p-8 flex flex-col items-center relative overflow-hidden border border-white/10">
-                        {/* Decorative Background for Dark Mode */}
-                        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-500/5 blur-[80px] pointer-events-none"></div>
+                        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-500/5 blur-[80px] pointer-events-none" />
 
                         <div className="w-20 h-20 bg-indigo-500/20 rounded-full flex items-center justify-center mb-6 border border-indigo-500/30">
                             <span className="text-4xl">🔐</span>
                         </div>
 
-                        {!pinWaiter ? (
-                            <>
-                                <h2 className="text-2xl font-black text-white mb-2 uppercase tracking-tight">Garson Seçimi</h2>
-                                <p className="text-slate-400 mb-8">Lütfen giriş yapmak için adınızı seçin.</p>
-                                <div className="grid grid-cols-2 w-full gap-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
-                                    {waiters.map(w => (
-                                        <button
-                                            key={w.id}
-                                            onClick={() => setPinWaiter(w)}
-                                            className="w-full py-4 px-6 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-white/5 hover:border-indigo-500/50 text-left font-bold text-white transition-all flex items-center justify-between group shadow-lg"
-                                        >
-                                            <span>{w.firstName} {w.lastName}</span>
-                                            <span className="opacity-0 group-hover:opacity-100 transition-opacity">➡️</span>
-                                        </button>
-                                    ))}
-                                    {waiters.length === 0 && (
-                                        <p className="text-center text-slate-500 italic py-4">Sistemde garson bulunamadı.</p>
-                                    )}
-                                </div>
-                            </>
-                        ) : (
-                            <>
-                                <button
-                                    onClick={() => setPinWaiter(null)}
-                                    className="absolute top-10 left-10 text-slate-500 hover:text-white flex items-center gap-2 font-bold transition-colors"
-                                >
-                                    ⬅️ Geri
+                        <h2 className="text-2xl font-black text-white mb-2 uppercase tracking-tight">PIN Kodunuzu Girin</h2>
+                        <p className="text-slate-400 mb-8">4 haneli PIN kodunuzu girin.</p>
+
+                        <div className="flex gap-4 mb-10">
+                            {[0, 1, 2, 3].map(i => (
+                                <div key={i}
+                                    className={`w-4 h-4 rounded-full border-2 border-indigo-500/50 transition-all duration-300
+                                        ${pinCode.length > i ? 'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.8)] scale-110' : 'bg-slate-800'}`}
+                                />
+                            ))}
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-6 w-full max-w-[280px]">
+                            {['1','2','3','4','5','6','7','8','9'].map(n => (
+                                <button key={n} onClick={() => handlePinClick(n)}
+                                    className="w-16 h-16 rounded-full bg-slate-800 hover:bg-slate-700 text-2xl font-black text-white transition-all active:scale-90 border border-white/5 shadow-lg">
+                                    {n}
                                 </button>
-                                <h2 className="text-2xl font-black text-white mb-2 uppercase tracking-tight">{pinWaiter.firstName} {pinWaiter.lastName}</h2>
-                                <p className="text-slate-400 mb-8">4 haneli PIN kodunuzu girin.</p>
+                            ))}
+                            <div />
+                            <button onClick={() => handlePinClick('0')}
+                                className="w-16 h-16 rounded-full bg-slate-800 hover:bg-slate-700 text-2xl font-black text-white transition-all active:scale-90 border border-white/5 shadow-lg">
+                                0
+                            </button>
+                            <button onClick={() => setPinCode('')}
+                                className="w-16 h-16 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-400 transition-colors bg-slate-800/50 hover:bg-rose-500/10 border border-white/5">
+                                Sil
+                            </button>
+                        </div>
 
-                                <div className="flex gap-4 mb-10">
-                                    {[0, 1, 2, 3].map(i => (
-                                        <div
-                                            key={i}
-                                            className={`w-4 h-4 rounded-full border-2 border-indigo-500/50 transition-all duration-300 ${pinCode.length > i ? 'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.8)] scale-110' : 'bg-slate-800'}`}
-                                        />
-                                    ))}
-                                </div>
-
-                                <div className="grid grid-cols-3 gap-6 w-full max-w-[280px]">
-                                    {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(n => (
-                                        <button
-                                            key={n}
-                                            onClick={() => handlePinClick(n)}
-                                            className="w-16 h-16 rounded-full bg-slate-800 hover:bg-slate-700 text-2xl font-black text-white transition-all active:scale-90 border border-white/5 shadow-lg"
-                                        >
-                                            {n}
-                                        </button>
-                                    ))}
-                                    <div />
-                                    <button
-                                        onClick={() => handlePinClick('0')}
-                                        className="w-16 h-16 rounded-full bg-slate-800 hover:bg-slate-700 text-2xl font-black text-white transition-all active:scale-90 border border-white/5 shadow-lg"
-                                    >
-                                        0
-                                    </button>
-                                    <button
-                                        onClick={() => setPinCode('')}
-                                        className="w-16 h-16 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-400 transition-colors bg-slate-800/50 hover:bg-rose-500/10 border border-white/5"
-                                    >
-                                        Sil
-                                    </button>
-                                </div>
-                            </>
-                        )}
-
-                        <button
-                            onClick={() => router.push(`/${locale}/dashboard`)}
-                            className="mt-10 text-slate-500 hover:text-white font-bold text-sm uppercase tracking-widest transition-colors py-2 px-4 rounded-full hover:bg-white/5"
-                        >
+                        <button onClick={() => router.push(`/${locale}/dashboard`)}
+                            className="mt-10 text-slate-500 hover:text-white font-bold text-sm uppercase tracking-widest transition-colors py-2 px-4 rounded-full hover:bg-white/5">
                             İptal
                         </button>
                     </div>

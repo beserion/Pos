@@ -32,15 +32,15 @@ function PosContainerContent() {
 
     return (
         <div className="h-screen w-full overflow-hidden bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
-            <div style={{ display: view === 'pos' ? 'block' : 'none', height: '100%' }}>
+            {view === 'pos' && (
                 <PosView onSwitchToQuickSale={() => changeView('quicksale')} onSwitchToTakeOrder={() => changeView('takeorder')} />
-            </div>
-            <div style={{ display: view === 'quicksale' ? 'block' : 'none', height: '100%' }}>
+            )}
+            {view === 'quicksale' && (
                 <QuickSaleView onSwitchToPos={() => changeView('pos')} />
-            </div>
-            <div style={{ display: view === 'takeorder' ? 'block' : 'none', height: '100%' }}>
+            )}
+            {view === 'takeorder' && (
                 <TakeOrderView onSwitchToPos={() => changeView('pos')} />
-            </div>
+            )}
         </div>
     );
 }

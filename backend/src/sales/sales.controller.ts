@@ -20,8 +20,8 @@ export class SalesController {
 
   // --- Kitchen Display Endpoints ---
   @Get('kitchen')
-  getKitchenOrders() {
-    return this.salesService.getKitchenOrders();
+  getKitchenOrders(@Query('status') status?: string) {
+    return this.salesService.getKitchenOrders(status);
   }
 
   @Get('kitchen/counts')
@@ -74,6 +74,16 @@ export class SalesController {
   @Put('items/:id/pay')
   payItem(@Param('id') id: string, @Body() payload: { paymentMethod: string, partnerId?: number }) {
     return this.salesService.payItem(+id, payload.paymentMethod, payload.partnerId);
+  }
+
+  @Post('items/:id/mars')
+  marsItem(@Param('id') id: string) {
+    return this.salesService.marsItem(+id);
+  }
+
+  @Put('items/:id/ready')
+  readyItem(@Param('id') id: string) {
+    return this.salesService.readyItem(+id);
   }
 
   // Status update: supports both POST (legacy) and PUT (new)

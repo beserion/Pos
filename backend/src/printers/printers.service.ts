@@ -255,9 +255,7 @@ export class PrintersService {
           thermalPrinter.drawLine();
 
           thermalPrinter.alignLeft();
-          const date = new Date(data.date || new Date()).toLocaleString(
-            'tr-TR',
-          );
+          const date = new Date(data.date || new Date()).toLocaleString('tr-TR');
           thermalPrinter.println(`Tarih: ${date}`);
           thermalPrinter.println(
             `Sipariş No: ${data.receiptNumber || '000000'}`,
@@ -267,7 +265,10 @@ export class PrintersService {
           thermalPrinter.leftRight('Adet', 'Urun');
           thermalPrinter.drawLine();
 
-          for (const item of items) {
+          const immediateItems = items.filter((i: any) => !i.isWaiting);
+          const waitingItems = items.filter((i: any) => i.isWaiting);
+
+          for (const item of immediateItems) {
             const nameStr = item.name.substring(0, 30);
             thermalPrinter.bold(true);
             thermalPrinter.setTextSize(1, 1);
@@ -276,6 +277,25 @@ export class PrintersService {
             thermalPrinter.bold(false);
             if (item.note) {
               thermalPrinter.println(`Not: ${item.note}`);
+            }
+          }
+
+          if (waitingItems.length > 0) {
+            thermalPrinter.drawLine();
+            thermalPrinter.alignCenter();
+            thermalPrinter.println('--- BEKLEYENLER ---');
+            thermalPrinter.alignLeft();
+            thermalPrinter.drawLine();
+
+            for (const item of waitingItems) {
+              const nameStr = item.name.substring(0, 30);
+              thermalPrinter.bold(true);
+              thermalPrinter.setTextNormal();
+              thermalPrinter.leftRight(`${item.quantity}x`, nameStr);
+              thermalPrinter.bold(false);
+              if (item.note) {
+                thermalPrinter.println(`Not: ${item.note}`);
+              }
             }
           }
 
@@ -296,6 +316,68 @@ export class PrintersService {
       };
     } catch (error: any) {
       console.error('Mutfak Yazıcı Hatası:', error);
+      return { success: false, message: `Yazıcı hatası: ${error.message}` };
+    }
+  }
+  async printMars(
+    data: any,
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      const item = data.item;
+      if (!item) return { success: false, message: 'Ürün bilgisi yok.' };
+
+      const printerId = item.printerId;
+      const targetPrinter = await this.printerRepository.findOne({
+        where: { id: printerId, isActive: true },
+      });
+
+      if (!targetPrinter || !targetPrinter.ipAddress) {
+        return { success: false, message: 'Aktif yazıcı bulunamadı.' };
+      }
+
+      const { ThermalPrinter, PrinterTypes, CharacterSet, BreakLine } =
+        await import('node-thermal-printer');
+
+      const thermalPrinter = new ThermalPrinter({
+        type: PrinterTypes.EPSON,
+        interface: `tcp://${targetPrinter.ipAddress}`,
+        characterSet: CharacterSet.PC857_TURKISH,
+        removeSpecialCharacters: false,
+        lineCharacter: '=',
+        breakLine: BreakLine.WORD,
+        options: { timeout: 5000 },
+      });
+
+      const isConnected = await thermalPrinter.isPrinterConnected();
+      if (!isConnected) return { success: false, message: 'Yazıcı bağlantı hatası.' };
+
+      thermalPrinter.alignCenter();
+      thermalPrinter.bold(true);
+      thermalPrinter.setTextSize(2, 2);
+      thermalPrinter.println('* MARS *');
+      
+      thermalPrinter.setTextSize(1, 1);
+      thermalPrinter.println(data.tableName || 'MASA BILGISI YOK');
+      thermalPrinter.setTextNormal();
+      thermalPrinter.bold(false);
+      thermalPrinter.drawLine();
+
+      thermalPrinter.alignLeft();
+      thermalPrinter.println(`${item.quantity}x ${item.name}`);
+      if (item.note) {
+        thermalPrinter.println(`Not: ${item.note}`);
+      }
+
+      thermalPrinter.drawLine();
+      thermalPrinter.cut();
+      thermalPrinter.beep();
+
+      await thermalPrinter.execute();
+      thermalPrinter.clear();
+
+      return { success: true, message: 'Mars fişi yazdırıldı' };
+    } catch (error: any) {
+      console.error('Mars Yazıcı Hatası:', error);
       return { success: false, message: `Yazıcı hatası: ${error.message}` };
     }
   }

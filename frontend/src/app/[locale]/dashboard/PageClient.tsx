@@ -132,7 +132,7 @@ export function PageClient() {
 
                     {/* POS PC (Stand) Card */}
                     <DashboardCard
-                        title="POS PC"
+                        title="Sipariş Ekranı"
                         description="Sipariş Al (Stand PC)"
                         icon="fa-desktop"
                         color="from-rose-500 to-pink-600"

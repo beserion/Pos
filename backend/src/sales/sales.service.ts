@@ -10,6 +10,7 @@ import { User } from '../users/user.entity';
 import { KitchenGateway } from '../orders/kitchen.gateway';
 import { FinanceService } from '../finance/finance.service';
 import { PartnersService } from '../partners/partners.service';
+import { PrintersService } from '../printers/printers.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
@@ -26,6 +27,7 @@ export class SalesService implements OnModuleInit {
     private kitchenGateway: KitchenGateway,
     private financeService: FinanceService,
     private partnersService: PartnersService,
+    private printersService: PrintersService,
   ) { }
 
   async onModuleInit() {
@@ -36,12 +38,40 @@ export class SalesService implements OnModuleInit {
     try {
       const queryRunner = this.saleRepository.manager.connection.createQueryRunner();
       const table = await queryRunner.getTable('sales');
-      
-      if (table) {
-        if (!table.columns.find(c => c.name === 'isEndOfDayClosed')) {
-          this.logger.log('Adding isEndOfDayClosed column to sales table...');
-          await queryRunner.addColumn('sales', {
-            name: 'isEndOfDayClosed',
+      if (table && !table.columns.find(c => c.name === 'isEndOfDayClosed')) {
+        this.logger.log('Adding isEndOfDayClosed column to sales table...');
+        await queryRunner.addColumn('sales', {
+          name: 'isEndOfDayClosed',
+          type: 'bit',
+          isNullable: false,
+          default: 0
+        } as any);
+      }
+
+      const itemsTable = await queryRunner.getTable('sale_items');
+      if (itemsTable) {
+        if (!itemsTable.columns.find(c => c.name === 'isWaiting')) {
+          this.logger.log('Adding isWaiting column to sale_items table...');
+          await queryRunner.addColumn('sale_items', {
+            name: 'isWaiting',
+            type: 'bit',
+            isNullable: false,
+            default: 0
+          } as any);
+        }
+        if (!itemsTable.columns.find(c => c.name === 'isMarshed')) {
+          this.logger.log('Adding isMarshed column to sale_items table...');
+          await queryRunner.addColumn('sale_items', {
+            name: 'isMarshed',
+            type: 'bit',
+            isNullable: false,
+            default: 0
+          } as any);
+        }
+        if (!itemsTable.columns.find(c => c.name === 'isReady')) {
+          this.logger.log('Adding isReady column to sale_items table...');
+          await queryRunner.addColumn('sale_items', {
+            name: 'isReady',
             type: 'bit',
             isNullable: false,
             default: 0
@@ -50,7 +80,7 @@ export class SalesService implements OnModuleInit {
       }
       await queryRunner.release();
     } catch (error) {
-      this.logger.error('Error ensuring schema for sales table:', error);
+      this.logger.error('Error ensuring schema for sales tables:', error);
     }
   }
 
@@ -190,6 +220,8 @@ export class SalesService implements OnModuleInit {
             costPrice: item.costPrice || 0,
             total: item.total || (item.quantity * item.unitPrice),
             note: item.note,
+            isWaiting: item.isWaiting || false,
+            isMarshed: false,
             sale: savedSale,
           });
           await this.saleItemRepository.save(saleItem);
@@ -245,6 +277,66 @@ export class SalesService implements OnModuleInit {
     }
   }
 
+  async marsItem(itemId: number): Promise<SaleItem> {
+    const item = await this.saleItemRepository.findOne({
+      where: { id: itemId },
+      relations: ['sale', 'sale.table']
+    });
+    if (!item) throw new NotFoundException('Ürün bulunamadı');
+
+    item.isMarshed = true;
+    const updated = await this.saleItemRepository.save(item);
+
+    // Mutfak bildirimini gönder
+    this.kitchenGateway.server.emit('itemMarshed', {
+      itemId: item.id,
+      saleId: item.sale?.id,
+      tableName: item.sale?.tableName,
+      productId: item.productId,
+      isMarshed: true
+    });
+
+    // Yazıcıya gönder
+    const rawProduct = await this.saleRepository.query(`
+      SELECT p.name, p.printerId FROM products p WHERE p.id = ${item.productId}
+    `);
+    
+    if (rawProduct && rawProduct.length > 0) {
+      await this.printersService.printMars({
+        tableName: item.sale?.tableName,
+        item: {
+          name: rawProduct[0].name,
+          quantity: item.quantity,
+          note: item.note,
+          printerId: rawProduct[0].printerId
+        }
+      });
+    }
+
+    return updated;
+  }
+
+  async readyItem(itemId: number): Promise<SaleItem> {
+    const item = await this.saleItemRepository.findOne({
+      where: { id: itemId },
+      relations: ['sale']
+    });
+    if (!item) throw new NotFoundException('Ürün bulunamadı');
+
+    item.isReady = !item.isReady;
+    const updated = await this.saleItemRepository.save(item);
+
+    // Mutfak bildirimini gönder
+    this.kitchenGateway.server.emit('itemReady', {
+      itemId: item.id,
+      saleId: item.sale?.id,
+      productId: item.productId,
+      isReady: updated.isReady
+    });
+
+    return updated;
+  }
+
   async payItem(itemId: number, paymentMethod: string, partnerId?: number): Promise<void> {
     return this.payBatchItems([itemId], paymentMethod, partnerId);
   }
@@ -291,15 +383,15 @@ export class SalesService implements OnModuleInit {
     this.kitchenGateway.notifySaleUpdate({ type: 'BATCH_PAYMENT', itemIds });
   }
 
-  async getKitchenOrders(): Promise<Sale[]> {
-    const activeStatuses = ['NEW', 'PREPARATION'];
+  async getKitchenOrders(status?: string): Promise<Sale[]> {
+    const statuses = status ? [status] : ['NEW', 'PREPARATION'];
     const sales = await this.saleRepository.createQueryBuilder('sale')
       .leftJoinAndSelect('sale.items', 'items')
       .leftJoinAndSelect('sale.table', 'table')
       .leftJoinAndSelect('sale.waiter', 'waiter')
-      .where('sale.status IN (:...statuses)', { statuses: activeStatuses })
+      .where('sale.status IN (:...statuses)', { statuses })
       .andWhere('sale.tableId IS NOT NULL')
-      .orderBy('sale.createdAt', 'ASC')
+      .orderBy(status === 'READY' ? 'sale.updatedAt' : 'sale.createdAt', status === 'READY' ? 'DESC' : 'ASC')
       .getMany();
 
     return this.mapProductsToSales(sales);

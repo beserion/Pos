@@ -36,4 +36,13 @@ export class SaleItem {
 
   @Column({ default: false })
   isPaid: boolean;
+
+  @Column({ default: false })
+  isWaiting: boolean;
+
+  @Column({ default: false })
+  isMarshed: boolean;
+
+  @Column({ default: false })
+  isReady: boolean;
 }

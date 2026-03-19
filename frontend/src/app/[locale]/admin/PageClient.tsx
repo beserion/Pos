@@ -27,6 +27,7 @@ export function PageClient() {
         { title: tAdmin('roles'), subtitle: tAdmin('rolesDesc'), path: `/${locale}/admin/roles`, icon: 'fa-user-tag', color: 'text-pink-500' },
         { title: tAdmin('printers'), subtitle: tAdmin('printersDesc'), path: `/${locale}/admin/printers`, icon: 'fa-print', color: 'text-sky-500' },
         { title: tAdmin('tablet'), subtitle: tAdmin('tabletDesc'), path: `/${locale}/waiter`, icon: 'fa-tablet-screen-button', color: 'text-rose-500' },
+        { title: 'Parametreler', subtitle: 'Modül bazlı sistem ayarları', path: `/${locale}/admin/parameters`, icon: 'fa-sliders', color: 'text-violet-500' },
     ];
 
     return (
