@@ -7,6 +7,7 @@ import {
   Put,
   Delete,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './user.entity';
@@ -17,6 +18,19 @@ import { Permissions } from '../auth/permissions.decorator';
 @UseGuards(JwtAuthGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
+
+  /** GET /users/check-pin?pin=1234&excludeId=5  → { unique: true/false } */
+  @Get('check-pin')
+  async checkPin(
+    @Query('pin') pin: string,
+    @Query('excludeId') excludeId?: string,
+  ) {
+    const unique = await this.usersService.isPinUnique(
+      pin,
+      excludeId ? +excludeId : undefined,
+    );
+    return { unique };
+  }
 
   @Get()
   @Permissions('VIEW_USERS')
@@ -46,5 +60,11 @@ export class UsersController {
   @Permissions('DELETE_USERS')
   remove(@Param('id') id: string) {
     return this.usersService.remove(+id);
+  }
+
+  @Post('batch-role')
+  @Permissions('EDIT_USERS')
+  batchUpdateRole(@Body() body: { userIds: number[]; roleId: number }) {
+    return this.usersService.batchUpdateRole(body.userIds, body.roleId);
   }
 }

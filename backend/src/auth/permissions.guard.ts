@@ -47,18 +47,45 @@ export class PermissionsGuard implements CanActivate {
         throw new ForbiddenException('Rol bilgisi bulunamadı.');
       }
 
-      // Admin has full access logically, but if strictly role-based, we can either hardcode 'Admin' bypass or require explicit permissions.
-      // Let's assume Admin role bypasses check (or you can give Admin all permissions in data).
-      if (foundUser.role.name === 'Admin') {
+      // Admin role bypasses all permission checks (Case-insensitive)
+      const roleName = foundUser.role.name?.toUpperCase();
+      console.log(`[PERM] Checking user ${foundUser.email} (Role: ${roleName})`);
+      if (roleName === 'ADMIN' || roleName === 'ADMINISTRATOR') {
         return true;
       }
 
-      // Check if user has ALL required permissions for this route OR AT LEAST ONE?
-      // Usually it's "at least one" of the listed or exactly the one listed.
-      const userPermissions = foundUser.role.permissions || [];
-      const hasPermission = requiredPermissions.every((permission) =>
-        userPermissions.includes(permission),
-      );
+      const userPermissions: any = foundUser.role.permissions || [];
+      const extra: string[] = foundUser.extraPermissions || [];
+      const allUserPerms = [...(Array.isArray(userPermissions) ? userPermissions : (typeof userPermissions === 'string' ? userPermissions.split(',') : [])), ...extra];
+
+      console.log(`[PERM] User calculated perms:`, allUserPerms);
+
+      if (allUserPerms.includes('ALL')) {
+        return true;
+      }
+
+      // Support both new format (ORDERS:VIEW) and legacy format (VIEW_ORDERS)
+      const hasPermission = requiredPermissions.every((required) => {
+        // Direct match (new MODULE:ACTION format)
+        if (allUserPerms.includes(required)) return true;
+
+        // Legacy format: VIEW_ORDERS → check if ORDERS:VIEW exists
+        if (required.includes('_')) {
+          const [action, ...moduleParts] = required.split('_');
+          const moduleKey = moduleParts.join('_');
+          const newFormatKey = `${moduleKey}:${action}`;
+          if (allUserPerms.includes(newFormatKey)) return true;
+        }
+
+        // New format: ORDERS:VIEW → check if VIEW_ORDERS exists (legacy fallback)
+        if (required.includes(':')) {
+          const [module, action] = required.split(':');
+          const legacyKey = `${action}_${module}`;
+          if (allUserPerms.includes(legacyKey)) return true;
+        }
+
+        return false;
+      });
 
       if (!hasPermission) {
         throw new ForbiddenException(

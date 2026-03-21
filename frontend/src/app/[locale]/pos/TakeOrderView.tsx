@@ -61,6 +61,10 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [noteModalItem, setNoteModalItem] = useState<OrderItem | null>(null);
     const [tempNote, setTempNote] = useState('');
     const [isSending, setIsSending] = useState(false);
+    const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+    const [isSplitPaymentOpen, setIsSplitPaymentOpen] = useState(false);
+    const [splitAmounts, setSplitAmounts] = useState({ cash: 0, creditCard: 0 });
+    const [selectedPosItems, setSelectedPosItems] = useState<number[]>([]);
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
     const { params } = useParameters();
@@ -295,7 +299,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                         Authorization: `Bearer ${token}`
                     },
                     body: JSON.stringify(kitchenPrintData)
-                }).catch(printErr => console.error('Mutfak yazıcı hatası:', printErr));
+                }).catch(printErr => console.warn('Mutfak yazıcısına istek gönderilemedi (arka plan):', printErr.message || printErr));
             }
 
             toastSwal({
@@ -424,107 +428,48 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             showSwal({ icon: 'error', title: 'Hata', text: 'Marş verilemedi.' });
         }
     };
-    const payMultipleItems = async () => {
-        const token = localStorage.getItem('token') || (user as any)?.token;
+    const handleCheckout = async (paymentMethod: 'Nakit' | 'Kart' | 'Parçalı', cashAmount: number = 0, creditAmount: number = 0) => {
+        if (!selectedTable) return;
         const unpaidItems = existingOrders.flatMap(o => o.items).filter(i => !i.isPaid);
-        if (unpaidItems.length === 0) {
-            toastSwal({ icon: 'info', title: 'Bilgi', text: 'Ödenecek ürün bulunamadı.' });
+        const itemsToPay = unpaidItems.filter(item => selectedPosItems.includes(item.id));
+        
+        if (itemsToPay.length === 0) {
+            toastSwal({ icon: 'warning', title: 'Ödenecek ürün seçmediniz!' });
             return;
         }
 
-        let partners: any[] = [];
         try {
-            const pRes = await fetch(`${API_URL}/partners`, { headers: { Authorization: `Bearer ${token}` } });
-            if (pRes.ok) partners = await pRes.json();
-        } catch (e) { console.error("Partners fetch failed", e); }
+            const token = localStorage.getItem('token') || (user as any)?.token;
+            const finalPMethod = paymentMethod === 'Nakit' ? 'KASA' : paymentMethod === 'Kart' ? 'KREDI_KARTI' : 'SPLIT';
 
-        const customerOptions = partners
-            .filter(p => p.type === 'CUSTOMER')
-            .reduce((acc, p) => ({ ...acc, [p.id]: p.name }), { '0': '-- Cari Seçilmedi --' });
-
-        const Swal = (await import('sweetalert2')).default;
-        const { value: formValues } = await Swal.fire({
-            title: '<span class="text-slate-800 dark:text-white font-black uppercase tracking-tight text-xl">PARÇALI ÖDEME AL</span>',
-            html: `
-                <div class="text-left space-y-6 p-2">
-                    <div class="space-y-3">
-                        <label class="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">Ödenecek Ürünleri Seçin</label>
-                        <div class="max-h-[300px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                            ${unpaidItems.map(item => `
-                                <label class="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors group">
-                                    <input type="checkbox" name="payment-item" value="${item.id}" class="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" checked />
-                                    <div class="flex-1">
-                                        <div class="font-bold text-slate-700 dark:text-slate-200">${item.product.name}</div>
-                                        <div class="text-[10px] font-bold text-slate-400 uppercase">₺${item.unitPrice} x ${item.quantity}</div>
-                                    </div>
-                                    <div class="font-black text-emerald-600 dark:text-emerald-400">₺${(item.quantity * item.unitPrice).toFixed(2)}</div>
-                                </label>
-                            `).join('')}
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="space-y-2">
-                            <label class="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">Ödeme Yöntemi</label>
-                            <select id="swal-payment-method" class="w-full h-12 px-4 bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-white font-bold appearance-none outline-none focus:border-emerald-500/50 transition-all">
-                                <option value="KASA">Nakit (Kasa)</option>
-                                <option value="KREDI_KARTI">Kredi Kartı</option>
-                                <option value="BANKA">Banka</option>
-                            </select>
-                        </div>
-                        <div class="space-y-2">
-                            <label class="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] ml-1">Cari (Müşteri)</label>
-                            <select id="swal-partner-id" class="w-full h-12 px-4 bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-white font-bold appearance-none outline-none focus:border-indigo-500/50 transition-all">
-                                ${Object.entries(customerOptions).map(([id, name]) => `<option value="${id}">${name}</option>`).join('')}
-                            </select>
-                        </div>
-                    </div>
-                </div>
-            `,
-            background: theme === 'dark' ? '#1e293b' : '#fff',
-            color: theme === 'dark' ? '#fff' : '#1e293b',
-            showCancelButton: true,
-            confirmButtonText: '<i class="fat fa-check-circle me-2"></i> Seçilenleri Öde',
-            cancelButtonText: 'İptal',
-            buttonsStyling: false,
-            customClass: {
-                confirmButton: 'bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-8 rounded-2xl shadow-lg shadow-emerald-600/20 transition-all outline-none mx-2',
-                cancelButton: 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold py-4 px-8 rounded-2xl hover:bg-slate-300 dark:hover:bg-slate-600 transition-all outline-none mx-2'
-            },
-            preConfirm: () => {
-                const selectedCheckboxes = document.querySelectorAll('input[name="payment-item"]:checked') as NodeListOf<HTMLInputElement>;
-                const itemIds = Array.from(selectedCheckboxes).map(cb => parseInt(cb.value));
-                if (itemIds.length === 0) {
-                    Swal.showValidationMessage('Lütfen en az bir ürün seçin');
-                    return false;
-                }
-                return {
-                    itemIds,
-                    paymentMethod: (document.getElementById('swal-payment-method') as HTMLSelectElement).value,
-                    partnerId: (document.getElementById('swal-partner-id') as HTMLSelectElement).value
-                };
-            }
-        });
-
-        if (!formValues) return;
-        const { itemIds, paymentMethod, partnerId } = formValues;
-
-        try {
             const res = await fetch(`${API_URL}/sales/items/pay-batch`, {
                 method: 'PUT',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    itemIds,
-                    paymentMethod,
-                    partnerId: partnerId === '0' ? undefined : parseInt(partnerId)
+                    itemIds: itemsToPay.map(i => i.id),
+                    paymentMethod: finalPMethod,
+                    paidAmountCash: paymentMethod === 'Nakit' ? null : cashAmount,
+                    paidAmountCreditCard: paymentMethod === 'Kart' ? null : creditAmount
                 }),
             });
-            if (!res.ok) throw new Error('Batch payment failed');
-            toastSwal({ icon: 'success', title: 'Başarılı', text: 'Seçilen ürünlerin ödemesi alındı.' });
-            await handleTableClick(selectedTable!);
-        } catch (err) {
-            showSwal({ icon: 'error', title: 'Hata', text: 'Ödeme işlemi başarısız oldu.' });
+            
+            if (res.ok) {
+                toastSwal({ title: 'Başarılı', text: `Ödeme alındı (${paymentMethod})!`, icon: 'success' });
+                setIsCheckoutOpen(false);
+                setIsSplitPaymentOpen(false);
+                setSelectedPosItems([]);
+                setSplitAmounts({ cash: 0, creditCard: 0 });
+                await handleTableClick(selectedTable!);
+            } else {
+                const errorData = await res.json();
+                showSwal({ title: 'Hata Detayı', text: errorData.message || 'Ödeme alınamadı.', icon: 'error' });
+            }
+        } catch (e) {
+            showSwal({ title: 'Hata', text: 'Sistem hatası oluştu.', icon: 'error' });
         }
     };
+
+    
 
     if (loading || !user) return null;
 
@@ -875,7 +820,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                     <span className="text-sm font-black text-amber-700 dark:text-amber-400">₺{remainingTotal.toFixed(2)}</span>
                                 </div>
                                 <button
-                                    onClick={payMultipleItems}
+                                    onClick={() => { setIsCheckoutOpen(true); setSelectedPosItems(existingOrders.flatMap(o => o.items).filter(i => !i.isPaid).map(i => i.id)); }}
                                     className="w-full mt-2 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-black text-[10px] uppercase tracking-[0.2em] rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"
                                 >
                                     <i className="fat fa-wallet"></i> Ödeme Al

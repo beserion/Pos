@@ -28,7 +28,11 @@
         "loadingError": "An error occurred while loading data",
         "details": "Details",
         "page": "Page",
-        "clear": "Clear"
+        "clear": "Clear",
+        "welcome": "Welcome,",
+        "areYouSure": "Are you sure?",
+        "cannotUndo": "This action cannot be undone",
+        "yesDelete": "Yes, delete"
     },
     "Dashboard": {
         "title": "Management Panel",
@@ -54,7 +58,13 @@
         "kitchen": "Kitchen (KDS)",
         "kitchenDesc": "Order preparation and notification screen",
         "reports": "Reports & Analytics",
-        "reportsDesc": "Sales charts and statistics"
+        "reportsDesc": "Sales charts and statistics",
+        "posScreen": "Order Screen",
+        "ordersStandPc": "Take Order (Stand PC)",
+        "sales": "Sales",
+        "salesDesc": "Track daily sales and re-edit if necessary",
+        "invoices": "Invoices",
+        "invoicesDesc": "Purchase/sales invoices and stock entry"
     },
     "Login": {
         "title": "Welcome",
@@ -457,7 +467,9 @@
         "newPrinter": "New Printer",
         "totalPrinters": "Total Printers",
         "activePrinters": "Active Printers",
+        "passivePrinters": "Passive Printers",
         "loading": "Loading Printers...",
+        "notFound": "No Registered Printers Found",
         "tableId": "ID",
         "tableInfo": "Printer Info",
         "tableSystemName": "System Name (Windows)",
@@ -500,6 +512,8 @@
         "labelLastName": "Last Name",
         "labelEmail": "E-Mail",
         "labelPassword": "Password",
+        "pinCodePlaceholder": "4-digit PIN",
+        "labelPinCode": "PIN Code",
         "passwordPlaceholder": "Leave blank if you don't want to change",
         "labelRole": "Role",
         "selectRole": "Select Role",

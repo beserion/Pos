@@ -32,12 +32,18 @@ export class User {
   @Column({ nullable: true, length: 10 })
   pinCode: string;
 
+  @Column({ nullable: true, length: 30 })
+  phone: string;
+
   @Column({ default: true })
   isActive: boolean;
 
   @ManyToOne(() => Role, (role) => role.users, { nullable: true })
   @JoinColumn({ name: 'roleId' })
   role: Role;
+
+  @Column('simple-array', { nullable: true })
+  extraPermissions: string[];
 
   @CreateDateColumn()
   createdAt: Date;

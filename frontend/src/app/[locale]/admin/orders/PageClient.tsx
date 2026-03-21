@@ -54,7 +54,7 @@ interface LowStockItem {
 }
 
 export function PageClient() {
-    const { user, loading } = useAuth();
+    const { user, loading, hasPermission } = useAuth();
     const router = useRouter();
     const locale = useLocale();
     const t = useTranslations('Admin');
@@ -153,9 +153,14 @@ export function PageClient() {
     }, [searchTerm, startDate, endDate]);
 
     useEffect(() => {
-        if (!loading && !user) router.push(`/${locale}/login`);
-        if (user) fetchData(1);
-    }, [user, loading, router, fetchData, locale]);
+        if (!loading && !user) {
+            router.push(`/${locale}/login`);
+        } else if (!loading && user && !hasPermission('ORDERS:VIEW')) {
+            router.push(`/${locale}/dashboard`);
+        } else if (user) {
+            fetchData(1);
+        }
+    }, [user, loading, router, fetchData, locale, hasPermission]);
 
     const handleOpenUpsert = (order: PurchaseOrder | null = null) => {
         if (order) {

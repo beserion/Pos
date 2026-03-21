@@ -116,23 +116,25 @@ export class StocksService {
     productId: number,
     quantity: number,
     location?: string,
+    manager?: any,
   ): Promise<void> {
+    const repo = manager ? manager.getRepository(Stock) : this.stockRepository;
     const where: any = { product: { id: productId } };
     if (location) where.location = location;
 
-    const stocks = await this.stockRepository.find({
+    const stocks = await repo.find({
       where,
       order: { quantity: 'DESC' },
     });
 
     if (stocks.length === 0) {
       // No stock record found — create one with negative value as a warning
-      const newStock = this.stockRepository.create({
+      const newStock = repo.create({
         product: { id: productId } as Product,
         quantity: -quantity,
         location: location || 'default',
       });
-      await this.stockRepository.save(newStock);
+      await repo.save(newStock);
       return;
     }
 
@@ -144,13 +146,13 @@ export class StocksService {
       const deduct = Math.min(available, remaining);
       stock.quantity = available - deduct;
       remaining -= deduct;
-      await this.stockRepository.save(stock);
+      await repo.save(stock);
     }
 
     // If there's still remaining, deduct from the first stock (can go negative)
     if (remaining > 0) {
       stocks[0].quantity = Number(stocks[0].quantity) - remaining;
-      await this.stockRepository.save(stocks[0]);
+      await repo.save(stocks[0]);
     }
   }
 
@@ -161,22 +163,24 @@ export class StocksService {
     productId: number,
     quantity: number,
     location?: string,
+    manager?: any,
   ): Promise<void> {
+    const repo = manager ? manager.getRepository(Stock) : this.stockRepository;
     const where: any = { product: { id: productId } };
     if (location) where.location = location;
 
-    const stock = await this.stockRepository.findOne({ where });
+    const stock = await repo.findOne({ where });
 
     if (stock) {
       stock.quantity = Number(stock.quantity) + quantity;
-      await this.stockRepository.save(stock);
+      await repo.save(stock);
     } else {
-      const newStock = this.stockRepository.create({
+      const newStock = repo.create({
         product: { id: productId } as Product,
         quantity,
         location: location || 'default',
       });
-      await this.stockRepository.save(newStock);
+      await repo.save(newStock);
     }
   }
 

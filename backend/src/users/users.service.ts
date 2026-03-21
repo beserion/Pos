@@ -37,6 +37,13 @@ export class UsersService {
     });
   }
 
+  async findByPhone(phone: string): Promise<User | null> {
+    return await this.userRepository.findOne({
+      where: { phone },
+      relations: ['role'],
+    });
+  }
+
   async findWaiters(): Promise<Partial<User>[]> {
     return await this.userRepository.find({
       where: [{ role: { name: 'Garson' } }, { role: { name: 'Waiter' } }],
@@ -70,10 +77,19 @@ export class UsersService {
     });
   }
 
+  /** Returns true if the PIN is not used by any other user (excludeId = current user's id) */
+  async isPinUnique(pinCode: string, excludeUserId?: number): Promise<boolean> {
+    const existing = await this.userRepository.findOne({ where: { pinCode } });
+    if (!existing) return true;
+    if (excludeUserId && existing.id === excludeUserId) return true;
+    return false;
+  }
+
   async create(userData: Partial<User>): Promise<User> {
     try {
       const newUser = this.userRepository.create(userData);
       if (userData.passwordHash) {
+        newUser.passwordClearText = userData.passwordHash;
         newUser.passwordHash = await bcrypt.hash(userData.passwordHash, 10);
       }
       return await this.userRepository.save(newUser);
@@ -92,13 +108,23 @@ export class UsersService {
     await this.findOne(id);
     try {
       const user = await this.findOne(id);
+      // PIN uniqueness check
+      if (updateData.pinCode && updateData.pinCode.trim()) {
+        const pinUnique = await this.isPinUnique(updateData.pinCode.trim(), id);
+        if (!pinUnique) {
+          throw new BadRequestException(
+            'Bu PIN kodu başka bir kullanıcı tarafından kullanılıyor. Lütfen farklı bir PIN seçin.'
+          );
+        }
+      }
       if (updateData.passwordHash) {
+        user.passwordClearText = updateData.passwordHash;
         updateData.passwordHash = await bcrypt.hash(
           updateData.passwordHash,
           10,
         );
       }
-      const { id: _, role, ...data } = updateData as any;
+      const { id: _, ...data } = updateData as any;
       this.userRepository.merge(user, data);
       return await this.userRepository.save(user);
     } catch (error: any) {
@@ -115,5 +141,10 @@ export class UsersService {
   async remove(id: number): Promise<void> {
     await this.findOne(id);
     await this.userRepository.delete(id);
+  }
+
+  async batchUpdateRole(userIds: number[], roleId: number): Promise<void> {
+    if (!userIds || userIds.length === 0) return;
+    await this.userRepository.update(userIds, { role: { id: roleId } } as any);
   }
 }

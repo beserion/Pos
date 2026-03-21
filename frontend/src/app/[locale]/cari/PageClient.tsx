@@ -32,7 +32,7 @@ export function PageClient() {
     const { user, loading } = useAuth();
     const router = useRouter();
     const locale = useLocale();
-    const API_URL = 'http://localhost:3050';
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
 
     const [partners, setPartners] = useState<Partner[]>([]);
     const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
@@ -50,9 +50,11 @@ export function PageClient() {
         try {
             const token = Cookies.get('token');
             const res = await axios.get(`${API_URL}/partners`, { headers: { Authorization: `Bearer ${token}` } });
-            setPartners(res.data);
+            // The backend returns { data: Partner[], total: number, ... }
+            setPartners(res.data.data || []);
         } catch (e) {
-            console.error(e);
+            console.error('Fetch Partners Error:', e);
+            setPartners([]);
         } finally {
             setDataLoading(false);
         }
@@ -132,7 +134,7 @@ export function PageClient() {
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                     <div className="flex items-center">
-                        <i className="fat fa-users-between-lines me-3 text-indigo-500 dark:text-indigo-400" style={{ fontSize: '50px' }}></i>
+                        <i className="fat fa-users me-3 text-indigo-500 dark:text-indigo-400" style={{ fontSize: '50px' }}></i>
                         <div>
                             <h3 className="mb-0 text-3xl font-extralight text-indigo-500 dark:text-indigo-400 leading-none uppercase tracking-[0.25em]">CARİLER</h3>
                             <h5 className="text-muted mb-0 text-lg font-medium text-slate-400 dark:text-slate-500 mt-0.5">Müşteri ve tedarikçi hesap hareketleri</h5>
@@ -173,7 +175,7 @@ export function PageClient() {
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <div className="font-bold text-sm">{p.name}</div>
-                                            <div className={`text-[10px] font-black uppercase tracking-wider mt-0.5 ${selectedPartner?.id === p.id ? 'text-indigo-200' : 'text-slate-400'}`}>
+                                            <div className={`text-[10px] italic font-medium uppercase tracking-wider mt-0.5 ${selectedPartner?.id === p.id ? 'text-indigo-200' : 'text-slate-400'}`}>
                                                 {p.type === 'CUSTOMER' ? '👤 Müşteri' : '🏭 Tedarikçi'}
                                             </div>
                                         </div>
@@ -203,15 +205,15 @@ export function PageClient() {
                                     <div className="flex items-center gap-4">
                                         <div className="text-center px-8 py-2 min-w-[140px] bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl border border-emerald-200 dark:border-emerald-500/20">
                                             <div className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Gelir</div>
-                                            <div className="text-lg font-black text-emerald-700 dark:text-emerald-400">₺{totalIncome.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</div>
+                                            <div className="text-lg font-black text-emerald-700 dark:text-emerald-400">{totalIncome.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</div>
                                         </div>
                                         <div className="text-center px-8 py-2 min-w-[140px] bg-red-50 dark:bg-red-500/10 rounded-2xl border border-red-200 dark:border-red-500/20">
                                             <div className="text-[10px] font-black text-red-700 dark:text-red-400 uppercase tracking-wider">Gider</div>
-                                            <div className="text-lg font-black text-red-700 dark:text-red-400">₺{totalExpense.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</div>
+                                            <div className="text-lg font-black text-red-700 dark:text-red-400">{totalExpense.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</div>
                                         </div>
                                         <div className={`text-center px-8 py-2 min-w-[140px] rounded-2xl border ${netBalance >= 0 ? 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-500/20' : 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20'}`}>
                                             <div className={`text-[10px] font-black uppercase tracking-wider ${netBalance >= 0 ? 'text-indigo-700 dark:text-indigo-400' : 'text-amber-700 dark:text-amber-400'}`}>Bakiye</div>
-                                            <div className={`text-lg font-black ${netBalance >= 0 ? 'text-indigo-700 dark:text-indigo-400' : 'text-amber-700 dark:text-amber-400'}`}>₺{netBalance.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</div>
+                                            <div className={`text-lg font-black ${netBalance >= 0 ? 'text-indigo-700 dark:text-indigo-400' : 'text-amber-700 dark:text-amber-400'}`}>{netBalance.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</div>
                                         </div>
                                         {/* <button onClick={() => setIsModalOpen(true)} className="px-5 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg shadow-indigo-500/30">
                                             <i className="fat fa-plus"></i> Hareket Ekle
@@ -253,10 +255,10 @@ export function PageClient() {
                                                             <td className="px-5 py-3 text-xs text-slate-400">{tx.sourceType || 'MANUAL'}</td>
                                                             <td className="px-5 py-3 text-sm text-slate-500 dark:text-slate-400">{methodLabel(tx.paymentMethod)}</td>
                                                             <td className={`px-5 py-3 text-right font-black ${tx.type === 'INCOME' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                                                                {tx.type === 'INCOME' ? '+' : '-'}₺{Number(tx.amount).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                                                                {tx.type === 'INCOME' ? '+' : '-'}{Number(tx.amount).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
                                                             </td>
-                                                            <td className={`px-5 py-3 text-right font-black text-sm ${tx.runningBalance >= 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                                                                ₺{tx.runningBalance.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                                                            <td className={`px-5 py-3 text-right font-black text-sm ${tx.runningBalance < 0 ? 'text-red-600 dark:text-red-400' : tx.runningBalance > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500'}`}>
+                                                                {tx.runningBalance.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
                                                             </td>
                                                         </tr>
                                                     ))}

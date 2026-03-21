@@ -15,7 +15,7 @@ export function PageClient() {
     const [screen, setScreen] = useState<Screen>('login');
 
     // Login
-    const [email, setEmail] = useState('');
+    const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -28,9 +28,9 @@ export function PageClient() {
     const [pinError, setPinError] = useState('');
     const [pinSaving, setPinSaving] = useState(false);
 
-    const { login } = useAuth();
+    const { setUser } = useAuth();
     const router = useRouter();
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
 
     // ─── Giriş ───────────────────────────────────────────────────────
     const handleSubmit = async (e: React.FormEvent) => {
@@ -39,25 +39,27 @@ export function PageClient() {
         setError('');
         try {
             const res = await axios.post(`${API_URL}/auth/login`, {
-                email: email.trim(),
+                identifier: identifier.trim(),
                 password,
             });
             const { access_token, user } = res.data;
             const roleName: string = user?.role?.name?.toUpperCase() || '';
 
-            // Token'ı her durumda kaydet
+            // Token'ı kaydet
             Cookies.set('token', access_token, { expires: 1 });
             localStorage.setItem('token', access_token);
             axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
 
-            if (roleName === 'GARSON') {
-                // Garson → PIN ekranına yönlendir (garson auto-seçili)
+            // Global state'i güncelle (Login loop'u önler)
+            setUser({ ...user, token: access_token });
+
+            if (roleName === 'GARSON' || roleName === 'WAITER') {
                 router.push(`/${locale}/waiter/login`);
             } else {
-                // Admin / diğer roller → dashboard
                 router.push(`/${locale}/dashboard`);
             }
-        } catch {
+        } catch (err: any) {
+            console.error('Login error:', err);
             setError('Giriş başarısız. Lütfen bilgilerinizi kontrol edin.');
             setIsLoading(false);
         }
@@ -72,6 +74,17 @@ export function PageClient() {
 
         setPinSaving(true);
         try {
+            // — Benzersizlik kontrolü
+            const checkRes = await axios.get(`${API_URL}/users/check-pin`, {
+                params: { pin, excludeId: pendingUser?.id },
+                headers: { Authorization: `Bearer ${pendingToken}` },
+            });
+            if (!checkRes.data.unique) {
+                setPinError('⚠️ Bu PIN kodu başka bir kullanıcı tarafından kullanılıyor. Lütfen farklı bir PIN seçin.');
+                setPinSaving(false);
+                return;
+            }
+
             await axios.put(`${API_URL}/users/${pendingUser.id}`,
                 { pinCode: pin },
                 { headers: { Authorization: `Bearer ${pendingToken}` } }
@@ -110,12 +123,12 @@ export function PageClient() {
 
     const Numpad = ({ field }: { field: 'pin' | 'confirm' }) => (
         <div className="grid grid-cols-3 gap-2 mt-3">
-            {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((k, i) => (
+            {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map((k, i) => (
                 k === '' ? <div key={i} /> :
-                <button key={i} type="button"
-                    onClick={() => handleNumpad(k, field)}
-                    className="h-12 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold text-lg transition-all border border-white/10"
-                >{k}</button>
+                    <button key={i} type="button"
+                        onClick={() => handleNumpad(k, field)}
+                        className="h-12 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold text-lg transition-all border border-white/10"
+                    >{k}</button>
             ))}
         </div>
     );
@@ -130,22 +143,25 @@ export function PageClient() {
             {screen === 'login' && (
                 <div className="relative z-10 w-full max-w-md p-8 sm:p-10 bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
                     <div className="text-center mb-8">
-                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-500 mb-4 shadow-lg">
-                            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
-                        </div>
-                        <h1 className="text-3xl font-extrabold text-white tracking-tight">Marmaris<span className="text-indigo-400">POS</span></h1>
+                        <img src="/PosNetX3.png" alt="PosNetX Logo" className="w-96 h-auto mx-auto mb-2 drop-shadow-lg" />
                         <p className="text-slate-300 mt-2 text-sm">{tLogin('subtitle')}</p>
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-1">{tLogin('email')}</label>
-                            <input type="email" required
-                                className="w-full px-4 py-3 rounded-xl bg-slate-800/50 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                                placeholder="admin@admin.com"
-                                value={email} onChange={e => setEmail(e.target.value)} />
+                            <label className="block text-sm font-medium text-slate-300 mb-1">E-posta veya Telefon</label>
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    required
+                                    autoComplete="username"
+                                    className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-800/50 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                    placeholder="admin@admin.com veya 5xx..."
+                                    value={identifier}
+                                    onChange={e => setIdentifier(e.target.value)}
+                                />
+                                <i className={`fat absolute left-3 top-3.5 text-slate-400 ${identifier.includes('@') ? 'fa-envelope' : identifier.length > 0 ? 'fa-phone' : 'fa-user'}`}></i>
+                            </div>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-300 mb-1">{tLogin('password')}</label>
@@ -162,7 +178,7 @@ export function PageClient() {
                             {isLoading ? `${tLogin('login')}...` : tLogin('login')}
                         </button>
                         <div className="text-center mt-4 text-xs text-slate-400">
-                            Test için: admin@admin.com / admin123
+                            E-posta: admin@admin.com / admin123
                         </div>
                     </form>
                 </div>

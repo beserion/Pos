@@ -6,20 +6,49 @@ import {
   Param,
   Put,
   Delete,
+  Patch,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { InvoicesService } from './invoices.service';
-import { Invoice } from './invoice.entity';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Public } from '../auth/public.decorator';
 
 @Controller('invoices')
-@UseGuards(JwtAuthGuard)
+// @UseGuards(JwtAuthGuard)
 export class InvoicesController {
   constructor(private readonly invoicesService: InvoicesService) {}
 
+  @Public()
+  @Get('seed')
+  async seedTempData() {
+    return this.invoicesService.seedTestData();
+  }
+
   @Get()
-  findAll() {
-    return this.invoicesService.findAll();
+  findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('type') type?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.invoicesService.findAll(
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 10,
+      search,
+      status,
+      type,
+      startDate,
+      endDate
+    );
+  }
+
+  @Get('generate-number')
+  generateNumber() {
+    return this.invoicesService.generateInvoiceNumber();
   }
 
   @Get(':id')
@@ -28,13 +57,18 @@ export class InvoicesController {
   }
 
   @Post()
-  create(@Body() invoiceData: Partial<Invoice>) {
+  create(@Body() invoiceData: any) {
     return this.invoicesService.create(invoiceData);
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() updateData: Partial<Invoice>) {
-    return this.invoicesService.update(+id, updateData);
+  update(@Param('id') id: string, @Body() invoiceData: any) {
+    return this.invoicesService.updateFull(+id, invoiceData);
+  }
+
+  @Patch(':id/status')
+  updateStatus(@Param('id') id: string, @Body('status') status: string) {
+    return this.invoicesService.updateStatus(+id, status);
   }
 
   @Delete(':id')

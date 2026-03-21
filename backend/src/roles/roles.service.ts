@@ -31,9 +31,10 @@ export class RolesService {
   }
 
   async update(id: number, updateData: Partial<Role>): Promise<Role> {
-    await this.findOne(id);
-    await this.roleRepository.update(id, updateData);
-    return this.findOne(id);
+    const role = await this.findOne(id);
+    const { id: _, users, createdAt, updatedAt, ...data } = updateData as any;
+    this.roleRepository.merge(role, data);
+    return await this.roleRepository.save(role);
   }
 
   async remove(id: number): Promise<void> {

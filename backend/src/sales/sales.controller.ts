@@ -67,8 +67,8 @@ export class SalesController {
   }
 
   @Put('items/pay-batch')
-  payBatchItems(@Body() payload: { itemIds: number[], paymentMethod: string, partnerId?: number }) {
-    return this.salesService.payBatchItems(payload.itemIds, payload.paymentMethod, payload.partnerId);
+  payBatchItems(@Body() payload: { itemIds: number[], paymentMethod: string, partnerId?: number, paidAmountCash?: number, paidAmountCreditCard?: number }) {
+    return this.salesService.payBatchItems(payload);
   }
 
   @Put('items/:id/pay')

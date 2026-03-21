@@ -35,6 +35,7 @@ import { Stock } from './stocks/stock.entity';
 import { Sale } from './sales/sale.entity';
 import { SaleItem } from './sales/sale-item.entity';
 import { Invoice } from './invoices/invoice.entity';
+import { InvoiceItem } from './invoices/invoice-item.entity';
 import { Delivery } from './deliveries/delivery.entity';
 import { Location } from './locations/location.entity';
 import { Table } from './tables/table.entity';
@@ -55,6 +56,8 @@ import { PurchaseOrderItem } from './purchase-orders/purchase-order-item.entity'
 import { Reservation } from './reservations/reservation.entity';
 import { Modifier } from './modifiers/modifier.entity';
 import { Parameter } from './parameters/parameter.entity';
+import { PermissionModulesModule } from './permission-modules/permission-modules.module';
+import { PermModule } from './permission-modules/permission-module.entity';
 
 import { ScheduleModule } from '@nestjs/schedule';
 
@@ -100,12 +103,14 @@ import { ScheduleModule } from '@nestjs/schedule';
             Sale,
             SaleItem,
             Invoice,
+            InvoiceItem,
             Delivery,
             Employee,
             EmployeeDocument,
             Reservation,
             Warehouse,
             Parameter,
+            PermModule,
           ],
           synchronize: false, // Migrations managed manually via migrate-remote.js
           options: {
@@ -156,6 +161,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     ReservationsModule,
     ModifiersModule,
     ParametersModule,
+    PermissionModulesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

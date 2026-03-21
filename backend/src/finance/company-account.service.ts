@@ -41,8 +41,10 @@ export class CompanyAccountService {
     await this.accountRepository.delete(id);
   }
 
-  async updateBalance(id: number, amount: number, type: 'INCOME' | 'EXPENSE'): Promise<CompanyAccount> {
-    const account = await this.findOne(id);
+  async updateBalance(id: number, amount: number, type: 'INCOME' | 'EXPENSE', manager?: any): Promise<CompanyAccount> {
+    const repo = manager ? manager.getRepository(CompanyAccount) : this.accountRepository;
+    const account = await (manager ? manager.findOne(CompanyAccount, { where: { id } }) : this.findOne(id));
+    if (!account) throw new NotFoundException(`Account with ID ${id} not found`);
     const numericAmount = Number(amount);
     
     if (type === 'INCOME') {
@@ -51,7 +53,7 @@ export class CompanyAccountService {
       account.balance = Number(account.balance) - numericAmount;
     }
     
-    return await this.accountRepository.save(account);
+    return await repo.save(account);
   }
 
   async getTransactions(accountId: number, page: number = 1, limit: number = 20, search?: string) {

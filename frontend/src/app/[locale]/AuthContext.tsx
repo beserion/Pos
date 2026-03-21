@@ -10,7 +10,9 @@ interface AuthContextType {
     loginPin: (userId: number, pin: string) => Promise<void>;
     loginPinOnly: (pin: string) => Promise<any>;
     logout: () => void;
+    hasPermission: (permission: string) => boolean;
     loading: boolean;
+    setUser: (user: any) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -21,20 +23,53 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
     const router = useRouter();
 
     useEffect(() => {
-        const token = Cookies.get('token') || localStorage.getItem('token');
-        if (token) {
-            setUser({ token });
-            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-            if (!localStorage.getItem('token')) {
-                localStorage.setItem('token', token);
+        const fetchProfile = async () => {
+            const token = Cookies.get('token') || localStorage.getItem('token');
+            if (token) {
+                try {
+                    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+                    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+                    const res = await axios.get(`${apiBase}/auth/me`);
+                    setUser({ ...res.data, token });
+                    if (!localStorage.getItem('token')) {
+                        localStorage.setItem('token', token);
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch profile:', error);
+                    logout();
+                }
             }
-        }
-        setLoading(false);
+            setLoading(false);
+        };
+        fetchProfile();
     }, []);
+
+    const hasPermission = (permission: string) => {
+        if (!user || !user.role) return false;
+        
+        const roleName = user.role.name?.toUpperCase();
+        if (roleName === 'ADMIN' || roleName === 'ADMINISTRATOR') return true;
+
+        const perms: any = user.role.permissions || [];
+        const extra: string[] = user.extraPermissions || [];
+        
+        // Combine perms if they are string arrays
+        let normalizedPerms: string[] = [];
+        if (perms === 'ALL' || (Array.isArray(perms) && perms[0] === 'ALL')) return true;
+        
+        if (Array.isArray(perms)) {
+            normalizedPerms = perms.flatMap(p => typeof p === 'string' ? p.split(',').map(s => s.trim()) : []);
+        } else if (typeof perms === 'string') {
+            normalizedPerms = perms.split(',').map(s => s.trim());
+        }
+
+        const allUserPerms = [...normalizedPerms, ...extra];
+        return allUserPerms.includes(permission) || allUserPerms.includes('ALL');
+    };
 
     const login = async (email: string, pass: string) => {
         try {
-            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
             console.log(`Attempting login to ${apiBase}/auth/login`);
             const response = await axios.post(`${apiBase}/auth/login`, { email: email.trim(), password: pass });
             if (response.data.access_token) {
@@ -53,7 +88,7 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
 
     const loginPin = async (userId: number, pin: string) => {
         try {
-            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
             const response = await axios.post(`${apiBase}/auth/login-pin`, { userId, pinCode: pin });
             if (response.data.access_token) {
                 const token = response.data.access_token;
@@ -69,7 +104,7 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
 
     const loginPinOnly = async (pin: string) => {
         try {
-            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
             const response = await axios.post(`${apiBase}/auth/login-pin-only`, { pinCode: pin });
             if (response.data.access_token) {
                 const token = response.data.access_token;
@@ -95,7 +130,7 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, loginPin, loginPinOnly, logout, loading }}>
+        <AuthContext.Provider value={{ user, login, loginPin, loginPinOnly, logout, hasPermission, loading, setUser }}>
             {children}
         </AuthContext.Provider>
     );

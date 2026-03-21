@@ -16,8 +16,13 @@ export class AuthService {
     private jwtService: JwtService,
   ) { }
 
-  async validateUser(email: string, pass: string): Promise<any> {
-    const user = await this.usersService.findByEmail(email);
+  async validateUser(identifier: string, pass: string): Promise<any> {
+    // Detect if identifier looks like a phone number (starts with + or digit, no @)
+    const isPhone = !identifier.includes('@') && /^[\d\s+\-()]+$/.test(identifier.trim());
+    const user = isPhone
+      ? await this.usersService.findByPhone(identifier.trim())
+      : await this.usersService.findByEmail(identifier.trim());
+
     if (user && user.passwordHash) {
       const isMatch = await bcrypt.compare(pass, user.passwordHash);
       if (isMatch) {

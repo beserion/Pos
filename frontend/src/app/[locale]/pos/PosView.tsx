@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { showSwal, toastSwal } from '../utils/swal';
 import { useLocale, useTranslations } from 'next-intl';
 import { useTheme } from 'next-themes';
@@ -25,6 +25,9 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const t = useTranslations('Admin');
     const tc = useTranslations('Common');
     const { theme, setTheme } = useTheme();
+    const searchParams = useSearchParams();
+    const restoreSaleId = searchParams.get('restoreSaleId');
+    const targetTableId = searchParams.get('tableId');
     const [mounted, setMounted] = useState(false);
 
     const [products, setProducts] = useState<Product[]>([]);
@@ -47,7 +50,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const [discount, setDiscount] = useState<number>(0);
     const [serviceFee, setServiceFee] = useState<number>(0);
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
 
     const fetchCashiers = async () => {
         try {
@@ -137,6 +140,54 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             }
         }
     }, [user, loading, router]);
+
+    // Restore Sale Logic
+    useEffect(() => {
+        const restoreSale = async () => {
+            if (!restoreSaleId || !user || tables.length === 0 || cart.length > 0) return;
+            try {
+                const token = (user as any)?.token || localStorage.getItem('token');
+                const res = await fetch(`${API_URL}/sales/${restoreSaleId}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const sale = await res.json();
+                    if (!sale || !sale.items) return;
+
+                    // Load items into cart
+                    const newCart = sale.items.map((item: any) => ({
+                        product: item.product,
+                        quantity: item.quantity
+                    }));
+                    setCart(newCart);
+                    setDiscount(sale.discountAmount || 0);
+                    setServiceFee(sale.serviceFee || 0);
+
+                    // Set table if applicable
+                    if (targetTableId) {
+                        const table = tables.find(t => t.id === parseInt(targetTableId));
+                        if (table) setSelectedTable(table);
+                    }
+
+                    // Delete original sale (voiding it)
+                    await fetch(`${API_URL}/sales/${restoreSaleId}`, {
+                        method: 'DELETE',
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+
+                    toastSwal({ icon: 'info', title: 'Satış masaya geri yüklendi.' });
+                    
+                    // Clear search params to avoid re-triggering?
+                    // router.replace(`/${locale}/pos`); // This might trigger re-render
+                }
+            } catch (error) {
+                console.error('Error restoring sale:', error);
+            }
+        };
+        if (mounted && user && tables.length > 0) {
+            restoreSale();
+        }
+    }, [restoreSaleId, user, tables, mounted]);
     useEffect(() => {
         const fetchTableOrders = async () => {
             if (!selectedTable || (selectedTable.status === 'BOŞ' && !selectedTable.currentTotal)) {
@@ -245,7 +296,10 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 paidAmountCreditCard: paymentMethod === 'Kart' ? selectedGrandTotal : creditAmount,
                 discountAmount: appliedDiscount,
                 serviceFee: appliedServiceFee,
-                paidItems: itemsToPay.map(item => ({
+                status: 'COMPLETED',
+                totalAmount: selectedGrandTotal,
+                mergeSaleIds: activeOrderIds,
+                items: itemsToPay.map(item => ({
                     productId: item.product.id,
                     quantity: item.quantity,
                     unitPrice: item.product.price,

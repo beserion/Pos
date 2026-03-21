@@ -27,9 +27,9 @@ async function bootstrap() {
   }
 
   const adminEmail = 'admin@admin.com';
-  const adminExists = await usersService.findByEmail(adminEmail);
-  if (!adminExists) {
-    await usersService.create({
+  let admin = await usersService.findByEmail(adminEmail);
+  if (!admin) {
+    admin = await usersService.create({
       firstName: 'Admin',
       lastName: 'User',
       email: adminEmail,
@@ -38,6 +38,10 @@ async function bootstrap() {
       role: adminRole,
     });
     console.log('Seed: Admin user created (admin@admin.com / admin123)');
+  } else if (!admin.role || admin.role.id !== adminRole.id) {
+    // Force assign role if missing or different (to ensure Admin always has access)
+    await usersService.update(admin.id, { role: adminRole });
+    console.log('Seed: Admin role enforced for existing user.');
   }
 
   // Increase payload size limit

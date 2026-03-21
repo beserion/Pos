@@ -17,7 +17,10 @@
         "loading": "Laden...",
         "search": "Suche...",
         "all": "Alle",
-        "status": "Status"
+        "status": "Status",
+        "areYouSure": "Sind Sie sicher?",
+        "cannotUndo": "Diese Aktion kann nicht rückgängig gemacht werden",
+        "yesDelete": "Ja, löschen"
     },
     "Dashboard": {
         "title": "Dashboard",

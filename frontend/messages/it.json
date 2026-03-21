@@ -17,7 +17,10 @@
         "loading": "Caricamento...",
         "search": "Cerca...",
         "all": "Tutti",
-        "status": "Stato"
+        "status": "Stato",
+        "areYouSure": "Sei sicuro?",
+        "cannotUndo": "Questa azione non può essere annullata",
+        "yesDelete": "Sì, elimina"
     },
     "Dashboard": {
         "title": "Pannello di controllo",
@@ -247,7 +250,6 @@
         "deleteConfirmTitle": "Sei sicuro?",
         "deleteConfirmText": "Sei sicuro di voler eliminare questo magazzino?",
         "deleteSuccess": "Magazzino eliminato con successo."
-
     },
     "Locations": {
         "title": "GESTIONE FILIALI",

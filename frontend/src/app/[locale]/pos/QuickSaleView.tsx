@@ -32,7 +32,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     const tc = useTranslations('Common');
     const { user, loading: authLoading } = useAuth();
     const { theme, setTheme } = useTheme();
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
 
     const [products, setProducts] = useState<Product[]>([]);
     const [categories, setCategories] = useState<string[]>([]);
@@ -158,6 +158,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 paymentMethod,
                 status: 'COMPLETED',
                 tableName: 'QUICKSALE',
+                description: 'Perakende Müşteri',
                 waiterId: pinCashier?.id || user?.id,
                 items: cart.map(item => ({
                     productId: item.product.id,
@@ -404,15 +405,15 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
 
                     <div className="grid grid-cols-2 gap-3 pb-2">
                         <button
-                            onClick={() => setSelectedPaymentMethod('CASH')}
-                            className={`rounded-2xl py-3 flex flex-col items-center justify-center gap-1 transition-all border-2 ${selectedPaymentMethod === 'CASH' ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg shadow-emerald-600/20' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'}`}
+                            onClick={() => { if(cart.length > 0) setSelectedPaymentMethod('CASH'); }}
+                            className={`rounded-2xl py-3 flex flex-col items-center justify-center gap-1 transition-all border-2 ${selectedPaymentMethod === 'CASH' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/80'} ${cart.length === 0 ? 'opacity-50 cursor-not-allowed' : 'active:scale-95'}`}
                         >
                             <i className="fat fa-money-bill-wave text-xl"></i>
                             <span className="text-[10px] font-black uppercase tracking-widest">{t('paymentCash') || 'Nakit'}</span>
                         </button>
                         <button
-                            onClick={() => setSelectedPaymentMethod('CREDIT_CARD')}
-                            className={`rounded-2xl py-3 flex flex-col items-center justify-center gap-1 transition-all border-2 ${selectedPaymentMethod === 'CREDIT_CARD' ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg shadow-indigo-600/20' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'}`}
+                            onClick={() => { if(cart.length > 0) setSelectedPaymentMethod('CREDIT_CARD'); }}
+                            className={`rounded-2xl py-3 flex flex-col items-center justify-center gap-1 transition-all border-2 ${selectedPaymentMethod === 'CREDIT_CARD' ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/80'} ${cart.length === 0 ? 'opacity-50 cursor-not-allowed' : 'active:scale-95'}`}
                         >
                             <i className="fat fa-credit-card text-xl"></i>
                             <span className="text-[10px] font-black uppercase tracking-widest">{t('paymentCreditCard') || 'Kredi Kartı'}</span>
@@ -422,18 +423,20 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                     <div className="grid grid-cols-2 gap-3 pb-4">
                         <button
                             onClick={() => handleCompleteSale(selectedPaymentMethod, false)}
-                            className="bg-slate-500/10 hover:bg-slate-500/20 text-slate-600 dark:text-slate-400 rounded-2xl py-4 flex flex-col items-center justify-center gap-1 transition-all border border-slate-500/20 active:scale-95 shadow-sm"
+                            disabled={cart.length === 0}
+                            className={`rounded-2xl py-4 flex flex-col items-center justify-center gap-1 transition-all border shadow-sm ${cart.length === 0 ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 opacity-50 cursor-not-allowed' : 'bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 border-orange-500/20 active:scale-95'}`}
                         >
-                            <i className="fat fa-save text-xl text-slate-500"></i>
+                            <i className={`fat fa-save text-xl ${cart.length === 0 ? 'text-slate-400' : 'text-orange-500'}`}></i>
                             <span className="text-xs font-black uppercase tracking-widest">Kaydet</span>
                         </button>
                         <button
                             onClick={() => handleCompleteSale(selectedPaymentMethod, true)}
-                            className="bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded-2xl py-4 flex flex-col items-center justify-center gap-1 transition-all border border-orange-500/20 active:scale-95 shadow-sm"
+                            disabled={cart.length === 0}
+                            className={`rounded-2xl py-4 flex flex-col items-center justify-center gap-1 transition-all border shadow-sm ${cart.length === 0 ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 opacity-50 cursor-not-allowed' : 'bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 border-orange-500/20 active:scale-95'}`}
                         >
                             <div className="flex gap-2 items-center">
-                                <i className="fat fa-save text-xl text-orange-500"></i>
-                                <i className="fat fa-print text-xl text-orange-500"></i>
+                                <i className={`fat fa-save text-xl ${cart.length === 0 ? 'text-slate-400' : 'text-orange-500'}`}></i>
+                                <i className={`fat fa-print text-xl ${cart.length === 0 ? 'text-slate-400' : 'text-orange-500'}`}></i>
                             </div>
                             <span className="text-xs font-black uppercase tracking-widest">Fiş Yazdır</span>
                         </button>

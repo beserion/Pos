@@ -135,7 +135,7 @@ export function PageClient() {
                         <i className="fat fa-users me-3 text-emerald-600 dark:text-emerald-400" style={{ fontSize: '50px' }}></i>
                         <div>
                             <h3 className="mb-0 text-3xl font-extralight text-emerald-600 dark:text-emerald-400 leading-none uppercase tracking-[0.25em]">{t('employees')}</h3>
-                            <div className="h-1 w-1/2 bg-gradient-to-r from-emerald-400 to-transparent rounded-full mt-2 mb-1"></div>
+                            <div className="h-1 w-1/1 bg-gradient-to-r from-emerald-400 to-transparent rounded-full mt-2 mb-1"></div>
                             <h5 className="text-muted mb-0 text-lg font-medium text-slate-400 dark:text-slate-500 mt-0.5">{t('employeesDesc')}</h5>
                         </div>
                     </div>

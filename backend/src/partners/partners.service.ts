@@ -94,8 +94,11 @@ export class PartnersService {
     });
   }
 
-  async updateBalance(id: number, amount: number, type: 'DEBIT' | 'CREDIT' | 'INCOME' | 'EXPENSE'): Promise<Partner> {
-    const partner = await this.findOne(id);
+  async updateBalance(id: number, amount: number, type: 'DEBIT' | 'CREDIT' | 'INCOME' | 'EXPENSE', manager?: any): Promise<Partner> {
+    const repo = manager ? manager.getRepository(Partner) : this.partnerRepository;
+    const partner = await (manager ? manager.findOne(Partner, { where: { id } }) : this.findOne(id));
+    if (!partner) throw new NotFoundException(`Partner with ID ${id} not found`);
+    
     const numericAmount = Number(amount);
     
     // Debit increases what customer owes us (Borçlandırma)
@@ -108,6 +111,6 @@ export class PartnersService {
       partner.currentBalance = Number(partner.currentBalance) + numericAmount;
     }
     
-    return await this.partnerRepository.save(partner);
+    return await repo.save(partner);
   }
 }

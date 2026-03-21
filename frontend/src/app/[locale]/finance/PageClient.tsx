@@ -204,6 +204,13 @@ export function PageClient() {
                         <button onClick={openCreateModal} className="px-6 py-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-600 dark:text-amber-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
                             <i className="fat fa-plus-circle text-lg"></i> {tFinance('newTransaction')}
                         </button>
+                        <button
+                            onClick={() => { setDataLoading(true); fetchData(); }}
+                            className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-emerald-50 dark:hover:bg-emerald-500/10 hover:text-emerald-600 hover:border-emerald-300 transition-all flex items-center gap-2 hover:scale-105 active:scale-95"
+                            title="Yenile"
+                        >
+                            <i className={`fat fa-arrow-rotate-right text-lg ${dataLoading ? 'animate-spin' : ''}`}></i> YENİLE
+                        </button>
                         <button onClick={() => router.push(`/${locale}/dashboard`)} className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center gap-2">
                             <i className="fat fa-reply"></i> {tCommon('back')}
                         </button>

@@ -180,7 +180,7 @@ export function PageClient() {
                     <i className="fat fa-calendar-check text-indigo-600 dark:text-indigo-400" style={{ fontSize: '50px' }}></i>
                     <div>
                         <h3 className="text-3xl font-black uppercase tracking-wider mb-0 text-indigo-600 dark:text-indigo-400">Rezervasyonlar</h3>
-                        <div className="h-1 w-1/4 bg-gradient-to-r from-indigo-400 to-transparent rounded-full mt-2 mb-1"></div>
+                        <div className="h-1 w-1/1 bg-gradient-to-r from-indigo-400 to-transparent rounded-full mt-1 mb-1"></div>
                         <h5 className="text-slate-400 dark:text-slate-500 font-medium">Müşteri randevu ve masa planlamasını yönetin.</h5>
                     </div>
                 </div>

@@ -74,9 +74,10 @@ export class FinanceService {
     return tx;
   }
 
-  async create(data: Partial<AccountTransaction>): Promise<AccountTransaction> {
-    const transaction = this.transactionRepository.create(data);
-    const saved = await this.transactionRepository.save(transaction);
+  async create(data: Partial<AccountTransaction>, manager?: any): Promise<AccountTransaction> {
+    const repo = manager ? manager.getRepository(AccountTransaction) : this.transactionRepository;
+    const transaction = repo.create(data);
+    const saved = await repo.save(transaction);
 
     // Update Company Account Balance
     if (saved.companyAccountId) {
@@ -84,6 +85,7 @@ export class FinanceService {
         saved.companyAccountId,
         saved.amount,
         saved.type as 'INCOME' | 'EXPENSE',
+        manager,
       );
     }
 
@@ -113,6 +115,7 @@ export class FinanceService {
           saved.partnerId,
           saved.amount,
           erpType,
+          manager,
         );
       } catch (err) {
         console.error('Error updating partner balance:', err);
@@ -129,6 +132,60 @@ export class FinanceService {
     await this.findOne(id);
     await this.transactionRepository.update(id, data);
     return this.findOne(id);
+  }
+
+  /**
+   * Aynı gün içinde birden fazla Gün Sonu yapılırsa Finance tablosunda
+   * tekrar kayıt açmak yerine mevcut kaydın tutarını günceller.
+   */
+  async upsertEndOfDay(
+    data: { amount: number; paymentMethod: string; description: string; category: string; userId?: number },
+    manager?: any,
+  ): Promise<AccountTransaction> {
+    const repo: Repository<AccountTransaction> = manager
+      ? manager.getRepository(AccountTransaction)
+      : this.transactionRepository;
+
+    // Bugünün başlangıcı ve sonu
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    // Aynı gün + END_OF_DAY + aynı ödeme yöntemi kaydı var mı?
+    const existing = await repo
+      .createQueryBuilder('tx')
+      .where('tx.sourceType = :sourceType', { sourceType: 'END_OF_DAY' })
+      .andWhere('tx.paymentMethod = :pm', { pm: data.paymentMethod })
+      .andWhere('tx.createdAt >= :start', { start: todayStart })
+      .andWhere('tx.createdAt <= :end', { end: todayEnd })
+      .getOne();
+
+    if (existing) {
+      // Mevcut tutara yeni miktarı ekle
+      const delta = data.amount;
+      const newAmount = Number(existing.amount) + delta;
+      await repo.update(existing.id, {
+        amount: newAmount,
+        description: data.description,
+        userId: data.userId ?? existing.userId,
+      });
+
+      // Kasa bakiyesini yalnızca delta kadar artır
+      if (existing.companyAccountId) {
+        await this.companyAccountService.updateBalance(
+          existing.companyAccountId,
+          delta,
+          'INCOME',
+          manager,
+        );
+      }
+
+      return repo.findOne({ where: { id: existing.id } }) as Promise<AccountTransaction>;
+    }
+
+    // Kayıt yoksa normal create
+    return this.create({ ...data, type: 'INCOME', sourceType: 'END_OF_DAY' }, manager);
   }
 
   async remove(id: number): Promise<void> {

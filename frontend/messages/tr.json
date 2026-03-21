@@ -29,7 +29,11 @@
         "loadingError": "Veriler yüklenirken hata oluştu",
         "details": "Detay",
         "page": "Sayfa",
-        "clear": "Temizle"
+        "clear": "Temizle",
+        "welcome": "Hoş geldin,",
+        "areYouSure": "Emin misiniz?",
+        "cannotUndo": "Bu işlem geri alınamaz",
+        "yesDelete": "Evet, sil"
     },
     "Dashboard": {
         "title": "Yönetim Paneli",
@@ -55,7 +59,13 @@
         "kitchen": "Mutfak (KDS)",
         "kitchenDesc": "Sipariş hazırlık ve bildirim ekranı",
         "reports": "Raporlar & Analiz",
-        "reportsDesc": "Satış grafikleri ve istatistikler"
+        "reportsDesc": "Satış grafikleri ve istatistikler",
+        "posScreen": "Sipariş Ekranı",
+        "ordersStandPc": "Sipariş Al (Stand PC)",
+        "sales": "Satışlar",
+        "salesDesc": "Günlük satışları izleyin ve gerekirse yeniden düzenleyin",
+        "invoices": "Faturalar",
+        "invoicesDesc": "Alış/satış faturaları ve stok girişi"
     },
     "Login": {
         "title": "Hoş Geldiniz",
@@ -465,7 +475,9 @@
         "newPrinter": "Yeni Yazıcı",
         "totalPrinters": "Toplam Yazıcı",
         "activePrinters": "Aktif Yazıcılar",
+        "passivePrinters": "Pasif Yazıcılar",
         "loading": "Yazıcılar Yükleniyor...",
+        "notFound": "Kayıtlı Yazıcı Bulunamadı",
         "tableId": "ID",
         "tableInfo": "Yazıcı Bilgisi",
         "tableSystemName": "Sistem Adı (Windows)",
@@ -508,6 +520,8 @@
         "labelLastName": "Soyad",
         "labelEmail": "E-Posta",
         "labelPassword": "Şifre",
+        "pinCodePlaceholder": "4 haneli PIN",
+        "labelPinCode": "PIN Kodu",
         "passwordPlaceholder": "Değiştirmek istemiyorsanız boş bırakın",
         "labelRole": "Rol",
         "selectRole": "Rol Seçiniz",

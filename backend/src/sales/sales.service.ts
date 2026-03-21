@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
+import { Recipe } from '../recipes/recipe.entity';
 import { Sale } from './sale.entity';
 import { SaleItem } from './sale-item.entity';
 import { RecipesService } from '../recipes/recipes.service';
@@ -85,12 +86,13 @@ export class SalesService implements OnModuleInit {
   }
 
   // Helper to fetch and map products bypassing TypeORM eager relation issues
-  private async mapProductsToSales(sales: Sale[]): Promise<Sale[]> {
+  private async mapProductsToSales(sales: Sale[], manager?: any): Promise<Sale[]> {
     if (sales.length === 0) return sales;
     const saleItemIds = sales.flatMap(s => s.items?.map(i => i.id) || []);
 
     if (saleItemIds.length > 0) {
-      const rawProducts: any[] = await this.saleRepository.query(`
+      const runner = manager ? manager : this.saleRepository;
+      const rawProducts: any[] = await runner.query(`
           SELECT si.id as saleItemId, p.*
           FROM sale_items si
           JOIN products p ON si.productId = p.id
@@ -148,6 +150,9 @@ export class SalesService implements OnModuleInit {
         } else {
           query.andWhere('sale.status = :status', { status });
         }
+      } else {
+        // By default, exclude CANCELLED records so they don't appear in totals
+        query.andWhere('sale.status != :cancelled', { cancelled: 'CANCELLED' });
       }
 
       if (tableId) {
@@ -199,82 +204,87 @@ export class SalesService implements OnModuleInit {
   }
 
   async create(saleData: Partial<Sale>): Promise<Sale> {
-    try {
-      const { items, ...data } = saleData;
+    return await this.saleRepository.manager.transaction(async (manager) => {
+      try {
+        const { items, ...dataRaw } = saleData;
+        const mergeSaleIds = (dataRaw as any).mergeSaleIds;
+        delete (dataRaw as any).mergeSaleIds;
+        const data = dataRaw;
 
-      // Handle Partner (Customer) default
-      if (!data.partnerId) {
-        const retailPartner = await this.partnersService.getOrCreateRetailCustomer();
-        data.partnerId = retailPartner.id;
-      }
+        // Handle Partner (Customer) default
+        if (!data.partnerId) {
+          const retailPartner = await this.partnersService.getOrCreateRetailCustomer();
+          data.partnerId = retailPartner.id;
+        }
 
-      const newSale = this.saleRepository.create(data);
-      let savedSale = await this.saleRepository.save(newSale);
+        const newSale = manager.create(Sale, data);
+        const savedSale = await manager.save(Sale, newSale);
 
-      if (items && items.length > 0) {
-        for (const item of items) {
-          const saleItem = this.saleItemRepository.create({
+        if (items && items.length > 0) {
+          const saleItems = items.map(item => manager.create(SaleItem, {
             productId: item.productId,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             costPrice: item.costPrice || 0,
-            total: item.total || (item.quantity * item.unitPrice),
+            total: item.total || (Number(item.quantity) * Number(item.unitPrice)),
             note: item.note,
             isWaiting: item.isWaiting || false,
             isMarshed: false,
             sale: savedSale,
-          });
-          await this.saleItemRepository.save(saleItem);
+            isPaid: savedSale.status === 'COMPLETED'
+          }));
+          await manager.save(SaleItem, saleItems);
+          savedSale.items = saleItems;
         }
-      }
 
-      // Record in finance if COMPLETED
-      if (savedSale.status === 'COMPLETED') {
-        await this.financeService.create({
-          amount: savedSale.totalAmount,
-          type: 'INCOME',
-          description: `Masa/Satış Ödemesi - Satış #${savedSale.id} ${savedSale.tableName ? `(${savedSale.tableName})` : ''}`,
-          sourceType: 'SALE',
-          sourceId: savedSale.id,
-          paymentMethod: savedSale.paymentMethod || 'KASA',
-          category: 'Satış',
-          partnerId: savedSale.partnerId,
-        });
-      }
+        // Finance kaydı ARTIK BURADA AÇILMIYOR.
+        // Tüm satış hareketleri Gün Sonu (endOfDay) alındığında
+        // account_transactions tablosuna toplu olarak upsert edilir.
 
-      // Table Status update
-      if (data.tableId) {
-        const table = await this.saleRepository.manager.findOne(Table, { where: { id: data.tableId } });
-        if (table) {
-          const waiter = await this.saleRepository.manager.findOne(User, { where: { id: data.waiterId || data.userId } });
-          await this.saleRepository.manager.update(Table, data.tableId, {
-            status: savedSale.status === 'COMPLETED' ? 'BOŞ' : 'DOLU',
-            waiterName: savedSale.status === 'COMPLETED' ? '' : (waiter ? `${waiter.firstName} ${waiter.lastName}` : (table.waiterName || 'Sistem')),
-            currentTotal: savedSale.status === 'COMPLETED' ? 0 : (Number(table.currentTotal || 0) + Number(savedSale.totalAmount)),
-            orderStartTime: table.status === 'BOŞ' ? new Date() : (savedSale.status === 'COMPLETED' ? null as any : table.orderStartTime),
-          });
+        // Table Status update
+        if (data.tableId) {
+          const table = await manager.findOne(Table, { where: { id: data.tableId } });
+          if (table) {
+            const waiter = await manager.findOne(User, { where: { id: data.waiterId || (data as any).userId } });
+            await manager.update(Table, data.tableId, {
+              status: savedSale.status === 'COMPLETED' ? 'BOŞ' : 'DOLU',
+              waiterName: savedSale.status === 'COMPLETED' ? '' : (waiter ? `${waiter.firstName} ${waiter.lastName}` : (table.waiterName || 'Sistem')),
+              currentTotal: savedSale.status === 'COMPLETED' ? 0 : (Number(table.currentTotal || 0) + Number(savedSale.totalAmount)),
+              orderStartTime: table.status === 'BOŞ' ? new Date() : (savedSale.status === 'COMPLETED' ? null as any : table.orderStartTime),
+            });
+          }
         }
+
+        // Stock deduction & Old Order Cleanup
+        if (!mergeSaleIds || mergeSaleIds.length === 0) {
+          await this.deductStockForSale(savedSale, manager);
+        } else {
+          for (const oldId of mergeSaleIds) {
+            const oldSale = await manager.findOne(Sale, { where: { id: oldId }, relations: ['items'] });
+            if (oldSale) {
+              if (oldSale.items) await manager.delete(SaleItem, oldSale.items.map(i => i.id));
+              await manager.delete(Sale, oldId);
+            }
+          }
+        }
+
+        const fullSales = await this.mapProductsToSales([savedSale], manager);
+        const fullSale = fullSales[0];
+
+        // Notify real-time listeners (Admin, POS, etc.)
+        this.kitchenGateway.notifySaleUpdate(fullSale);
+
+        // Notify kitchen specifically for new preparation orders
+        if (fullSale.status === 'NEW' || fullSale.status === 'PREPARATION') {
+          this.kitchenGateway.notifyNewOrder(fullSale as any);
+        }
+
+        return fullSale;
+      } catch (error: any) {
+        console.error('SALE CREATE ERROR:', error.message);
+        throw error;
       }
-
-      // Stock deduction
-      await this.deductStockForSale(savedSale.id);
-
-      const fullSales = await this.mapProductsToSales([savedSale]);
-      const fullSale = fullSales[0];
-
-      // Notify real-time listeners (Admin, POS, etc.)
-      this.kitchenGateway.notifySaleUpdate(fullSale);
-
-      // Notify kitchen specifically for new preparation orders
-      if (fullSale.status === 'NEW' || fullSale.status === 'PREPARATION') {
-        this.kitchenGateway.notifyNewOrder(fullSale as any);
-      }
-
-      return fullSale;
-    } catch (error: any) {
-      console.error('SALE CREATE ERROR:', error.message);
-      throw error;
-    }
+    });
   }
 
   async marsItem(itemId: number): Promise<SaleItem> {
@@ -300,7 +310,7 @@ export class SalesService implements OnModuleInit {
     const rawProduct = await this.saleRepository.query(`
       SELECT p.name, p.printerId FROM products p WHERE p.id = ${item.productId}
     `);
-    
+
     if (rawProduct && rawProduct.length > 0) {
       await this.printersService.printMars({
         tableName: item.sale?.tableName,
@@ -338,10 +348,11 @@ export class SalesService implements OnModuleInit {
   }
 
   async payItem(itemId: number, paymentMethod: string, partnerId?: number): Promise<void> {
-    return this.payBatchItems([itemId], paymentMethod, partnerId);
+    return this.payBatchItems({ itemIds: [itemId], paymentMethod, partnerId });
   }
 
-  async payBatchItems(itemIds: number[], paymentMethod: string, partnerId?: number): Promise<void> {
+  async payBatchItems(payload: { itemIds: number[], paymentMethod: string, partnerId?: number, paidAmountCash?: number, paidAmountCreditCard?: number }): Promise<void> {
+    const { itemIds, paymentMethod, partnerId, paidAmountCash, paidAmountCreditCard } = payload;
     if (!itemIds || itemIds.length === 0) return;
 
     await this.saleRepository.manager.transaction(async (manager) => {
@@ -349,33 +360,75 @@ export class SalesService implements OnModuleInit {
         where: { id: In(itemIds) },
         relations: ['sale', 'sale.table']
       });
-      if (items.length === 0) return;
+      
+      const unpaidItems = items.filter(i => !i.isPaid);
+      if (unpaidItems.length === 0) return;
 
-      for (const item of items) {
-        if (!item.isPaid) {
-          item.isPaid = true;
-          await manager.save(SaleItem, item);
+      const totalCheckoutAmount = unpaidItems.reduce((sum, item) => sum + (item.total || Number(item.unitPrice) * Number(item.quantity)), 0);
+      const firstItemSale = unpaidItems[0].sale;
+      const table = firstItemSale?.table;
 
-          // Update Table currentTotal decrease by item total.
-          if (item.sale && item.sale.table) {
-            const table = await manager.findOne(Table, { where: { id: item.sale.table.id } });
-            if (table) {
-               table.currentTotal = Math.max(0, Number(table.currentTotal || 0) - Number(item.total || (item.unitPrice * item.quantity)));
-               await manager.save(Table, table);
-            }
+      // 1. Create a unified COMPLETED Sale for these paid items
+      const checkoutSale = manager.create(Sale, {
+        partnerId: partnerId || firstItemSale?.partnerId,
+        userId: firstItemSale?.userId || firstItemSale?.waiterId,
+        waiterId: firstItemSale?.waiterId,
+        tableId: table?.id,
+        tableName: table?.name,
+        totalAmount: totalCheckoutAmount,
+        status: 'COMPLETED',
+        paymentMethod: paymentMethod || 'KASA',
+        paidAmountCash: paymentMethod === 'SPLIT' ? (paidAmountCash || 0) : (paymentMethod === 'KASA' || paymentMethod === 'CASH' ? totalCheckoutAmount : 0),
+        paidAmountCreditCard: paymentMethod === 'SPLIT' ? (paidAmountCreditCard || 0) : (paymentMethod === 'KREDI_KARTI' || paymentMethod === 'CREDIT_CARD' ? totalCheckoutAmount : 0),
+        paidAmountBank: (paymentMethod === 'BANKA' || paymentMethod === 'EFT') ? totalCheckoutAmount : 0,
+        discountAmount: 0,
+        serviceFee: 0,
+        isEndOfDayClosed: false,
+      }) as any;
+      
+      const savedCheckoutSale = await manager.save(Sale, checkoutSale);
+
+      // Collect the old Sale IDs to check for cleanup later
+      const oldSaleIds = new Set<number>();
+
+      // 2. Transfer items to this checkout sale and mark as paid
+      for (const item of unpaidItems) {
+        if (item.sale && item.sale.id) oldSaleIds.add(item.sale.id);
+        
+        item.isPaid = true;
+        item.sale = savedCheckoutSale;
+        await manager.save(SaleItem, item);
+      }
+
+      // 3. Update Table totals
+      if (table) {
+        const freshTable = await manager.findOne(Table, { where: { id: table.id } });
+        if (freshTable) {
+          const newTotal = Math.max(0, Number(freshTable.currentTotal || 0) - totalCheckoutAmount);
+          freshTable.currentTotal = newTotal;
+          if (newTotal === 0) {
+            freshTable.status = 'BOŞ';
+            freshTable.waiterName = '';
+            freshTable.orderStartTime = null as any;
           }
+          await manager.save(Table, freshTable);
+        }
+      }
 
-          // Finance kaydı
-          await this.financeService.create({
-            amount: item.total || (item.unitPrice * item.quantity),
-            type: 'INCOME',
-            description: `Satış Kalemi Ödemesi - Kalem #${item.id}`,
-            sourceType: 'SALE_ITEM',
-            sourceId: item.id,
-            paymentMethod: paymentMethod || 'KASA',
-            category: 'Satış',
-            partnerId: partnerId,
-          });
+      // 4. Finance kaydı ARTIK BURADA AÇILMIYOR.
+      // Kasa/masa ödemelerinin finans hareketi Gün Sonu (endOfDay) ile
+      // account_transactions tablosuna toplu upsert edilir.
+
+      // 5. Cleanup empty old temporary sales
+      for (const oldSaleId of oldSaleIds) {
+        const remainingItems = await manager.count(SaleItem, { where: { sale: { id: oldSaleId } } });
+        if (remainingItems === 0) {
+          await manager.delete(Sale, oldSaleId);
+        } else {
+          // If the old sale still has items, update its totalAmount
+          const remainingItemsData = await manager.find(SaleItem, { where: { sale: { id: oldSaleId } } });
+          const newTotalAmount = remainingItemsData.reduce((sum, item) => sum + (item.total || Number(item.unitPrice) * Number(item.quantity)), 0);
+          await manager.update(Sale, oldSaleId, { totalAmount: newTotalAmount });
         }
       }
     });
@@ -437,6 +490,8 @@ export class SalesService implements OnModuleInit {
     const sales = await this.saleRepository
       .createQueryBuilder('sale')
       .where('sale.status = :status', { status: 'COMPLETED' })
+      .andWhere('sale.status != :cancelled', { cancelled: 'CANCELLED' })
+      .andWhere('sale.createdAt >= :start', { start: todayStart })
       .andWhere('sale.createdAt <= :end', { end: todayEnd })
       .andWhere('sale.isEndOfDayClosed = :closed', { closed: false })
       .getMany();
@@ -466,13 +521,11 @@ export class SalesService implements OnModuleInit {
 
     const dateStr = todayStart.toLocaleDateString('tr-TR');
 
-    // Finans kayıtlarını oluştur
+    // Finans kayıtlarını upsert et (aynı gün tekrar yapılırsa yeni kayıt açmaz, mevcut güncellenir)
     if (cashTotal > 0) {
-      await this.financeService.create({
+      await this.financeService.upsertEndOfDay({
         amount: cashTotal,
-        type: 'INCOME',
         description: `Gün Sonu Nakit Tahsilat - ${dateStr}`,
-        sourceType: 'END_OF_DAY',
         category: 'Gün Sonu',
         paymentMethod: 'KASA',
         userId,
@@ -480,11 +533,9 @@ export class SalesService implements OnModuleInit {
     }
 
     if (cardTotal > 0) {
-      await this.financeService.create({
+      await this.financeService.upsertEndOfDay({
         amount: cardTotal,
-        type: 'INCOME',
         description: `Gün Sonu Kredi Kartı Tahsilat - ${dateStr}`,
-        sourceType: 'END_OF_DAY',
         category: 'Gün Sonu',
         paymentMethod: 'KREDI_KARTI',
         userId,
@@ -492,11 +543,9 @@ export class SalesService implements OnModuleInit {
     }
 
     if (bankTotal > 0) {
-      await this.financeService.create({
+      await this.financeService.upsertEndOfDay({
         amount: bankTotal,
-        type: 'INCOME',
         description: `Gün Sonu Banka Tahsilat - ${dateStr}`,
-        sourceType: 'END_OF_DAY',
         category: 'Gün Sonu',
         paymentMethod: 'BANKA',
         userId,
@@ -543,28 +592,60 @@ export class SalesService implements OnModuleInit {
     await this.saleRepository.delete(id);
   }
 
-  private async deductStockForSale(saleId: number): Promise<void> {
-    const sale = await this.findOne(saleId);
-    for (const item of sale.items) {
+  private async deductStockForSale(sale: Sale, manager: any): Promise<void> {
+    const items = sale.items;
+    if (!items || items.length === 0) return;
+
+    const productIds = Array.from(new Set(items.map(i => i.productId).filter(Boolean)));
+    if (productIds.length === 0) return;
+
+    // Fetch all recipes at once
+    const allRecipes = await manager.getRepository(Recipe).find({
+      where: { productId: In(productIds) },
+      relations: ['ingredient']
+    });
+
+    const recipeMap = new Map<number, Recipe[]>();
+    allRecipes.forEach((r: Recipe) => {
+      const list = recipeMap.get(r.productId) || [];
+      list.push(r);
+      recipeMap.set(r.productId, list);
+    });
+
+    const deductions = new Map<number, number>(); // productId/ingredientId -> totalQuantity
+    const itemCostMap = new Map<number, number>(); // itemId -> totalCost
+
+    for (const item of items) {
       const productId = item.productId;
       if (!productId) continue;
 
-      const recipes = await this.recipesService.findByProduct(productId);
+      const recipes = recipeMap.get(productId) || [];
       let totalCost = 0;
 
       if (recipes.length > 0) {
         for (const recipe of recipes) {
-          const deductQty = Number(recipe.quantity) * Number(item.quantity);
-          await this.stocksService.deductStock(recipe.ingredientId, deductQty);
+          const qty = Number(recipe.quantity) * Number(item.quantity);
+          deductions.set(recipe.ingredientId, (deductions.get(recipe.ingredientId) || 0) + qty);
           const ingredientCost = Number(recipe.ingredient?.costPrice || recipe.ingredient?.price || 0);
           totalCost += ingredientCost * Number(recipe.quantity);
         }
       } else {
-        await this.stocksService.deductStock(productId, Number(item.quantity));
-        const prod = (item as any).product;
-        totalCost = Number(prod?.costPrice || 0);
+        deductions.set(productId, (deductions.get(productId) || 0) + Number(item.quantity));
+        // Fallback for cost if no recipe
+        const rawProduct = await manager.query(`SELECT costPrice FROM products WHERE id = ${productId}`);
+        totalCost = Number(rawProduct[0]?.costPrice || 0);
       }
-      await this.saleItemRepository.update(item.id, { costPrice: totalCost });
+      itemCostMap.set(item.id, totalCost);
+    }
+
+    // Apply aggregated deductions
+    for (const [id, qty] of deductions.entries()) {
+      await this.stocksService.deductStock(id, qty, undefined, manager);
+    }
+
+    // Update costs in bulk-ish manner (each item can still have different cost)
+    for (const [itemId, cost] of itemCostMap.entries()) {
+      await manager.getRepository(SaleItem).update(itemId, { costPrice: cost });
     }
   }
 }

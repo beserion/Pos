@@ -115,7 +115,7 @@ export function PageClient() {
                         <i className="fat fa-print me-3 text-sky-600 dark:text-sky-400" style={{ fontSize: '50px' }}></i>
                         <div>
                             <h3 className="mb-0 text-3xl font-extralight text-sky-600 dark:text-sky-400 leading-none uppercase tracking-[0.25em]" id="title">{t('title')}</h3>
-                            <div className="h-1 w-1/2 bg-gradient-to-r from-sky-400 to-transparent rounded-full mt-2 mb-1"></div>
+                            <div className="h-1 w-1/1 bg-gradient-to-r from-sky-400 to-transparent rounded-full mt-2 mb-1"></div>
                             <h5 className="text-muted mb-0 text-lg font-medium text-slate-400 dark:text-slate-500 mt-0.5">{t('subtitle')}</h5>
                         </div>
                     </div>
@@ -131,15 +131,6 @@ export function PageClient() {
 
                 {/* KPI Bar - cardrighticon */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-sky-300 dark:hover:border-sky-500/40 hover:shadow-[0_8px_30px_-5px_rgba(14,165,233,0.3)] hover:scale-[1.02] cursor-pointer">
-                        <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('totalPrinters')}</p>
-                            <h3 className="text-3xl font-black text-slate-800 dark:text-white">{printers.length}</h3>
-                        </div>
-                        <div className="w-16 h-16 rounded-2xl bg-sky-50 dark:bg-sky-500/10 flex items-center justify-center text-sky-600 dark:text-sky-400">
-                            <i className="fat fa-print text-3xl"></i>
-                        </div>
-                    </div>
                     <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-emerald-300 dark:hover:border-emerald-500/40 hover:shadow-[0_8px_30px_-5px_rgba(16,185,129,0.3)] hover:scale-[1.02] cursor-pointer">
                         <div>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('activePrinters')}</p>
@@ -147,6 +138,29 @@ export function PageClient() {
                         </div>
                         <div className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
                             <i className="fat fa-circle-check text-3xl"></i>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-rose-300 dark:hover:border-rose-500/40 hover:shadow-[0_8px_30px_-5px_rgba(244,63,94,0.3)] hover:scale-[1.02] cursor-pointer">
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('passivePrinters') || 'Pasif Yazıcılar'}</p>
+                            <h3 className="text-3xl font-black text-slate-800 dark:text-white">{printers.filter(p => !p.isActive).length}</h3>
+                        </div>
+                        <div className="w-16 h-16 rounded-2xl bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center text-rose-600 dark:text-rose-400">
+                            <i className="fat fa-circle-xmark text-3xl"></i>
+                        </div>
+                    </div>
+
+                    {/* Empty Space for 3rd Column */}
+                    <div className="hidden md:block"></div>
+
+                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-sky-300 dark:hover:border-sky-500/40 hover:shadow-[0_8px_30px_-5px_rgba(14,165,233,0.3)] hover:scale-[1.02] cursor-pointer">
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('totalPrinters')}</p>
+                            <h3 className="text-3xl font-black text-slate-800 dark:text-white">{printers.length}</h3>
+                        </div>
+                        <div className="w-16 h-16 rounded-2xl bg-sky-50 dark:bg-sky-500/10 flex items-center justify-center text-sky-600 dark:text-sky-400">
+                            <i className="fat fa-print text-3xl"></i>
                         </div>
                     </div>
                 </div>
@@ -164,6 +178,7 @@ export function PageClient() {
                                     <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-700/50">
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest" style={{ width: '40px' }}>{t('tableId')}</th>
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableInfo')}</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('labelLocation')}</th>
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableSystemName')}</th>
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableIp')}</th>
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t('tableActions')}</th>
@@ -182,12 +197,17 @@ export function PageClient() {
                                                     </div>
                                                     <div>
                                                         <p className="font-black text-slate-800 dark:text-white tracking-tight leading-none text-lg capitalize">{printer.name}</p>
-                                                        <p className="text-xs font-bold text-slate-500 mt-1">{printer.location || t('locationNotSpecified')}</p>
                                                         <p className={`text-[10px] font-bold mt-1.5 uppercase tracking-widest ${printer.isActive ? 'text-emerald-500' : 'text-red-500'}`}>
                                                             {printer.isActive ? t('statusActive') : t('statusPassive')}
                                                         </p>
                                                     </div>
                                                 </div>
+                                            </td>
+                                            <td className="px-8 py-3">
+                                                <p className="text-sm font-bold text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                                                    <i className="fat fa-map-pin text-slate-300"></i>
+                                                    {printer.location || '-'}
+                                                </p>
                                             </td>
                                             <td className="px-8 py-3 text-sm font-bold text-slate-600 dark:text-slate-400">
                                                 {printer.printerName || '-'}
@@ -212,7 +232,7 @@ export function PageClient() {
                                     ))}
                                     {printers.length === 0 && (
                                         <tr>
-                                            <td colSpan={5} className="p-20 text-center">
+                                            <td colSpan={6} className="p-20 text-center">
                                                 <div className="flex flex-col items-center opacity-40">
                                                     <i className="fat fa-print text-6xl mb-4 text-slate-300"></i>
                                                     <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">{t('notFound')}</p>
@@ -281,12 +301,25 @@ export function PageClient() {
 
                                         <div>
                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{tc('active')}</label>
-                                            <div className="relative flex items-center pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl w-full">
-                                                <i className="fat fa-power-off absolute left-4 top-4 text-sky-500/50"></i>
-                                                <div className="form-check form-switch mb-0 flex-1 d-flex justify-content-end pr-2">
-                                                    <input className="form-check-input cursor-pointer" type="checkbox" checked={formData.isActive} onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })} />
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, isActive: !formData.isActive })}
+                                                className={`w-full h-[52px] px-4 rounded-2xl flex items-center justify-between transition-all border outline-none ${
+                                                    formData.isActive 
+                                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.1)]' 
+                                                    : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 text-slate-500'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${formData.isActive ? 'bg-emerald-500/20' : 'bg-slate-200 dark:bg-slate-800'}`}>
+                                                        <i className={`fat fa-power-off ${formData.isActive ? 'text-emerald-500' : 'text-slate-400'}`}></i>
+                                                    </div>
+                                                    <span className="font-bold text-sm tracking-wide">{formData.isActive ? t('statusActive') : t('statusPassive')}</span>
                                                 </div>
-                                            </div>
+                                                <div className={`w-12 h-6 rounded-full p-1 flex items-center transition-colors duration-300 ${formData.isActive ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                                    <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 flex-shrink-0 ${formData.isActive ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                                </div>
+                                            </button>
                                         </div>
                                     </div>
 

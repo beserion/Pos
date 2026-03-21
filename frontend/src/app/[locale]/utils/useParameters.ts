@@ -50,6 +50,9 @@ export interface AppParameters {
   currency_symbol: string;
   fiscal_year_start: string;
   auto_invoice: boolean;
+
+  // Görünüm
+  dashboard_column_count: number;
 }
 
 // Varsayılan değerler (DB'den gelmezse fallback)
@@ -93,6 +96,8 @@ export const DEFAULT_PARAMS: AppParameters = {
   currency_symbol: '₺',
   fiscal_year_start: 'Ocak',
   auto_invoice: false,
+
+  dashboard_column_count: 4,
 };
 
 // Tip dönüşüm yardımcısı
