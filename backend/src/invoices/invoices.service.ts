@@ -19,11 +19,9 @@ export class InvoicesService {
     private readonly stocksService: StocksService,
   ) {}
 
-  async onModuleInit() {
-    this.seedTestData()
-      .then(r => console.log('AUTO SEED RESULT:', r.msg))
-      .catch(e => console.error('AUTO SEED ERORR:', e.message));
-  }
+  // onModuleInit kaldırıldı: Önceden her yeniden başlatılmada otomatik seed çalışıyordu
+  // ve invoices tablosuna saleId olmadan yazdığı için 'Cannot insert NULL into saleId' hatasına yol açıyordu.
+  // seedTestData() manuel olarak çağrılabilir, otomatik çalışıtmayacak.
 
   async findAll(
     page: number = 1,

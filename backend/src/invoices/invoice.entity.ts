@@ -32,8 +32,8 @@ export class Invoice {
   @Column({ nullable: true })
   customerId: number; // legacy support
 
-  @Column({ nullable: true })
-  saleId: number;
+  @Column({ nullable: true, type: 'int' })
+  saleId: number | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   description: string | null;
