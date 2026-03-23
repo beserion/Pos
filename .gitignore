@@ -12,7 +12,11 @@ build/
 dist/
 .next/
 out/
-public/
+publish/frontend.zip
+
+# Cache and temporary folders
+.turbo/
+.cache/
 
 # Build artifacts
 *.tsbuildinfo
@@ -29,6 +33,7 @@ backend/*.tsbuildinfo
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.log
 
 # Local env files
 .env*.local
@@ -46,3 +51,8 @@ yarn-error.log*
 # OS files
 Thumbs.db
 db.crypt
+*.exe
+*.zip
+*.7z
+*.rar
+*.pdb
