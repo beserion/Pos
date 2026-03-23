@@ -20,17 +20,17 @@ export class Recipe {
   @JoinColumn({ name: 'productId' })
   product: Product;
 
-  @Column()
+  @Column({ default: 0 })
   productId: number;
 
   @ManyToOne('Product', { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'ingredientId' })
   ingredient: Product;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   ingredientId: number;
 
-  @Column('decimal', { precision: 10, scale: 3 })
+  @Column('decimal', { precision: 10, scale: 3 , default: 0 })
   quantity: number;
 
   @Column({ default: 'adet' })

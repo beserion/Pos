@@ -68,6 +68,7 @@ import { Department } from './departments/department.entity';
 import { ShiftsModule } from './shifts/shifts.module';
 import { Shift } from './shifts/shift.entity';
 import { ZReport } from './reports/z-report.entity';
+import { AuditLog } from './reports/audit-log.entity';
 
 import { ScheduleModule } from '@nestjs/schedule';
 
@@ -127,8 +128,10 @@ import { ScheduleModule } from '@nestjs/schedule';
             Department,
             Shift,
             ZReport,
+            AuditLog,
           ],
-          synchronize: false, // Migrations managed manually via migrate-remote.js
+          synchronize: true, // Auto-sync enabled by user permission
+          logging: true,
           options: {
             encrypt: true,
             trustServerCertificate: true,

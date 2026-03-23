@@ -16,7 +16,7 @@ export class AccountTransaction {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column('decimal', { precision: 12, scale: 2 })
+  @Column('decimal', { precision: 12, scale: 2 , default: 0 })
   amount: number;
 
   @Column()
@@ -28,7 +28,7 @@ export class AccountTransaction {
   @Column({ nullable: true })
   sourceType: string; // 'SALE', 'REFUND', 'PAYMENT', 'TRANSFER'
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   sourceId: number;
 
   @Column({ default: 'KASA' })
@@ -41,21 +41,21 @@ export class AccountTransaction {
   @JoinColumn({ name: 'userId' })
   user: User;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   userId: number;
 
   @ManyToOne(() => Partner, { nullable: true })
   @JoinColumn({ name: 'partnerId' })
   partner: Partner;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   partnerId: number;
 
   @ManyToOne(() => CompanyAccount, { nullable: true })
   @JoinColumn({ name: 'companyAccountId' })
   companyAccount: CompanyAccount;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   companyAccountId: number;
 
   @Column({ nullable: true })

@@ -29,7 +29,7 @@ export class Invoice {
   @Column({ type: 'int', nullable: true })
   partnerId: number | null;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   customerId: number; // legacy support
 
   @Column({ nullable: true, type: 'int' })
@@ -44,7 +44,7 @@ export class Invoice {
   @Column('decimal', { precision: 12, scale: 2, default: 0 })
   taxAmount: number; // Total VAT
 
-  @Column('decimal', { precision: 12, scale: 2 })
+  @Column('decimal', { precision: 12, scale: 2 , default: 0 })
   totalAmount: number; // subtotal + taxAmount
 
   @Column('decimal', { precision: 5, scale: 2, default: 0 })

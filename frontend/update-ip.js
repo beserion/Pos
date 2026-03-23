@@ -18,7 +18,7 @@ function getLocalIp() {
 const ip = getLocalIp();
 const envPath = path.join(__dirname, '.env.local');
 const varName = 'NEXT_PUBLIC_API_URL';
-const newValue = `https://posbackend.beserion.com.tr`;
+const newValue = `http://192.168.1.5:3050`;
 
 let envContent = '';
 if (fs.existsSync(envPath)) {

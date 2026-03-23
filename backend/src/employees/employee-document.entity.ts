@@ -13,7 +13,7 @@ export class EmployeeDocument {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column({ default: 0 })
   employeeId: number;
 
   @ManyToOne(() => Employee, (employee) => employee.documents, {

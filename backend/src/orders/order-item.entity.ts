@@ -21,13 +21,13 @@ export class OrderItem {
   @JoinColumn({ name: 'productId' })
   product: Product;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   productId: number;
 
-  @Column('decimal', { precision: 10, scale: 2 })
+  @Column('decimal', { precision: 10, scale: 2 , default: 0 })
   quantity: number;
 
-  @Column('decimal', { precision: 10, scale: 2 })
+  @Column('decimal', { precision: 10, scale: 2 , default: 0 })
   unitPrice: number;
 
   @Column({ nullable: true })

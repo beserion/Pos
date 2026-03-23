@@ -28,7 +28,7 @@ export class Product {
   @Column({ nullable: true, unique: true })
   barcode: string;
 
-  @Column('decimal', { precision: 10, scale: 2 })
+  @Column('decimal', { precision: 10, scale: 2 , default: 0 })
   price: number;
 
   @Column({ nullable: true })
@@ -40,7 +40,7 @@ export class Product {
   @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
   imageUrl: string;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   printerId: number;
 
   @Column('decimal', { precision: 10, scale: 2, default: 0, nullable: true })

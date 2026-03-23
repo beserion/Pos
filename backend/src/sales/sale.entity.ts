@@ -17,10 +17,10 @@ export class Sale {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   partnerId: number;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   userId: number; // Operator / Cashier
 
   @Column('decimal', { precision: 12, scale: 2, default: 0 })
@@ -70,11 +70,27 @@ export class Sale {
   @Column({ default: false })
   isEndOfDayClosed: boolean;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   cashRegisterId: number;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   shiftId: number;
+
+  // --- İade (Refund) Alanları ---
+  @Column('decimal', { precision: 12, scale: 2, default: 0, nullable: true })
+  refundAmount: number;
+
+  @Column({ length: 500, nullable: true })
+  refundReason: string;
+
+  @Column({ type: 'datetime2', nullable: true })
+  refundedAt: Date;
+
+  @Column({ nullable: true , default: 0 })
+  refundedByUserId: number;
+
+  @Column({ nullable: true , default: 0 })
+  companyId: number;
 
   @CreateDateColumn()
   createdAt: Date;

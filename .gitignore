@@ -3,7 +3,7 @@ backend/node_modules/
 frontend/node_modules/
 .pnp
 .pnp.js
-
+PROMPTS/*
 # Testing
 coverage/
 frontend/update-ip.js
@@ -24,7 +24,7 @@ publish/frontend.zip
 *.js.map
 backend/dist/
 backend/*.tsbuildinfo
-
+frontend/update-ip.js
 # Misc
 .DS_Store
 *.pem

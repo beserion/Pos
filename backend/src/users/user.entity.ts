@@ -45,7 +45,7 @@ export class User {
   @Column('simple-array', { nullable: true })
   extraPermissions: string[];
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   cashRegisterId: number;
 
   @CreateDateColumn()

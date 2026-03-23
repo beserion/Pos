@@ -14,7 +14,7 @@ export class CompanyAccount {
   @Column()
   name: string; // Örn: Akbank Ticari, Merkez Kasa, Garanti POS
 
-  @Column()
+  @Column({ default: 'CASH' })
   type: string; // 'CASH', 'BANK', 'CREDIT_CARD'
 
   @Column({ nullable: true })

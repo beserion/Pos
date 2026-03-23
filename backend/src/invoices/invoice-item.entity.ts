@@ -17,14 +17,14 @@ export class InvoiceItem {
   @JoinColumn({ name: 'invoiceId' })
   invoice: Invoice;
 
-  @Column()
+  @Column({ default: 0 })
   invoiceId: number;
 
   @ManyToOne(() => Product, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'productId' })
   product: Product;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   productId: number;
 
   @Column({ nullable: true })
@@ -36,7 +36,7 @@ export class InvoiceItem {
   @Column({ default: 'adet', nullable: true })
   unit: string;
 
-  @Column('decimal', { precision: 12, scale: 2 })
+  @Column('decimal', { precision: 12, scale: 2 , default: 0 })
   unitPrice: number;
 
   @Column('decimal', { precision: 5, scale: 2, default: 0 })

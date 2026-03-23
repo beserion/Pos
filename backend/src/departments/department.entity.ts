@@ -12,7 +12,7 @@ export class Department {
   @ManyToOne(() => Location, { nullable: true })
   location: Location;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   locationId: number;
 
   @Column({ default: true })
