@@ -50,9 +50,15 @@ async function bootstrap() {
 
   // Enable CORS
   app.enableCors({
-    origin: true,
+    origin: [
+      'https://pos.beserion.com.tr',
+      'https://posbackend.beserion.com.tr',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+    ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
+    allowedHeaders: 'Content-Type, Accept, Authorization',
   });
 
   const config = new DocumentBuilder()
