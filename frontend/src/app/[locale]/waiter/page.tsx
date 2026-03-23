@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { PageClient } from './PageClient';
 
 const locales = ['tr', 'en', 'de', 'fr', 'it', 'ar', 'ru', 'el'];
@@ -7,5 +8,9 @@ export function generateStaticParams() {
 }
 
 export default function Page() {
-    return <PageClient />;
+    return (
+        <Suspense fallback={<div>Loading...</div>}>
+            <PageClient />
+        </Suspense>
+    );
 }

@@ -37,6 +37,7 @@ yarn-error.log*
 
 # Local env files
 .env*.local
+.env
 
 # Editor directories and files
 .vscode/*
