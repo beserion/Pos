@@ -22,5 +22,5 @@
     "strictBindCallApply": true,
     "noFallthroughCasesInSwitch": true
   },
-  "exclude": ["diag-db.ts", "diag-db.js"]
+  "exclude": ["dist", "diag-db.ts", "diag-db.js"]
 }
