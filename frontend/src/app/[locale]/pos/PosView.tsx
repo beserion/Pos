@@ -424,21 +424,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             <div className="absolute inset-0 z-0 opacity-[0.03] dark:opacity-[0.05] pointer-events-none"
                 style={{ backgroundImage: 'radial-gradient(#4f46e5 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
 
-            {/* Shift Manager Overlay */}
-            <ShiftManager
-                user={user}
-                apiUrl={API_URL}
-                onShiftOpen={(shift, cashRegister) => {
-                    setActiveShift(shift);
-                    setActiveCashRegister(cashRegister);
-                    setShiftReady(true);
-                }}
-                onShiftClose={() => {
-                    setActiveShift(null);
-                    setActiveCashRegister(null);
-                    setShiftReady(false);
-                }}
-            />
+            {/* Vurgulu Arkaplan - Silinmiş ShiftManager overlay blok kodu */}
 
             {/* Sol Pane - Masa Seçimi */}
             <div className="flex-1 flex flex-col p-6 overflow-y-auto w-full md:w-auto relative z-10">
@@ -463,6 +449,22 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                             className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-all bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 backdrop-blur-md px-5 py-2.5 rounded-full border border-rose-500/20 shadow-sm active:scale-95">
                             <i className="fat fa-users text-rose-500"></i> Kasiyer
                         </button> */}
+
+                        {/* Shift Manager Overlay / Vardiya Kapat Butonu */}
+                        <ShiftManager
+                            user={user}
+                            apiUrl={API_URL}
+                            onShiftOpen={(shift, cashRegister) => {
+                                setActiveShift(shift);
+                                setActiveCashRegister(cashRegister);
+                                setShiftReady(true);
+                            }}
+                            onShiftClose={() => {
+                                setActiveShift(null);
+                                setActiveCashRegister(null);
+                                setShiftReady(false);
+                            }}
+                        />
 
                         <button
                             onClick={onSwitchToTakeOrder}

@@ -254,21 +254,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     return (
         <div className="h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 flex overflow-hidden transition-colors duration-300">
-            {/* Shift Manager Overlay */}
-            <ShiftManager
-                user={user}
-                apiUrl={API_URL}
-                onShiftOpen={(shift: any, cashRegister: any) => {
-                    setActiveShift(shift);
-                    setActiveCashRegister(cashRegister);
-                    setShiftReady(true);
-                }}
-                onShiftClose={() => {
-                    setActiveShift(null);
-                    setActiveCashRegister(null);
-                    setShiftReady(false);
-                }}
-            />
+            {/* Shift Manager Overlay moved to right header */}
 
             {/* Left Side: Product Selection (70%) */}
             <div className="flex-1 flex flex-col p-6 overflow-hidden relative z-10">
@@ -323,6 +309,22 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                         {/* <button onClick={() => router.push(`/${locale}/admin/sales`)} className="h-12 px-6 rounded-2xl bg-orange-500/10 text-orange-500 font-bold uppercase tracking-wider flex items-center gap-2 hover:bg-orange-500/20 transition-all border border-orange-500/20 active:scale-95 shadow-sm">
                             <i className="fat fa-basket-shopping text-orange-500"></i> Satışlar
                         </button> */}
+
+                        {/* Shift Manager Overlay / Vardiya Kapat Butonu */}
+                        <ShiftManager
+                            user={user}
+                            apiUrl={API_URL}
+                            onShiftOpen={(shift: any, cashRegister: any) => {
+                                setActiveShift(shift);
+                                setActiveCashRegister(cashRegister);
+                                setShiftReady(true);
+                            }}
+                            onShiftClose={() => {
+                                setActiveShift(null);
+                                setActiveCashRegister(null);
+                                setShiftReady(false);
+                            }}
+                        />
 
                         {/* Theme Toggle */}
                         <button onClick={onSwitchToPos} className="h-12 px-6 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider flex items-center gap-2 hover:bg-indigo-500/20 transition-all border border-indigo-500/20 active:scale-95 shadow-sm">

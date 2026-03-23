@@ -628,9 +628,9 @@ export default function ShiftManager({ user, apiUrl, onShiftOpen, onShiftClose }
                 {/* Floating shift close button — will be positioned by parent */}
                 <button
                     onClick={openCloseModal}
-                    className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-all bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 backdrop-blur-md px-5 py-2.5 rounded-full border border-rose-500/20 shadow-sm active:scale-95"
+                    className="group flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-all bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 backdrop-blur-md px-5 py-2.5 rounded-full border border-rose-500/20 shadow-sm active:scale-95"
                 >
-                    <i className="fat fa-lock text-rose-500"></i> Vardiya Kapat
+                    <i className="fat fa-lock text-rose-500 group-hover:animate-pulse"></i> Vardiya Kapat
                 </button>
             </>
         );
