@@ -32,6 +32,11 @@ export class TablesController {
     return this.tablesService.create(tableData);
   }
 
+  @Post('bulk')
+  bulkCreate(@Body() data: { zoneId: number, count: number, prefix: string, capacity: number }) {
+    return this.tablesService.bulkCreate(data);
+  }
+
   @Put(':id')
   update(@Param('id') id: string, @Body() updateData: Partial<Table>) {
     return this.tablesService.update(+id, updateData);

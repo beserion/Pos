@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
 import { Stock } from './stock.entity';
 import { Product } from '../products/product.entity';
+import { AlertsService } from '../alerts/alerts.service';
 
 @Injectable()
 export class StocksService {
@@ -15,6 +16,7 @@ export class StocksService {
     private stockRepository: Repository<Stock>,
     @InjectRepository(Product)
     private productRepository: Repository<Product>,
+    private alertsService: AlertsService,
   ) {}
 
   async findAll(
@@ -93,15 +95,71 @@ export class StocksService {
     return stock;
   }
 
-  async create(stockData: Partial<Stock>): Promise<Stock> {
-    const newStock = this.stockRepository.create(stockData);
+  async create(stockData: Partial<Stock> & { productId?: number }): Promise<Stock> {
+    const newStock = this.stockRepository.create();
+    Object.assign(newStock, stockData);
+    if (stockData.productId) {
+      newStock.product = { id: stockData.productId } as Product;
+    }
+    
+    if ('expirationDate' in stockData) {
+      const expDate: any = stockData.expirationDate;
+      if (
+        !expDate || 
+        expDate === 'null' || 
+        (typeof expDate === 'string' && expDate.trim() === '') || 
+        (expDate instanceof Date && isNaN(expDate.getTime()))
+      ) {
+        newStock.expirationDate = null as any;
+      } else {
+        newStock.expirationDate = new Date(expDate);
+      }
+    }
     return await this.stockRepository.save(newStock);
   }
 
-  async update(id: number, updateData: Partial<Stock>): Promise<Stock> {
-    await this.findOne(id);
-    await this.stockRepository.update(id, updateData);
-    return this.findOne(id);
+  async update(id: number, updateData: Partial<Stock> & { productId?: number }): Promise<Stock> {
+    const stock = await this.findOne(id);
+    
+    // Güvenli assign
+    for (const [key, val] of Object.entries(updateData)) {
+       if (key !== 'productId' && key !== 'product' && key !== 'expirationDate') {
+          (stock as any)[key] = val;
+       }
+    }
+
+    if (updateData.productId) {
+      stock.product = { id: updateData.productId } as Product;
+    }
+    
+    if ('expirationDate' in updateData) {
+      const expDate: any = updateData.expirationDate;
+      if (
+        !expDate || 
+        expDate === 'null' || 
+        (typeof expDate === 'string' && expDate.trim() === '') || 
+        (expDate instanceof Date && isNaN(expDate.getTime()))
+      ) {
+        stock.expirationDate = null as any;
+      } else {
+        stock.expirationDate = new Date(expDate);
+      }
+    }
+    
+    const saved = await this.stockRepository.save(stock);
+    
+    // Trigger STOCK_LOW alert if needed
+    try {
+      const allProductStocks = await this.stockRepository.find({ where: { product: { id: saved.product?.id || updateData.productId } } });
+      const totalStock = allProductStocks.reduce((sum: number, s: any) => sum + Number(s.quantity), 0);
+      this.alertsService.trigger('STOCK_LOW', {
+        relatedId: saved.product?.id,
+        numericValue: totalStock,
+        description: `Stok miktarı ${totalStock} seviyesine güncellendi!`,
+      }).catch(() => {});
+    } catch(e) { console.error('Alert error', e); }
+
+    return saved;
   }
 
   async remove(id: number): Promise<void> {
@@ -130,30 +188,43 @@ export class StocksService {
     if (stocks.length === 0) {
       // No stock record found — create one with negative value as a warning
       const newStock = repo.create({
-        product: { id: productId } as Product,
+        product: { id: productId } as any,
         quantity: -quantity,
         location: location || 'default',
       });
       await repo.save(newStock);
-      return;
+    } else {
+      let remaining = quantity;
+      for (const stock of stocks) {
+        if (remaining <= 0) break;
+
+        const available = Number(stock.quantity);
+        const deduct = Math.min(available, remaining);
+        stock.quantity = available - deduct;
+        remaining -= deduct;
+        await repo.save(stock);
+      }
+
+      // If there's still remaining, deduct from the first stock (can go negative)
+      if (remaining > 0) {
+        stocks[0].quantity = Number(stocks[0].quantity) - remaining;
+        await repo.save(stocks[0]);
+      }
     }
 
-    let remaining = quantity;
-    for (const stock of stocks) {
-      if (remaining <= 0) break;
-
-      const available = Number(stock.quantity);
-      const deduct = Math.min(available, remaining);
-      stock.quantity = available - deduct;
-      remaining -= deduct;
-      await repo.save(stock);
-    }
-
-    // If there's still remaining, deduct from the first stock (can go negative)
-    if (remaining > 0) {
-      stocks[0].quantity = Number(stocks[0].quantity) - remaining;
-      await repo.save(stocks[0]);
-    }
+    // Trigger STOCK_LOW alert if needed
+    try {
+      const allProductStocks = await repo.find({ where: { product: { id: productId } } });
+      const totalStock = allProductStocks.reduce((sum: number, s: any) => sum + Number(s.quantity), 0);
+      const productRepo = manager ? manager.getRepository(Product) : this.productRepository;
+      const product = await productRepo.findOne({ where: { id: productId } });
+      
+      this.alertsService.trigger('STOCK_LOW', {
+        relatedId: productId,
+        numericValue: totalStock,
+        description: `${product?.name || `Ürün #${productId}`} stok miktarı ${totalStock} adet/birim seviyesine düştü!`,
+      }).catch(() => {});
+    } catch(e) { console.error('Alert error', e); }
   }
 
   /**
@@ -176,12 +247,26 @@ export class StocksService {
       await repo.save(stock);
     } else {
       const newStock = repo.create({
-        product: { id: productId } as Product,
+        product: { id: productId } as any,
         quantity,
         location: location || 'default',
       });
       await repo.save(newStock);
     }
+
+    // Trigger STOCK_LOW alert if needed
+    try {
+      const allProductStocks = await repo.find({ where: { product: { id: productId } } });
+      const totalStock = allProductStocks.reduce((sum: number, s: any) => sum + Number(s.quantity), 0);
+      const productRepo = manager ? manager.getRepository(Product) : this.productRepository;
+      const product = await productRepo.findOne({ where: { id: productId } });
+      
+      this.alertsService.trigger('STOCK_LOW', {
+        relatedId: productId,
+        numericValue: totalStock,
+        description: `${product?.name || `Ürün #${productId}`} stok miktarı ${totalStock} adet/birim seviyesinde!`,
+      }).catch(() => {});
+    } catch(e) { console.error('Alert error', e); }
   }
 
   /**

@@ -13,6 +13,7 @@ import { FinanceService } from '../finance/finance.service';
 import { PartnersService } from '../partners/partners.service';
 import { PrintersService } from '../printers/printers.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { AlertsService } from '../alerts/alerts.service';
 
 @Injectable()
 export class SalesService implements OnModuleInit {
@@ -29,6 +30,7 @@ export class SalesService implements OnModuleInit {
     private financeService: FinanceService,
     private partnersService: PartnersService,
     private printersService: PrintersService,
+    private alertsService: AlertsService,
   ) { }
 
   async onModuleInit() {
@@ -185,7 +187,7 @@ export class SalesService implements OnModuleInit {
   async findOne(id: number): Promise<Sale> {
     const sale = await this.saleRepository.findOne({
       where: { id },
-      relations: ['items', 'table', 'waiter'],
+      relations: ['items', 'table', 'table.zone', 'waiter'],
     });
     if (!sale) {
       throw new NotFoundException(`Sale with ID ${id} not found`);
@@ -200,6 +202,20 @@ export class SalesService implements OnModuleInit {
     const updated = await this.saleRepository.save(sale);
     this.kitchenGateway.notifyOrderUpdated(updated as any);
     this.kitchenGateway.notifySaleUpdate(updated);
+
+    if (status === 'READY') {
+      const locationName = updated.table?.zone ? `${updated.table.zone.name} bölümü, ${updated.table.name}` : (updated.tableName || 'Paket');
+      this.alertsService.trigger('KDS_MESSAGE_ACTIVE', {
+        triggerUserId: undefined,
+        triggerUserName: 'Mutfak (KDS)',
+        saleId: updated.id,
+        tableId: updated.tableId,
+        tableName: updated.tableName,
+        description: `${locationName} siparişiniz hazır!`,
+        dynamicTargetUserId: updated.waiterId || updated.userId,
+      }).catch(() => {});
+    }
+
     return updated;
   }
 
@@ -243,7 +259,7 @@ export class SalesService implements OnModuleInit {
 
         // Table Status update
         if (data.tableId) {
-          const table = await manager.findOne(Table, { where: { id: data.tableId } });
+          const table = await manager.findOne(Table, { where: { id: data.tableId, isDeleted: false } });
           if (table) {
             const waiter = await manager.findOne(User, { where: { id: data.waiterId || (data as any).userId } });
             await manager.update(Table, data.tableId, {
@@ -268,8 +284,40 @@ export class SalesService implements OnModuleInit {
           }
         }
 
-        const fullSales = await this.mapProductsToSales([savedSale], manager);
+        const refreshedSale = await manager.findOne(Sale, {
+          where: { id: savedSale.id },
+          relations: ['items', 'table', 'table.zone', 'waiter']
+        }) as Sale;
+        const fullSales = await this.mapProductsToSales([refreshedSale], manager);
         const fullSale = fullSales[0];
+
+        // Yüksek indirim bildirimi
+        if (Number(data.discountAmount || 0) > 0 && Number(data.totalAmount || 0) > 0) {
+          const discountRate = (Number(data.discountAmount) / (Number(data.totalAmount) + Number(data.discountAmount))) * 100;
+          const waiterUser = data.waiterId
+            ? await manager.findOne(User, { where: { id: data.waiterId } })
+            : null;
+          this.alertsService.trigger('SALE_DISCOUNT_HIGH', {
+            triggerUserId: data.waiterId,
+            triggerUserName: waiterUser ? `${waiterUser.firstName} ${waiterUser.lastName}` : undefined,
+            saleId: savedSale.id,
+            tableId: data.tableId,
+            tableName: data.tableName,
+            description: `İndirim uygulandı: %${discountRate.toFixed(1)} (₺${data.discountAmount}) — Masa: ${data.tableName || '-'}`,
+            numericValue: discountRate,
+          }).catch(() => {});
+        }
+
+        // İkram bildirimi (toplam tutar 0)
+        if (Number(data.totalAmount || 0) === 0 && (fullSale.items?.length || 0) > 0) {
+          this.alertsService.trigger('SALE_COMPLIMENTARY', {
+            triggerUserId: data.waiterId,
+            saleId: savedSale.id,
+            tableId: data.tableId,
+            tableName: data.tableName,
+            description: `İkram yapıldı — Masa: ${data.tableName || '-'}`,
+          }).catch(() => {});
+        }
 
         // Notify real-time listeners (Admin, POS, etc.)
         this.kitchenGateway.notifySaleUpdate(fullSale);
@@ -329,7 +377,7 @@ export class SalesService implements OnModuleInit {
   async readyItem(itemId: number): Promise<SaleItem> {
     const item = await this.saleItemRepository.findOne({
       where: { id: itemId },
-      relations: ['sale']
+      relations: ['sale', 'sale.waiter', 'sale.table', 'sale.table.zone']
     });
     if (!item) throw new NotFoundException('Ürün bulunamadı');
 
@@ -343,6 +391,19 @@ export class SalesService implements OnModuleInit {
       productId: item.productId,
       isReady: updated.isReady
     });
+
+    if (updated.isReady && item.sale) {
+      const locationName = item.sale.table?.zone ? `${item.sale.table.zone.name} bölümü, ${item.sale.table.name}` : (item.sale.tableName || 'Paket');
+      this.alertsService.trigger('KDS_MESSAGE_ACTIVE', {
+        triggerUserId: undefined,
+        triggerUserName: 'Mutfak (KDS)',
+        saleId: item.sale.id,
+        tableId: item.sale.tableId,
+        tableName: item.sale.tableName,
+        description: `${locationName} siparişinizde bir ürün hazır!`,
+        dynamicTargetUserId: item.sale.waiterId || item.sale.userId,
+      }).catch(() => {});
+    }
 
     return updated;
   }
@@ -433,19 +494,24 @@ export class SalesService implements OnModuleInit {
       }
     });
 
-    this.kitchenGateway.notifySaleUpdate({ type: 'BATCH_PAYMENT', itemIds });
   }
 
   async getKitchenOrders(status?: string): Promise<Sale[]> {
     const statuses = status ? [status] : ['NEW', 'PREPARATION'];
-    const sales = await this.saleRepository.createQueryBuilder('sale')
+    const query = this.saleRepository.createQueryBuilder('sale')
       .leftJoinAndSelect('sale.items', 'items')
       .leftJoinAndSelect('sale.table', 'table')
       .leftJoinAndSelect('sale.waiter', 'waiter')
       .where('sale.status IN (:...statuses)', { statuses })
       .andWhere('sale.tableId IS NOT NULL')
-      .orderBy(status === 'READY' ? 'sale.updatedAt' : 'sale.createdAt', status === 'READY' ? 'DESC' : 'ASC')
-      .getMany();
+      .andWhere('sale.isEndOfDayClosed = 0')
+      .orderBy(status === 'READY' ? 'sale.updatedAt' : 'sale.createdAt', status === 'READY' ? 'DESC' : 'ASC');
+
+    if (status === 'READY') {
+      query.take(50);
+    }
+
+    const sales = await query.getMany();
 
     return this.mapProductsToSales(sales);
   }
@@ -453,11 +519,11 @@ export class SalesService implements OnModuleInit {
   async getKitchenCounts(): Promise<{ pending: number; finished: number; total: number }> {
     const pending = await this.saleRepository.count({
       where: [
-        { status: 'NEW' as any },
-        { status: 'PREPARATION' as any },
+        { status: 'NEW' as any, isEndOfDayClosed: false },
+        { status: 'PREPARATION' as any, isEndOfDayClosed: false },
       ],
     });
-    const finished = await this.saleRepository.count({ where: { status: 'READY' as any } });
+    const finished = await this.saleRepository.count({ where: { status: 'READY' as any, isEndOfDayClosed: false } });
     const total = pending + finished;
     return { pending, finished, total };
   }
@@ -560,12 +626,21 @@ export class SalesService implements OnModuleInit {
       .whereInIds(saleIds)
       .execute();
 
+    const grandTotal = cashTotal + cardTotal + bankTotal;
+
+    // Bildirim tetikle (Manuel ve Otomatik Ortak)
+    this.alertsService.trigger('END_OF_DAY', {
+      triggerUserId: userId,
+      description: `Gün Sonu Kapatıldı. Toplam Hasılat: ₺${grandTotal}`,
+      numericValue: grandTotal,
+    }).catch(() => {});
+
     return {
       date: dateStr,
       cashTotal,
       cardTotal,
       bankTotal,
-      grandTotal: cashTotal + cardTotal + bankTotal,
+      grandTotal,
     };
   }
 
@@ -575,7 +650,7 @@ export class SalesService implements OnModuleInit {
         { tableId, status: In(['NEW', 'PREPARATION', 'READY', 'SERVED']) },
         { status: 'CANCELLED' }
       );
-      const table = await manager.findOne(Table, { where: { id: tableId } });
+      const table = await manager.findOne(Table, { where: { id: tableId, isDeleted: false } });
       if (table) {
         await manager.update(Table, tableId, {
           status: 'BOŞ',
@@ -585,6 +660,12 @@ export class SalesService implements OnModuleInit {
         });
       }
     });
+
+    // Bildirim tetikle
+    this.alertsService.trigger('SALE_CANCELLED', {
+      tableId,
+      description: `Masa #${tableId} adisyonu iptal edildi.`,
+    }).catch(() => {});
   }
 
   async remove(id: number): Promise<void> {

@@ -13,6 +13,7 @@ import { PrintersModule } from '../printers/printers.module';
 import { Table } from '../tables/table.entity';
 import { User } from '../users/user.entity';
 import { KitchenGateway } from '../orders/kitchen.gateway';
+import { AlertsModule } from '../alerts/alerts.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { KitchenGateway } from '../orders/kitchen.gateway';
     FinanceModule,
     PartnersModule,
     PrintersModule,
+    AlertsModule,
   ],
   providers: [SalesService, KitchenGateway],
   controllers: [SalesController],

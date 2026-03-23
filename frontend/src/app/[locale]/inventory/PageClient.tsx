@@ -58,7 +58,7 @@ export function PageClient() {
         try {
             setIsFetching(true);
             const token = Cookies.get('token');
-            const res = await axios.get('http://localhost:3050/stocks', {
+            const res = await axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/stocks', {
                 headers: { Authorization: `Bearer ${token}` },
                 params: {
                     page,
@@ -107,7 +107,7 @@ export function PageClient() {
     const fetchWarehouses = async () => {
         try {
             const token = Cookies.get('token');
-            const res = await axios.get('http://localhost:3050/warehouses', {
+            const res = await axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/warehouses', {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setWarehouses(res.data);
@@ -126,11 +126,11 @@ export function PageClient() {
             };
 
             if (formData.id === 0) {
-            await axios.post('http://localhost:3050/stocks', data, {
+            await axios.post((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/stocks', data, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             } else {
-                await axios.put(`http://localhost:3050/stocks/${formData.id}`, data, {
+                await axios.put(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/stocks/${formData.id}`, data, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
             }
@@ -156,7 +156,7 @@ export function PageClient() {
         if (result.isConfirmed) {
             try {
                 const token = Cookies.get('token');
-                await axios.delete(`http://localhost:3050/stocks/${id}`, {
+                await axios.delete(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/stocks/${id}`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 toastSwal({ icon: 'success', title: tc('success') });

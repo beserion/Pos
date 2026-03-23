@@ -58,6 +58,16 @@ import { Modifier } from './modifiers/modifier.entity';
 import { Parameter } from './parameters/parameter.entity';
 import { PermissionModulesModule } from './permission-modules/permission-modules.module';
 import { PermModule } from './permission-modules/permission-module.entity';
+import { AlertsModule } from './alerts/alerts.module';
+import { AlertRule } from './alerts/alert-rule.entity';
+import { AlertNotification } from './alerts/alert-notification.entity';
+import { CashRegistersModule } from './cash-registers/cash-registers.module';
+import { CashRegister } from './cash-registers/cash-register.entity';
+import { DepartmentsModule } from './departments/departments.module';
+import { Department } from './departments/department.entity';
+import { ShiftsModule } from './shifts/shifts.module';
+import { Shift } from './shifts/shift.entity';
+import { ZReport } from './reports/z-report.entity';
 
 import { ScheduleModule } from '@nestjs/schedule';
 
@@ -111,6 +121,12 @@ import { ScheduleModule } from '@nestjs/schedule';
             Warehouse,
             Parameter,
             PermModule,
+            AlertRule,
+            AlertNotification,
+            CashRegister,
+            Department,
+            Shift,
+            ZReport,
           ],
           synchronize: false, // Migrations managed manually via migrate-remote.js
           options: {
@@ -162,6 +178,10 @@ import { ScheduleModule } from '@nestjs/schedule';
     ModifiersModule,
     ParametersModule,
     PermissionModulesModule,
+    AlertsModule,
+    CashRegistersModule,
+    DepartmentsModule,
+    ShiftsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

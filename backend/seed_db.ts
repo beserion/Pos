@@ -55,7 +55,20 @@ async function runSeed() {
     }
     console.log('10 reservations created successfully.');
   } catch (err) {
-      console.log('Could not insert raw reservations:', err.message);
+  }
+
+  console.log('Seeding System Parameters...');
+  try {
+    await dataSource.query(`
+      IF NOT EXISTS (SELECT 1 FROM system_parameters WHERE [module] = 'pos' AND [key] = 'business_day_start_hour')
+      BEGIN
+        INSERT INTO system_parameters ([module], [key], [value], [type], [label], [description])
+        VALUES ('pos', 'business_day_start_hour', '04:00', 'time', 'Gece Dönüş Saati', 'İş gününün hangi saatte sıfırlanacağını belirler.')
+      END
+    `);
+    console.log('System Parameters seeded successfully.');
+  } catch (err) {
+    console.error('System parameters seed error:', err.message);
   }
 
   await app.close();

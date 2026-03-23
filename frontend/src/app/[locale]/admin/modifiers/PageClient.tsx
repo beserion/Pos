@@ -35,7 +35,7 @@ export function PageClient() {
         if (!user?.token) return;
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const res = await axios.get('http://localhost:3050/modifiers', config);
+            const res = await axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/modifiers', config);
             setModifiers(res.data);
         } catch (error) {
             console.error('Error fetching data', error);
@@ -56,10 +56,10 @@ export function PageClient() {
             };
 
             if (formData.id === 0) {
-                await axios.post('http://localhost:3050/modifiers', payload, config);
+                await axios.post((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/modifiers', payload, config);
                 toastSwal({ title: tc('success'), text: 'Özellik başarıyla eklendi.', icon: 'success' });
             } else {
-                await axios.put(`http://localhost:3050/modifiers/${formData.id}`, payload, config);
+                await axios.put(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/modifiers/${formData.id}`, payload, config);
                 toastSwal({ title: tc('success'), text: 'Özellik başarıyla güncellendi.', icon: 'success' });
             }
             setIsModalOpen(false);
@@ -82,7 +82,7 @@ export function PageClient() {
 
         if (result.isConfirmed && user?.token) {
             try {
-                await axios.delete(`http://localhost:3050/modifiers/${id}`, {
+                await axios.delete(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/modifiers/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
                 toastSwal({ title: tc('success'), text: 'Silme işlemi başarılı', icon: 'success' });

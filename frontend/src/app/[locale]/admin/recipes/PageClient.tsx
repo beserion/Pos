@@ -48,8 +48,8 @@ export function PageClient() {
         if (!user?.token) return;
         try {
             const [recipeRes, prodRes] = await Promise.all([
-                axios.get('http://localhost:3050/recipes', { headers: { Authorization: `Bearer ${user.token}` } }),
-                axios.get('http://localhost:3050/products', { headers: { Authorization: `Bearer ${user.token}` } })
+                axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/recipes', { headers: { Authorization: `Bearer ${user.token}` } }),
+                axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/products', { headers: { Authorization: `Bearer ${user.token}` } })
             ]);
             setRecipes(recipeRes.data);
             setProducts(prodRes.data);
@@ -76,10 +76,10 @@ export function PageClient() {
 
             if (formData.id === 0) {
                 const { id, ...postData } = payload;
-                await axios.post('http://localhost:3050/recipes', postData, config);
+                await axios.post((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/recipes', postData, config);
                 toastSwal({ title: tc('success'), text: tc('added'), icon: 'success' });
             } else {
-                await axios.put(`http://localhost:3050/recipes/${formData.id}`, payload, config);
+                await axios.put(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/recipes/${formData.id}`, payload, config);
                 toastSwal({ title: tc('success'), text: tc('saved'), icon: 'success' });
             }
             setIsModalOpen(false);
@@ -102,7 +102,7 @@ export function PageClient() {
 
         if (result.isConfirmed && user?.token) {
             try {
-                await axios.delete(`http://localhost:3050/recipes/${id}`, {
+                await axios.delete(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/recipes/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
                 toastSwal({ title: tc('deleted'), text: t('deleteSuccess'), icon: 'success' });

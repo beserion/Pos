@@ -36,7 +36,7 @@ export function PageClient() {
     const [totalPages, setTotalPages] = useState(1);
     const limit = 30;
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+    const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')));
 
     const fetchSales = async () => {
         setDataLoading(true);

@@ -51,7 +51,7 @@ export function PageClient() {
     const fetchData = async () => {
         if (!user?.token) return;
         try {
-            const res = await axios.get('http://localhost:3050/products', {
+            const res = await axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/products', {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
             // Filter only ingredients
@@ -73,10 +73,10 @@ export function PageClient() {
 
             if (formData.id === 0) {
                 const { id, ...postData } = payload;
-                await axios.post('http://localhost:3050/products', postData, config);
+                await axios.post((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/products', postData, config);
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             } else {
-                await axios.put(`http://localhost:3050/products/${formData.id}`, payload, config);
+                await axios.put(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/products/${formData.id}`, payload, config);
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             }
             setIsModalOpen(false);
@@ -99,7 +99,7 @@ export function PageClient() {
 
         if (result.isConfirmed && user?.token) {
             try {
-                await axios.delete(`http://localhost:3050/products/${id}`, {
+                await axios.delete(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/products/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
                 toastSwal({ title: tc('success'), text: t('deleteSuccess'), icon: 'success' });

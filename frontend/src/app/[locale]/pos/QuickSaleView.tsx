@@ -8,6 +8,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { showSwal, toastSwal } from '../utils/swal';
 import { printReceipt } from '../utils/print';
 import { useTheme } from 'next-themes';
+import ShiftManager from '@/components/shifts/ShiftManager';
 
 interface Product {
     id: number;
@@ -32,7 +33,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     const tc = useTranslations('Common');
     const { user, loading: authLoading } = useAuth();
     const { theme, setTheme } = useTheme();
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+    const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')));
 
     const [products, setProducts] = useState<Product[]>([]);
     const [categories, setCategories] = useState<string[]>([]);
@@ -45,6 +46,20 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [pinCode, setPinCode] = useState('');
     const [isPinRequired, setIsPinRequired] = useState(true);
     const { loginPinOnly } = useAuth();
+
+    const [activeShift, setActiveShift] = useState<any | null>(null);
+    const [activeCashRegister, setActiveCashRegister] = useState<any | null>(null);
+    const [shiftReady, setShiftReady] = useState(false);
+
+    useEffect(() => {
+        if (activeCashRegister?.allowedPaymentMethods?.length > 0) {
+            if (!activeCashRegister.allowedPaymentMethods.includes('Nakit') && activeCashRegister.allowedPaymentMethods.includes('Kart')) {
+                setSelectedPaymentMethod('CREDIT_CARD');
+            } else if (!activeCashRegister.allowedPaymentMethods.includes('Kart') && activeCashRegister.allowedPaymentMethods.includes('Nakit')) {
+                setSelectedPaymentMethod('CASH');
+            }
+        }
+    }, [activeCashRegister]);
 
     const fetchData = async () => {
         try {
@@ -156,6 +171,8 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
             const saleData = {
                 totalAmount,
                 paymentMethod,
+                cashRegisterId: activeCashRegister?.id || null,
+                shiftId: activeShift?.id || null,
                 status: 'COMPLETED',
                 tableName: 'QUICKSALE',
                 description: 'Perakende Müşteri',
@@ -237,8 +254,24 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     return (
         <div className="h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 flex overflow-hidden transition-colors duration-300">
+            {/* Shift Manager Overlay */}
+            <ShiftManager
+                user={user}
+                apiUrl={API_URL}
+                onShiftOpen={(shift: any, cashRegister: any) => {
+                    setActiveShift(shift);
+                    setActiveCashRegister(cashRegister);
+                    setShiftReady(true);
+                }}
+                onShiftClose={() => {
+                    setActiveShift(null);
+                    setActiveCashRegister(null);
+                    setShiftReady(false);
+                }}
+            />
+
             {/* Left Side: Product Selection (70%) */}
-            <div className="flex-1 flex flex-col p-6 overflow-hidden">
+            <div className="flex-1 flex flex-col p-6 overflow-hidden relative z-10">
                 <div className="flex justify-between items-center mb-6">
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-2xl bg-orange-500/20 text-orange-500 flex items-center justify-center">
@@ -404,6 +437,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 pb-2">
+                        {(!activeCashRegister?.allowedPaymentMethods || activeCashRegister.allowedPaymentMethods.length === 0 || activeCashRegister.allowedPaymentMethods.includes('Nakit')) && (
                         <button
                             onClick={() => { if(cart.length > 0) setSelectedPaymentMethod('CASH'); }}
                             className={`rounded-2xl py-3 flex flex-col items-center justify-center gap-1 transition-all border-2 ${selectedPaymentMethod === 'CASH' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/80'} ${cart.length === 0 ? 'opacity-50 cursor-not-allowed' : 'active:scale-95'}`}
@@ -411,6 +445,8 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                             <i className="fat fa-money-bill-wave text-xl"></i>
                             <span className="text-[10px] font-black uppercase tracking-widest">{t('paymentCash') || 'Nakit'}</span>
                         </button>
+                        )}
+                        {(!activeCashRegister?.allowedPaymentMethods || activeCashRegister.allowedPaymentMethods.length === 0 || activeCashRegister.allowedPaymentMethods.includes('Kart')) && (
                         <button
                             onClick={() => { if(cart.length > 0) setSelectedPaymentMethod('CREDIT_CARD'); }}
                             className={`rounded-2xl py-3 flex flex-col items-center justify-center gap-1 transition-all border-2 ${selectedPaymentMethod === 'CREDIT_CARD' ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/80'} ${cart.length === 0 ? 'opacity-50 cursor-not-allowed' : 'active:scale-95'}`}
@@ -418,6 +454,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                             <i className="fat fa-credit-card text-xl"></i>
                             <span className="text-[10px] font-black uppercase tracking-widest">{t('paymentCreditCard') || 'Kredi Kartı'}</span>
                         </button>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 pb-4">

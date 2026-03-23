@@ -26,7 +26,7 @@ export default function StockUpsert({ formData, setFormData, onSave, onClose }: 
         const fetchProducts = async () => {
             try {
                 const token = Cookies.get('token');
-                const res = await axios.get('http://localhost:3050/products', {
+                const res = await axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/products', {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 setProducts(res.data);

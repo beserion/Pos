@@ -59,9 +59,9 @@ export function PageClient() {
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const [zonesRes, locsRes, tablesRes] = await Promise.all([
-                axios.get('http://localhost:3050/zones', config),
-                axios.get('http://localhost:3050/locations', config),
-                axios.get('http://localhost:3050/tables', config)
+                axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/zones', config),
+                axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/locations', config),
+                axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/tables', config)
             ]);
             setZones(zonesRes.data);
             setLocations(locsRes.data);
@@ -87,10 +87,10 @@ export function PageClient() {
             };
 
             if (formData.id === 0) {
-                await axios.post('http://localhost:3050/zones', payload, config);
+                await axios.post((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/zones', payload, config);
                 toastSwal({ title: tc('success'), text: t('deleteSuccess').replace('silindi', 'eklendi'), icon: 'success' });
             } else {
-                await axios.put(`http://localhost:3050/zones/${formData.id}`, payload, config);
+                await axios.put(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/zones/${formData.id}`, payload, config);
                 toastSwal({ title: tc('success'), text: t('deleteSuccess').replace('silindi', 'güncellendi'), icon: 'success' });
             }
             setIsModalOpen(false);
@@ -113,7 +113,7 @@ export function PageClient() {
 
         if (result.isConfirmed && user?.token) {
             try {
-                await axios.delete(`http://localhost:3050/zones/${id}`, {
+                await axios.delete(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/zones/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
                 toastSwal({ title: tc('success'), text: t('deleteSuccess'), icon: 'success' });
@@ -149,7 +149,7 @@ export function PageClient() {
                 isActive: true,
                 zone: { id: selectedZone.id }
             };
-            await axios.post('http://localhost:3050/tables', payload, config);
+            await axios.post((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/tables', payload, config);
             toastSwal({ title: tc('success'), text: tc('saved'), icon: 'success' });
             setNewTableData({ name: '', capacity: 4 });
             fetchData(); // Refresh both zones and tables
@@ -170,7 +170,7 @@ export function PageClient() {
         if (result.isConfirmed) {
             try {
                 const config = { headers: { Authorization: `Bearer ${user.token}` } };
-                await axios.delete(`http://localhost:3050/tables/${id}`, config);
+                await axios.delete(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/tables/${id}`, config);
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
                 fetchData();
             } catch (error) {
@@ -306,11 +306,11 @@ export function PageClient() {
                                                     {allTables.filter(tbl => (tbl.zoneId === z.id || tbl.zone?.id === z.id)).reduce((a, b) => a + (b.capacity || 0), 0)}
                                                 </span>
                                             </td>
-                                            <td className="px-8 py-3 text-right">
+                                            <td className="px-5 py-3 text-right">
                                                 <div className="flex gap-2 justify-end transition-all">
-                                                    <button onClick={() => handleManageTables(z)} className="w-10 h-10 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 hover:text-white hover:bg-indigo-600 rounded-xl shadow-sm border border-indigo-100 dark:border-indigo-500/20 transition-all flex items-center justify-center" title="Masaları Yönet">
+                                                    {/* <button onClick={() => handleManageTables(z)} className="w-10 h-10 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 hover:text-white hover:bg-indigo-600 rounded-xl shadow-sm border border-indigo-100 dark:border-indigo-500/20 transition-all flex items-center justify-center" title="Masaları Yönet">
                                                         <i className="fat fa-table-cells text-lg"></i>
-                                                    </button>
+                                                    </button> */}
                                                     <button onClick={() => openModal(z)} className="w-10 h-10 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 hover:text-white hover:bg-emerald-600 rounded-xl shadow-sm border border-emerald-100 dark:border-emerald-500/20 transition-all flex items-center justify-center">
                                                         <i className="fat fa-pen-field text-lg"></i>
                                                     </button>
@@ -388,7 +388,7 @@ export function PageClient() {
                         {/* Right Side: Quick Add */}
                         <div className="w-full md:w-[380px] bg-slate-50/50 dark:bg-slate-900/30 p-10 flex flex-col shrink-0 relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 blur-[80px] rounded-full -mr-20 -mt-20"></div>
-                            
+
                             <div className="relative z-10 flex flex-col h-full">
                                 <div className="flex justify-between items-center mb-10">
                                     <h4 className="text-lg font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-tighter">Hızlı Masa Ekle</h4>

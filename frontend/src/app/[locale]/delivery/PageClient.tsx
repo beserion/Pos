@@ -43,8 +43,8 @@ export function PageClient() {
         if (!user?.token) return;
         try {
             const [empRes, delRes] = await Promise.all([
-                axios.get('http://localhost:3050/employees', { headers: { Authorization: `Bearer ${user.token}` } }),
-                axios.get('http://localhost:3050/deliveries', { headers: { Authorization: `Bearer ${user.token}` } })
+                axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/employees', { headers: { Authorization: `Bearer ${user.token}` } }),
+                axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/deliveries', { headers: { Authorization: `Bearer ${user.token}` } })
             ]);
 
             const fetchedCouriers = empRes.data.filter((e: any) =>
@@ -106,7 +106,7 @@ export function PageClient() {
                 status: formData.courierId ? 'IN_TRANSIT' : 'PENDING'
             };
 
-            await axios.post('http://localhost:3050/deliveries', payload, {
+            await axios.post((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/deliveries', payload, {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
 
@@ -125,7 +125,7 @@ export function PageClient() {
         if (!user?.token || !selectedDeliveryId || !assignCourierId) return;
 
         try {
-            await axios.put(`http://localhost:3050/deliveries/${selectedDeliveryId}`,
+            await axios.put(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/deliveries/${selectedDeliveryId}`,
                 { courierId: parseInt(assignCourierId), status: 'IN_TRANSIT' },
                 { headers: { Authorization: `Bearer ${user.token}` } }
             );
@@ -145,7 +145,7 @@ export function PageClient() {
         if (!user?.token) return;
 
         try {
-            await axios.put(`http://localhost:3050/deliveries/${deliveryId}`,
+            await axios.put(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/deliveries/${deliveryId}`,
                 { status: 'CANCELLED' },
                 { headers: { Authorization: `Bearer ${user.token}` } }
             );

@@ -47,8 +47,8 @@ export function PageClient() {
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const [wareRes, locsRes] = await Promise.all([
-                axios.get('http://localhost:3050/warehouses', config),
-                axios.get('http://localhost:3050/locations', config)
+                axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/warehouses', config),
+                axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/locations', config)
             ]);
             setWarehouses(wareRes.data);
             setLocations(locsRes.data);
@@ -71,10 +71,10 @@ export function PageClient() {
             };
 
             if (formData.id === 0) {
-                await axios.post('http://localhost:3050/warehouses', payload, config);
+                await axios.post((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/warehouses', payload, config);
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             } else {
-                await axios.put(`http://localhost:3050/warehouses/${formData.id}`, payload, config);
+                await axios.put(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/warehouses/${formData.id}`, payload, config);
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             }
             setIsModalOpen(false);
@@ -97,7 +97,7 @@ export function PageClient() {
 
         if (result.isConfirmed && user?.token) {
             try {
-                await axios.delete(`http://localhost:3050/warehouses/${id}`, {
+                await axios.delete(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/warehouses/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
                 toastSwal({ title: tc('success'), text: t('deleteSuccess'), icon: 'success' });

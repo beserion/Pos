@@ -25,7 +25,7 @@ interface Table {
 interface Zone { id: number; name: string; }
 
 export function PageClient() {
-    const { user, loginPin, loginPinOnly, loading } = useAuth();
+    const { user, loginPin, loginPinOnly, loading, alertsBell } = useAuth();
     const router = useRouter();
     const locale = useLocale();
     const t = useTranslations('Common');
@@ -44,13 +44,14 @@ export function PageClient() {
     const [pinCode, setPinCode] = useState('');
     const [isPinRequired, setIsPinRequired] = useState(true);
     const [isReadOnly, setIsReadOnly] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [tableOrders, setTableOrders] = useState<TableSale[]>([]); // Dolu masanın siparişleri
     const [tableOrdersLoading, setTableOrdersLoading] = useState(false);
 
     const searchParams = useSearchParams();
     const bypass = searchParams.get('bypass') === '1';
 
-    const API_URL = 'http://localhost:3050';
+    const API_URL = (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
 
     const formatTime = (dateStr?: string) => {
         if (!dateStr) return '';
@@ -89,34 +90,10 @@ export function PageClient() {
             fetchData();
 
             // WebSocket Connection for Real-time alerts
+            // (AlertsBell dinlemeleri AuthContext üzerinden yürütülür)
             const socket = io(API_URL);
 
             socket.on('connect', () => console.log('Connected to Waiter WebSocket'));
-
-            socket.on('orderReady', (order: any) => {
-                console.log('Order ready notification:', order);
-
-                // Only show alert if it belongs to this waiter or is at a table they care about
-                // For simplicity in this POS, we'll show it to all waiters or filter by waiterId if available
-
-                // Play notification sound
-                try {
-                    const audio = new Audio('/notification.mp3');
-                    audio.play().catch(e => console.log('Audio autoplay blocked', e));
-                } catch (e) { }
-
-                showSwal({
-                    title: 'Sipariş Hazır!',
-                    text: `${order?.table?.name || 'Paket'} siparişi mutfakta hazırlandı.`,
-                    icon: 'success',
-                    timer: 8000,
-                    showConfirmButton: true,
-                    confirmButtonText: 'Tamam'
-                });
-
-                // Refresh tables to show status change if any
-                fetchData();
-            });
 
             return () => {
                 socket.disconnect();
@@ -181,7 +158,8 @@ export function PageClient() {
     };
 
     const sendOrder = async () => {
-        if (!selectedTable || cart.length === 0) return;
+        if (!selectedTable || cart.length === 0 || isSubmitting) return;
+        setIsSubmitting(true);
         try {
             const token = Cookies.get('token');
             const orderPayload = {
@@ -238,6 +216,8 @@ export function PageClient() {
                 title: 'Hata',
                 text: 'Sipariş iletilemedi.'
             });
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -256,7 +236,7 @@ export function PageClient() {
                             <i className="fat fa-reply"></i> Masalara Dön
                         </button>
                     )}
-                    
+
                     {mounted && (
                         <button
                             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -266,6 +246,8 @@ export function PageClient() {
                             {theme === 'dark' ? '☀️' : '🌙'}
                         </button>
                     )}
+
+                    {!isPinRequired && alertsBell}
 
                     {!isPinRequired && (
                         <button onClick={() => {
@@ -362,13 +344,13 @@ export function PageClient() {
                                     {/* Arka Plan Görseli / Emoji Mapped Area */}
                                     <div className="absolute inset-0 bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center transition-transform duration-500 group-hover:scale-105">
                                         {p.imageUrl ? (
-                                            <img 
-                                                src={p.imageUrl.startsWith('http') || p.imageUrl.startsWith('data:') || p.imageUrl.startsWith('/') 
-                                                    ? p.imageUrl 
+                                            <img
+                                                src={p.imageUrl.startsWith('http') || p.imageUrl.startsWith('data:') || p.imageUrl.startsWith('/')
+                                                    ? p.imageUrl
                                                     : `/uploads/products/${p.imageUrl}`
-                                                } 
-                                                alt={p.name} 
-                                                className="w-full h-full object-cover" 
+                                                }
+                                                alt={p.name}
+                                                className="w-full h-full object-cover"
                                             />
                                         ) : (
                                             <span className="text-3xl mb-1 opacity-50 transition-opacity">
@@ -413,8 +395,14 @@ export function PageClient() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
-                        <button onClick={() => setCart([])} className="py-3 rounded-xl border-2 border-slate-200 dark:border-slate-600 font-bold text-slate-600 dark:text-slate-300">İptal</button>
-                        <button onClick={sendOrder} className="py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold shadow-lg shadow-emerald-500/30">Mutfağa İlet</button>
+                        <button onClick={() => setCart([])} disabled={isSubmitting} className="py-3 rounded-xl border-2 border-slate-200 dark:border-slate-600 font-bold text-slate-600 dark:text-slate-300 disabled:opacity-50">İptal</button>
+                        <button onClick={sendOrder} disabled={isSubmitting} className="py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold shadow-lg shadow-emerald-500/30 disabled:opacity-50 disabled:scale-100 transition-all flex items-center justify-center gap-2">
+                            {isSubmitting ? (
+                                <><i className="fat fa-spinner animate-spin"></i> İletiliyor...</>
+                            ) : (
+                                'Sipariş Ver'
+                            )}
+                        </button>
                     </div>
                 </div>
             )}
@@ -442,7 +430,7 @@ export function PageClient() {
                         </div>
 
                         <div className="grid grid-cols-3 gap-6 w-full max-w-[280px]">
-                            {['1','2','3','4','5','6','7','8','9'].map(n => (
+                            {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(n => (
                                 <button key={n} onClick={() => handlePinClick(n)}
                                     className="w-16 h-16 rounded-full bg-slate-800 hover:bg-slate-700 text-2xl font-black text-white transition-all active:scale-90 border border-white/5 shadow-lg">
                                     {n}

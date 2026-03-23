@@ -8,22 +8,24 @@ export function PageClient() {
     const router = useRouter();
     const tCommon = useTranslations('Common');
     const tAdmin = useTranslations('Admin');
+    const tDashboard = useTranslations('Dashboard');
     const locale = useLocale();
-    const { user, loading, hasPermission } = useAuth();
+    const { user, loading, hasPermission, alertsBell } = useAuth();
 
     useEffect(() => {
         if (!loading && !user) router.push(`/${locale}/login`);
     }, [user, loading, router, locale]);
 
     const sections = [
-        { key: 'FINANCE', title: tAdmin('companyAccounts'), subtitle: tAdmin('companyAccountsDesc'), path: `/${locale}/finance/accounts`, icon: 'fa-building-columns', color: 'text-blue-500' },
+        // { key: 'FINANCE', title: tAdmin('companyAccounts'), subtitle: tAdmin('companyAccountsDesc'), path: `/${locale}/finance/accounts`, icon: 'fa-building-columns', color: 'text-blue-500' },
         { key: 'CARI', title: tAdmin('cari'), subtitle: tAdmin('cariDesc'), path: `/${locale}/cari`, icon: 'fa-users', color: 'text-indigo-500' },
-        { key: 'LOCATIONS', title: tAdmin('locations'), subtitle: tAdmin('locationsDesc'), path: `/${locale}/admin/locations`, icon: 'fa-location-dot', color: 'text-blue-500' },
+        { key: 'EMPLOYEES', title: tAdmin('employees'), subtitle: tAdmin('employeesDesc'), path: `/${locale}/admin/employees`, icon: 'fa-users-gear', color: 'text-emerald-500' },
         { key: 'USERS', title: tAdmin('users'), subtitle: tAdmin('usersDesc'), path: `/${locale}/admin/users`, icon: 'fa-user-shield', color: 'text-cyan-500' },
         { key: 'ROLES', title: tAdmin('roles'), subtitle: tAdmin('rolesDesc'), path: `/${locale}/admin/roles`, icon: 'fa-user-tag', color: 'text-pink-500' },
+        { key: 'SYSTEM', title: 'Yetki Kalemleri', subtitle: 'Modül ve aksiyon tanımlarını yönet', path: `/${locale}/admin/permissions`, icon: 'fa-shield-check', color: 'text-violet-500' },
+        { key: 'LOCATIONS', title: tAdmin('locations'), subtitle: tAdmin('locationsDesc'), path: `/${locale}/admin/locations`, icon: 'fa-location-dot', color: 'text-blue-500' },
         { key: 'ZONES', title: tAdmin('zones'), subtitle: tAdmin('zonesDesc'), path: `/${locale}/admin/zones`, icon: 'fa-map-location-dot', color: 'text-indigo-500' },
         { key: 'TABLES', title: tAdmin('tables'), subtitle: tAdmin('tablesDesc'), path: `/${locale}/admin/tables`, icon: 'fa-chair-office', color: 'text-purple-500' },
-        { key: 'EMPLOYEES', title: tAdmin('employees'), subtitle: tAdmin('employeesDesc'), path: `/${locale}/admin/employees`, icon: 'fa-users-gear', color: 'text-emerald-500' },
         { key: 'COURIERS', title: tAdmin('couriers'), subtitle: tAdmin('couriersDesc'), path: `/${locale}/admin/couriers`, icon: 'fa-user-helmet-safety', color: 'text-orange-500' },
         { key: 'DELIVERY', title: tAdmin('deliveries'), subtitle: tAdmin('deliveriesDesc'), path: `/${locale}/admin/deliveries`, icon: 'fa-truck-fast', color: 'text-indigo-500' },
         { key: 'WAREHOUSES', title: tAdmin('warehouses'), subtitle: tAdmin('warehousesDesc'), path: `/${locale}/admin/warehouses`, icon: 'fa-warehouse-full', color: 'text-amber-500' },
@@ -34,8 +36,9 @@ export function PageClient() {
         { key: 'ORDERS', title: tAdmin('purchaseOrders'), subtitle: tAdmin('purchaseOrdersDesc'), path: `/${locale}/admin/orders`, icon: 'fa-cart-shopping', color: 'text-amber-500' },
         { key: 'PRINTERS', title: tAdmin('printers'), subtitle: tAdmin('printersDesc'), path: `/${locale}/admin/printers`, icon: 'fa-print', color: 'text-sky-500' },
         { key: 'WAITER', title: tAdmin('tablet'), subtitle: tAdmin('tabletDesc'), path: `/${locale}/waiter`, icon: 'fa-tablet-screen-button', color: 'text-rose-500' },
-        { key: 'SYSTEM', title: 'Yetki Kalemleri', subtitle: 'Modül ve aksiyon tanımlarını yönet', path: `/${locale}/admin/permissions`, icon: 'fa-shield-check', color: 'text-violet-500' },
+        { key: 'SALES', title: 'POS Kasa Yönetimi', subtitle: 'Kasa terminallerini ve yazıcılarını yönet', path: `/${locale}/admin/cash-registers`, icon: 'fa-cash-register', color: 'text-emerald-500' },
         { key: 'SYSTEM', title: 'Parametreler', subtitle: 'Modül bazlı sistem ayarları', path: `/${locale}/admin/parameters`, icon: 'fa-sliders', color: 'text-violet-500' },
+        // { key: 'ALERTS', title: tDashboard('alerts'), subtitle: tDashboard('alertsDesc'), path: `/${locale}/admin/alerts`, icon: 'fa-bell-on', color: 'text-rose-500' },
     ];
 
     const filteredSections = sections.filter(sec => hasPermission(`${sec.key}:VIEW`));
@@ -54,7 +57,8 @@ export function PageClient() {
             <div className="w-[90%] mx-auto px-6 py-8 relative z-10 h-full flex flex-col">
                 {/* Header Section - Properly Centered Block */}
                 <div className="flex flex-col items-center mb-8 px-4 relative shrink-0">
-                    <div className="md:absolute md:right-4 md:top-0 flex gap-3 mb-8 md:mb-0 z-20">
+                    <div className="md:absolute md:right-4 md:top-0 flex items-center gap-3 mb-8 md:mb-0 z-20">
+                        {alertsBell}
                         <button
                             onClick={() => router.push(`/${locale}/dashboard`)}
                             className="group flex items-center gap-2 px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-2xl hover:bg-slate-900 hover:text-white dark:hover:bg-white dark:hover:text-slate-900 transition-all duration-300 shadow-sm"

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { showSwal, toastSwal } from '../utils/swal';
 import { useLocale, useTranslations } from 'next-intl';
 import { useTheme } from 'next-themes';
+import ShiftManager from '@/components/shifts/ShiftManager';
 
 interface Product {
     id: number;
@@ -33,6 +34,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const [products, setProducts] = useState<Product[]>([]);
     const [tables, setTables] = useState<Table[]>([]);
     const [zones, setZones] = useState<Zone[]>([]);
+    const [allZones, setAllZones] = useState<Zone[]>([]);
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
     const [selectedZone, setSelectedZone] = useState<number | 'ALL'>('ALL');
     const [cart, setCart] = useState<{ product: Product; quantity: number }[]>([]);
@@ -50,7 +52,12 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const [discount, setDiscount] = useState<number>(0);
     const [serviceFee, setServiceFee] = useState<number>(0);
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+    // Shift & Cash Register state
+    const [activeShift, setActiveShift] = useState<any>(null);
+    const [activeCashRegister, setActiveCashRegister] = useState<any>(null);
+    const [shiftReady, setShiftReady] = useState(false);
+
+    const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')));
 
     const fetchCashiers = async () => {
         try {
@@ -105,11 +112,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
             setProducts(productsData);
             setTables(tablesData);
-            setZones(zonesData);
-
-            if (zonesData.length > 0 && selectedZone === null) {
-                setSelectedZone(zonesData[0].id);
-            }
+            setAllZones(zonesData);
         } catch (error) {
             console.error('Error fetching POS data:', error);
         } finally {
@@ -140,6 +143,25 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             }
         }
     }, [user, loading, router]);
+
+    // Apply zone filtering whenever allZones or activeCashRegister changes
+    useEffect(() => {
+        if (!allZones || allZones.length === 0) return;
+
+        let filteredZones = allZones;
+        if (activeCashRegister && activeCashRegister.zoneIds && activeCashRegister.zoneIds.length > 0) {
+            const allowedZoneIds = activeCashRegister.zoneIds.map((id: any) => Number(id));
+            filteredZones = allZones.filter((z: any) => allowedZoneIds.includes(z.id));
+        }
+        setZones(filteredZones);
+
+        // Auto-select zone based on filtered results
+        if (filteredZones.length === 1) {
+            setSelectedZone(filteredZones[0].id);
+        } else if (filteredZones.length > 0 && selectedZone === null) {
+            setSelectedZone('ALL');
+        }
+    }, [activeCashRegister, allZones]);
 
     // Restore Sale Logic
     useEffect(() => {
@@ -176,7 +198,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     });
 
                     toastSwal({ icon: 'info', title: 'Satış masaya geri yüklendi.' });
-                    
+
                     // Clear search params to avoid re-triggering?
                     // router.replace(`/${locale}/pos`); // This might trigger re-render
                 }
@@ -299,6 +321,8 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 status: 'COMPLETED',
                 totalAmount: selectedGrandTotal,
                 mergeSaleIds: activeOrderIds,
+                cashRegisterId: activeCashRegister?.id || null,
+                shiftId: activeShift?.id || null,
                 items: itemsToPay.map(item => ({
                     productId: item.product.id,
                     quantity: item.quantity,
@@ -395,10 +419,26 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-500/10 dark:bg-indigo-600/15 blur-[120px] z-0 pointer-events-none transition-all duration-700 animate-pulse"></div>
             <div className="absolute bottom-[-10%] right-[30%] w-[30%] h-[30%] rounded-full bg-blue-500/10 dark:bg-blue-600/10 blur-[100px] z-0 pointer-events-none transition-all duration-700"></div>
             <div className="absolute top-[20%] right-[-5%] w-[25%] h-[25%] rounded-full bg-purple-500/5 dark:bg-purple-600/10 blur-[80px] z-0 pointer-events-none transition-all duration-700 animate-bounce-slow"></div>
-            
+
             {/* Corporate Pattern Overlay */}
-            <div className="absolute inset-0 z-0 opacity-[0.03] dark:opacity-[0.05] pointer-events-none" 
-                 style={{ backgroundImage: 'radial-gradient(#4f46e5 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
+            <div className="absolute inset-0 z-0 opacity-[0.03] dark:opacity-[0.05] pointer-events-none"
+                style={{ backgroundImage: 'radial-gradient(#4f46e5 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
+
+            {/* Shift Manager Overlay */}
+            <ShiftManager
+                user={user}
+                apiUrl={API_URL}
+                onShiftOpen={(shift, cashRegister) => {
+                    setActiveShift(shift);
+                    setActiveCashRegister(cashRegister);
+                    setShiftReady(true);
+                }}
+                onShiftClose={() => {
+                    setActiveShift(null);
+                    setActiveCashRegister(null);
+                    setShiftReady(false);
+                }}
+            />
 
             {/* Sol Pane - Masa Seçimi */}
             <div className="flex-1 flex flex-col p-6 overflow-y-auto w-full md:w-auto relative z-10">
@@ -408,17 +448,21 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                             <i className="fat fa-cash-register text-2xl"></i>
                         </div>
                         <div>
-                            <h3 className="text-2xl font-black uppercase tracking-wider text-indigo-500">{'KASA POS'}</h3>
-                            <h5 className="text-slate-500 text-xs font-medium uppercase tracking-widest leading-tight">{t('selectTableDesc') || 'İşlem yapmak istediğiniz masayı seçin'}</h5>
+                            <h3 className="text-2xl font-black uppercase tracking-wider text-indigo-500">
+                                {activeCashRegister ? activeCashRegister.name : 'KASA POS'}
+                            </h3>
+                            <h5 className="text-slate-500 text-xs font-medium uppercase tracking-widest leading-tight">
+                                {activeShift ? (pinCashier ? `${pinCashier.firstName} ${pinCashier.lastName || ''}`.trim() : user ? `${(user as any).firstName} ${(user as any).lastName || ''}`.trim() : 'Aktif Kasiyer') : (t('selectTableDesc') || 'İşlem yapmak istediğiniz masayı seçin')}
+                            </h5>
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
 
-                        <button
+                        {/* <button
                             onClick={() => { setIsPinRequired(true); setPinCashier(null); }}
                             className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-all bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 backdrop-blur-md px-5 py-2.5 rounded-full border border-rose-500/20 shadow-sm active:scale-95">
                             <i className="fat fa-users text-rose-500"></i> Kasiyer
-                        </button>
+                        </button> */}
 
                         <button
                             onClick={onSwitchToTakeOrder}
@@ -451,12 +495,14 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 {/* Zone Seçimi */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                     <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none flex-1">
-                        <button
-                            onClick={() => setSelectedZone('ALL')}
-                            className={`px-5 py-2.5 rounded-full font-bold whitespace-nowrap transition-all shadow-sm ${selectedZone === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}`}
-                        >
-                            Tümü
-                        </button>
+                        {zones.length > 1 && (
+                            <button
+                                onClick={() => setSelectedZone('ALL')}
+                                className={`px-5 py-2.5 rounded-full font-bold whitespace-nowrap transition-all shadow-sm ${selectedZone === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}`}
+                            >
+                                Tümü
+                            </button>
+                        )}
                         {Array.isArray(zones) && zones.map(z => (
                             <button
                                 key={z.id}
@@ -472,7 +518,9 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                     {Array.isArray(tables) && tables
                         .filter(t => {
-                            const zoneMatch = selectedZone === 'ALL' || t.zone?.id === selectedZone || (t as any).zoneId === selectedZone;
+                            const zoneMatch = selectedZone === 'ALL'
+                                ? zones.some(z => z.id === t.zone?.id || z.id === (t as any).zoneId)
+                                : t.zone?.id === selectedZone || (t as any).zoneId === selectedZone;
                             const isOccupied = t.status === 'DOLU' || t.status === 'REZERVE' || (t.currentTotal && t.currentTotal > 0);
                             return zoneMatch && isOccupied;
                         })
@@ -481,12 +529,12 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                 key={table.id}
                                 onClick={() => setSelectedTable(selectedTable?.id === table.id ? null : table)}
                                 className={`relative p-6 rounded-[32px] cursor-pointer shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border flex flex-col items-center justify-center text-center gap-2 group 
-                                    ${selectedTable?.id === table.id 
-                                        ? 'ring-4 ring-indigo-500 scale-105 bg-indigo-50/90 dark:bg-indigo-500/30 border-indigo-400/50 dark:border-indigo-400/50' 
-                                        : table.status === 'BOŞ' 
-                                            ? 'bg-white/40 dark:bg-slate-800/40 border-white/50 dark:border-slate-700/50' 
-                                            : table.status === 'REZERVE' 
-                                                ? 'bg-amber-100/60 dark:bg-amber-500/20 border-amber-300 dark:border-amber-400/40 shadow-amber-500/10' 
+                                    ${selectedTable?.id === table.id
+                                        ? 'ring-4 ring-indigo-500 scale-105 bg-indigo-50/90 dark:bg-indigo-500/30 border-indigo-400/50 dark:border-indigo-400/50'
+                                        : table.status === 'BOŞ'
+                                            ? 'bg-white/40 dark:bg-slate-800/40 border-white/50 dark:border-slate-700/50'
+                                            : table.status === 'REZERVE'
+                                                ? 'bg-amber-100/60 dark:bg-amber-500/20 border-amber-300 dark:border-amber-400/40 shadow-amber-500/10'
                                                 : 'bg-rose-100/80 dark:bg-rose-600/20 border-rose-300/50 dark:border-rose-500/50 shadow-rose-500/20'}`}
                             >
                                 <div className="absolute top-4 right-4 animate-pulse">
@@ -585,13 +633,16 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                             />
                         </div>
                         <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">Servis (₺)</label>
+                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">İndirim (%)</label>
                             <input
                                 type="number"
-                                value={serviceFee || ''}
-                                onChange={(e) => setServiceFee(Number(e.target.value) || 0)}
+                                value={(totalBeforeAdjustments > 0 && discount > 0) ? Number((discount / totalBeforeAdjustments) * 100).toFixed(1).replace(/\.0$/, '') : ''}
+                                onChange={(e) => {
+                                    const percent = Number(e.target.value) || 0;
+                                    setDiscount(Number((totalBeforeAdjustments * percent / 100).toFixed(2)));
+                                }}
                                 className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
-                                placeholder="0.00"
+                                placeholder="% 0"
                             />
                         </div>
                     </div>
@@ -683,30 +734,50 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                     </span>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-3 mb-3">
-                                    <button
-                                        onClick={() => handleCheckout('Nakit')}
-                                        className="flex items-center justify-center gap-2 p-3 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/30 rounded-xl transition-all font-bold text-emerald-700 dark:text-emerald-400 active:scale-95"
-                                    >
-                                        <span className="text-xl">💵</span> {t('paymentCash') || 'Nakit'}
-                                    </button>
-                                    <button
-                                        onClick={() => handleCheckout('Kart')}
-                                        className="flex items-center justify-center gap-2 p-3 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 border border-blue-200 dark:border-blue-500/30 rounded-xl transition-all font-bold text-blue-700 dark:text-blue-400 active:scale-95"
-                                    >
-                                        <span className="text-xl">💳</span> {t('paymentCreditCard') || 'Kart'}
-                                    </button>
-                                </div>
+                                {/* Check permissions for payment methods */}
+                                {(() => {
+                                    const allowed = activeCashRegister?.allowedPaymentMethods || [];
+                                    const hasLimit = allowed.length > 0;
+                                    const canCash = !hasLimit || allowed.includes('Nakit');
+                                    const canCard = !hasLimit || allowed.includes('Kart');
+                                    const canSplit = !hasLimit || allowed.includes('Parçalı');
+                                    const canCari = !hasLimit || allowed.includes('Cari');
 
-                                <button
-                                    onClick={() => {
-                                        setIsSplitPaymentOpen(true);
-                                        setSplitAmounts({ cash: 0, creditCard: selectedGrandTotal });
-                                    }}
-                                    className="w-full py-3 flex items-center justify-center gap-2 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 rounded-xl transition-all font-bold text-indigo-700 dark:text-indigo-400 active:scale-[0.98]"
-                                >
-                                    <span className="text-xl">🔀</span> Tutar Böl (Nakit + Kart)
-                                </button>
+                                    return (
+                                        <>
+                                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                                {canCash && (
+                                                    <button
+                                                        onClick={() => handleCheckout('Nakit')}
+                                                        className="flex items-center justify-center gap-2 p-3 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/30 rounded-xl transition-all font-bold text-emerald-700 dark:text-emerald-400 active:scale-95"
+                                                    >
+                                                        <span className="text-xl">💵</span> {t('paymentCash') || 'Nakit'}
+                                                    </button>
+                                                )}
+                                                {canCard && (
+                                                    <button
+                                                        onClick={() => handleCheckout('Kart')}
+                                                        className="flex items-center justify-center gap-2 p-3 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 border border-blue-200 dark:border-blue-500/30 rounded-xl transition-all font-bold text-blue-700 dark:text-blue-400 active:scale-95"
+                                                    >
+                                                        <span className="text-xl">💳</span> {t('paymentCreditCard') || 'Kart'}
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            {canSplit && (
+                                                <button
+                                                    onClick={() => {
+                                                        setIsSplitPaymentOpen(true);
+                                                        setSplitAmounts({ cash: 0, creditCard: selectedGrandTotal });
+                                                    }}
+                                                    className="w-full py-3 flex items-center justify-center gap-2 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 rounded-xl transition-all font-bold text-indigo-700 dark:text-indigo-400 active:scale-[0.98] mb-3"
+                                                >
+                                                    <span className="text-xl">🔀</span> Tutar Böl (Nakit + Kart)
+                                                </button>
+                                            )}
+                                        </>
+                                    );
+                                })()}
 
                                 <button
                                     onClick={() => setIsCheckoutOpen(false)}

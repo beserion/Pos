@@ -8,11 +8,13 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
 import { JwtStrategy } from './jwt.strategy';
+import { AlertsModule } from '../alerts/alerts.module';
 
 @Module({
   imports: [
     forwardRef(() => UsersModule),
     PassportModule,
+    AlertsModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

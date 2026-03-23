@@ -30,6 +30,8 @@ const DEFAULT_MODULES = [
   { key: 'WAITER',      label: 'Garson Paneli',      icon: 'fa-hand-holding-heart', color: 'text-pink-500',    accentBg: 'bg-pink-500/10',    actions: 'VIEW,ADD,EDIT',                     sortOrder: 18 },
   { key: 'USERS',       label: 'Kullanıcı Yönetimi', icon: 'fa-users-gear',         color: 'text-slate-700',   accentBg: 'bg-slate-500/10',   actions: 'VIEW,ADD,EDIT,DELETE',              sortOrder: 19 },
   { key: 'ROLES',       label: 'Rol Yönetimi',       icon: 'fa-user-shield',        color: 'text-pink-600',    accentBg: 'bg-pink-600/10',    actions: 'VIEW,ADD,EDIT,DELETE',              sortOrder: 20 },
+  { key: 'INVOICES',    label: 'Fatura Yönetimi',    icon: 'fa-file-invoice',       color: 'text-indigo-600',  accentBg: 'bg-indigo-500/10',  actions: 'VIEW,ADD,EDIT,DELETE',              sortOrder: 21 },
+  { key: 'ALERTS',      label: 'Bildirim Yönetimi',  icon: 'fa-bell-on',            color: 'text-rose-600',    accentBg: 'bg-rose-500/10',   actions: 'VIEW,ADD,EDIT,DELETE',              sortOrder: 22 },
 ];
 
 @Injectable()
@@ -80,13 +82,15 @@ export class PermissionModulesService implements OnApplicationBootstrap {
   }
 
   private async seedDefaults() {
-    const count = await this.repo.count();
-    if (count > 0) return;
     for (const mod of DEFAULT_MODULES) {
-      const entity = this.repo.create(mod);
-      await this.repo.save(entity);
+      const existing = await this.repo.findOne({ where: { key: mod.key } });
+      if (!existing) {
+        const entity = this.repo.create(mod);
+        await this.repo.save(entity);
+        console.log(`[PermissionModules] Added missing module: ${mod.key}`);
+      }
     }
-    console.log(`[PermissionModules] Seeded ${DEFAULT_MODULES.length} default modules.`);
+    console.log(`[PermissionModules] Module sync completed.`);
   }
 
   async findAll(): Promise<PermModule[]> {

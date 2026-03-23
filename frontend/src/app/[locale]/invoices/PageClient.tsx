@@ -6,7 +6,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 
-const API = 'http://localhost:3050';
+const API = (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -152,17 +152,23 @@ export function PageClient() {
 
     const loadDependencies = useCallback(async () => {
         if (!currentUser?.token) return;
+        const config = getConfig();
+
+        // Separate calls for clearer error tracking
         try {
-            const [prodRes, partRes] = await Promise.all([
-                axios.get<Product[]>(`${API}/products`, getConfig()),
-                axios.get(`${API}/partners`, getConfig()),
-            ]);
-            const prodData = Array.isArray(prodRes.data) ? prodRes.data : prodRes.data?.data || [];
+            const prodRes = await axios.get<Product[]>(`${API}/products`, config);
+            const prodData = Array.isArray(prodRes.data) ? prodRes.data : (prodRes.data as any)?.data || [];
             setProducts(prodData.filter((p: Product) => p.isActive));
-            const partnerData = Array.isArray(partRes.data) ? partRes.data : partRes.data?.data || [];
+        } catch (err: any) {
+            console.error("Products load failed:", err.response?.data || err.message);
+        }
+
+        try {
+            const partRes = await axios.get(`${API}/partners`, config);
+            const partnerData = Array.isArray(partRes.data) ? partRes.data : (partRes.data as any)?.data || [];
             setPartners(partnerData.filter((p: Partner) => p.type === 'SUPPLIER' || p.type === 'CUSTOMER'));
-        } catch (err) {
-            console.error("Dependencies load error", err);
+        } catch (err: any) {
+            console.error("Partners load failed:", err.response?.data || err.message);
         }
     }, [currentUser?.token]);
 

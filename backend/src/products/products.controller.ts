@@ -19,19 +19,18 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) { }
 
   @Get()
-  @Permissions('VIEW_PRODUCTS')
+  @Permissions('VIEW_PRODUCTS', 'VIEW_INVOICES', 'VIEW_SALES')
   async findAll() {
     return this.productsService.findAll();
   }
 
   @Get('quicksale')
-  @Permissions('VIEW_PRODUCTS')
   async findAllQuickSale() {
     return this.productsService.findAllQuickSale();
   }
 
   @Get(':id')
-  @Permissions('VIEW_PRODUCTS')
+  @Permissions('VIEW_PRODUCTS', 'VIEW_INVOICES', 'VIEW_SALES')
   findOne(@Param('id') id: string) {
     return this.productsService.findOne(+id);
   }

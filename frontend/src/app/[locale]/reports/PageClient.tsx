@@ -54,7 +54,7 @@ export function PageClient() {
     const fetchDashboardData = async () => {
         try {
             const token = Cookies.get('token');
-            const res = await axios.get('http://localhost:3050/reports/dashboard', {
+            const res = await axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/reports/dashboard', {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setDashboardData(res.data);
@@ -217,10 +217,34 @@ export function PageClient() {
 
                 {/* KPI Cards Row */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-[20px] mb-10">
-                    <KPICard title="Toplam Gelir" value={`${(dashboardData?.totalIncome || 0).toLocaleString('tr-TR')} ₺`} trend="+0%" icon={<DollarSign className="text-emerald-500" />} />
-                    <KPICard title="Net Kar" value={`${(dashboardData?.netProfit || 0).toLocaleString('tr-TR')} ₺`} trend="+0%" icon={<TrendingUp className="text-indigo-500" />} />
-                    <KPICard title="Mal Maliyeti (COGS)" value={`${(dashboardData?.cogs || 0).toLocaleString('tr-TR')} ₺`} trend="+0%" icon={<Package className="text-amber-500" />} negative />
-                    <KPICard title="Giderler" value={`${(dashboardData?.totalExpense || 0).toLocaleString('tr-TR')} ₺`} trend="-0%" icon={<Wallet className="text-rose-500" />} negative />
+                    <KPICard 
+                        title="Toplam Gelir" 
+                        value={`${(dashboardData?.totalIncome || 0).toLocaleString('tr-TR')} ₺`} 
+                        trend={dashboardData?.incomeTrend || "+0%"} 
+                        icon={<DollarSign className="text-emerald-500" />} 
+                        negative={dashboardData?.incomeTrend?.startsWith('-')}
+                    />
+                    <KPICard 
+                        title="Net Kar" 
+                        value={`${(dashboardData?.netProfit || 0).toLocaleString('tr-TR')} ₺`} 
+                        trend={dashboardData?.profitTrend || "+0%"} 
+                        icon={<TrendingUp className="text-indigo-500" />} 
+                        negative={dashboardData?.profitTrend?.startsWith('-')}
+                    />
+                    <KPICard 
+                        title="Mal Maliyeti (COGS)" 
+                        value={`${(dashboardData?.cogs || 0).toLocaleString('tr-TR')} ₺`} 
+                        trend={dashboardData?.cogsTrend || "+0%"} 
+                        icon={<Package className="text-amber-500" />} 
+                        negative={dashboardData?.cogsTrend?.includes('-')} 
+                    />
+                    <KPICard 
+                        title="Giderler" 
+                        value={`${(dashboardData?.totalExpense || 0).toLocaleString('tr-TR')} ₺`} 
+                        trend={dashboardData?.expenseTrend || "-0%"} 
+                        icon={<Wallet className="text-rose-500" />} 
+                        negative={dashboardData?.expenseTrend?.startsWith('-')}
+                    />
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

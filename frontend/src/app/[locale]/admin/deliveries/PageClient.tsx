@@ -67,8 +67,8 @@ export function PageClient() {
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const [delRes, empRes] = await Promise.all([
-                axios.get('http://localhost:3050/deliveries', config),
-                axios.get('http://localhost:3050/employees', config)
+                axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/deliveries', config),
+                axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/employees', config)
             ]);
             setDeliveries(delRes.data);
             // Simple filter for couriers based on roleTitle
@@ -86,7 +86,7 @@ export function PageClient() {
     const fetchDeliveries = async () => {
         if (!user?.token) return;
         try {
-            const res = await axios.get('http://localhost:3050/deliveries', {
+            const res = await axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/deliveries', {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
             setDeliveries(res.data);
@@ -109,7 +109,7 @@ export function PageClient() {
                 status: formData.courierId ? 'IN_TRANSIT' : 'PENDING'
             };
 
-            await axios.post('http://localhost:3050/deliveries', payload, {
+            await axios.post((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/deliveries', payload, {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
 

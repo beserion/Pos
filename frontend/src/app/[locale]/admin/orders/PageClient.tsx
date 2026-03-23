@@ -58,7 +58,7 @@ export function PageClient() {
     const router = useRouter();
     const locale = useLocale();
     const t = useTranslations('Admin');
-    const API_URL = 'http://localhost:3050';
+    const API_URL = (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
 
     const [activeTab, setActiveTab] = useState<'LIST' | 'LOW_STOCK'>('LIST');
     const [orders, setOrders] = useState<PurchaseOrder[]>([]);

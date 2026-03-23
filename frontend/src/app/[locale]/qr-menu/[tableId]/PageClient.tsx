@@ -22,7 +22,7 @@ export function PageClient() {
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
     const [loading, setLoading] = useState(true);
 
-    const API_URL = 'http://localhost:3050';
+    const API_URL = (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
 
     useEffect(() => {
         fetch(`${API_URL}/public/products`)

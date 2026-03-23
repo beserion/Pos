@@ -50,9 +50,11 @@ const defaultModules: Module[] = [
         borderColor: 'border-amber-500/30', title: 'Mutfak (KDS)', subtitle: 'Mutfak ekranı, hazırlık ve modül ayarları',
         params: [
             { key: 'kitchen_display_enabled', label: 'Görsel Mutfak Ekranı Aktif', description: 'Kapatıldığında KDS sayfası devre dışı olur, siparişler yazıcıya iletilir.', type: 'boolean', value: true },
+            { key: 'kitchen_item_selection_enabled', label: 'Mutfak Ürün Seçimi', description: 'Aktif olduğunda mutfak ekranında ürünler tek tek seçilebilir.', type: 'boolean', value: true },
             { key: 'warning_time', label: 'Uyarı Süresi', description: 'Bu süreyi aşan siparişler turuncu olur', type: 'number', value: 10, unit: 'dk' },
             { key: 'critical_time', label: 'Kritik Süre', description: 'Bu süreyi aşan siparişler kırmızı olur', type: 'number', value: 20, unit: 'dk' },
             { key: 'auto_refresh_interval', label: 'Otomatik Yenileme', type: 'number', value: 10, unit: 'sn' },
+            { key: 'kitchen_finished_screen_timeout', label: 'Bitenleri Gösterme Süresi', description: 'Bitenler sekmesinde işlem yapılmadığında belirtilen saniye sonra aktif ekrana döner. (0 = Sürekli kalır)', type: 'number', value: 30, unit: 'sn' },
             { key: 'beep_on_new_order', label: 'Yeni Siparişte Sesli Uyarı', type: 'boolean', value: true },
             { key: 'show_waiter_name', label: 'Garson Adını Göster', type: 'boolean', value: true },
         ]
@@ -154,7 +156,7 @@ export function PageClient() {
 
     const currentModule = modules.find(m => m.id === activeModule)!;
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+    const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')));
 
     // Sayfa açılışında tüm parametreleri çek
     useEffect(() => {

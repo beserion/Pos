@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')));
 
 export interface AppParameters {
   // POS & Satış
@@ -22,6 +22,8 @@ export interface AppParameters {
 
   // Mutfak Ekranı (KDS Modülü)
   kitchen_display_enabled: boolean;
+  kitchen_item_selection_enabled: boolean;
+  kitchen_finished_screen_timeout: number;
   kitchen_printer_only: boolean;
   kitchen_printer_name: string;
 
@@ -72,6 +74,8 @@ export const DEFAULT_PARAMS: AppParameters = {
   show_waiter_name: true,
 
   kitchen_display_enabled: true,
+  kitchen_item_selection_enabled: true,
+  kitchen_finished_screen_timeout: 30, // 30 seconds default
   kitchen_printer_only: true,
   kitchen_printer_name: '',
 

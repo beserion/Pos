@@ -70,6 +70,12 @@ export class Sale {
   @Column({ default: false })
   isEndOfDayClosed: boolean;
 
+  @Column({ nullable: true })
+  cashRegisterId: number;
+
+  @Column({ nullable: true })
+  shiftId: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

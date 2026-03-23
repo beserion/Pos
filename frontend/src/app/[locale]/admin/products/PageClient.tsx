@@ -280,7 +280,7 @@ export function PageClient() {
                         <i className="fat fa-mug-hot me-3 text-teal-600 dark:text-teal-400" style={{ fontSize: '50px' }}></i>
                         <div>
                             <h3 className="mb-0 text-3xl font-extralight text-teal-600 dark:text-teal-400 leading-none uppercase tracking-[0.25em]" id="title">{t('title')}</h3>
-                            <div className="h-1 w-1/2 bg-gradient-to-r from-teal-400 to-transparent rounded-full mt-2 mb-1"></div>
+                            <div className="h-1 w-1/1 bg-gradient-to-r from-teal-400 to-transparent rounded-full mt-2 mb-1"></div>
                             <h5 className="text-muted mb-0 text-lg font-medium text-slate-400 dark:text-slate-500 mt-0.5">{t('subtitle')}</h5>
                         </div>
                     </div>
@@ -355,13 +355,13 @@ export function PageClient() {
                                             <td className="px-8 py-3">
                                                 <div className="flex items-center gap-4">
                                                     {prod.imageUrl ? (
-                                                        <img 
-                                                            src={prod.imageUrl.startsWith('http') || prod.imageUrl.startsWith('data:') || prod.imageUrl.startsWith('/') 
-                                                                ? prod.imageUrl 
+                                                        <img
+                                                            src={prod.imageUrl.startsWith('http') || prod.imageUrl.startsWith('data:') || prod.imageUrl.startsWith('/')
+                                                                ? prod.imageUrl
                                                                 : `/uploads/products/${prod.imageUrl}`
-                                                            } 
-                                                            alt={prod.name} 
-                                                            className="w-12 h-12 rounded-2xl object-cover border border-slate-100 dark:border-slate-700 shadow-sm transition-transform group-hover:scale-110" 
+                                                            }
+                                                            alt={prod.name}
+                                                            className="w-12 h-12 rounded-2xl object-cover border border-slate-100 dark:border-slate-700 shadow-sm transition-transform group-hover:scale-110"
                                                         />
                                                     ) : (
                                                         <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-center font-black text-teal-600 dark:text-teal-400 group-hover:scale-110 transition-transform">
@@ -459,11 +459,27 @@ export function PageClient() {
                                     <div className="min-h-[420px]">
                                         {activeTab === 'genel' && (
                                             <div className="space-y-6">
-                                                <div>
-                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelName')}</label>
-                                                    <div className="relative">
-                                                        <i className="fat fa-bowl-food absolute left-4 top-4 text-teal-500/50"></i>
-                                                        <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder={t('labelName')} />
+                                                <div className="grid grid-cols-1 gap-6">
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCategory')}</label>
+                                                        <div className="relative">
+                                                            <i className="fat fa-folder-tree absolute left-4 top-4 text-teal-500/50"></i>
+                                                            <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                                <option value="">{t('selectCategory')}</option>
+                                                                {categoryOptions.map(cat => (
+                                                                    <option key={cat.key} value={cat.value}>{t(cat.key)}</option>
+                                                                ))}
+                                                            </select>
+                                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                        </div>
+                                                    </div>
+
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelName')}</label>
+                                                        <div className="relative">
+                                                            <i className="fat fa-bowl-food absolute left-4 top-4 text-teal-500/50"></i>
+                                                            <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder={t('labelName')} />
+                                                        </div>
                                                     </div>
                                                 </div>
 
@@ -495,19 +511,6 @@ export function PageClient() {
                                                     </div>
 
                                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                                        <div>
-                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCategory')}</label>
-                                                            <div className="relative">
-                                                                <i className="fat fa-folder-tree absolute left-4 top-4 text-teal-500/50"></i>
-                                                                <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                                    <option value="">{t('selectCategory')}</option>
-                                                                    {categoryOptions.map(cat => (
-                                                                        <option key={cat.key} value={cat.value}>{t(cat.key)}</option>
-                                                                    ))}
-                                                                </select>
-                                                                <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                                            </div>
-                                                        </div>
                                                         <div>
                                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelMinStock')}</label>
                                                             <div className="relative">
@@ -546,21 +549,38 @@ export function PageClient() {
                                                     </div>
 
                                                     <div>
-                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelQuickSale')}</label>
-                                                        <div className="relative flex items-center pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl w-full">
-                                                            <i className="fat fa-bolt absolute left-4 top-4 text-teal-500/50"></i>
-                                                            <div className="form-check form-switch mb-0 flex-1 flex justify-end pr-2">
-                                                                <input className="form-check-input cursor-pointer scale-110" type="checkbox" checked={formData.isQuickSale} onChange={(e) => setFormData({ ...formData, isQuickSale: e.target.checked })} />
+                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">ÜRÜN DURUMU & ÖZELLİKLERİ</label>
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div 
+                                                                onClick={() => setFormData({ ...formData, isQuickSale: !formData.isQuickSale })}
+                                                                className={`cursor-pointer group flex flex-col p-4 rounded-3xl border-2 transition-all duration-300 ${formData.isQuickSale ? 'bg-teal-50 border-teal-500 dark:bg-teal-500/10 shadow-lg shadow-teal-500/10' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800 hover:border-teal-300'}`}
+                                                            >
+                                                                <div className="flex items-center justify-between mb-2">
+                                                                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-colors ${formData.isQuickSale ? 'bg-white text-teal-600 shadow-sm' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>
+                                                                        <i className="fat fa-bolt text-lg"></i>
+                                                                    </div>
+                                                                    <div className={`w-5 h-5 rounded-full border-2 transition-all flex items-center justify-center ${formData.isQuickSale ? 'border-teal-600 bg-teal-600' : 'border-slate-300'}`}>
+                                                                        {formData.isQuickSale && <i className="fat fa-check text-[10px] text-white"></i>}
+                                                                    </div>
+                                                                </div>
+                                                                <h6 className={`text-sm font-black mb-0.5 tracking-tight ${formData.isQuickSale ? 'text-teal-900 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>{t('labelQuickSale')}</h6>
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none m-0">Hızlı Satış Aktif</p>
                                                             </div>
-                                                        </div>
-                                                    </div>
 
-                                                    <div>
-                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelIngredient')}</label>
-                                                        <div className="relative flex items-center pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl w-full">
-                                                            <i className="fat fa-leaf absolute left-4 top-4 text-teal-500/50"></i>
-                                                            <div className="form-check form-switch mb-0 flex-1 flex justify-end pr-2">
-                                                                <input className="form-check-input cursor-pointer scale-110" type="checkbox" checked={formData.isIngredient} onChange={(e) => setFormData({ ...formData, isIngredient: e.target.checked })} />
+                                                            <div 
+                                                                onClick={() => setFormData({ ...formData, isIngredient: !formData.isIngredient })}
+                                                                className={`cursor-pointer group flex flex-col p-4 rounded-3xl border-2 transition-all duration-300 ${formData.isIngredient ? 'bg-emerald-50 border-emerald-500 dark:bg-emerald-500/10 shadow-lg shadow-emerald-500/10' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800 hover:border-emerald-300'}`}
+                                                            >
+                                                                <div className="flex items-center justify-between mb-2">
+                                                                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-colors ${formData.isIngredient ? 'bg-white text-emerald-600 shadow-sm' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>
+                                                                        <i className="fat fa-leaf text-lg"></i>
+                                                                    </div>
+                                                                    <div className={`w-5 h-5 rounded-full border-2 transition-all flex items-center justify-center ${formData.isIngredient ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300'}`}>
+                                                                        {formData.isIngredient && <i className="fat fa-check text-[10px] text-white"></i>}
+                                                                    </div>
+                                                                </div>
+                                                                <h6 className={`text-sm font-black mb-0.5 tracking-tight ${formData.isIngredient ? 'text-emerald-900 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}>{t('labelIngredient')}</h6>
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none m-0">Hammadde Olarak Kullan</p>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -611,13 +631,13 @@ export function PageClient() {
                                                 >
                                                     {formData.imageUrl ? (
                                                         <div className="relative group w-48 h-48">
-                                                            <img 
-                                                                src={formData.imageUrl.startsWith('http') || formData.imageUrl.startsWith('data:') || formData.imageUrl.startsWith('/') 
-                                                                    ? formData.imageUrl 
+                                                            <img
+                                                                src={formData.imageUrl.startsWith('http') || formData.imageUrl.startsWith('data:') || formData.imageUrl.startsWith('/')
+                                                                    ? formData.imageUrl
                                                                     : `/uploads/products/${formData.imageUrl}`
-                                                                } 
-                                                                alt={t('preview')} 
-                                                                className="w-full h-full object-cover rounded-2xl shadow-lg" 
+                                                                }
+                                                                alt={t('preview')}
+                                                                className="w-full h-full object-cover rounded-2xl shadow-lg"
                                                             />
                                                             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex items-center justify-center backdrop-blur-sm">
                                                                 <div className="text-white text-center">

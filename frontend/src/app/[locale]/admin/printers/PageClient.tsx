@@ -38,7 +38,7 @@ export function PageClient() {
     const fetchPrinters = async () => {
         if (!user?.token) return;
         try {
-            const res = await axios.get('http://localhost:3050/printers', {
+            const res = await axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/printers', {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
             setPrinters(res.data);
@@ -57,11 +57,11 @@ export function PageClient() {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             if (formData.id === 0) {
                 const { id, ...postData } = formData;
-                await axios.post('http://localhost:3050/printers', postData, config);
+                await axios.post((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/printers', postData, config);
                 toastSwal({ title: tc('success'), text: t('deleteSuccess'), icon: 'success' });
             } else {
                 const { id, ...putData } = formData;
-                await axios.put(`http://localhost:3050/printers/${id}`, putData, config);
+                await axios.put(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/printers/${id}`, putData, config);
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             }
             setIsModalOpen(false);
@@ -84,7 +84,7 @@ export function PageClient() {
 
         if (result.isConfirmed && user?.token) {
             try {
-                await axios.delete(`http://localhost:3050/printers/${id}`, {
+                await axios.delete(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/printers/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
                 toastSwal({ title: tc('delete'), text: t('deleteSuccess'), icon: 'success' });

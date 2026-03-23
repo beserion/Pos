@@ -4,7 +4,7 @@ const withNextIntl = createNextIntlPlugin('./src/i18n.ts');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: (process.env.NEXT_OUTPUT as 'standalone' | 'export') || 'export',
+  output: (process.env.NEXT_OUTPUT as 'standalone' | 'export') || 'standalone',
   typescript: {
     ignoreBuildErrors: true,
   },

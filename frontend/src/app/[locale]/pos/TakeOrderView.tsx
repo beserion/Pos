@@ -78,10 +78,10 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                 fetch(`${API_URL}/tables`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
                 fetch(`${API_URL}/zones`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json())
             ]);
-            setProducts(productsRes);
-            setTables(tablesRes);
-            setZones(zonesRes);
-            if (zonesRes.length > 0) setSelectedZone(zonesRes[0].id);
+            setProducts(Array.isArray(productsRes) ? productsRes : []);
+            setTables(Array.isArray(tablesRes) ? tablesRes : []);
+            setZones(Array.isArray(zonesRes) ? zonesRes : []);
+            if (Array.isArray(zonesRes) && zonesRes.length > 0) setSelectedZone(zonesRes[0].id);
         } catch (error) {
             console.error('Error fetching POS data:', error);
         } finally {
@@ -208,8 +208,8 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             if (existing) {
                 return prev.map(item => (item.product.id === product.id && item.note === note) ? { ...item, quantity: item.quantity + 1 } : item);
             }
-            // mars_default_items parametresi aktifse eklenen ürünler varsayılan beklet konumunda açılsın
-            return [...prev, { product, quantity: 1, note, isWaiting: params.mars_default_items || false }];
+            // mars_default_items parametresi aktifse ve mars_enabled aciksa beklet konumunda acilsin
+            return [...prev, { product, quantity: 1, note, isWaiting: params.mars_enabled ? (params.mars_default_items || false) : false }];
         });
     };
 
@@ -257,7 +257,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                     quantity: item.quantity,
                     unitPrice: item.product.price,
                     note: item.note,
-                    isWaiting: item.isWaiting || false
+                    isWaiting: params.mars_enabled ? (item.isWaiting || false) : false
                 }))
             };
 
@@ -287,7 +287,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                         name: item.product.name,
                         quantity: item.quantity,
                         printerId: item.product.printerId,
-                        isWaiting: item.isWaiting || false
+                        isWaiting: params.mars_enabled ? (item.isWaiting || false) : false
                     }))
                 };
 
@@ -721,7 +721,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                                 <i className="fat fa-circle-check text-[10px]"></i> Öde
                                             </button>
                                         )}
-                                        {item.isWaiting && !item.isMarshed && (
+                                        {params.mars_enabled && item.isWaiting && !item.isMarshed && (
                                             <button
                                                 onClick={() => marsItem(item.id)}
                                                 className="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400 hover:text-rose-700 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 border border-rose-200 dark:border-rose-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1 animate-pulse"
@@ -729,7 +729,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                                 <i className="fat fa-fire-flame-curved text-[10px]"></i> MARŞ VER
                                             </button>
                                         )}
-                                        {item.isWaiting && item.isMarshed && (
+                                        {params.mars_enabled && item.isWaiting && item.isMarshed && (
                                             <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-full flex items-center gap-1">
                                                <i className="fat fa-check text-[10px]"></i> Marshed
                                             </span>

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import Cookies from 'js-cookie';
@@ -39,14 +39,19 @@ export function PageClient() {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [tickets, setTickets] = useState<OrderTicket[]>([]);
     const [counts, setCounts] = useState({ pending: 0, finished: 0, total: 0 });
+    const countsRef = useRef(counts);
+    useEffect(() => { countsRef.current = counts; }, [counts]);
+
     const [activeFilter, setActiveFilter] = useState<'active' | 'finished'>('active');
+    const [updatingItems, setUpdatingItems] = useState<number[]>([]);
+    const [updatingTickets, setUpdatingTickets] = useState<number[]>([]);
     const { params, loading: paramsLoading } = useParameters();
 
     useEffect(() => {
         setMounted(true);
     }, []);
 
-    const API_URL = 'http://localhost:3050';
+    const API_URL = (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
 
     const fetchKitchenOrders = async () => {
         try {
@@ -70,70 +75,88 @@ export function PageClient() {
         fetchKitchenOrders();
     }, [activeFilter]);
 
+    // ─── Bitenler sekmesinden otomatik aktif sekmeye dönme (Hareketsizlik zamanlayıcısı) ───
+    useEffect(() => {
+        const timeoutSeconds = params.kitchen_finished_screen_timeout;
+        if (!timeoutSeconds || timeoutSeconds <= 0 || activeFilter !== 'finished') return;
+
+        const timeoutMs = timeoutSeconds * 1000;
+        let timer: ReturnType<typeof setTimeout>;
+
+        const resetTimer = () => {
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                setActiveFilter(prev => {
+                    // Yalnızca Bitenler sayfasındaysak ve "Bekleyen" bir şey varsa geçiş yap!
+                    // İçi tamamen boş/sakin olan ('Bekleyen sipariş yok') ekrana 
+                    // düşmesini engelliyoruz (kullanıcıların nefret ettiği durum).
+                    if (prev === 'finished' && countsRef.current.pending > 0) {
+                        return 'active';
+                    }
+                    return prev;
+                });
+            }, timeoutMs);
+        };
+
+        const events = ['mousemove', 'mousedown', 'touchstart', 'keydown', 'click', 'scroll'];
+        events.forEach(e => window.addEventListener(e, resetTimer, { passive: true }));
+        resetTimer();
+
+        return () => {
+            clearTimeout(timer);
+            events.forEach(e => window.removeEventListener(e, resetTimer));
+        };
+    }, [activeFilter, params.kitchen_finished_screen_timeout]);
+
+    // ─── Eğer bitenler başlığındaki geri dönmeyi engellemek istersek ───
+    // Gelen boş ekranı (Bekleyen Yok) görmek istemedikleri için iptal
+    useEffect(() => {
+        // if (activeFilter === 'finished' && tickets.length === 0 && !loading) {
+        //     setActiveFilter('active');
+        // }
+    }, [activeFilter, tickets.length, loading]);
+
+    // ─── Oturum ve WebSocket İşlemleri ───────────────────────────────
     useEffect(() => {
         if (!loading && !user) router.push(`/${locale}/login`);
+        if (user) {
+            const socket = io(API_URL);
+            socket.on('connect', () => console.log('Connected to Kitchen WebSocket'));
+
+            socket.on('newOrder', (order: any) => {
+                fetchKitchenOrders();
+                if (params.beep_on_new_order) {
+                    try {
+                        const audio = new Audio('/notification.mp3');
+                        audio.play().catch(e => console.log('Audio autoplay blocked', e));
+                    } catch (e) { }
+                }
+                const zoneText = order?.table?.zone?.name ? `${order.table.zone.name} - ` : '';
+                const tableText = order?.table?.name ? `${order.table.name} masasından` : (order?.tableName ? `${order.tableName} masasından` : 'Paketten');
+                showSwal({ title: 'Yeni Sipariş!', text: `${zoneText}${tableText} yeni bir sipariş geldi.`, icon: 'info', timer: 5000, showConfirmButton: false });
+            });
+
+            socket.on('orderReady', () => fetchKitchenOrders());
+            socket.on('orderUpdated', () => fetchKitchenOrders());
+            socket.on('itemMarshed', (data: any) => {
+                fetchKitchenOrders();
+                toastSwal({ icon: 'warning', title: 'MARŞ GELDİ!', text: `${data.tableName} masası için MARŞ komutu verildi.` });
+            });
+            socket.on('itemReady', () => fetchKitchenOrders());
+
+            return () => { socket.disconnect(); };
+        }
+    }, [user, loading, router]);
+
+    // ─── Otomatik Veri Çekme ve Yenileme ────────────────────────────
+    useEffect(() => {
         if (user) {
             fetchKitchenOrders();
             const intervalMs = (params.auto_refresh_interval || 10) * 1000;
             const interval = setInterval(fetchKitchenOrders, intervalMs);
-
-            // WebSocket Connection for Real-time alerts
-            const socket = io(API_URL);
-
-            socket.on('connect', () => console.log('Connected to Kitchen WebSocket'));
-
-            socket.on('newOrder', (order: any) => {
-                console.log('Incoming order via WebSocket:', order);
-                fetchKitchenOrders();
-
-                // Play notification sound (parametre kontrol)
-                if (params.beep_on_new_order) {
-                    try {
-                        const audio = new Audio('/notification.mp3');
-                        audio.play().catch(e => console.log('Audio autoplay blocked by browser', e));
-                    } catch (e) { }
-                }
-
-                showSwal({
-                    title: 'Yeni Sipariş!',
-                    text: `${order?.table?.name || 'Paket'} masasından yeni bir sipariş geldi.`,
-                    icon: 'info',
-                    timer: 5000,
-                    showConfirmButton: false
-                });
-            });
-
-            socket.on('orderReady', (order: any) => {
-                console.log('Order marked as ready via WebSocket:', order);
-                fetchKitchenOrders();
-            });
-
-            socket.on('orderUpdated', (order: any) => {
-                console.log('Order updated via WebSocket:', order);
-                fetchKitchenOrders();
-            });
-            
-            socket.on('itemMarshed', (data: any) => {
-                console.log('Item Marshed via WebSocket:', data);
-                fetchKitchenOrders();
-                toastSwal({
-                    icon: 'warning',
-                    title: 'MARŞ GELDİ!',
-                    text: `${data.tableName} masası için MARŞ komutu verildi.`
-                });
-            });
-
-            socket.on('itemReady', (data: any) => {
-                console.log('Item Ready State Changed via WebSocket:', data);
-                fetchKitchenOrders();
-            });
-
-            return () => {
-                clearInterval(interval);
-                socket.disconnect();
-            };
+            return () => clearInterval(interval);
         }
-    }, [user, loading, router]);
+    }, [user, activeFilter, params.auto_refresh_interval]);
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 30000);
@@ -141,18 +164,48 @@ export function PageClient() {
     }, []);
 
     const toggleItemReady = async (itemId: number) => {
+        if (updatingItems.includes(itemId)) return;
+        setUpdatingItems(prev => [...prev, itemId]);
+
+        // Optimistic UI update
+        setTickets(prevTickets =>
+            prevTickets.map(ticket => ({
+                ...ticket,
+                items: ticket.items.map(item =>
+                    item.id === itemId ? { ...item, isReady: !item.isReady } : item
+                )
+            }))
+        );
+
         try {
             const token = Cookies.get('token');
             await axios.put(`${API_URL}/sales/items/${itemId}/ready`, {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            fetchKitchenOrders();
+            // fetchKitchenOrders() is triggered via WebSocket globally, so we don't strictly need to await it here.
         } catch (error) {
             console.error('Error toggling item ready state:', error);
+            // Revert on error
+            fetchKitchenOrders();
+        } finally {
+            setUpdatingItems(prev => prev.filter(id => id !== itemId));
         }
     };
 
     const updateTicketStatus = async (id: number, newStatus: string) => {
+        if (updatingTickets.includes(id)) return;
+        setUpdatingTickets(prev => [...prev, id]);
+
+        // Optimistic UI update
+        const currentFilter = activeFilter;
+        if (newStatus === 'READY' && currentFilter === 'active') {
+            setTickets(prev => prev.filter(t => t.id !== id));
+        } else if (newStatus === 'NEW' && currentFilter === 'finished') {
+            setTickets(prev => prev.filter(t => t.id !== id));
+        } else {
+            setTickets(prev => prev.map(t => t.id === id ? { ...t, status: newStatus } : t));
+        }
+
         try {
             const token = Cookies.get('token');
             await axios.put(`${API_URL}/sales/${id}/status`, { status: newStatus }, {
@@ -162,9 +215,12 @@ export function PageClient() {
                 icon: 'success',
                 title: 'Durum Güncellendi'
             });
-            fetchKitchenOrders();
+            // WebSocket will handle full data refresh, so no await fetchKitchenOrders() here
         } catch (error) {
             console.error('Error updating status:', error);
+            fetchKitchenOrders();
+        } finally {
+            setUpdatingTickets(prev => prev.filter(ticketId => ticketId !== id));
         }
     };
 
@@ -222,17 +278,24 @@ export function PageClient() {
 
     return (
         <div className="h-screen bg-slate-50 dark:bg-slate-900 font-sans text-slate-800 dark:text-slate-200 flex flex-col overflow-hidden transition-colors duration-300">
-            <header className="bg-white dark:bg-slate-950 p-4 border-b border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-md flex justify-between items-center z-10 flex-none transition-colors duration-300">
-                <div className="flex items-center gap-3">
-                    <span className="text-3xl">👨‍🍳</span>
-                    <div>
-                        <h1 className="text-xl font-extrabold text-slate-800 dark:text-white tracking-wide uppercase">Mutfak KDS</h1>
-                        <p className="text-emerald-500 dark:text-emerald-400 text-sm font-bold animate-pulse">Aktif Siparişler</p>
+            <header className="bg-white dark:bg-slate-950 p-4 border-b border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-md flex justify-between items-center z-10 flex-none transition-colors duration-300 relative">
+                {/* Sol: Logo */}
+                <div className="flex items-center gap-3 w-1/3">
+                    <img src="/PosNetX3.png" alt="PosNetX Logo" className="h-16 w-auto object-contain" />
+                </div>
+
+                {/* Orta: Mutfak KDS Başlığı */}
+                <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center flex-col pointer-events-none">
+                    <div className="flex items-center gap-2">
+                        {/* <span className="text-2xl">👨‍🍳</span> */}
+                        <h1 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-wide uppercase">Mutfak KDS</h1>
                     </div>
                 </div>
-                <div className="flex gap-4 items-center">
+
+                {/* Sağ: Sekmeler ve İşlemler */}
+                <div className="flex gap-4 items-center justify-end w-1/3">
                     <div className="flex bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm h-11 transition-all duration-300">
-                        <button 
+                        <button
                             onClick={() => setActiveFilter('active')}
                             className={`flex items-center justify-between gap-3 px-4 border-r border-slate-200 dark:border-slate-700 w-32 transition-all ${activeFilter === 'active' ? 'bg-amber-500/10 dark:bg-amber-500/20' : 'bg-slate-50 dark:bg-slate-800/80'}`}
                         >
@@ -242,7 +305,7 @@ export function PageClient() {
                                 <span className={`text-lg font-black ${activeFilter === 'active' ? 'text-amber-700 dark:text-amber-500' : 'text-amber-600 dark:text-amber-500'} leading-none`}>{counts.pending}</span>
                             </div>
                         </button>
-                        <button 
+                        <button
                             onClick={() => setActiveFilter('finished')}
                             className={`flex items-center justify-between gap-3 px-4 border-r border-slate-200 dark:border-slate-700 w-32 transition-all ${activeFilter === 'finished' ? 'bg-emerald-500/10 dark:bg-emerald-500/20' : 'bg-slate-50 dark:bg-slate-800/80'}`}
                         >
@@ -325,34 +388,38 @@ export function PageClient() {
 
                                 <div className="p-3 flex-1 bg-white dark:bg-slate-800/40">
                                     <ul className="space-y-2">
-                                        {ticket.items.map((item, idx) => (
-                                            <li 
-                                                key={idx} 
-                                                onClick={() => !item.isWaiting || item.isMarshed ? toggleItemReady(item.id) : null}
-                                                className={`flex gap-2 text-base p-2 rounded-lg -mx-1 cursor-pointer transition-all border ${item.isWaiting && !item.isMarshed ? 'opacity-40 grayscale scale-[0.98] cursor-not-allowed shadow-inner' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 border-transparent dark:hover:border-slate-600/50'} ${item.isReady ? 'bg-rose-50 dark:bg-rose-950/20' : ''}`}
-                                            >
-                                                <span className={`font-black text-lg ${item.isReady ? 'text-rose-600' : (item.isWaiting && !item.isMarshed ? 'text-slate-400' : (item.isWaiting && item.isMarshed ? 'text-rose-500 animate-pulse' : 'text-indigo-500 dark:text-indigo-400'))}`}>{item.quantity}x</span>
-                                                <div className="flex-1">
-                                                    <div className="flex items-center justify-between">
-                                                       <span className={`font-bold text-lg ${item.isReady ? 'text-rose-600 line-through decoration-rose-400/50' : (item.isWaiting && !item.isMarshed ? 'text-slate-400' : 'text-slate-800 dark:text-white')}`}>{item.product?.name}</span>
-                                                       <div className="flex items-center gap-1">
-                                                           {item.isReady && <i className="fat fa-check-double text-rose-500 text-sm"></i>}
-                                                           {item.isWaiting && !item.isMarshed && (
-                                                               <span className="text-[9px] font-black uppercase text-slate-400 border border-slate-300 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                                                   <i className="fat fa-clock"></i> BEKLEMEDE
-                                                               </span>
-                                                           )}
-                                                           {item.isWaiting && item.isMarshed && !item.isReady && (
-                                                               <span className="text-[10px] font-black uppercase text-rose-500 bg-rose-500/10 border border-rose-500/50 px-1.5 py-0.5 rounded flex items-center gap-1 shadow-[0_0_10px_rgba(244,63,94,0.2)] animate-pulse">
-                                                                   <i className="fat fa-fire-flame-curved"></i> MARŞ!
-                                                               </span>
-                                                           )}
-                                                       </div>
+                                        {ticket.items.map((item, idx) => {
+                                            const isItemUpdating = updatingItems.includes(item.id);
+                                            return (
+                                                <li
+                                                    key={idx}
+                                                    onClick={() => params.kitchen_item_selection_enabled !== false && !isItemUpdating && (!params.mars_enabled || !item.isWaiting || item.isMarshed) ? toggleItemReady(item.id) : null}
+                                                    className={`flex gap-2 text-base p-2 rounded-lg -mx-1 ${params.kitchen_item_selection_enabled !== false ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:border-transparent dark:hover:border-slate-600/50' : 'cursor-default border-transparent'} transition-all border ${isItemUpdating ? 'opacity-50 pointer-events-none' : ''} ${params.mars_enabled && item.isWaiting && !item.isMarshed ? 'opacity-40 grayscale scale-[0.98] cursor-not-allowed shadow-inner' : ''} ${item.isReady ? 'bg-rose-50 dark:bg-rose-950/20' : ''}`}
+                                                >
+                                                    <span className={`font-black text-lg ${item.isReady ? 'text-rose-600' : (params.mars_enabled && item.isWaiting && !item.isMarshed ? 'text-slate-400' : (params.mars_enabled && item.isWaiting && item.isMarshed ? 'text-rose-500 animate-pulse' : 'text-indigo-500 dark:text-indigo-400'))}`}>{item.quantity}x</span>
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center justify-between">
+                                                            <span className={`font-bold text-lg ${item.isReady ? 'text-rose-600 line-through decoration-rose-400/50' : (params.mars_enabled && item.isWaiting && !item.isMarshed ? 'text-slate-400' : 'text-slate-800 dark:text-white')}`}>{item.product?.name}</span>
+                                                            <div className="flex items-center gap-1">
+                                                                {isItemUpdating && <i className="fat fa-spinner animate-spin text-slate-400 text-sm"></i>}
+                                                                {item.isReady && !isItemUpdating && <i className="fat fa-check-double text-rose-500 text-sm"></i>}
+                                                                {params.mars_enabled && item.isWaiting && !item.isMarshed && (
+                                                                    <span className="text-[9px] font-black uppercase text-slate-400 border border-slate-300 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                                                        <i className="fat fa-clock"></i> BEKLEMEDE
+                                                                    </span>
+                                                                )}
+                                                                {params.mars_enabled && item.isWaiting && item.isMarshed && !item.isReady && (
+                                                                    <span className="text-[10px] font-black uppercase text-rose-500 bg-rose-500/10 border border-rose-500/50 px-1.5 py-0.5 rounded flex items-center gap-1 shadow-[0_0_10px_rgba(244,63,94,0.2)] animate-pulse">
+                                                                        <i className="fat fa-fire-flame-curved"></i> MARŞ!
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        {item.note && <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium block mt-0.5 bg-amber-100 dark:bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-300 dark:border-amber-500/20">Not: {item.note}</span>}
                                                     </div>
-                                                    {item.note && <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium block mt-0.5 bg-amber-100 dark:bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-300 dark:border-amber-500/20">Not: {item.note}</span>}
-                                                </div>
-                                            </li>
-                                        ))}
+                                                </li>
+                                            )
+                                        })}
                                     </ul>
                                 </div>
 
@@ -360,25 +427,32 @@ export function PageClient() {
                                     {ticket.status === 'NEW' ? (
                                         <button
                                             onClick={() => updateTicketStatus(ticket.id, 'PREPARATION')}
-                                            className="w-11/12 mx-auto py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg transition shadow-sm"
+                                            disabled={updatingTickets.includes(ticket.id)}
+                                            className="w-11/12 mx-auto py-3 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg transition shadow-sm"
                                         >
-                                            <i className="fat fa-fire-burner mr-2"></i> Hazırlamaya Başla
+                                            {updatingTickets.includes(ticket.id) ? <i className="fat fa-spinner animate-spin mr-2"></i> : <i className="fat fa-fire-burner mr-2"></i>} Hazırlamaya Başla
+                                        </button>
+                                    ) : ticket.status === 'READY' ? (
+                                        <button
+                                            onClick={() => updateTicketStatus(ticket.id, 'NEW')}
+                                            disabled={updatingTickets.includes(ticket.id)}
+                                            className="w-11/12 mx-auto py-3 bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50 disabled:cursor-not-allowed font-bold rounded-lg shadow-sm transition flex items-center justify-center gap-2"
+                                        >
+                                            {updatingTickets.includes(ticket.id) ? <i className="fat fa-spinner animate-spin"></i> : <i className="fat fa-arrow-turn-down-left"></i>} Bekleyenlere Al
                                         </button>
                                     ) : (
                                         <div className="grid grid-cols-2 gap-2">
                                             <button
                                                 onClick={() => {
-                                                    const hasWaiting = ticket.items.some(i => i.isWaiting && !i.isMarshed);
-                                                    const allActiveReady = ticket.items.filter(i => !i.isWaiting || i.isMarshed).every(i => i.isReady);
-                                                    
+                                                    const hasWaiting = params.mars_enabled && ticket.items.some(i => i.isWaiting && !i.isMarshed);
+                                                    const allActiveReady = params.kitchen_item_selection_enabled === false || ticket.items.filter(i => !params.mars_enabled || !i.isWaiting || i.isMarshed).every(i => i.isReady);
+
                                                     if (hasWaiting) {
                                                         showSwal({
                                                             title: 'Bekleyen Ürün Var!',
                                                             text: 'Bu masada henüz Marş verilmemiş ürünler var. Sadece hazırlananlar bitti olarak işaretlenecek.',
                                                             icon: 'warning'
                                                         });
-                                                        // Belki burada sadece aktifleri bitti yaparız ama zaten kalem bazlı tıklanabiliyor.
-                                                        // Bu yüzden sadece uyarı verip masayı kapatmıyoruz.
                                                     } else if (!allActiveReady) {
                                                         showSwal({
                                                             title: 'Tamamlanmamış Ürünler!',
@@ -389,15 +463,17 @@ export function PageClient() {
                                                         updateTicketStatus(ticket.id, 'READY');
                                                     }
                                                 }}
-                                                className={`py-2.5 font-bold rounded-lg transition shadow-sm flex items-center justify-center gap-2 ${ticket.items.every(i => i.isReady) ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'bg-slate-300 dark:bg-slate-700 text-slate-500 cursor-not-allowed opacity-70'}`}
+                                                disabled={updatingTickets.includes(ticket.id)}
+                                                className={`py-2.5 font-bold rounded-lg transition shadow-sm flex items-center justify-center gap-2 ${(params.kitchen_item_selection_enabled === false || ticket.items.every(i => i.isReady)) && !updatingTickets.includes(ticket.id) ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'bg-slate-300 dark:bg-slate-700 text-slate-500 cursor-not-allowed opacity-70'}`}
                                             >
-                                                <i className="fat fa-check-double"></i> Siparişi Kapat
+                                                {updatingTickets.includes(ticket.id) ? <i className="fat fa-spinner animate-spin"></i> : <i className="fat fa-check-double"></i>} Siparişi Kapat
                                             </button>
                                             <button
                                                 onClick={() => updateTicketStatus(ticket.id, 'NEW')}
-                                                className="py-2.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 font-bold rounded-lg transition flex items-center justify-center gap-2"
+                                                disabled={updatingTickets.includes(ticket.id)}
+                                                className="py-2.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed font-bold rounded-lg transition flex items-center justify-center gap-2"
                                             >
-                                                <i className="fat fa-rotate-left"></i> Geri
+                                                {updatingTickets.includes(ticket.id) ? <i className="fat fa-spinner animate-spin"></i> : <i className="fat fa-rotate-left"></i>} Geri
                                             </button>
                                         </div>
                                     )}

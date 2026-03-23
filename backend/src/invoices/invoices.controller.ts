@@ -13,9 +13,10 @@ import {
 import { InvoicesService } from './invoices.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Public } from '../auth/public.decorator';
+import { Permissions } from '../auth/permissions.decorator';
 
 @Controller('invoices')
-// @UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard)
 export class InvoicesController {
   constructor(private readonly invoicesService: InvoicesService) {}
 
@@ -26,6 +27,7 @@ export class InvoicesController {
   }
 
   @Get()
+  @Permissions('VIEW_INVOICES', 'VIEW_SALES')
   findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -47,36 +49,43 @@ export class InvoicesController {
   }
 
   @Get('generate-number')
+  @Permissions('ADD_INVOICES', 'ADD_SALES')
   generateNumber() {
     return this.invoicesService.generateInvoiceNumber();
   }
 
   @Get(':id')
+  @Permissions('VIEW_INVOICES', 'VIEW_SALES')
   findOne(@Param('id') id: string) {
     return this.invoicesService.findOne(+id);
   }
 
   @Post()
+  @Permissions('ADD_INVOICES')
   create(@Body() invoiceData: any) {
     return this.invoicesService.create(invoiceData);
   }
 
   @Put(':id')
+  @Permissions('EDIT_INVOICES')
   update(@Param('id') id: string, @Body() invoiceData: any) {
     return this.invoicesService.updateFull(+id, invoiceData);
   }
 
   @Patch(':id/status')
+  @Permissions('EDIT_INVOICES')
   updateStatus(@Param('id') id: string, @Body('status') status: string) {
     return this.invoicesService.updateStatus(+id, status);
   }
 
   @Delete(':id')
+  @Permissions('DELETE_INVOICES')
   remove(@Param('id') id: string) {
     return this.invoicesService.remove(+id);
   }
 
   @Get('partner/:id')
+  @Permissions('VIEW_INVOICES')
   findByPartner(@Param('id') id: string) {
     return this.invoicesService.findByPartner(+id);
   }

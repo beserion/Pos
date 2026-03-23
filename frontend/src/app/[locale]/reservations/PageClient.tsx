@@ -51,7 +51,7 @@ export function PageClient() {
     const router = useRouter();
     const locale = useLocale();
     const { user, loading: authLoading } = useAuth();
-    const API_URL = 'http://localhost:3050';
+    const API_URL = (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
 
     const [reservations, setReservations] = useState<Reservation[]>([]);
     const [tables, setTables] = useState<Table[]>([]);

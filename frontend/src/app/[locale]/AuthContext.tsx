@@ -3,6 +3,9 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import Cookies from 'js-cookie';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
+import { useAlerts } from '../../hooks/useAlerts';
+import { AlertsBell } from '../../components/alerts/AlertsBell';
+import { AlertCriticalPopup } from '../../components/alerts/AlertCriticalPopup';
 
 interface AuthContextType {
     user: any;
@@ -13,6 +16,7 @@ interface AuthContextType {
     hasPermission: (permission: string) => boolean;
     loading: boolean;
     setUser: (user: any) => void;
+    alertsBell: React.ReactNode;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -22,13 +26,26 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
     const [loading, setLoading] = useState(true);
     const router = useRouter();
 
+    const userId = user?.id ?? null;
+    const roleId = user?.role?.id ?? null;
+    const { notifications, unreadCount, criticalPopup, markAsRead, markAllAsRead, dismissPopup } = useAlerts(userId, roleId);
+
+    const alertsBell = user ? (
+        <AlertsBell
+            notifications={notifications}
+            unreadCount={unreadCount}
+            onMarkAsRead={markAsRead}
+            onMarkAllAsRead={markAllAsRead}
+        />
+    ) : null;
+
     useEffect(() => {
         const fetchProfile = async () => {
             const token = Cookies.get('token') || localStorage.getItem('token');
             if (token) {
                 try {
                     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-                    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+                    const apiBase = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
                     const res = await axios.get(`${apiBase}/auth/me`);
                     setUser({ ...res.data, token });
                     if (!localStorage.getItem('token')) {
@@ -69,7 +86,7 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
 
     const login = async (email: string, pass: string) => {
         try {
-            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
             console.log(`Attempting login to ${apiBase}/auth/login`);
             const response = await axios.post(`${apiBase}/auth/login`, { email: email.trim(), password: pass });
             if (response.data.access_token) {
@@ -88,7 +105,7 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
 
     const loginPin = async (userId: number, pin: string) => {
         try {
-            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
             const response = await axios.post(`${apiBase}/auth/login-pin`, { userId, pinCode: pin });
             if (response.data.access_token) {
                 const token = response.data.access_token;
@@ -104,7 +121,7 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
 
     const loginPinOnly = async (pin: string) => {
         try {
-            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
             const response = await axios.post(`${apiBase}/auth/login-pin-only`, { pinCode: pin });
             if (response.data.access_token) {
                 const token = response.data.access_token;
@@ -130,8 +147,9 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, loginPin, loginPinOnly, logout, hasPermission, loading, setUser }}>
+        <AuthContext.Provider value={{ user, login, loginPin, loginPinOnly, logout, hasPermission, loading, setUser, alertsBell }}>
             {children}
+            <AlertCriticalPopup notification={criticalPopup} onDismiss={dismissPopup} />
         </AuthContext.Provider>
     );
 };

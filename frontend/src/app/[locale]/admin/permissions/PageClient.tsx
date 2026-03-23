@@ -85,7 +85,7 @@ export function PageClient() {
     const locale = useLocale();
     const { user: currentUser } = useAuth();
 
-    const API_URL = 'http://localhost:3050';
+    const API_URL = (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
 
     const [modules, setModules] = useState<PermModule[]>([]);
     const [loading, setLoading] = useState(true);

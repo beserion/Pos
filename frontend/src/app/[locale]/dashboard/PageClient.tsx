@@ -1,8 +1,10 @@
 'use client';
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
 import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
+import axios from 'axios';
+import Cookies from 'js-cookie';
 import { useTranslations, useLocale } from 'next-intl';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useParameters } from '../utils/useParameters';
@@ -12,16 +14,36 @@ export function PageClient() {
     const tDashboard = useTranslations('Dashboard');
     const tAdmin = useTranslations('Admin');
     const locale = useLocale();
-    const { user, loading, logout, hasPermission } = useAuth();
+    const { user, loading, logout, hasPermission, alertsBell } = useAuth();
     const { params } = useParameters();
     const router = useRouter();
     const { theme, setTheme } = useTheme();
+    const [accounts, setAccounts] = useState<any[]>([]);
+    const [accountsLoading, setAccountsLoading] = useState(true);
+    const API_URL = (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
 
     useEffect(() => {
         if (!loading && !user) {
             router.push(`/${locale}/login`);
         }
+        if (user) {
+            fetchAccounts();
+        }
     }, [user, loading, router, locale]);
+
+    const fetchAccounts = async () => {
+        try {
+            const token = Cookies.get('token');
+            const res = await axios.get(`${API_URL}/finance/accounts`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setAccounts(res.data);
+        } catch (error) {
+            console.error('Error fetching accounts:', error);
+        } finally {
+            setAccountsLoading(false);
+        }
+    };
 
     const hasAnyAdminPerm = ['LOCATIONS', 'ZONES', 'TABLES', 'EMPLOYEES', 'WAREHOUSES', 'PRODUCTS', 'MODIFIERS', 'INGREDIENTS', 'COURIERS', 'USERS', 'ROLES', 'SYSTEM', 'PRINTERS', 'PARAMETERS', 'ADMIN'].some(key => hasPermission(`${key}:VIEW`)) || hasPermission('ADMIN:VIEW');
 
@@ -77,6 +99,8 @@ export function PageClient() {
                             </div>
                         </div>
 
+                        {alertsBell}
+
                         {/* Theme Toggle */}
                         <button
                             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -108,16 +132,6 @@ export function PageClient() {
 
             {/* Main Content Area */}
             <main className="relative z-10 w-full px-[50px] py-8">
-
-                {/* Form Title Section */}
-                <div className="flex flex-col items-center justify-center text-center mb-5">
-                    {/* <i className="fat fa-house mb-3 text-indigo-600 dark:text-indigo-400" style={{ fontSize: '42px' }}></i> */}
-                    {/* <div className="flex flex-col items-center">
-                        <h3 className="mb-0 text-2xl font-black text-slate-800 dark:text-white tracking-tight leading-none uppercase" id="title">{tDashboard('title')}</h3>
-                        <div className="h-1 w-60 bg-gradient-to-r from-transparent via-indigo-500 to-transparent rounded-full mt-3 mb-1"></div>
-                        <h5 className="text-muted mb-0 text-base font-medium text-slate-400 dark:text-slate-500">{tDashboard('subtitle')}</h5>
-                    </div> */}
-                </div>
 
                 {/* Dashboard Grid - Modern High-End Cards */}
                 <div className={`grid grid-cols-1 sm:grid-cols-2 ${getGridCols(params.dashboard_column_count)} gap-6 transition-all duration-500`}>
@@ -196,14 +210,16 @@ export function PageClient() {
 
 
                     {/* Satışlar Card */}
-                    <DashboardCard
-                        title={tDashboard('sales')}
-                        description={tDashboard('salesDesc')}
-                        icon="fa-receipt"
-                        color="from-rose-500 to-pink-600"
-                        bg="bg-rose-500"
-                        onClick={() => router.push(`/${locale}/sales`)}
-                    />
+                    {hasPermission('SALES:VIEW') && (
+                        <DashboardCard
+                            title={tDashboard('sales')}
+                            description={tDashboard('salesDesc')}
+                            icon="fa-receipt"
+                            color="from-rose-500 to-pink-600"
+                            bg="bg-rose-500"
+                            onClick={() => router.push(`/${locale}/sales`)}
+                        />
+                    )}
 
                     {/* Siparişler Card */}
                     {hasPermission('ORDERS:VIEW') && (
@@ -229,6 +245,20 @@ export function PageClient() {
                         />
                     )}
 
+
+                    {/* Firma Hesapları Card */}
+                    {hasPermission('FINANCE:VIEW') && (
+                        <DashboardCard
+                            title="Hesaplar"
+                            description={tAdmin('companyAccountsDesc')}
+                            icon="fa-building-columns"
+                            color="from-blue-500 to-indigo-600"
+                            bg="bg-blue-500"
+                            onClick={() => router.push(`/${locale}/finance/accounts`)}
+                        />
+                    )}
+
+
                     {/* Finans Card */}
                     {hasPermission('FINANCE:VIEW') && (
                         <DashboardCard
@@ -242,14 +272,16 @@ export function PageClient() {
                     )}
 
                     {/* Faturalar Card */}
-                    <DashboardCard
-                        title={tDashboard('invoices')}
-                        description={tDashboard('invoicesDesc')}
-                        icon="fa-file-invoice"
-                        color="from-sky-500 to-indigo-600"
-                        bg="bg-sky-500"
-                        onClick={() => router.push(`/${locale}/invoices`)}
-                    />
+                    {hasPermission('INVOICES:VIEW') && (
+                        <DashboardCard
+                            title={tDashboard('invoices')}
+                            description={tDashboard('invoicesDesc')}
+                            icon="fa-file-invoice"
+                            color="from-sky-500 to-indigo-600"
+                            bg="bg-sky-500"
+                            onClick={() => router.push(`/${locale}/invoices`)}
+                        />
+                    )}
 
 
                     {/* Inventory Card */}
@@ -275,21 +307,21 @@ export function PageClient() {
                             onClick={() => router.push(`/${locale}/reports`)}
                         />
                     )}
-
-                    {/* Settings Card - moved to navbar
-                    {hasAnyAdminPerm && (
+                    {/* Alerts/Notifications Card */}
+                    {hasPermission('ALERTS:VIEW') && (
                         <DashboardCard
-                            title={tCommon('settings')}
-                            description={tAdmin('subtitle')}
-                            icon="fa-gears"
-                            color="from-slate-500 to-slate-700"
-                            bg="bg-slate-500"
-                            onClick={() => router.push(`/${locale}/admin`)}
+                            title={tDashboard('alerts')}
+                            description={tDashboard('alertsDesc')}
+                            icon="fa-bell-on"
+                            color="from-violet-500 to-purple-600"
+                            bg="bg-violet-500"
+                            onClick={() => router.push(`/${locale}/admin/alerts`)}
                         />
                     )}
-                    */}
 
                 </div>
+
+
             </main>
         </div>
     );

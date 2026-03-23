@@ -8,6 +8,7 @@ import {
   Delete,
   UseGuards,
   Query,
+  Req,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './user.entity';
@@ -17,7 +18,24 @@ import { Permissions } from '../auth/permissions.decorator';
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService) { }
+
+  @Get('me')
+  async getMe(@Req() req: any) {
+    const user = await this.usersService.findOne(req.user.userId || req.user.id);
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role?.name,
+      permissions: user.role?.permissions,
+      extraPermissions: user.extraPermissions,
+    };
+  }
+
+  @Get('cashiers')
+  findCashiers() {
+    return this.usersService.findCashiers();
+  }
 
   /** GET /users/check-pin?pin=1234&excludeId=5  → { unique: true/false } */
   @Get('check-pin')

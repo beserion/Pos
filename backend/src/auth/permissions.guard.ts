@@ -56,7 +56,16 @@ export class PermissionsGuard implements CanActivate {
 
       const userPermissions: any = foundUser.role.permissions || [];
       const extra: string[] = foundUser.extraPermissions || [];
-      const allUserPerms = [...(Array.isArray(userPermissions) ? userPermissions : (typeof userPermissions === 'string' ? userPermissions.split(',') : [])), ...extra];
+      
+      let rolePermsArr: string[] = [];
+      if (Array.isArray(userPermissions)) {
+        rolePermsArr = userPermissions;
+      } else if (typeof userPermissions === 'string') {
+        rolePermsArr = userPermissions.split(',').map((s: string) => s.trim()).filter(Boolean);
+      }
+      
+      const extraPermsArr = extra.map((s: string) => s.trim()).filter(Boolean);
+      const allUserPerms = [...rolePermsArr, ...extraPermsArr];
 
       console.log(`[PERM] User calculated perms:`, allUserPerms);
 
@@ -64,9 +73,9 @@ export class PermissionsGuard implements CanActivate {
         return true;
       }
 
-      // Support both new format (ORDERS:VIEW) and legacy format (VIEW_ORDERS)
-      const hasPermission = requiredPermissions.every((required) => {
-        // Direct match (new MODULE:ACTION format)
+      // ANY of the listed permissions is sufficient (OR logic)
+      const checkOnePerm = (required: string): boolean => {
+        // Direct match
         if (allUserPerms.includes(required)) return true;
 
         // Legacy format: VIEW_ORDERS → check if ORDERS:VIEW exists
@@ -85,7 +94,10 @@ export class PermissionsGuard implements CanActivate {
         }
 
         return false;
-      });
+      };
+
+      // User must have at least ONE of the required permissions
+      const hasPermission = requiredPermissions.some(checkOnePerm);
 
       if (!hasPermission) {
         throw new ForbiddenException(

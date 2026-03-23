@@ -29,7 +29,7 @@ export function PageClient() {
     const fetchAssignedDeliveries = async () => {
         if (!user?.id || !user?.token) return;
         try {
-            const res = await axios.get(`http://localhost:3050/deliveries/courier/${user.id}`, {
+            const res = await axios.get(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/deliveries/courier/${user.id}`, {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
             setDeliveries(res.data);
@@ -49,7 +49,7 @@ export function PageClient() {
             for (const d of deliveries) {
                 if (d.status === 'IN_TRANSIT') {
                     try {
-                        await axios.put(`http://localhost:3050/deliveries/${d.id}/location`,
+                        await axios.put(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/deliveries/${d.id}/location`,
                             { lat: latitude, lng: longitude },
                             { headers: { Authorization: `Bearer ${user.token}` } }
                         );
@@ -69,7 +69,7 @@ export function PageClient() {
                 (payload as any).actualDeliveryTime = new Date();
             }
 
-            await axios.put(`http://localhost:3050/deliveries/${id}`, payload, {
+            await axios.put(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/deliveries/${id}`, payload, {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
 

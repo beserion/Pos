@@ -12,6 +12,12 @@ interface Role {
     permissions?: string[];
 }
 
+interface CashRegister {
+    id: number;
+    name: string;
+    isActive: boolean;
+}
+
 interface User {
     id: number;
     firstName: string;
@@ -23,6 +29,7 @@ interface User {
     isActive: boolean;
     role?: Role;
     extraPermissions?: string[];
+    cashRegisterId?: number;
 }
 
 type Action = 'VIEW' | 'ADD' | 'EDIT' | 'DELETE' | 'PRINT' | 'APPROVE';
@@ -47,6 +54,7 @@ export function PageClient() {
     const [users, setUsers] = useState<User[]>([]);
     const [roles, setRoles] = useState<Role[]>([]);
     const [modules, setModules] = useState<any[]>([]);
+    const [cashRegisters, setCashRegisters] = useState<CashRegister[]>([]);
     const [loading, setLoading] = useState(true);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -69,7 +77,8 @@ export function PageClient() {
         password: '',
         pinCode: '',
         roleId: 0,
-        isActive: true
+        isActive: true,
+        cashRegisterId: 0
     });
 
     useEffect(() => {
@@ -81,17 +90,19 @@ export function PageClient() {
     const fetchData = async () => {
         try {
             const config = { headers: { Authorization: `Bearer ${currentUser?.token}` } };
-            // Using literal config since dynamic URL might be broken previously
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+            const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+            const API_URL = isLocalhost ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050');
 
-            const [usersRes, rolesRes, modulesRes] = await Promise.all([
+            const [usersRes, rolesRes, modulesRes, cashRegsRes] = await Promise.all([
                 axios.get(`${API_URL}/users`, config),
                 axios.get(`${API_URL}/roles`, config),
-                axios.get(`${API_URL}/permission-modules`, config)
+                axios.get(`${API_URL}/permission-modules`, config),
+                axios.get(`${API_URL}/cash-registers`, config)
             ]);
 
             setUsers(usersRes.data);
             setRoles(rolesRes.data);
+            setCashRegisters(cashRegsRes.data || []);
 
             const backendModules = (modulesRes.data || []).map((m: any) => ({
                 key: m.key,
@@ -101,8 +112,8 @@ export function PageClient() {
             }));
             setModules(backendModules);
 
-        } catch (error) {
-            console.error('Error fetching data', error);
+        } catch (error: any) {
+            console.error('Error fetching data:', error);
             showSwal({ title: tc('error'), text: tc('loadingError'), icon: 'error' });
         } finally {
             setLoading(false);
@@ -112,8 +123,10 @@ export function PageClient() {
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+            const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+            const API_URL = isLocalhost ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050');
             const config = { headers: { Authorization: `Bearer ${currentUser?.token}` } };
+            
             const payload = {
                 firstName: formData.firstName,
                 lastName: formData.lastName,
@@ -122,7 +135,8 @@ export function PageClient() {
                 pinCode: formData.pinCode,
                 isActive: formData.isActive,
                 passwordHash: formData.password,
-                role: formData.roleId !== 0 ? { id: formData.roleId } : null
+                role: formData.roleId !== 0 ? { id: formData.roleId } : null,
+                cashRegisterId: formData.cashRegisterId || null
             };
 
             if (formData.id === 0) {
@@ -136,7 +150,7 @@ export function PageClient() {
             setIsModalOpen(false);
             fetchData();
         } catch (error: any) {
-            console.error('Error saving user', error?.response?.data || error);
+            console.error('Error saving user detail:', error?.response?.data || error.message || error);
             const errDetail = error?.response?.data?.message || error?.response?.data?.error || error.message || 'Bilinmeyen bir hata oluştu.';
             showSwal({ title: tc('error'), text: Array.isArray(errDetail) ? errDetail.join(', ') : errDetail, icon: 'error' });
         }
@@ -159,7 +173,7 @@ export function PageClient() {
 
         if (result.isConfirmed) {
             try {
-                const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+                const API_URL = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
                 await axios.delete(`${API_URL}/users/${id}`, {
                     headers: { Authorization: `Bearer ${currentUser?.token}` }
                 });
@@ -186,7 +200,8 @@ export function PageClient() {
                 password: usr.passwordClearText || '',
                 pinCode: usr.pinCode || '',
                 roleId: usr.role?.id || 0,
-                isActive: usr.isActive
+                isActive: usr.isActive,
+                cashRegisterId: usr.cashRegisterId || 0
             });
         } else {
             setFormData({
@@ -198,7 +213,8 @@ export function PageClient() {
                 password: '',
                 pinCode: '',
                 roleId: roles.length > 0 ? roles[0].id : 0,
-                isActive: true
+                isActive: true,
+                cashRegisterId: 0
             });
         }
         setIsModalOpen(true);
@@ -326,7 +342,8 @@ export function PageClient() {
         if (!permUser) return;
         setPermSaving(true);
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+            const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+            const API_URL = isLocalhost ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050');
             const config = { headers: { Authorization: `Bearer ${currentUser?.token}` } };
             // Hit the standard PUT /users/:id endpoint which accepts Partial<User>
             await axios.put(`${API_URL}/users/${permUser.id}`, { extraPermissions: extraPerms }, config);
@@ -408,6 +425,7 @@ export function PageClient() {
                                             <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableUser')}</th>
                                             <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableEmail')}</th>
                                             <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableRole')}</th>
+                                            <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Yetkili Kasa</th>
                                             <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Yetki Durumu</th>
                                             <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t('tableActions')}</th>
                                         </tr>
@@ -442,6 +460,19 @@ export function PageClient() {
                                                             <i className="fat fa-shield-halved text-slate-400 text-xs"></i>
                                                             <span className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest">{usr.role?.name || t('notSpecified')}</span>
                                                         </div>
+                                                    </td>
+                                                    <td className="px-8 py-3">
+                                                        {(() => {
+                                                            const reg = cashRegisters.find(r => r.id === usr.cashRegisterId);
+                                                            return reg ? (
+                                                                <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 dark:bg-indigo-500/10 rounded-lg border border-indigo-200 dark:border-indigo-500/20">
+                                                                    <i className="fat fa-cash-register text-indigo-500 text-xs"></i>
+                                                                    <span className="text-xs font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-widest">{reg.name}</span>
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-xs text-slate-300 font-bold">Atanmamış</span>
+                                                            );
+                                                        })()}
                                                     </td>
                                                     <td className="px-8 py-4">
                                                         {usr.role ? (
@@ -586,6 +617,18 @@ export function PageClient() {
                                                     <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
                                                 </div>
                                             </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">YETKİLİ KASA</label>
+                                                <div className="relative"><i className="fat fa-cash-register absolute left-4 top-4 text-cyan-500/50"></i>
+                                                    <select value={formData.cashRegisterId} onChange={(e) => setFormData({ ...formData, cashRegisterId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-cyan-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                        <option value={0}>Kasa Atanmamış</option>
+                                                        {cashRegisters.filter(cr => cr.isActive).map(cr => <option key={cr.id} value={cr.id}>{cr.name}</option>)}
+                                                    </select>
+                                                    <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{tc('active')}</label>
                                                 <div className="relative flex items-center pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl w-full h-[54px]">
