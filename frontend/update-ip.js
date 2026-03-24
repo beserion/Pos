@@ -18,7 +18,7 @@ function getLocalIp() {
 const ip = getLocalIp();
 const envPath = path.join(__dirname, '.env.local');
 const varName = 'NEXT_PUBLIC_API_URL';
-const newValue = `https://api.posnetx.com`;
+const newValue = `bosnakback.posnetx.com`;
 
 let envContent = '';
 if (fs.existsSync(envPath)) {
