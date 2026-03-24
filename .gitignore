@@ -13,7 +13,7 @@ dist/
 .next/
 out/
 publish/frontend.zip
-
+ecosystem.config.js
 # Cache and temporary folders
 .turbo/
 .cache/
