@@ -11,7 +11,8 @@ module.exports = {
     },
     {
       name: "posapp-frontend",
-      script: ".next/standalone/server.js",
+      script: "npm",
+      args: "start",
       cwd: "./frontend",
       env: {
         NODE_ENV: "production",

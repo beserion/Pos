@@ -55,6 +55,8 @@ async function bootstrap() {
       'https://posbackend.beserion.com.tr',
       'http://localhost:3000',
       'http://127.0.0.1:3000',
+      'https://api.posnetx.com',
+      'https://posnetx.com',
     ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,

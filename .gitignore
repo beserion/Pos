@@ -38,7 +38,7 @@ yarn-error.log*
 # Local env files
 .env*.local
 .env
-
+frontend/update-ip.js
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
