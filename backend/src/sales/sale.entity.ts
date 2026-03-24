@@ -92,6 +92,23 @@ export class Sale {
   @Column({ nullable: true , default: 0 })
   companyId: number;
 
+  // --- Alt Adisyon (Sub-Check) Alanları ---
+  @ManyToOne(() => Sale, (sale) => sale.subChecks, { nullable: true })
+  @JoinColumn({ name: 'parentSaleId' })
+  parentSale: Sale;
+
+  @Column({ nullable: true })
+  parentSaleId: number;
+
+  @OneToMany(() => Sale, (sale) => sale.parentSale)
+  subChecks: Sale[];
+
+  @Column({ nullable: true, length: 100 })
+  subCheckLabel: string;
+
+  @Column({ default: 0 })
+  subCheckIndex: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

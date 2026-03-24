@@ -81,6 +81,37 @@ export class SalesService implements OnModuleInit {
           } as any);
         }
       }
+
+      // --- Alt Adisyon (Sub-Check) sütunları ---
+      if (table && !table.columns.find(c => c.name === 'parentSaleId')) {
+        this.logger.log('Adding parentSaleId column to sales table...');
+        await queryRunner.addColumn('sales', {
+          name: 'parentSaleId',
+          type: 'int',
+          isNullable: true,
+          default: null
+        } as any);
+      }
+      if (table && !table.columns.find(c => c.name === 'subCheckLabel')) {
+        this.logger.log('Adding subCheckLabel column to sales table...');
+        await queryRunner.addColumn('sales', {
+          name: 'subCheckLabel',
+          type: 'nvarchar',
+          length: '100',
+          isNullable: true,
+          default: null
+        } as any);
+      }
+      if (table && !table.columns.find(c => c.name === 'subCheckIndex')) {
+        this.logger.log('Adding subCheckIndex column to sales table...');
+        await queryRunner.addColumn('sales', {
+          name: 'subCheckIndex',
+          type: 'int',
+          isNullable: false,
+          default: 0
+        } as any);
+      }
+
       await queryRunner.release();
     } catch (error) {
       this.logger.error('Error ensuring schema for sales tables:', error);
@@ -188,7 +219,7 @@ export class SalesService implements OnModuleInit {
   async findOne(id: number): Promise<Sale> {
     const sale = await this.saleRepository.findOne({
       where: { id },
-      relations: ['items', 'table', 'table.zone', 'waiter'],
+      relations: ['items', 'table', 'table.zone', 'waiter', 'subChecks', 'subChecks.items', 'parentSale'],
     });
     if (!sale) {
       throw new NotFoundException(`Sale with ID ${id} not found`);
@@ -368,8 +399,13 @@ export class SalesService implements OnModuleInit {
     `);
 
     if (rawProduct && rawProduct.length > 0) {
+      // Alt adisyon bilgisini yazıcıya gönder: MASA X / Aile Y
+      const printTableName = item.sale?.subCheckLabel
+        ? `${item.sale?.tableName} / ${item.sale.subCheckLabel}`
+        : item.sale?.tableName;
+
       await this.printersService.printMars({
-        tableName: item.sale?.tableName,
+        tableName: printTableName,
         item: {
           name: rawProduct[0].name,
           quantity: item.quantity,
@@ -831,5 +867,401 @@ export class SalesService implements OnModuleInit {
       await manager.getRepository(SaleItem).update(itemId, { costPrice: cost });
     }
   }
-}
 
+  // ==============================
+  // Alt Adisyon (Sub-Check) Metotları
+  // ==============================
+
+  /**
+   * Mevcut bir adisyona yeni bir alt adisyon ekler.
+   */
+  async createSubCheck(parentSaleId: number, label?: string): Promise<Sale> {
+    const parentSale = await this.saleRepository.findOne({
+      where: { id: parentSaleId },
+      relations: ['items', 'table', 'subChecks'],
+    });
+    if (!parentSale) throw new NotFoundException('Üst adisyon bulunamadı.');
+
+    // Eğer parentSale zaten bir alt adisyon ise, gerçek kök adisyonu bul
+    const rootSaleId = parentSale.parentSaleId || parentSale.id;
+
+    // Mevcut alt adisyon sayısını say
+    const existingCount = await this.saleRepository.count({
+      where: { parentSaleId: rootSaleId },
+    });
+    const subCheckIndex = existingCount + 1;
+    const defaultLabel = label || `Adisyon ${subCheckIndex + 1}`;
+
+    // Ana adisyona da label ata (ilk kez alt adisyon oluşturuluyorsa)
+    if (!parentSale.subCheckLabel && !parentSale.parentSaleId) {
+      await this.saleRepository.update(rootSaleId, { subCheckLabel: 'Adisyon 1', subCheckIndex: 0 });
+    }
+
+    const newSubCheck = this.saleRepository.create({
+      parentSaleId: rootSaleId,
+      subCheckLabel: defaultLabel,
+      subCheckIndex,
+      tableId: parentSale.tableId,
+      tableName: parentSale.tableName,
+      waiterId: parentSale.waiterId,
+      userId: parentSale.userId,
+      cashRegisterId: parentSale.cashRegisterId,
+      shiftId: parentSale.shiftId,
+      partnerId: parentSale.partnerId,
+      companyId: parentSale.companyId,
+      status: 'NEW',
+      totalAmount: 0,
+      discountAmount: 0,
+      serviceFee: 0,
+    });
+
+    const saved = await this.saleRepository.save(newSubCheck);
+
+    // WebSocket bildirim
+    this.kitchenGateway.notifySaleUpdate(saved);
+
+    return saved;
+  }
+
+  /**
+   * Varolan bir adisyona (veya alt-adisyona) yeni ürünler ekler
+   */
+  async appendItems(saleId: number, items: any[]): Promise<Sale> {
+    return await this.saleRepository.manager.transaction(async (manager) => {
+      const sale = await manager.findOne(Sale, {
+        where: { id: saleId },
+        relations: ['items', 'table', 'table.zone', 'waiter']
+      });
+      if (!sale) throw new NotFoundException('Adisyon bulunamadı.');
+
+      if (!items || items.length === 0) return sale;
+
+      const newSaleItems = items.map(item => manager.create(SaleItem, {
+        productId: item.productId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        costPrice: item.costPrice || 0,
+        total: item.total || (Number(item.quantity) * Number(item.unitPrice)),
+        note: item.note,
+        isWaiting: item.isWaiting || false,
+        isMarshed: false,
+        sale: sale,
+        isPaid: sale.status === 'COMPLETED'
+      }));
+
+      await manager.save(SaleItem, newSaleItems);
+
+      const newItemsTotal = newSaleItems.reduce((sum, i) => sum + Number(i.total || (Number(i.quantity) * Number(i.unitPrice))), 0);
+
+      // IMPORTANT: Push new items to sale relation array before saving sale, otherwise TypeORM cascade will detached/delete them.
+      if (sale.items) {
+        sale.items.push(...newSaleItems);
+      } else {
+        sale.items = newSaleItems;
+      }
+      
+      sale.totalAmount = Number(sale.totalAmount) + newItemsTotal;
+      await manager.save(Sale, sale);
+
+      if (sale.tableId) {
+        const table = await manager.findOne(Table, { where: { id: sale.tableId } });
+        if (table) {
+          table.currentTotal = Number(table.currentTotal || 0) + newItemsTotal;
+          await manager.save(Table, table);
+        }
+      }
+
+      const fakeSale = { ...sale, items: newSaleItems } as Sale;
+      await this.deductStockForSale(fakeSale, manager);
+
+      const refreshedSale = await manager.findOne(Sale, {
+        where: { id: saleId },
+        relations: ['items', 'table', 'table.zone', 'waiter', 'subChecks', 'parentSale']
+      });
+      const fullSales = await this.mapProductsToSales([refreshedSale as Sale], manager);
+      const fullSale = fullSales[0];
+
+      this.kitchenGateway.notifySaleUpdate(fullSale);
+      if (fullSale.status === 'NEW' || fullSale.status === 'PREPARATION') {
+        this.kitchenGateway.notifyNewOrder(fullSale as any);
+      }
+
+      return fullSale;
+    });
+  }
+
+  /**
+   * Adisyon bölme: Kaynak adisyondan seçilen ürünleri yeni bir alt adisyona taşır.
+   * Miktar bölme destekler (örn: 3 adet Cola → 2 kaynak, 1 hedef).
+   */
+  async splitCheck(
+    saleId: number,
+    itemIds: number[],
+    quantities?: Record<number, number>,
+    newLabel?: string,
+  ): Promise<{ source: Sale; newCheck: Sale }> {
+    return await this.saleRepository.manager.transaction(async (manager) => {
+      const sourceSale = await manager.findOne(Sale, {
+        where: { id: saleId },
+        relations: ['items', 'table', 'subChecks'],
+      });
+      if (!sourceSale) throw new NotFoundException('Kaynak adisyon bulunamadı.');
+
+      // Taşınacak item'ları doğrula
+      const sourceItems = await manager.find(SaleItem, {
+        where: { id: In(itemIds), sale: { id: saleId } },
+      });
+      if (sourceItems.length === 0) {
+        throw new BadRequestException('Taşınacak ürün bulunamadı.');
+      }
+
+      // Yeni alt adisyon oluştur
+      const rootSaleId = sourceSale.parentSaleId || sourceSale.id;
+      const existingCount = await manager.count(Sale, {
+        where: { parentSaleId: rootSaleId },
+      });
+      const subCheckIndex = existingCount + 1;
+      const label = newLabel || `Adisyon ${subCheckIndex + 1}`;
+
+      // Ana adisyona label ata (ilk kez)
+      if (!sourceSale.subCheckLabel && !sourceSale.parentSaleId) {
+        await manager.update(Sale, rootSaleId, { subCheckLabel: 'Adisyon 1', subCheckIndex: 0 });
+      }
+
+      const newCheck = manager.create(Sale, {
+        parentSaleId: rootSaleId,
+        subCheckLabel: label,
+        subCheckIndex,
+        tableId: sourceSale.tableId,
+        tableName: sourceSale.tableName,
+        waiterId: sourceSale.waiterId,
+        userId: sourceSale.userId,
+        cashRegisterId: sourceSale.cashRegisterId,
+        shiftId: sourceSale.shiftId,
+        partnerId: sourceSale.partnerId,
+        companyId: sourceSale.companyId,
+        status: sourceSale.status,
+        totalAmount: 0,
+        discountAmount: 0,
+        serviceFee: 0,
+      });
+      const savedNewCheck = await manager.save(Sale, newCheck);
+
+      let newCheckTotal = 0;
+      let sourceDeduction = 0;
+
+      for (const item of sourceItems) {
+        const splitQty = quantities?.[item.id];
+
+        if (splitQty && splitQty < Number(item.quantity)) {
+          // Miktar bölme: kaynak miktarını azalt, yeni item oluştur
+          const remainingQty = Number(item.quantity) - splitQty;
+          await manager.update(SaleItem, item.id, {
+            quantity: remainingQty,
+            total: remainingQty * Number(item.unitPrice),
+          });
+
+          const newItem = manager.create(SaleItem, {
+            productId: item.productId,
+            quantity: splitQty,
+            unitPrice: item.unitPrice,
+            costPrice: item.costPrice,
+            total: splitQty * Number(item.unitPrice),
+            note: item.note,
+            isMarshed: item.isMarshed,
+            isWaiting: item.isWaiting,
+            isReady: item.isReady,
+            isPaid: false,
+            status: item.status,
+            sale: savedNewCheck,
+          });
+          await manager.save(SaleItem, newItem);
+
+          newCheckTotal += splitQty * Number(item.unitPrice);
+          sourceDeduction += splitQty * Number(item.unitPrice);
+        } else {
+          // Tam taşıma: item'ı yeni adisyona aktar
+          await manager.update(SaleItem, item.id, { sale: savedNewCheck } as any);
+          // TypeORM update ile relation atamak güvenilmez, raw query yapalım
+          await manager.query(`UPDATE sale_items SET saleId = ${savedNewCheck.id} WHERE id = ${item.id}`);
+
+          newCheckTotal += Number(item.total || Number(item.unitPrice) * Number(item.quantity));
+          sourceDeduction += Number(item.total || Number(item.unitPrice) * Number(item.quantity));
+        }
+      }
+
+      // Tutarları güncelle
+      await manager.update(Sale, savedNewCheck.id, { totalAmount: newCheckTotal });
+      const newSourceTotal = Math.max(0, Number(sourceSale.totalAmount) - sourceDeduction);
+      await manager.update(Sale, sourceSale.id, { totalAmount: newSourceTotal });
+
+      // Güncel halleri getir
+      const updatedSource = await manager.findOne(Sale, {
+        where: { id: sourceSale.id },
+        relations: ['items', 'table'],
+      }) as Sale;
+      const updatedNew = await manager.findOne(Sale, {
+        where: { id: savedNewCheck.id },
+        relations: ['items', 'table'],
+      }) as Sale;
+
+      // WebSocket bildirim
+      this.kitchenGateway.notifySaleUpdate(updatedSource);
+      this.kitchenGateway.notifySaleUpdate(updatedNew);
+
+      return { source: updatedSource, newCheck: updatedNew };
+    });
+  }
+
+  /**
+   * Bir masadaki tüm alt adisyonları ağaç yapısında getirir.
+   */
+  async getTableSubChecks(tableId: number): Promise<Sale[]> {
+    const sales = await this.saleRepository.find({
+      where: {
+        tableId,
+        status: In(['NEW', 'PREPARATION', 'READY', 'SERVED']),
+      },
+      relations: ['items', 'table', 'waiter', 'subChecks', 'subChecks.items'],
+      order: { subCheckIndex: 'ASC', createdAt: 'ASC' },
+    });
+
+    // Sadece kök adisyonları dön (alt adisyonlar zaten subChecks relation'ında)
+    const rootSales = sales.filter(s => !s.parentSaleId);
+
+    // Product bilgilerini map et
+    const allSales = [...rootSales];
+    rootSales.forEach(s => {
+      if (s.subChecks) allSales.push(...s.subChecks);
+    });
+    await this.mapProductsToSales(allSales);
+
+    return rootSales;
+  }
+
+  /**
+   * Ürünleri bir adisyondan diğerine taşır.
+   */
+  async moveItems(
+    sourceId: number,
+    targetId: number,
+    itemIds: number[],
+    quantities?: Record<number, number>,
+  ): Promise<{ source: Sale; target: Sale }> {
+    return await this.saleRepository.manager.transaction(async (manager) => {
+      const sourceSale = await manager.findOne(Sale, { where: { id: sourceId }, relations: ['items'] });
+      const targetSale = await manager.findOne(Sale, { where: { id: targetId }, relations: ['items'] });
+      if (!sourceSale) throw new NotFoundException('Kaynak adisyon bulunamadı.');
+      if (!targetSale) throw new NotFoundException('Hedef adisyon bulunamadı.');
+
+      // Aynı masa kontrolü
+      if (sourceSale.tableId !== targetSale.tableId) {
+        throw new BadRequestException('Ürün taşıma sadece aynı masa içinde yapılabilir.');
+      }
+
+      const items = await manager.find(SaleItem, {
+        where: { id: In(itemIds), sale: { id: sourceId } },
+      });
+      if (items.length === 0) throw new BadRequestException('Taşınacak ürün bulunamadı.');
+
+      let movedTotal = 0;
+
+      for (const item of items) {
+        const splitQty = quantities?.[item.id];
+
+        if (splitQty && splitQty < Number(item.quantity)) {
+          const remainingQty = Number(item.quantity) - splitQty;
+          await manager.update(SaleItem, item.id, {
+            quantity: remainingQty,
+            total: remainingQty * Number(item.unitPrice),
+          });
+
+          const newItem = manager.create(SaleItem, {
+            productId: item.productId,
+            quantity: splitQty,
+            unitPrice: item.unitPrice,
+            costPrice: item.costPrice,
+            total: splitQty * Number(item.unitPrice),
+            note: item.note,
+            isMarshed: item.isMarshed,
+            isWaiting: item.isWaiting,
+            isReady: item.isReady,
+            isPaid: false,
+            status: item.status,
+            sale: targetSale,
+          });
+          await manager.save(SaleItem, newItem);
+          movedTotal += splitQty * Number(item.unitPrice);
+        } else {
+          await manager.query(`UPDATE sale_items SET saleId = ${targetId} WHERE id = ${item.id}`);
+          movedTotal += Number(item.total || Number(item.unitPrice) * Number(item.quantity));
+        }
+      }
+
+      // Tutarları güncelle
+      await manager.update(Sale, sourceId, {
+        totalAmount: Math.max(0, Number(sourceSale.totalAmount) - movedTotal),
+      });
+      await manager.update(Sale, targetId, {
+        totalAmount: Number(targetSale.totalAmount) + movedTotal,
+      });
+
+      const updatedSource = await manager.findOne(Sale, { where: { id: sourceId }, relations: ['items'] }) as Sale;
+      const updatedTarget = await manager.findOne(Sale, { where: { id: targetId }, relations: ['items'] }) as Sale;
+
+      this.kitchenGateway.notifySaleUpdate(updatedSource);
+      this.kitchenGateway.notifySaleUpdate(updatedTarget);
+
+      return { source: updatedSource, target: updatedTarget };
+    });
+  }
+
+  /**
+   * Tüm alt adisyonları ana adisyona birleştirir.
+   */
+  async mergeSubChecks(parentSaleId: number): Promise<Sale> {
+    return await this.saleRepository.manager.transaction(async (manager) => {
+      const parentSale = await manager.findOne(Sale, {
+        where: { id: parentSaleId },
+        relations: ['items', 'subChecks', 'subChecks.items'],
+      });
+      if (!parentSale) throw new NotFoundException('Ana adisyon bulunamadı.');
+
+      const subChecks = parentSale.subChecks || [];
+      if (subChecks.length === 0) {
+        throw new BadRequestException('Birleştirilecek alt adisyon bulunamadı.');
+      }
+
+      let totalMergedAmount = 0;
+
+      for (const subCheck of subChecks) {
+        // Alt adisyonun item'larını ana adisyona taşı
+        if (subCheck.items && subCheck.items.length > 0) {
+          for (const item of subCheck.items) {
+            await manager.query(`UPDATE sale_items SET saleId = ${parentSaleId} WHERE id = ${item.id}`);
+          }
+          totalMergedAmount += Number(subCheck.totalAmount);
+        }
+        // Alt adisyonu sil
+        await manager.delete(Sale, subCheck.id);
+      }
+
+      // Ana adisyonun tutarını ve label bilgilerini güncelle
+      await manager.update(Sale, parentSaleId, {
+        totalAmount: Number(parentSale.totalAmount) + totalMergedAmount,
+        subCheckLabel: null as any,
+        subCheckIndex: 0,
+      });
+
+      const updatedParent = await manager.findOne(Sale, {
+        where: { id: parentSaleId },
+        relations: ['items', 'table', 'waiter'],
+      }) as Sale;
+
+      const mapped = await this.mapProductsToSales([updatedParent], manager);
+      this.kitchenGateway.notifySaleUpdate(mapped[0]);
+
+      return mapped[0];
+    });
+  }
+}

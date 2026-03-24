@@ -125,4 +125,41 @@ export class SalesController {
   async remove(@Param('id') id: string) {
     return this.salesService.updateStatus(+id, 'CANCELLED');
   }
+
+  // --- Alt Adisyon (Sub-Check) Endpoints ---
+
+  @Get('table/:tableId/sub-checks')
+  getTableSubChecks(@Param('tableId') tableId: string) {
+    return this.salesService.getTableSubChecks(+tableId);
+  }
+
+  @Post(':id/sub-check')
+  createSubCheck(@Param('id') id: string, @Body('label') label?: string) {
+    return this.salesService.createSubCheck(+id, label);
+  }
+
+  @Post(':id/split')
+  splitCheck(
+    @Param('id') id: string,
+    @Body() body: { itemIds: number[]; quantities?: Record<number, number>; newLabel?: string },
+  ) {
+    return this.salesService.splitCheck(+id, body.itemIds, body.quantities, body.newLabel);
+  }
+
+  @Put('items/move')
+  moveItems(
+    @Body() body: { sourceId: number; targetId: number; itemIds: number[]; quantities?: Record<number, number> },
+  ) {
+    return this.salesService.moveItems(body.sourceId, body.targetId, body.itemIds, body.quantities);
+  }
+
+  @Put(':id/merge')
+  mergeSubChecks(@Param('id') id: string) {
+    return this.salesService.mergeSubChecks(+id);
+  }
+
+  @Post(':id/items')
+  appendItems(@Param('id') id: string, @Body('items') items: any[]) {
+    return this.salesService.appendItems(+id, items);
+  }
 }

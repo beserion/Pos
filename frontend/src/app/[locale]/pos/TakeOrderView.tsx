@@ -66,6 +66,11 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [splitAmounts, setSplitAmounts] = useState({ cash: 0, creditCard: 0 });
     const [selectedPosItems, setSelectedPosItems] = useState<number[]>([]);
 
+    const [allFlatChecks, setAllFlatChecks] = useState<any[]>([]);
+    const [activeSubCheckId, setActiveSubCheckId] = useState<number | 'ALL' | null>(null);
+    const [isAddSubCheckOpen, setIsAddSubCheckOpen] = useState(false);
+    const [newSubCheckLabel, setNewSubCheckLabel] = useState('');
+
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
     const { params } = useParameters();
 
@@ -184,20 +189,44 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         if (table.status === 'DOLU' || table.status === 'REZERVE' || table.currentTotal) {
             try {
                 const token = localStorage.getItem('token') || (user as any)?.token;
-                const res = await fetch(`${API_URL}/sales?tableId=${table.id}&status=ACTIVE`, {
+                const res = await fetch(`${API_URL}/sales/table/${table.id}/sub-checks`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 if (res.ok) {
-                    const result = await res.json();
-                    setExistingOrders(result.data || []);
+                    const data = await res.json();
+                    const flat: any[] = [];
+                    data.forEach((main: any) => {
+                        flat.push({ ...main, isSub: false });
+                        if (main.subChecks && main.subChecks.length > 0) {
+                            main.subChecks.forEach((sub: any) => {
+                                flat.push({ ...sub, isSub: true });
+                            });
+                        }
+                    });
+                    setAllFlatChecks(flat);
+
+                    if (flat.length > 0) {
+                        setActiveSubCheckId('ALL');
+                        setExistingOrders(flat);
+                    } else {
+                        setAllFlatChecks([]);
+                        setActiveSubCheckId(null);
+                        setExistingOrders([]);
+                    }
                 } else {
+                    setAllFlatChecks([]);
+                    setActiveSubCheckId(null);
                     setExistingOrders([]);
                 }
             } catch (err) {
-                console.error("Failed to fetch existing orders", err);
+                console.error("Failed to fetch sub-checks", err);
+                setAllFlatChecks([]);
+                setActiveSubCheckId(null);
                 setExistingOrders([]);
             }
         } else {
+            setAllFlatChecks([]);
+            setActiveSubCheckId(null);
             setExistingOrders([]);
         }
     };
@@ -247,28 +276,52 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         setIsSending(true);
         try {
             const token = localStorage.getItem('token') || (user as any)?.token;
-            const orderPayload = {
-                tableId: selectedTable.id,
-                userId: pinWaiter?.id || user?.id,
-                totalAmount: cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0),
-                status: 'NEW',
-                items: cart.map(item => ({
-                    productId: item.product.id,
-                    quantity: item.quantity,
-                    unitPrice: item.product.price,
-                    note: item.note,
-                    isWaiting: params.mars_enabled ? (item.isWaiting || false) : false
-                }))
-            };
+            let orderRes;
 
-            const orderRes = await fetch(`${API_URL}/sales`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify(orderPayload)
-            });
+            if (activeSubCheckId === 'ALL') {
+                toastSwal({ icon: 'warning', title: 'Lütfen ürünleri ekleyeceğiniz alt adisyonu/sekmeyi seçin!' });
+                setIsSending(false);
+                return;
+            }
+
+            if (activeSubCheckId) {
+                const orderPayload = {
+                    items: cart.map(item => ({
+                        productId: item.product.id,
+                        quantity: item.quantity,
+                        unitPrice: item.product.price,
+                        note: item.note,
+                        isWaiting: params.mars_enabled ? (item.isWaiting || false) : false
+                    }))
+                };
+                orderRes = await fetch(`${API_URL}/sales/${activeSubCheckId}/items`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify(orderPayload)
+                });
+            } else {
+                const orderPayload = {
+                    tableId: selectedTable.id,
+                    userId: pinWaiter?.id || user?.id,
+                    totalAmount: cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0),
+                    status: 'NEW',
+                    items: cart.map(item => ({
+                        productId: item.product.id,
+                        quantity: item.quantity,
+                        unitPrice: item.product.price,
+                        note: item.note,
+                        isWaiting: params.mars_enabled ? (item.isWaiting || false) : false
+                    }))
+                };
+                orderRes = await fetch(`${API_URL}/sales`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`
+                    },
+                    body: JSON.stringify(orderPayload)
+                });
+            }
 
             if (!orderRes.ok) {
                 throw new Error("Failed to send order");
@@ -433,7 +486,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         if (!selectedTable) return;
         const unpaidItems = existingOrders.flatMap(o => o.items).filter(i => !i.isPaid);
         const itemsToPay = unpaidItems.filter(item => selectedPosItems.includes(item.id));
-        
+
         if (itemsToPay.length === 0) {
             toastSwal({ icon: 'warning', title: 'Ödenecek ürün seçmediniz!' });
             return;
@@ -453,7 +506,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                     paidAmountCreditCard: paymentMethod === 'Kart' ? null : creditAmount
                 }),
             });
-            
+
             if (res.ok) {
                 toastSwal({ title: 'Başarılı', text: `Ödeme alındı (${paymentMethod})!`, icon: 'success' });
                 setIsCheckoutOpen(false);
@@ -470,7 +523,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         }
     };
 
-    
+
 
     if (loading || !user) return null;
 
@@ -593,6 +646,17 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                             <div className={`w-2 h-2 rounded-full ${table.status === 'BOŞ' ? 'bg-emerald-500' : table.status === 'REZERVE' ? 'bg-amber-500' : 'bg-rose-500'}`}></div>
                                         </div>
 
+                                        <button
+                                            onClick={(e) => {
+
+                                                // TODO: Implement Table Transfer backend
+                                            }}
+                                            className="absolute top-3 left-3 w-8 h-8 flex items-center justify-center rounded-xl bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-500/30 transition-all opacity-70 hover:opacity-100"
+                                            title="Masa Transfer"
+                                        >
+                                            <i className="fat fa-arrow-right-arrow-left text-xs"></i>
+                                        </button>
+
                                         <span className="text-4xl mb-1 group-hover:scale-110 transition-transform">
                                             {table.status === 'BOŞ' ? '🪑' : table.status === 'REZERVE' ? '📅' : '🍽️'}
                                         </span>
@@ -691,12 +755,69 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                 <span className="bg-emerald-100/80 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 py-1.5 px-4 rounded-full text-sm font-bold shadow-inner">{selectedTable.name}</span>
                             )}
                         </h2>
+
+                        {selectedTable && allFlatChecks.length > 0 && (
+                            <div className="flex items-center gap-2 mt-3 overflow-x-auto pb-1 scrollbar-none">
+                                <button
+                                    onClick={() => {
+                                        setActiveSubCheckId('ALL');
+                                        setExistingOrders(allFlatChecks);
+                                    }}
+                                    className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${activeSubCheckId === 'ALL'
+                                        ? 'bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-500/20'
+                                        : 'bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-emerald-400'
+                                        }`}
+                                >
+                                    <i className="fat fa-layer-group mr-1.5"></i> Tümü
+                                    <span className="ml-1 opacity-70">₺{allFlatChecks.reduce((sum, c) => sum + Number(c.totalAmount || 0), 0).toFixed(0)}</span>
+                                </button>
+                                {allFlatChecks.map((check: any) => (
+                                    <button
+                                        key={check.id}
+                                        onClick={() => {
+                                            setActiveSubCheckId(check.id);
+                                            setExistingOrders([check]);
+                                        }}
+                                        className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${activeSubCheckId === check.id
+                                            ? 'bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-500/20'
+                                            : 'bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-emerald-400'
+                                            }`}
+                                    >
+                                        {check.subCheckLabel || `Adisyon ${check.subCheckIndex + 1}`}
+                                        {check.totalAmount > 0 && (
+                                            <span className="ml-1 opacity-70">₺{Number(check.totalAmount).toFixed(0)}</span>
+                                        )}
+                                    </button>
+                                ))}
+                                <button
+                                    onClick={() => { setIsAddSubCheckOpen(true); setNewSubCheckLabel(''); }}
+                                    className="w-7 h-7 rounded-full flex items-center justify-center bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 transition-all text-sm font-bold flex-shrink-0"
+                                    title="Alt Adisyon Ekle"
+                                >
+                                    +
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar max-h-[calc(100vh-180px)]">
-                        {existingOrders.map(order =>
-                            order.items.map((item, idx) => (
-                                <div key={`ex-${order.id}-${idx}`} className={`flex flex-col gap-2 p-3 rounded-2xl border shadow-sm transition-all ${item.isPaid ? 'bg-emerald-50/60 dark:bg-emerald-900/10 border-emerald-200/50 dark:border-emerald-500/20 opacity-70' : 'bg-slate-100/50 dark:bg-slate-700/30 border-slate-200/50 dark:border-slate-700/50'}`}>
+                        {(() => {
+                            // Merge duplicate products when Tümü (ALL) is selected
+                            const allItems = existingOrders.flatMap(order => order.items);
+                            const displayItems = activeSubCheckId === 'ALL'
+                                ? allItems.reduce((merged: any[], item) => {
+                                    const existing = merged.find(m => m.product.id === item.product.id && m.isPaid === item.isPaid);
+                                    if (existing) {
+                                        existing.quantity += item.quantity;
+                                    } else {
+                                        merged.push({ ...item });
+                                    }
+                                    return merged;
+                                }, [])
+                                : allItems;
+
+                            return displayItems.map((item: any, idx: number) => (
+                                <div key={`ex-${item.id}-${idx}`} className={`flex flex-col gap-2 p-3 rounded-2xl border shadow-sm transition-all ${item.isPaid ? 'bg-emerald-50/60 dark:bg-emerald-900/10 border-emerald-200/50 dark:border-emerald-500/20 opacity-70' : 'bg-slate-100/50 dark:bg-slate-700/30 border-slate-200/50 dark:border-slate-700/50'}`}>
                                     <div className="flex justify-between items-start">
                                         <span className="block font-medium text-slate-600 dark:text-slate-400">
                                             {item.product.name}
@@ -716,10 +837,9 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                         <span className="text-xs font-bold text-slate-400">Birim: ₺{item.unitPrice} &nbsp;·&nbsp; {item.quantity} Adet</span>
                                         {!item.isPaid && (
                                             <button
-                                                onClick={() => payItem(item.id)}
-                                                className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1"
+                                                className="text-[10px] font-black uppercase text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 border border-yellow-200 dark:border-yellow-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1"
                                             >
-                                                <i className="fat fa-circle-check text-[10px]"></i> Öde
+                                                <i className="fat fa-arrow-right-arrow-left text-[10px]"></i> Transfer
                                             </button>
                                         )}
                                         {params.mars_enabled && item.isWaiting && !item.isMarshed && (
@@ -732,13 +852,13 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                         )}
                                         {params.mars_enabled && item.isWaiting && item.isMarshed && (
                                             <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-full flex items-center gap-1">
-                                               <i className="fat fa-check text-[10px]"></i> Marshed
+                                                <i className="fat fa-check text-[10px]"></i> Marshed
                                             </span>
                                         )}
                                     </div>
                                 </div>
-                            ))
-                        )}
+                            ));
+                        })()}
 
                         {cart.length === 0 && existingOrders.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-slate-400 dark:text-slate-600">
@@ -778,17 +898,17 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                                 <i className="fat fa-trash"></i>
                                             </button>
                                             {params.mars_enabled && (
-                                            <button
-                                                onClick={() => {
-                                                    setCart(prev => prev.map((it, idx) => 
-                                                        idx === index ? { ...it, isWaiting: !it.isWaiting } : it
-                                                    ));
-                                                }}
-                                                className={`w-8 h-8 flex items-center justify-center rounded-md transition-all ${item.isWaiting ? 'bg-amber-500 text-white shadow-lg' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`}
-                                                title={item.isWaiting ? 'Beklesin Olarak İşaretli' : 'Beklesin Olarak İşaretle'}
-                                            >
-                                                <i className="fat fa-clock"></i>
-                                            </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setCart(prev => prev.map((it, idx) =>
+                                                            idx === index ? { ...it, isWaiting: !it.isWaiting } : it
+                                                        ));
+                                                    }}
+                                                    className={`w-8 h-8 flex items-center justify-center rounded-md transition-all ${item.isWaiting ? 'bg-amber-500 text-white shadow-lg' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`}
+                                                    title={item.isWaiting ? 'Beklesin Olarak İşaretli' : 'Beklesin Olarak İşaretle'}
+                                                >
+                                                    <i className="fat fa-clock"></i>
+                                                </button>
                                             )}
                                             <div className="flex items-center gap-3 bg-slate-100 dark:bg-slate-700/50 rounded-lg p-1">
                                                 <button onClick={() => removeFromCart(item)} className="w-7 h-7 flex items-center justify-center text-red-500 font-bold hover:bg-white dark:hover:bg-slate-600 rounded-md transition-colors">-</button>
@@ -803,31 +923,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                     </div>
 
                     <div className="p-6 bg-slate-100/60 dark:bg-slate-800/60 backdrop-blur-xl border-t border-white/50 dark:border-slate-700/50 m-4 rounded-3xl transition-colors shadow-inner">
-                        {/* Paid vs Remaining totals */}
-                        {existingOrders.length > 0 && (
-                            <div className="mb-3 space-y-2">
-                                {paidTotal > 0 && (
-                                    <div className="flex justify-between items-center py-1.5 px-3 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl border border-emerald-200 dark:border-emerald-500/20">
-                                        <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-                                            <i className="fat fa-check-circle"></i> Ödenen
-                                        </span>
-                                        <span className="text-sm font-black text-emerald-700 dark:text-emerald-400">₺{paidTotal.toFixed(2)}</span>
-                                    </div>
-                                )}
-                                <div className="flex justify-between items-center py-1.5 px-3 bg-amber-50 dark:bg-amber-500/10 rounded-xl border border-amber-200 dark:border-amber-500/20">
-                                    <span className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1">
-                                        <i className="fat fa-clock"></i> Kalan (Ödenmemiş)
-                                    </span>
-                                    <span className="text-sm font-black text-amber-700 dark:text-amber-400">₺{remainingTotal.toFixed(2)}</span>
-                                </div>
-                                <button
-                                    onClick={() => { setIsCheckoutOpen(true); setSelectedPosItems(existingOrders.flatMap(o => o.items).filter(i => !i.isPaid).map(i => i.id)); }}
-                                    className="w-full mt-2 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-black text-[10px] uppercase tracking-[0.2em] rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"
-                                >
-                                    <i className="fat fa-wallet"></i> Ödeme Al
-                                </button>
-                            </div>
-                        )}
+
                         <div className="flex justify-between mb-4">
                             <span className="text-lg font-bold text-slate-800 dark:text-slate-100">{existingOrders.length > 0 ? 'Yeni Eklenecek' : 'Toplam Tutar'}</span>
                             <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400">₺{cartTotal.toFixed(2)}</span>
@@ -1009,6 +1105,62 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                 className="w-2/3 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold shadow-lg shadow-emerald-500/30 hover:shadow-teal-500/40 transition hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2"
                             >
                                 <i className="fat fa-check"></i> Kaydet ve Kapat
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Alt Adisyon Ekle Modal */}
+            {isAddSubCheckOpen && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+                    <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-sm shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden border border-white/20 dark:border-slate-700/50 p-6">
+                        <div className="text-center mb-6">
+                            <div className="w-14 h-14 bg-emerald-100 dark:bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <span className="text-2xl">➕</span>
+                            </div>
+                            <h2 className="text-xl font-bold text-slate-800 dark:text-white">Alt Adisyon Ekle</h2>
+                            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Yeni müşteri grubu için ayrı adisyon açın.</p>
+                        </div>
+                        <input
+                            type="text"
+                            value={newSubCheckLabel}
+                            onChange={(e) => setNewSubCheckLabel(e.target.value)}
+                            placeholder="Örn: Aile 2, Misafir 3..."
+                            className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold dark:text-white mb-4"
+                            autoFocus
+                        />
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setIsAddSubCheckOpen(false)}
+                                className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                            >
+                                İptal
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    if (allFlatChecks.length === 0) return;
+                                    try {
+                                        const token = localStorage.getItem('token') || (user as any)?.token;
+                                        const parentId = allFlatChecks.find(c => !c.isSub)?.id || allFlatChecks[0].id;
+                                        const res = await fetch(`${API_URL}/sales/${parentId}/sub-check`, {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                            body: JSON.stringify({ label: newSubCheckLabel || undefined })
+                                        });
+                                        if (res.ok) {
+                                            const newSub = await res.json();
+                                            toastSwal({ icon: 'success', title: `${newSub.subCheckLabel} oluşturuldu!` });
+                                            setIsAddSubCheckOpen(false);
+                                            await handleTableClick(selectedTable!);
+                                            setActiveSubCheckId(newSub.id);
+                                        } else {
+                                            toastSwal({ icon: 'error', title: 'Oluşturulamadı!' });
+                                        }
+                                    } catch (e) { toastSwal({ icon: 'error', title: 'Hata!' }); }
+                                }}
+                                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold shadow-lg shadow-emerald-500/30 transition-all"
+                            >
+                                Oluştur
                             </button>
                         </div>
                     </div>

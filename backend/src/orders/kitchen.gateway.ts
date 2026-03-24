@@ -40,4 +40,13 @@ export class KitchenGateway
   notifySaleUpdate(sale: any) {
     this.server?.emit('salesUpdate', sale);
   }
+
+  // Alt Adisyon (Sub-Check) bildirimleri
+  notifySubCheckCreated(data: any) {
+    this.server?.emit('subCheckCreated', data);
+  }
+
+  notifySubCheckSplit(data: any) {
+    this.server?.emit('subCheckSplit', data);
+  }
 }

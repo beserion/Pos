@@ -52,6 +52,16 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const [discount, setDiscount] = useState<number>(0);
     const [serviceFee, setServiceFee] = useState<number>(0);
 
+    // --- Alt Adisyon (Sub-Check) State ---
+    const [tableSubChecks, setTableSubChecks] = useState<any[]>([]); // Tüm kök adisyonlar (subChecks dahil)
+    const [allFlatChecks, setAllFlatChecks] = useState<any[]>([]); // Düzleştirilmiş tüm alt adisyonlar
+    const [activeSubCheckId, setActiveSubCheckId] = useState<number | 'ALL' | null>(null);
+    const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
+    const [splitSelectedItems, setSplitSelectedItems] = useState<number[]>([]);
+    const [splitQuantities, setSplitQuantities] = useState<Record<number, number>>({});
+    const [isAddSubCheckOpen, setIsAddSubCheckOpen] = useState(false);
+    const [newSubCheckLabel, setNewSubCheckLabel] = useState('');
+
     // Shift & Cash Register state
     const [activeShift, setActiveShift] = useState<any>(null);
     const [activeCashRegister, setActiveCashRegister] = useState<any>(null);
@@ -215,36 +225,116 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             if (!selectedTable || (selectedTable.status === 'BOŞ' && !selectedTable.currentTotal)) {
                 setCart([]);
                 setActiveOrderIds([]);
+                setTableSubChecks([]);
+                setAllFlatChecks([]);
+                setActiveSubCheckId(null);
                 return;
             }
             try {
                 const token = (user as any)?.token || localStorage.getItem('token');
-                const res = await fetch(`${API_URL}/sales?tableId=${selectedTable.id}&status=ACTIVE`, {
+                // Alt adisyon destekli endpoint
+                const res = await fetch(`${API_URL}/sales/table/${selectedTable.id}/sub-checks`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 if (res.ok) {
-                    const result = await res.json();
-                    const orders = result.data || [];
-                    let newCart: { product: Product; quantity: number }[] = [];
-                    const orderIds: number[] = [];
+                    const rootSales = await res.json();
+                    setTableSubChecks(rootSales);
 
-                    orders.forEach((order: any) => {
-                        orderIds.push(order.id);
-                        order.items.forEach((item: any) => {
-                            const existing = newCart.find(c => c.product.id === item.product.id);
-                            if (existing) {
-                                existing.quantity += item.quantity;
-                            } else {
-                                newCart.push({ product: item.product, quantity: item.quantity });
+                    // Tüm adisyonları düzleştir (kökler + alt adisyonlar)
+                    const flat: any[] = [];
+                    const orderIds: number[] = [];
+                    (rootSales || []).forEach((root: any) => {
+                        flat.push(root);
+                        orderIds.push(root.id);
+                        if (root.subChecks && root.subChecks.length > 0) {
+                            root.subChecks.forEach((sub: any) => {
+                                flat.push(sub);
+                                orderIds.push(sub.id);
+                            });
+                        }
+                    });
+                    setAllFlatChecks(flat);
+                    setActiveOrderIds(orderIds);
+
+                    // Aktif sekmeyi belirle
+                    if (flat.length > 0 && !activeSubCheckId) {
+                        setActiveSubCheckId('ALL');
+                    }
+
+                    if (activeSubCheckId === 'ALL' || !activeSubCheckId) {
+                        let newCart: any[] = [];
+                        flat.forEach(check => {
+                            if (check.items) {
+                                check.items
+                                    .filter((item: any) => item.status === 'ACTIVE')
+                                    .forEach((item: any) => {
+                                        const product = item.product || { id: item.productId, name: `Ürün #${item.productId}`, price: item.unitPrice };
+                                        const existing = newCart.find(c => c.product.id === product.id);
+                                        if (existing) {
+                                            existing.quantity += item.quantity;
+                                        } else {
+                                            newCart.push({
+                                                product,
+                                                quantity: item.quantity,
+                                                itemId: item.id,
+                                                subCheckId: check.id
+                                            });
+                                        }
+                                    });
                             }
                         });
-                    });
-
-                    setCart(newCart);
-                    setActiveOrderIds(orderIds);
+                        setCart(newCart);
+                        setActiveOrderIds(orderIds);
+                    } else {
+                        // Aktif adisyonun ürünlerini cart'a yükle
+                        const activeCheck = flat.find((s: any) => s.id === activeSubCheckId);
+                        if (activeCheck && activeCheck.items) {
+                            const newCart = activeCheck.items
+                                .filter((item: any) => item.status === 'ACTIVE')
+                                .map((item: any) => ({
+                                    product: item.product || { id: item.productId, name: `Ürün #${item.productId}`, price: item.unitPrice },
+                                    quantity: item.quantity,
+                                    itemId: item.id,
+                                    subCheckId: activeCheck.id
+                                }));
+                            setCart(newCart);
+                            setActiveOrderIds([activeCheck.id]);
+                        } else {
+                            setCart([]);
+                            setActiveOrderIds([]);
+                        }
+                    }
                 } else {
-                    setCart([]);
-                    setActiveOrderIds([]);
+                    // Fallback: eski yöntem
+                    const fallbackRes = await fetch(`${API_URL}/sales?tableId=${selectedTable.id}&status=ACTIVE`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (fallbackRes.ok) {
+                        const result = await fallbackRes.json();
+                        const orders = result.data || [];
+                        let newCart: { product: Product; quantity: number }[] = [];
+                        const orderIds: number[] = [];
+
+                        orders.forEach((order: any) => {
+                            orderIds.push(order.id);
+                            order.items.forEach((item: any) => {
+                                const existing = newCart.find(c => c.product.id === item.product.id);
+                                if (existing) {
+                                    existing.quantity += item.quantity;
+                                } else {
+                                    newCart.push({ product: item.product, quantity: item.quantity });
+                                }
+                            });
+                        });
+
+                        setCart(newCart);
+                        setActiveOrderIds(orderIds);
+                        setAllFlatChecks(orders);
+                        if (orders.length > 0) setActiveSubCheckId(orders[0].id);
+                    } else {
+                        setCart([]);
+                        setActiveOrderIds([]);
+                    }
                 }
             } catch (error) {
                 console.error('Error fetching table orders:', error);
@@ -253,7 +343,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             }
         };
         fetchTableOrders();
-    }, [selectedTable]);
+    }, [selectedTable, activeSubCheckId]);
     const handlePinSubmit = async (val: string) => {
         if (!pinCashier) return;
         try {
@@ -587,6 +677,46 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                             <span className="bg-indigo-100/80 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 py-1.5 px-4 rounded-full text-sm font-bold shadow-inner">{selectedTable.name}</span>
                         )}
                     </h2>
+
+                    {/* Alt Adisyon Sekmeleri */}
+                    {selectedTable && allFlatChecks.length > 0 && (
+                        <div className="flex items-center gap-2 mt-3 overflow-x-auto pb-1 scrollbar-none">
+                            <button
+                                onClick={() => setActiveSubCheckId('ALL')}
+                                className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${
+                                    activeSubCheckId === 'ALL'
+                                        ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-500/20'
+                                        : 'bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                                }`}
+                            >
+                                <i className="fat fa-layer-group mr-1.5"></i> Tümü
+                                <span className="ml-1 opacity-70">₺{allFlatChecks.reduce((sum, c) => sum + Number(c.totalAmount || 0), 0).toFixed(0)}</span>
+                            </button>
+                            {allFlatChecks.map((check: any) => (
+                                <button
+                                    key={check.id}
+                                    onClick={() => setActiveSubCheckId(check.id)}
+                                    className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${
+                                        activeSubCheckId === check.id
+                                            ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-500/20'
+                                            : 'bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                                    }`}
+                                >
+                                    {check.subCheckLabel || `Adisyon ${check.subCheckIndex + 1}`}
+                                    {check.totalAmount > 0 && (
+                                        <span className="ml-1 opacity-70">₺{Number(check.totalAmount).toFixed(0)}</span>
+                                    )}
+                                </button>
+                            ))}
+                            <button
+                                onClick={() => { setIsAddSubCheckOpen(true); setNewSubCheckLabel(''); }}
+                                className="w-7 h-7 rounded-full flex items-center justify-center bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 transition-all text-sm font-bold flex-shrink-0"
+                                title="Alt Adisyon Ekle"
+                            >
+                                +
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -654,20 +784,44 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                         <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-600 dark:from-indigo-400 dark:to-blue-400">₺{grandTotal.toFixed(2)}</span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="grid grid-cols-3 gap-3 mb-3">
                         <button
                             onClick={() => setSelectedTable(null)}
                             className="py-3 rounded-2xl bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-bold text-sm shadow-sm transition-all active:scale-[0.98]"
                             disabled={!selectedTable}
                         >
-                            <i className="fat fa-pause mr-2"></i> Beklet
+                            <i className="fat fa-pause mr-1"></i> Beklet
+                        </button>
+                        <button
+                            onClick={() => {
+                                if (!activeSubCheckId || activeSubCheckId === 'ALL') {
+                                    toastSwal({ icon: 'warning', title: 'Lütfen bölünecek tek bir adisyon seçin!' });
+                                    return;
+                                }
+                                const activeCheck = allFlatChecks.find((s: any) => s.id === activeSubCheckId);
+                                if (!activeCheck || !activeCheck.items || activeCheck.items.length === 0) {
+                                    toastSwal({ icon: 'warning', title: 'Bölünecek ürün yok!' });
+                                    return;
+                                }
+                                setSplitSelectedItems([]);
+                                setSplitQuantities({});
+                                setIsSplitModalOpen(true);
+                            }}
+                            className={`py-3 rounded-2xl border font-bold text-sm shadow-sm transition-all ${
+                                activeSubCheckId === 'ALL' 
+                                ? 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-400 opacity-50 cursor-not-allowed'
+                                : 'bg-violet-50 dark:bg-violet-500/10 border-violet-200 dark:border-violet-500/30 text-violet-700 dark:text-violet-400 active:scale-[0.98]'
+                            }`}
+                            disabled={!selectedTable || cart.length === 0 || activeSubCheckId === 'ALL'}
+                        >
+                            <i className="fat fa-scissors mr-1"></i> Böl
                         </button>
                         <button
                             onClick={handleCancelAdisyon}
                             className="py-3 rounded-2xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-400 font-bold text-sm shadow-sm transition-all active:scale-[0.98]"
                             disabled={!selectedTable || cart.length === 0}
                         >
-                            <i className="fat fa-trash mr-2"></i> İptal
+                            <i className="fat fa-trash mr-1"></i> İptal
                         </button>
                     </div>
 
@@ -869,6 +1023,214 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     );
                 })()
             }
+
+            {/* Alt Adisyon Ekle Modal */}
+            {isAddSubCheckOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+                    <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-sm shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden border border-white/20 dark:border-slate-700/50 p-6">
+                        <div className="text-center mb-6">
+                            <div className="w-14 h-14 bg-emerald-100 dark:bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <span className="text-2xl">➕</span>
+                            </div>
+                            <h2 className="text-xl font-bold text-slate-800 dark:text-white">Alt Adisyon Ekle</h2>
+                            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Yeni müşteri grubu için ayrı adisyon açın.</p>
+                        </div>
+                        <input
+                            type="text"
+                            value={newSubCheckLabel}
+                            onChange={(e) => setNewSubCheckLabel(e.target.value)}
+                            placeholder="Örn: Aile 2, Misafir 3..."
+                            className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold dark:text-white mb-4"
+                            autoFocus
+                        />
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setIsAddSubCheckOpen(false)}
+                                className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                            >
+                                İptal
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    if (!activeSubCheckId && activeOrderIds.length === 0) return;
+                                    try {
+                                        const token = localStorage.getItem('token') || (user as any)?.token;
+                                        const parentId = activeOrderIds[0] || activeSubCheckId;
+                                        const res = await fetch(`${API_URL}/sales/${parentId}/sub-check`, {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                            body: JSON.stringify({ label: newSubCheckLabel || undefined })
+                                        });
+                                        if (res.ok) {
+                                            const newSub = await res.json();
+                                            toastSwal({ icon: 'success', title: `${newSub.subCheckLabel} oluşturuldu!` });
+                                            setIsAddSubCheckOpen(false);
+                                            setActiveSubCheckId(newSub.id);
+                                            setSelectedTable({ ...selectedTable! });
+                                        } else {
+                                            toastSwal({ icon: 'error', title: 'Alt adisyon oluşturulamadı!' });
+                                        }
+                                    } catch (e) {
+                                        console.error(e);
+                                        toastSwal({ icon: 'error', title: 'Sistem hatası!' });
+                                    }
+                                }}
+                                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold shadow-lg shadow-emerald-500/30 transition-all"
+                            >
+                                Oluştur
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Adisyon Bölme (Split Check) Modal */}
+            {isSplitModalOpen && (() => {
+                const activeCheck = allFlatChecks.find((s: any) => s.id === activeSubCheckId);
+                const splitItems = activeCheck?.items?.filter((i: any) => i.status === 'ACTIVE') || [];
+                const splitTotal = splitSelectedItems.reduce((sum, itemId) => {
+                    const item = splitItems.find((i: any) => i.id === itemId);
+                    if (!item) return sum;
+                    const qty = splitQuantities[itemId] || Number(item.quantity);
+                    return sum + (qty * Number(item.unitPrice));
+                }, 0);
+                const remainingTotal = Number(activeCheck?.totalAmount || 0) - splitTotal;
+
+                return (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+                        <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col max-h-[90vh]">
+                            <div className="p-6 text-center shrink-0 border-b border-slate-100 dark:border-slate-700">
+                                <div className="w-14 h-14 bg-violet-100 dark:bg-violet-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                                    <span className="text-2xl">✂️</span>
+                                </div>
+                                <h2 className="text-xl font-bold text-slate-800 dark:text-white">Adisyon Böl</h2>
+                                <p className="text-slate-500 dark:text-slate-400 text-sm">Yeni adisyona taşınacak ürünleri seçin</p>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3">Kaynak: {activeCheck?.subCheckLabel || 'Ana Adisyon'}</h3>
+                                        <div className="space-y-2">
+                                            {splitItems.map((item: any) => {
+                                                const isSelected = splitSelectedItems.includes(item.id);
+                                                const splitQty = splitQuantities[item.id] || Number(item.quantity);
+                                                return (
+                                                    <div
+                                                        key={item.id}
+                                                        className={`p-3 rounded-xl border transition-all cursor-pointer ${isSelected ? 'bg-violet-50/80 border-violet-200 dark:bg-violet-500/20 dark:border-violet-500/30' : 'bg-white border-slate-200 dark:bg-slate-800 dark:border-slate-700'}`}
+                                                        onClick={() => {
+                                                            if (isSelected) {
+                                                                setSplitSelectedItems(prev => prev.filter(id => id !== item.id));
+                                                                setSplitQuantities(prev => { const n = { ...prev }; delete n[item.id]; return n; });
+                                                            } else {
+                                                                setSplitSelectedItems(prev => [...prev, item.id]);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <div className="flex justify-between items-center">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className={`w-5 h-5 rounded-full flex items-center justify-center border-2 transition-colors ${isSelected ? 'bg-violet-600 border-violet-600' : 'border-slate-300 dark:border-slate-600'}`}>
+                                                                    {isSelected && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
+                                                                </div>
+                                                                <span className="font-bold text-sm text-slate-700 dark:text-slate-200">{item.product?.name || `Ürün #${item.productId}`}</span>
+                                                            </div>
+                                                            <span className="text-xs font-bold text-slate-500">x{Number(item.quantity)}</span>
+                                                        </div>
+                                                        {isSelected && Number(item.quantity) > 1 && (
+                                                            <div className="mt-2 flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                                                                <span className="text-[10px] font-bold text-slate-400 uppercase">Taşı:</span>
+                                                                <input type="number" min={1} max={Number(item.quantity)} value={splitQty}
+                                                                    onChange={(e) => { const val = Math.min(Number(item.quantity), Math.max(1, Number(e.target.value) || 1)); setSplitQuantities(prev => ({ ...prev, [item.id]: val })); }}
+                                                                    className="w-16 px-2 py-1 text-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-violet-500"
+                                                                />
+                                                                <span className="text-[10px] font-bold text-slate-400">/ {Number(item.quantity)}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xs font-black uppercase tracking-widest text-emerald-500 mb-3">Yeni Adisyon</h3>
+                                        <div className="space-y-2">
+                                            {splitSelectedItems.map(itemId => {
+                                                const item = splitItems.find((i: any) => i.id === itemId);
+                                                if (!item) return null;
+                                                const qty = splitQuantities[itemId] || Number(item.quantity);
+                                                return (
+                                                    <div key={itemId} className="p-3 rounded-xl bg-emerald-50/80 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30">
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="font-bold text-sm text-slate-700 dark:text-slate-200">{item.product?.name || `Ürün #${item.productId}`}</span>
+                                                            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">x{qty} — ₺{(qty * Number(item.unitPrice)).toFixed(2)}</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                            {splitSelectedItems.length === 0 && (
+                                                <div className="text-center text-slate-400 py-8 text-sm"><p>← Soldan ürün seçin</p></div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="p-6 shrink-0 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800">
+                                <div className="flex justify-between items-center mb-4">
+                                    <div>
+                                        <span className="text-xs font-bold text-slate-400 uppercase">Kaynak Kalan</span>
+                                        <p className="text-lg font-black text-slate-800 dark:text-white">₺{remainingTotal.toFixed(2)}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-xs font-bold text-emerald-500 uppercase">Yeni Adisyon</span>
+                                        <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">₺{splitTotal.toFixed(2)}</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-3">
+                                    <button onClick={() => setIsSplitModalOpen(false)} className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
+                                        İptal
+                                    </button>
+                                    <button
+                                        onClick={async () => {
+                                            if (splitSelectedItems.length === 0) return;
+                                            try {
+                                                const token = localStorage.getItem('token') || (user as any)?.token;
+                                                const quantitiesPayload: Record<number, number> = {};
+                                                splitSelectedItems.forEach(itemId => {
+                                                    const item = splitItems.find((i: any) => i.id === itemId);
+                                                    if (item && splitQuantities[itemId] && splitQuantities[itemId] < Number(item.quantity)) {
+                                                        quantitiesPayload[itemId] = splitQuantities[itemId];
+                                                    }
+                                                });
+                                                const res = await fetch(`${API_URL}/sales/${activeSubCheckId}/split`, {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                                    body: JSON.stringify({ itemIds: splitSelectedItems, quantities: Object.keys(quantitiesPayload).length > 0 ? quantitiesPayload : undefined })
+                                                });
+                                                if (res.ok) {
+                                                    const result = await res.json();
+                                                    toastSwal({ icon: 'success', title: 'Adisyon başarıyla bölündü!' });
+                                                    setIsSplitModalOpen(false);
+                                                    setActiveSubCheckId(result.newCheck?.id || activeSubCheckId);
+                                                    setSelectedTable({ ...selectedTable! });
+                                                } else {
+                                                    const err = await res.json();
+                                                    toastSwal({ icon: 'error', title: err.message || 'Bölme başarısız!' });
+                                                }
+                                            } catch (e) { console.error(e); toastSwal({ icon: 'error', title: 'Sistem hatası!' }); }
+                                        }}
+                                        disabled={splitSelectedItems.length === 0}
+                                        className="flex-1 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-bold shadow-lg shadow-violet-500/30 transition-all disabled:opacity-50 disabled:grayscale"
+                                    >
+                                        Böldür
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* Geri Dön Butonu - Float */}
             {/* <button
