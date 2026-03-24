@@ -254,21 +254,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     return (
         <div className="h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 flex overflow-hidden transition-colors duration-300">
-            {/* Shift Manager Overlay */}
-            <ShiftManager
-                user={user}
-                apiUrl={API_URL}
-                onShiftOpen={(shift: any, cashRegister: any) => {
-                    setActiveShift(shift);
-                    setActiveCashRegister(cashRegister);
-                    setShiftReady(true);
-                }}
-                onShiftClose={() => {
-                    setActiveShift(null);
-                    setActiveCashRegister(null);
-                    setShiftReady(false);
-                }}
-            />
+
 
             {/* Left Side: Product Selection (70%) */}
             <div className="flex-1 flex flex-col p-6 overflow-hidden relative z-10">
@@ -332,6 +318,22 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                         <button onClick={() => router.push(`/${locale}/dashboard`)} className="px-6 py-3 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black text-xs uppercase tracking-widest border border-slate-200 dark:border-slate-700 transition flex items-center gap-2">
                             <i className="fat fa-home"></i> Ana Menü
                         </button>
+
+                        {/* Shift Manager - Vardiya Kapat */}
+                        <ShiftManager
+                            user={user}
+                            apiUrl={API_URL}
+                            onShiftOpen={(shift: any, cashRegister: any) => {
+                                setActiveShift(shift);
+                                setActiveCashRegister(cashRegister);
+                                setShiftReady(true);
+                            }}
+                            onShiftClose={() => {
+                                setActiveShift(null);
+                                setActiveCashRegister(null);
+                                setShiftReady(false);
+                            }}
+                        />
                         <button
                             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
                             className="w-12 h-12 flex items-center justify-center rounded-2xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 transition-all text-xl"
