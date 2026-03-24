@@ -22,7 +22,7 @@ export class ProductsService {
 
     async findAll(): Promise<Product[]> {
         const products = await this.productRepository.find({
-            relations: ['recipes', 'printer'],
+            relations: ['recipes', 'printer', 'productType', 'outputProfile'],
         });
 
         if (products.length > 0) {
@@ -51,7 +51,7 @@ export class ProductsService {
         // Exclude products where isIngredient = true (handle NULL as non-ingredient)
         return await this.productRepository
             .createQueryBuilder('p')
-            .select(['p.id', 'p.name', 'p.price', 'p.category', 'p.imageUrl', 'p.isQuickSale', 'p.sku'])
+            .select(['p.id', 'p.name', 'p.price', 'p.category', 'p.imageUrl', 'p.isQuickSale', 'p.sku', 'p.productTypeId', 'p.printerId'])
             .where('p.isIngredient IS NULL OR p.isIngredient = :val', { val: false })
             .getMany();
     }
@@ -59,7 +59,7 @@ export class ProductsService {
     async findOne(id: number): Promise<Product> {
         const product = await this.productRepository.findOne({
             where: { id },
-            relations: ['recipes', 'printer'],
+            relations: ['recipes', 'printer', 'productType', 'outputProfile'],
         });
         if (!product) {
             throw new NotFoundException(`Product with ID ${id} not found`);

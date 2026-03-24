@@ -255,6 +255,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     return (
         <div className="h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 flex overflow-hidden transition-colors duration-300">
 
+            {/* Shift Manager Overlay moved to right header */}
 
             {/* Left Side: Product Selection (70%) */}
             <div className="flex-1 flex flex-col p-6 overflow-hidden relative z-10">
@@ -310,16 +311,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                             <i className="fat fa-basket-shopping text-orange-500"></i> Satışlar
                         </button> */}
 
-                        {/* Theme Toggle */}
-                        <button onClick={onSwitchToPos} className="h-12 px-6 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider flex items-center gap-2 hover:bg-indigo-500/20 transition-all border border-indigo-500/20 active:scale-95 shadow-sm">
-                            <i className="fat fa-cash-register text-indigo-500"></i> Kasa
-                        </button>
-
-                        <button onClick={() => router.push(`/${locale}/dashboard`)} className="px-6 py-3 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black text-xs uppercase tracking-widest border border-slate-200 dark:border-slate-700 transition flex items-center gap-2">
-                            <i className="fat fa-home"></i> Ana Menü
-                        </button>
-
-                        {/* Shift Manager - Vardiya Kapat */}
+                        {/* Shift Manager Overlay / Vardiya Kapat Butonu */}
                         <ShiftManager
                             user={user}
                             apiUrl={API_URL}
@@ -334,6 +326,16 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                                 setShiftReady(false);
                             }}
                         />
+
+                        {/* Theme Toggle */}
+                        <button onClick={onSwitchToPos} className="h-12 px-6 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider flex items-center gap-2 hover:bg-indigo-500/20 transition-all border border-indigo-500/20 active:scale-95 shadow-sm">
+                            <i className="fat fa-cash-register text-indigo-500"></i> Kasa
+                        </button>
+
+                        <button onClick={() => router.push(`/${locale}/dashboard`)} className="px-6 py-3 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black text-xs uppercase tracking-widest border border-slate-200 dark:border-slate-700 transition flex items-center gap-2">
+                            <i className="fat fa-home"></i> Ana Menü
+                        </button>
+
                         <button
                             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
                             className="w-12 h-12 flex items-center justify-center rounded-2xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 transition-all text-xl"

@@ -28,7 +28,7 @@ export class AlertRule {
   displayMode: string;
 
   /** Eşik değeri (isteğe bağlı) — örn: indirim %15, PIN 5 deneme */
-  @Column('decimal', { precision: 10, scale: 2, nullable: true })
+  @Column('decimal', { precision: 10, scale: 2, nullable: true , default: 0 })
   thresholdValue: number;
 
   /** USER | ROLE | ALL */
@@ -36,7 +36,7 @@ export class AlertRule {
   targetType: string;
 
   /** targetType = USER ise userId, ROLE ise roleId, ALL ise null */
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   targetId: number;
 
   /** Kural açıklaması */

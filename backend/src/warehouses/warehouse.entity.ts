@@ -19,10 +19,10 @@ export class Warehouse {
   @Column({ nullable: true })
   address: string;
 
-  @Column({ type: 'decimal', precision: 10, scale: 8, nullable: true })
+  @Column({ type: 'decimal', precision: 10, scale: 8, nullable: true , default: 0 })
   latitude: number;
 
-  @Column({ type: 'decimal', precision: 11, scale: 8, nullable: true })
+  @Column({ type: 'decimal', precision: 11, scale: 8, nullable: true , default: 0 })
   longitude: number;
 
   @Column({ default: true })

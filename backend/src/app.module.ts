@@ -68,6 +68,12 @@ import { Department } from './departments/department.entity';
 import { ShiftsModule } from './shifts/shifts.module';
 import { Shift } from './shifts/shift.entity';
 import { ZReport } from './reports/z-report.entity';
+import { AuditLog } from './reports/audit-log.entity';
+import { ProductType } from './product-types/product-type.entity';
+import { OutputProfile } from './output-profiles/output-profile.entity';
+import { ProductTypesModule } from './product-types/product-types.module';
+import { OutputProfilesModule } from './output-profiles/output-profiles.module';
+import { OrderRoutingModule } from './order-routing/order-routing.module';
 
 import { ScheduleModule } from '@nestjs/schedule';
 
@@ -127,8 +133,12 @@ import { ScheduleModule } from '@nestjs/schedule';
             Department,
             Shift,
             ZReport,
+            AuditLog,
+            ProductType,
+            OutputProfile,
           ],
-          synchronize: false, // Migrations managed manually via migrate-remote.js
+          synchronize: true, // Auto-sync enabled by user permission
+          logging: true,
           options: {
             encrypt: true,
             trustServerCertificate: true,
@@ -182,6 +192,9 @@ import { ScheduleModule } from '@nestjs/schedule';
     CashRegistersModule,
     DepartmentsModule,
     ShiftsModule,
+    ProductTypesModule,
+    OutputProfilesModule,
+    OrderRoutingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

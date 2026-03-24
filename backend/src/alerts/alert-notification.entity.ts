@@ -18,7 +18,7 @@ export class AlertNotification {
   @JoinColumn({ name: 'ruleId' })
   rule: AlertRule;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   ruleId: number;
 
   /** Olay anahtarı kopyalanır (kural bağımsız sorgu için) */
@@ -34,33 +34,33 @@ export class AlertNotification {
   displayMode: string;
 
   /** Bildirimin hedef kullanıcısı */
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   targetUserId: number;
 
   /** Bildirimin hedef rolü */
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   targetRoleId: number;
 
   /** Olayı tetikleyen kullanıcı */
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   triggerUserId: number;
 
   @Column({ length: 150, nullable: true })
   triggerUserName: string;
 
   /** İlgili satış */
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   saleId: number;
 
   /** İlgili masa */
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   tableId: number;
 
   @Column({ length: 50, nullable: true })
   tableName: string;
 
   /** Genel ilgili kayıt ID */
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   relatedId: number;
 
   /** Bildirim açıklaması / mesajı */
@@ -74,7 +74,7 @@ export class AlertNotification {
   @Column({ nullable: true })
   readAt: Date;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   readByUserId: number;
 
   @CreateDateColumn()

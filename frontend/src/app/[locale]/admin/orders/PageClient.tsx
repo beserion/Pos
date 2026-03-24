@@ -127,7 +127,7 @@ export function PageClient() {
 
             const lowStockData = lowStockRes?.data || [];
             setLowStocks(lowStockData);
-            
+
             const supplierList = suppliersRes?.data?.data || (Array.isArray(suppliersRes?.data) ? suppliersRes.data : []);
             setSuppliers(supplierList);
 
@@ -169,9 +169,9 @@ export function PageClient() {
                 supplierId: order.supplierId,
                 note: order.note,
                 status: order.status,
-                items: order.items.map(i => ({ 
-                    ...i, 
-                    productName: i.productName || i.product?.name || '---' 
+                items: order.items.map(i => ({
+                    ...i,
+                    productName: i.productName || i.product?.name || '---'
                 }))
             });
         } else {
@@ -362,7 +362,7 @@ export function PageClient() {
                         <button onClick={() => handleOpenUpsert()} className="px-8 py-3 bg-amber-500/10 text-amber-600 border border-amber-500/20 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-amber-500/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
                             <i className="fat fa-plus-circle text-lg"></i> Yeni Sipariş Oluştur
                         </button>
-                        <button onClick={() => router.push(`/${locale}/dashboard`)} className="px-6 py-3 bg-white dark:bg-slate-800 text-slate-500 font-black text-xs uppercase tracking-widest rounded-2xl border border-slate-100 dark:border-slate-700 hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm">
+                        <button onClick={() => router.push(`/${locale}/admin`)} className="px-6 py-3 bg-white dark:bg-slate-800 text-slate-500 font-black text-xs uppercase tracking-widest rounded-2xl border border-slate-100 dark:border-slate-700 hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm">
                             <i className="fat fa-home text-lg"></i> ANA MENU
                         </button>
                     </div>
@@ -453,21 +453,21 @@ export function PageClient() {
                                             <td className="px-6 py-2.5 text-right space-x-1.5 transition-all">
                                                 {order.status !== 'RECEIVED' ? (
                                                     <>
-                                                        <button 
-                                                            onClick={(e) => { e.stopPropagation(); openInvoiceModal(order); }} 
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); openInvoiceModal(order); }}
                                                             className="px-4 py-2 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-black uppercase rounded-xl hover:bg-emerald-500/20 hover:scale-105 active:scale-95 transition-all"
                                                         >
                                                             Teslim Al
                                                         </button>
-                                                        <button 
-                                                            onClick={(e) => { e.stopPropagation(); handleOpenUpsert(order); }} 
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); handleOpenUpsert(order); }}
                                                             className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 border border-amber-500/20 inline-flex items-center justify-center text-xs hover:bg-amber-500/20 hover:scale-105 active:scale-95 transition-all"
                                                             title="Düzenle"
                                                         >
                                                             <i className="fat fa-edit"></i>
                                                         </button>
-                                                        <button 
-                                                            onClick={(e) => { e.stopPropagation(); deleteOrder(order.id); }} 
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); deleteOrder(order.id); }}
                                                             className="w-9 h-9 rounded-xl bg-rose-500/10 text-rose-600 border border-rose-500/20 inline-flex items-center justify-center text-xs hover:bg-rose-500/20 hover:scale-105 active:scale-95 transition-all"
                                                             title="Sil"
                                                         >
@@ -731,8 +731,8 @@ export function PageClient() {
                                     className="w-full pl-8 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl text-[10px] font-bold outline-none focus:ring-2 ring-indigo-500/20 shadow-sm"
                                 />
                             </div>
-                            <button 
-                                onClick={() => setIsProductPickerOpen(false)} 
+                            <button
+                                onClick={() => setIsProductPickerOpen(false)}
                                 className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-600 hover:bg-rose-500/20 active:scale-90 transition-all flex items-center justify-center"
                             >
                                 <i className="fat fa-times text-sm"></i>
@@ -745,30 +745,30 @@ export function PageClient() {
                             ) : filteredPickerProducts.map(p => {
                                 const isCritical = (p.currentStock || 0) <= (p.minStockLevel || 0);
                                 return (
-                                        <div
-                                            key={p.id}
-                                            className={`p-3 h-[65px] rounded-2xl border transition-all cursor-pointer flex items-center gap-3 group relative overflow-hidden shrink-0 ${isCritical ? 'bg-rose-50 border-rose-100 dark:bg-rose-950/20 dark:border-rose-900/50' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700 hover:border-emerald-500'}`}
-                                            onClick={() => handleAddProductToOrder(p)}
-                                        >
-                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-black shadow-sm shrink-0 ${isCritical ? 'bg-rose-500 text-white shadow-rose-500/20' : 'bg-slate-50 dark:bg-slate-900 dark:text-slate-400'}`}>
-                                                {p.name.substring(0, 1).toUpperCase()}
+                                    <div
+                                        key={p.id}
+                                        className={`p-3 h-[65px] rounded-2xl border transition-all cursor-pointer flex items-center gap-3 group relative overflow-hidden shrink-0 ${isCritical ? 'bg-rose-50 border-rose-100 dark:bg-rose-950/20 dark:border-rose-900/50' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700 hover:border-emerald-500'}`}
+                                        onClick={() => handleAddProductToOrder(p)}
+                                    >
+                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-black shadow-sm shrink-0 ${isCritical ? 'bg-rose-500 text-white shadow-rose-500/20' : 'bg-slate-50 dark:bg-slate-900 dark:text-slate-400'}`}>
+                                            {p.name.substring(0, 1).toUpperCase()}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-[11px] font-black text-slate-800 dark:text-white uppercase leading-tight truncate pr-4">{p.name}</div>
+                                            <div className="flex items-center gap-2 mt-0.5">
+                                                <span className={`text-[9px] font-black uppercase ${isCritical ? 'text-rose-500 animate-pulse' : 'text-slate-400'}`}>
+                                                    Stok: {p.currentStock} {p.unit}
+                                                </span>
+                                                <span className="text-[9px] text-slate-300">|</span>
+                                                <span className="text-[10px] font-black text-slate-600 dark:text-slate-400">₺{Number(p.costPrice).toLocaleString()}</span>
                                             </div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="text-[11px] font-black text-slate-800 dark:text-white uppercase leading-tight truncate pr-4">{p.name}</div>
-                                                <div className="flex items-center gap-2 mt-0.5">
-                                                    <span className={`text-[9px] font-black uppercase ${isCritical ? 'text-rose-500 animate-pulse' : 'text-slate-400'}`}>
-                                                        Stok: {p.currentStock} {p.unit}
-                                                    </span>
-                                                    <span className="text-[9px] text-slate-300">|</span>
-                                                    <span className="text-[10px] font-black text-slate-600 dark:text-slate-400">₺{Number(p.costPrice).toLocaleString()}</span>
-                                                </div>
-                                            </div>
-                                            <div className="absolute right-3 flex items-center justify-center">
+                                        </div>
+                                        <div className="absolute right-3 flex items-center justify-center">
                                             <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 flex items-center justify-center hover:bg-emerald-500/20 transition-all shadow-sm">
                                                 <i className="fat fa-plus text-xs"></i>
                                             </div>
                                         </div>
-                                        </div>
+                                    </div>
                                 );
                             })}
                         </div>

@@ -21,6 +21,10 @@ interface Product {
     unit: string;
     isQuickSale?: boolean;
     isIngredient?: boolean;
+    productTypeId?: number | null;
+    productType?: any;
+    outputProfileId?: number | null;
+    outputProfile?: any;
     recipes?: { ingredientId: number; ingredientName?: string; quantity: number; unit: string }[];
     modifiers?: Modifier[];
 }
@@ -46,6 +50,9 @@ export function PageClient() {
     const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [printers, setPrinters] = useState<Printer[]>([]);
+    const [productTypes, setProductTypes] = useState<any[]>([]);
+    const [outputProfiles, setOutputProfiles] = useState<any[]>([]);
+    const [departments, setDepartments] = useState<any[]>([]);
     const [allModifiers, setAllModifiers] = useState<Modifier[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -65,6 +72,8 @@ export function PageClient() {
         unit: 'piece',
         isQuickSale: true,
         isIngredient: false,
+        productTypeId: 0,
+        outputProfileId: 0,
         recipes: [],
         modifiers: []
     });
@@ -83,15 +92,21 @@ export function PageClient() {
         if (!user?.token) return;
         try {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
-            const [prodRes, printRes, modRes] = await Promise.all([
+            const [prodRes, printRes, modRes, typesRes, profilesRes, depRes] = await Promise.all([
                 axios.get(`${API_URL}/products`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/printers`, { headers: { Authorization: `Bearer ${user.token}` } }),
-                axios.get(`${API_URL}/modifiers`, { headers: { Authorization: `Bearer ${user.token}` } })
+                axios.get(`${API_URL}/modifiers`, { headers: { Authorization: `Bearer ${user.token}` } }),
+                axios.get(`${API_URL}/product-types`, { headers: { Authorization: `Bearer ${user.token}` } }),
+                axios.get(`${API_URL}/output-profiles`, { headers: { Authorization: `Bearer ${user.token}` } }),
+                axios.get(`${API_URL}/departments`, { headers: { Authorization: `Bearer ${user.token}` } })
             ]);
             setProducts(prodRes.data);
             setFilteredProducts(prodRes.data);
             setPrinters(printRes.data);
             setAllModifiers(modRes.data);
+            setProductTypes(typesRes.data);
+            setOutputProfiles(profilesRes.data);
+            setDepartments(depRes.data);
         } catch (error) {
             console.error('Error fetching data', error);
             showSwal({ title: tc('error'), text: tc('loadingError'), icon: 'error' });
@@ -213,6 +228,8 @@ export function PageClient() {
                 unit: 'piece',
                 isQuickSale: true,
                 isIngredient: false,
+                productTypeId: 0,
+                outputProfileId: 0,
                 recipes: [],
                 modifiers: []
             });
@@ -250,13 +267,7 @@ export function PageClient() {
         }
     };
 
-    const categoryOptions = [
-        { key: 'catHotDrink', value: 'Sıcak İçecek' },
-        { key: 'catColdDrink', value: 'Soğuk İçecek' },
-        { key: 'catFood', value: 'Yiyecek' },
-        { key: 'catDessert', value: 'Tatlı' },
-        { key: 'catSideProduct', value: 'Yan Ürün' }
-    ];
+    const categoryOptions = departments.filter(d => d.isActive).map(d => ({ key: d.name, value: d.name }));
 
     const unitOptions = [
         { key: 'unitPiece', value: 'piece' },
@@ -295,6 +306,9 @@ export function PageClient() {
                                 className="w-64 pl-12 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold text-sm focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow"
                             />
                         </div>
+                        <button onClick={() => router.push(`/${locale}/admin/departments`)} className="px-6 py-3 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
+                            <i className="fat fa-layer-group text-lg"></i> Kategoriler
+                        </button>
                         <button onClick={() => openModal()} className="px-6 py-3 bg-teal-50 dark:bg-teal-500/10 border border-teal-200 dark:border-teal-500/20 text-teal-600 dark:text-teal-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-teal-100 dark:hover:bg-teal-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
                             <i className="fat fa-plus-circle text-lg"></i> {t('newProduct')}
                         </button>
@@ -341,7 +355,8 @@ export function PageClient() {
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableInfo')}</th>
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableSku')}</th>
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableCategory')}</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tablePrinter')}</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">ÜRÜN CİNSİ</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">ÇIKTI PROFİLİ</th>
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tablePrice')}</th>
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t('tableActions')}</th>
                                     </tr>
@@ -385,15 +400,23 @@ export function PageClient() {
                                                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-700">
                                                     <i className="fat fa-tag text-slate-400 text-xs text-teal-500"></i>
                                                     <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                                                        {categoryOptions.find(opt => opt.value === prod.category) ? t(categoryOptions.find(opt => opt.value === prod.category)!.key) : prod.category || t('categoryOther')}
+                                                        {prod.category || t('categoryOther')}
                                                     </span>
                                                 </div>
                                             </td>
                                             <td className="px-8 py-3">
                                                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-700">
-                                                    <i className="fat fa-print text-slate-400 text-xs text-blue-500"></i>
+                                                    <i className="fat fa-shapes text-teal-400 text-xs text-teal-500"></i>
                                                     <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                                                        {printers.find(p => p.id === prod.printerId)?.name || t('printerDefault')}
+                                                        {productTypes.find(pt => pt.id === prod.productTypeId)?.name || '-'}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="px-8 py-3">
+                                                <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-700">
+                                                    <i className="fat fa-route text-slate-400 text-xs text-blue-500"></i>
+                                                    <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                                                        {outputProfiles.find(op => op.id === prod.outputProfileId)?.name || 'Varsayılan'}
                                                     </span>
                                                 </div>
                                             </td>
@@ -461,13 +484,41 @@ export function PageClient() {
                                             <div className="space-y-6">
                                                 <div className="grid grid-cols-1 gap-6">
                                                     <div>
+                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">ÜRÜN CİNSİ</label>
+                                                        <div className="relative">
+                                                            <i className="fat fa-shapes absolute left-4 top-4 text-teal-500/50"></i>
+                                                            <select value={formData.productTypeId || ''} onChange={(e) => setFormData({ ...formData, productTypeId: e.target.value ? parseInt(e.target.value) : 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                                <option value="">Cins Seçin (Zorunlu)</option>
+                                                                {productTypes.map(pt => (
+                                                                    <option key={pt.id} value={pt.id}>{pt.name}</option>
+                                                                ))}
+                                                            </select>
+                                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                        </div>
+                                                    </div>
+
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">ÇIKTI PROFİLİ OVERRIDE</label>
+                                                        <div className="relative">
+                                                            <i className="fat fa-route absolute left-4 top-4 text-teal-500/50"></i>
+                                                            <select value={formData.outputProfileId || ''} onChange={(e) => setFormData({ ...formData, outputProfileId: e.target.value ? parseInt(e.target.value) : 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                                <option value="">Varsayılanı Kullan</option>
+                                                                {outputProfiles.map(op => (
+                                                                    <option key={op.id} value={op.id}>{op.name}</option>
+                                                                ))}
+                                                            </select>
+                                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                        </div>
+                                                    </div>
+
+                                                    <div>
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCategory')}</label>
                                                         <div className="relative">
                                                             <i className="fat fa-folder-tree absolute left-4 top-4 text-teal-500/50"></i>
                                                             <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
                                                                 <option value="">{t('selectCategory')}</option>
                                                                 {categoryOptions.map(cat => (
-                                                                    <option key={cat.key} value={cat.value}>{t(cat.key)}</option>
+                                                                    <option key={cat.value} value={cat.value}>{cat.value}</option>
                                                                 ))}
                                                             </select>
                                                             <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>

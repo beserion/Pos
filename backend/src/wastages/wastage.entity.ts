@@ -18,10 +18,10 @@ export class Wastage {
   @JoinColumn({ name: 'productId' })
   product: Product;
 
-  @Column()
+  @Column({ default: 0 })
   productId: number;
 
-  @Column('decimal', { precision: 10, scale: 3 })
+  @Column('decimal', { precision: 10, scale: 3 , default: 0 })
   quantity: number;
 
   @Column({ default: 'adet' })
@@ -34,7 +34,7 @@ export class Wastage {
   @JoinColumn({ name: 'recordedById' })
   recordedBy: User;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   recordedById: number;
 
   @Column({ nullable: true })

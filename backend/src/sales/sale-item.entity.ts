@@ -16,19 +16,19 @@ export class SaleItem {
   @JoinColumn({ name: 'saleId' })
   sale: Sale;
 
-  @Column()
+  @Column({ default: 0 })
   productId: number;
 
-  @Column('decimal', { precision: 10, scale: 2 })
+  @Column('decimal', { precision: 10, scale: 2 , default: 0 })
   quantity: number;
 
-  @Column('decimal', { precision: 10, scale: 2 })
+  @Column('decimal', { precision: 10, scale: 2 , default: 0 })
   unitPrice: number;
 
   @Column('decimal', { precision: 10, scale: 2, default: 0 })
   costPrice: number;
 
-  @Column('decimal', { precision: 12, scale: 2 })
+  @Column('decimal', { precision: 12, scale: 2 , default: 0 })
   total: number;
 
   @Column({ nullable: true })
@@ -45,4 +45,32 @@ export class SaleItem {
 
   @Column({ default: false })
   isReady: boolean;
+
+  // --- Durum / İptal / İade ---
+  @Column({ length: 20, default: 'ACTIVE' })
+  status: string; // ACTIVE, CANCELLED, REFUNDED
+
+  @Column({ length: 500, nullable: true })
+  cancelReason: string;
+
+  @Column({ length: 500, nullable: true })
+  refundReason: string;
+
+  @Column({ nullable: true , default: 0 })
+  cancelledByUserId: number;
+
+  @Column({ nullable: true , default: 0 })
+  refundedByUserId: number;
+
+  // --- Yazdırma / KDS Gönderim Takibi ---
+  @Column({ default: false })
+  isSentToPrinter: boolean;
+
+  // Hangi çıktı profiline göre gönderildi
+  @Column({ nullable: true, default: 0 })
+  sentOutputProfileId: number;
+
+  // Ürün cinsi (raporlama için snapshot)
+  @Column({ nullable: true })
+  productTypeName: string;
 }

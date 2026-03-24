@@ -133,6 +133,7 @@ export class SalesService implements OnModuleInit {
       if (startDate && startDate.trim() !== '') {
         const start = new Date(startDate);
         if (!isNaN(start.getTime())) {
+          start.setHours(0, 0, 0, 0);
           query.andWhere('sale.createdAt >= :startDate', { startDate: start });
         }
       }
@@ -226,6 +227,13 @@ export class SalesService implements OnModuleInit {
         const mergeSaleIds = (dataRaw as any).mergeSaleIds;
         delete (dataRaw as any).mergeSaleIds;
         const data = dataRaw;
+
+        (data as any).tableId = data.tableId || null;
+        (data as any).shiftId = data.shiftId || null;
+        (data as any).cashRegisterId = data.cashRegisterId || null;
+        (data as any).waiterId = data.waiterId || null;
+        (data as any).userId = data.userId || null;
+        (data as any).partnerId = data.partnerId || null;
 
         // Handle Partner (Customer) default
         if (!data.partnerId) {
@@ -668,9 +676,107 @@ export class SalesService implements OnModuleInit {
     }).catch(() => {});
   }
 
-  async remove(id: number): Promise<void> {
-    await this.findOne(id);
-    await this.saleRepository.delete(id);
+  async cancelItem(itemId: number, reason: string, userId: number): Promise<SaleItem> {
+    const item = await this.saleItemRepository.findOne({
+      where: { id: itemId },
+      relations: ['sale', 'sale.table'],
+    });
+    if (!item) throw new NotFoundException('Ürün bulunamadı.');
+    if (item.isMarshed) {
+      throw new BadRequestException('Bu ürün mutfağa gönderilmiştir. İptal yerine iade işlemi yapınız.');
+    }
+
+    item.status = 'CANCELLED';
+    item.cancelReason = reason;
+    (item as any).cancelledByUserId = userId;
+
+    const updated = await this.saleItemRepository.save(item);
+
+    // Stok geri alımı (varsa)
+    try {
+      const stockParam = await this.saleRepository.query(`
+        SELECT value FROM system_parameters WHERE [module] = 'pos' AND [key] = 'cancel_stock_reverse'
+      `);
+      if (stockParam[0]?.value === 'true') {
+        await this.stocksService.deductStock(item.productId, -Number(item.quantity));
+      }
+    } catch { /* parametre yoksa atla */ }
+
+    // Denetim logu
+    try {
+      await this.saleRepository.query(`
+        INSERT INTO audit_logs (timestamp, userId, actionType, saleId, productName, amount, description, companyId)
+        VALUES (GETDATE(), @0, 'ITEM_CANCEL', @1, @2, @3, @4, 1)
+      `, [userId, item.sale?.id, `Ürün #${item.productId}`, item.total, reason || 'İptal edildi']);
+    } catch { /* audit log hatası sessizce geç */ }
+
+    this.kitchenGateway.notifySaleUpdate(item.sale as any);
+    return updated;
+  }
+
+  async refundItem(itemId: number, reason: string, userId: number): Promise<SaleItem> {
+    const item = await this.saleItemRepository.findOne({
+      where: { id: itemId },
+      relations: ['sale', 'sale.table'],
+    });
+    if (!item) throw new NotFoundException('Ürün bulunamadı.');
+
+    item.status = 'REFUNDED';
+    item.refundReason = reason;
+    (item as any).refundedByUserId = userId;
+
+    const updated = await this.saleItemRepository.save(item);
+
+    // Denetim logu
+    try {
+      await this.saleRepository.query(`
+        INSERT INTO audit_logs (timestamp, userId, actionType, saleId, productName, amount, description, companyId)
+        VALUES (GETDATE(), @0, 'ITEM_REFUND', @1, @2, @3, @4, 1)
+      `, [userId, item.sale?.id, `Ürün #${item.productId}`, item.total, reason || 'İade edildi']);
+    } catch { /* audit log hatası sessizce geç */ }
+
+    // KDS/Yazıcıya iade bildirimi
+    this.kitchenGateway.server.emit('itemRefunded', {
+      itemId: item.id,
+      saleId: item.sale?.id,
+      tableName: item.sale?.tableName,
+      productId: item.productId,
+      status: 'REFUNDED',
+    });
+
+    return updated;
+  }
+
+  async refundSale(saleId: number, reason: string, userId: number): Promise<Sale> {
+    const sale = await this.findOne(saleId);
+    if (!sale) throw new NotFoundException('Satış bulunamadı.');
+
+    sale.status = 'CANCELLED';
+    (sale as any).refundReason = reason;
+    (sale as any).refundedAt = new Date();
+    (sale as any).refundedByUserId = userId;
+    (sale as any).refundAmount = sale.totalAmount;
+
+    const updated = await this.saleRepository.save(sale);
+
+    // Tüm kalemleri iade et
+    if (sale.items?.length) {
+      await this.saleItemRepository.update(
+        sale.items.map(i => i.id),
+        { status: 'REFUNDED', refundReason: reason, refundedByUserId: userId } as any,
+      );
+    }
+
+    // Denetim logu
+    try {
+      await this.saleRepository.query(`
+        INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId)
+        VALUES (GETDATE(), @0, 'SALE_REFUND', @1, @2, @3, @4, 1)
+      `, [userId, saleId, sale.tableName, sale.totalAmount, reason || 'Tam adisyon iadesi']);
+    } catch { /* sessizce geç */ }
+
+    this.kitchenGateway.notifySaleUpdate(updated as any);
+    return updated;
   }
 
   private async deductStockForSale(sale: Sale, manager: any): Promise<void> {
@@ -680,7 +786,6 @@ export class SalesService implements OnModuleInit {
     const productIds = Array.from(new Set(items.map(i => i.productId).filter(Boolean)));
     if (productIds.length === 0) return;
 
-    // Fetch all recipes at once
     const allRecipes = await manager.getRepository(Recipe).find({
       where: { productId: In(productIds) },
       relations: ['ingredient']
@@ -693,8 +798,8 @@ export class SalesService implements OnModuleInit {
       recipeMap.set(r.productId, list);
     });
 
-    const deductions = new Map<number, number>(); // productId/ingredientId -> totalQuantity
-    const itemCostMap = new Map<number, number>(); // itemId -> totalCost
+    const deductions = new Map<number, number>();
+    const itemCostMap = new Map<number, number>();
 
     for (const item of items) {
       const productId = item.productId;
@@ -712,21 +817,19 @@ export class SalesService implements OnModuleInit {
         }
       } else {
         deductions.set(productId, (deductions.get(productId) || 0) + Number(item.quantity));
-        // Fallback for cost if no recipe
         const rawProduct = await manager.query(`SELECT costPrice FROM products WHERE id = ${productId}`);
         totalCost = Number(rawProduct[0]?.costPrice || 0);
       }
       itemCostMap.set(item.id, totalCost);
     }
 
-    // Apply aggregated deductions
     for (const [id, qty] of deductions.entries()) {
       await this.stocksService.deductStock(id, qty, undefined, manager);
     }
 
-    // Update costs in bulk-ish manner (each item can still have different cost)
     for (const [itemId, cost] of itemCostMap.entries()) {
       await manager.getRepository(SaleItem).update(itemId, { costPrice: cost });
     }
   }
 }
+

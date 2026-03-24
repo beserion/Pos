@@ -20,7 +20,7 @@ export class Order {
   @JoinColumn({ name: 'supplierId' })
   supplier: Partner;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   supplierId: number;
 
   @Column({ default: 'DRAFT' })
@@ -39,7 +39,7 @@ export class Order {
   @Column({ nullable: true, type: 'nvarchar', length: 20 })
   invoiceDateStr: string | null;
 
-  @Column('decimal', { precision: 12, scale: 2, nullable: true })
+  @Column('decimal', { precision: 12, scale: 2, nullable: true , default: 0 })
   invoiceAmount: number;
 
   @Column({ default: 'UNPAID' })

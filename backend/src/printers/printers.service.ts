@@ -1,13 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Printer } from './printer.entity';
+import { OrderRoutingService } from '../order-routing/order-routing.service';
 
 @Injectable()
 export class PrintersService {
   constructor(
     @InjectRepository(Printer)
     private readonly printerRepository: Repository<Printer>,
+    @Inject(forwardRef(() => OrderRoutingService))
+    private readonly orderRoutingService: OrderRoutingService,
   ) { }
 
   async findAll(): Promise<Printer[]> {
@@ -159,160 +162,115 @@ export class PrintersService {
         return { success: false, message: 'Yazdırılacak ürün bulunamadı.' };
       }
 
-      // Group items by their printer's location
-      const locationGroups: { [location: string]: any[] } = {};
-
-      for (const item of itemsToPrint) {
-        if (!item.printerId) continue;
-
-        // Resolve the printer from DB to get its location
-        const originalPrinter = await this.printerRepository.findOne({
-          where: { id: item.printerId },
-        });
-
-        if (originalPrinter && originalPrinter.location) {
-          const loc = originalPrinter.location;
-          if (!locationGroups[loc]) {
-            locationGroups[loc] = [];
-          }
-          locationGroups[loc].push(item);
-        } else if (originalPrinter) {
-          // If printer has no location defined, group by its ID just in case
-          const fallbackLoc = `PRINTER_${originalPrinter.id}`;
-          if (!locationGroups[fallbackLoc]) {
-            locationGroups[fallbackLoc] = [];
-          }
-          locationGroups[fallbackLoc].push(item);
-        }
-      }
-
-      const activeLocations = Object.keys(locationGroups);
-      if (activeLocations.length === 0) {
-        return {
-          success: false,
-          message: 'Ürünlere tanımlı geçerli yazıcı konumu bulunamadı.',
-        };
-      }
-
+      // Yeni Nesil Yönlendirme Algoritması Devreye Giriyor
+      const routedGroups = await this.orderRoutingService.routeOrderItems(itemsToPrint);
+      
       const { ThermalPrinter, PrinterTypes, CharacterSet, BreakLine } =
         await import('node-thermal-printer');
 
-      for (const loc of activeLocations) {
-        let targetPrinter;
+      let printCount = 0;
 
-        if (loc.startsWith('PRINTER_')) {
-          const pid = parseInt(loc.replace('PRINTER_', ''), 10);
-          targetPrinter = await this.printerRepository.findOne({
-            where: { id: pid, isActive: true },
-          });
-        } else {
-          // Find any active printer for this location
-          targetPrinter = await this.printerRepository.findOne({
-            where: { location: loc, isActive: true },
-          });
-        }
+      for (const group of routedGroups) {
+        const profile = group.profile;
+        if (!profile) continue;
 
-        if (!targetPrinter || !targetPrinter.ipAddress) {
-          console.warn(
-            `Aktif yazıcı bulunamadı veya IP adresi yok. Konum/ID: ${loc}`,
-          );
-          continue;
-        }
+        const targetPrinters = [];
+        if (profile.mainPrinter) targetPrinters.push({ printer: profile.mainPrinter, type: 'MAIN' });
+        if (profile.infoPrinter) targetPrinters.push({ printer: profile.infoPrinter, type: 'INFO' });
 
-        const items = locationGroups[loc];
+        for (const target of targetPrinters) {
+          const printer = target.printer;
+          if (!printer || !printer.isActive || !printer.ipAddress) continue;
+          
+          const copyCount = target.type === 'MAIN' ? (profile.copyCount || 1) : 1;
+          
+          for (let c = 0; c < copyCount; c++) {
+            try {
+              const thermalPrinter = new ThermalPrinter({
+                type: PrinterTypes.EPSON,
+                interface: `tcp://${printer.ipAddress}`,
+                characterSet: CharacterSet.PC857_TURKISH,
+                removeSpecialCharacters: false,
+                lineCharacter: '=',
+                breakLine: BreakLine.WORD,
+                options: { timeout: 5000 },
+              });
 
-        try {
-          const thermalPrinter = new ThermalPrinter({
-            type: PrinterTypes.EPSON,
-            interface: `tcp://${targetPrinter.ipAddress}`,
-            characterSet: CharacterSet.PC857_TURKISH,
-            removeSpecialCharacters: false,
-            lineCharacter: '=',
-            breakLine: BreakLine.WORD,
-            options: {
-              timeout: 5000,
-            },
-          });
+              if (await thermalPrinter.isPrinterConnected()) {
+                thermalPrinter.alignCenter();
+                thermalPrinter.bold(true);
+                thermalPrinter.setTextSize(2, 2);
+                
+                let title = data.orderType || 'MUTFAK SIPARISI';
+                if (target.type === 'INFO') title = 'BILGI FISI';
+                
+                thermalPrinter.println(title);
+                thermalPrinter.setTextNormal();
+                thermalPrinter.bold(false);
+                thermalPrinter.drawLine();
 
-          const isConnected = await thermalPrinter.isPrinterConnected();
-          if (!isConnected) {
-            console.error(`Yazıcıya bağlanılamadı: ${targetPrinter.ipAddress}`);
-            continue;
-          }
+                thermalPrinter.alignLeft();
+                const date = new Date(data.date || new Date()).toLocaleString('tr-TR');
+                thermalPrinter.println(`Tarih: ${date}`);
+                thermalPrinter.println(`Sipariş No: ${data.receiptNumber || '000000'}`);
+                if (target.type === 'MAIN') {
+                  thermalPrinter.println(`Cikti Profili: ${profile.name}`);
+                }
+                thermalPrinter.drawLine();
+                thermalPrinter.leftRight('Adet', 'Urun');
+                thermalPrinter.drawLine();
 
-          thermalPrinter.alignCenter();
-          thermalPrinter.bold(true);
-          thermalPrinter.setTextSize(2, 2);
+                const immediateItems = group.items.filter((i: any) => !i.isWaiting);
+                const waitingItems = group.items.filter((i: any) => i.isWaiting);
 
-          let ticketTitle = data.orderType || 'MUTFAK SIPARISI';
-          if (!loc.startsWith('PRINTER_')) {
-            ticketTitle = `${loc.toUpperCase()} SIPARISI`;
-          }
+                for (const item of immediateItems) {
+                  thermalPrinter.bold(true);
+                  if (target.type === 'MAIN') thermalPrinter.setTextSize(1, 1);
+                  thermalPrinter.leftRight(`${item.quantity}x`, item.name.substring(0,30));
+                  thermalPrinter.setTextNormal();
+                  thermalPrinter.bold(false);
+                  if (item.note) thermalPrinter.println(`Not: ${item.note}`);
+                }
 
-          thermalPrinter.println(ticketTitle);
-          thermalPrinter.setTextNormal();
-          thermalPrinter.bold(false);
-          thermalPrinter.drawLine();
+                if (waitingItems.length > 0) {
+                  thermalPrinter.drawLine();
+                  thermalPrinter.alignCenter();
+                  thermalPrinter.println('--- BEKLEYENLER ---');
+                  thermalPrinter.alignLeft();
+                  thermalPrinter.drawLine();
+                  for (const item of waitingItems) {
+                    thermalPrinter.bold(true);
+                    thermalPrinter.leftRight(`${item.quantity}x`, item.name.substring(0,30));
+                    thermalPrinter.bold(false);
+                    if (item.note) thermalPrinter.println(`Not: ${item.note}`);
+                  }
+                }
 
-          thermalPrinter.alignLeft();
-          const date = new Date(data.date || new Date()).toLocaleString('tr-TR');
-          thermalPrinter.println(`Tarih: ${date}`);
-          thermalPrinter.println(
-            `Sipariş No: ${data.receiptNumber || '000000'}`,
-          );
-          thermalPrinter.drawLine();
+                if (c > 0) {
+                  thermalPrinter.drawLine();
+                  thermalPrinter.alignCenter();
+                  thermalPrinter.println(`*** KOPYA ${c + 1} ***`);
+                }
 
-          thermalPrinter.leftRight('Adet', 'Urun');
-          thermalPrinter.drawLine();
-
-          const immediateItems = items.filter((i: any) => !i.isWaiting);
-          const waitingItems = items.filter((i: any) => i.isWaiting);
-
-          for (const item of immediateItems) {
-            const nameStr = item.name.substring(0, 30);
-            thermalPrinter.bold(true);
-            thermalPrinter.setTextSize(1, 1);
-            thermalPrinter.leftRight(`${item.quantity}x`, nameStr);
-            thermalPrinter.setTextNormal();
-            thermalPrinter.bold(false);
-            if (item.note) {
-              thermalPrinter.println(`Not: ${item.note}`);
-            }
-          }
-
-          if (waitingItems.length > 0) {
-            thermalPrinter.drawLine();
-            thermalPrinter.alignCenter();
-            thermalPrinter.println('--- BEKLEYENLER ---');
-            thermalPrinter.alignLeft();
-            thermalPrinter.drawLine();
-
-            for (const item of waitingItems) {
-              const nameStr = item.name.substring(0, 30);
-              thermalPrinter.bold(true);
-              thermalPrinter.setTextNormal();
-              thermalPrinter.leftRight(`${item.quantity}x`, nameStr);
-              thermalPrinter.bold(false);
-              if (item.note) {
-                thermalPrinter.println(`Not: ${item.note}`);
+                thermalPrinter.drawLine();
+                thermalPrinter.cut();
+                thermalPrinter.beep();
+                await thermalPrinter.execute();
+                thermalPrinter.clear();
+                printCount++;
+              } else {
+                 console.error(`Printer baglanamadi: ${printer.ipAddress}`);
               }
+            } catch (err) {
+              console.error(`Printer Hatası [${printer.ipAddress}]:`, err);
             }
           }
-
-          thermalPrinter.drawLine();
-          thermalPrinter.cut();
-          thermalPrinter.beep();
-
-          await thermalPrinter.execute();
-          thermalPrinter.clear();
-        } catch (printErr: any) {
-          console.error(`Printer ${targetPrinter.name} hatası:`, printErr);
         }
       }
 
       return {
         success: true,
-        message: 'Bölüm/Konum bazlı fişler yazdırıldı',
+        message: `${printCount} adet fiş yazdırıldı.`,
       };
     } catch (error: any) {
       console.error('Mutfak Yazıcı Hatası:', error);

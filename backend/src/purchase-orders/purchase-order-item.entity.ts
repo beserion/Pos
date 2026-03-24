@@ -17,17 +17,17 @@ export class PurchaseOrderItem {
   @JoinColumn({ name: 'purchaseOrderId' })
   purchaseOrder: PurchaseOrder;
 
-  @Column()
+  @Column({ default: 0 })
   purchaseOrderId: number;
 
   @ManyToOne(() => Product, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'productId' })
   product: Product;
 
-  @Column()
+  @Column({ default: 0 })
   productId: number;
 
-  @Column('decimal', { precision: 10, scale: 3 })
+  @Column('decimal', { precision: 10, scale: 3 , default: 0 })
   quantity: number;
 
   @Column('decimal', { precision: 10, scale: 2, default: 0 })

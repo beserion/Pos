@@ -76,6 +76,12 @@ export class FinanceService {
 
   async create(data: Partial<AccountTransaction>, manager?: any): Promise<AccountTransaction> {
     const repo = manager ? manager.getRepository(AccountTransaction) : this.transactionRepository;
+    
+    (data as any).partnerId = data.partnerId || null;
+    (data as any).userId = data.userId || null;
+    (data as any).companyAccountId = data.companyAccountId || null;
+    (data as any).sourceId = data.sourceId || null;
+
     const transaction = repo.create(data);
     const saved = await repo.save(transaction);
 

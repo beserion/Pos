@@ -8,6 +8,7 @@ import {
   Delete,
   UseGuards,
   Query,
+  Request,
 } from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { Sale } from './sale.entity';
@@ -102,9 +103,26 @@ export class SalesController {
     return (this.salesService as any).cancelTableOrders(+tableId);
   }
 
+  @Post('items/:id/cancel')
+  cancelItem(@Param('id') id: string, @Body('reason') reason: string, @Request() req: any) {
+    const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
+    return this.salesService.cancelItem(+id, reason || '', userId);
+  }
+
+  @Post('items/:id/refund')
+  refundItem(@Param('id') id: string, @Body('reason') reason: string, @Request() req: any) {
+    const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
+    return this.salesService.refundItem(+id, reason || '', userId);
+  }
+
+  @Post(':id/refund')
+  refundSale(@Param('id') id: string, @Body('reason') reason: string, @Request() req: any) {
+    const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
+    return this.salesService.refundSale(+id, reason || '', userId);
+  }
+
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.salesService.remove(+id);
+  async remove(@Param('id') id: string) {
+    return this.salesService.updateStatus(+id, 'CANCELLED');
   }
 }
-

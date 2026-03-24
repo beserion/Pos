@@ -15,7 +15,7 @@ export class CashRegister {
   @Column({ nullable: true })
   printerAddress: string;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true , default: 0 })
   locationId: number;
 
   @Column('simple-array', { nullable: true })

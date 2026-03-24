@@ -26,18 +26,18 @@ export class KitchenGateway
   }
 
   notifyNewOrder(order: any) {
-    this.server.emit('newOrder', order);
+    this.server?.emit('newOrder', order);
   }
 
   notifyOrderReady(order: any) {
-    this.server.emit('orderReady', order);
+    this.server?.emit('orderReady', order);
   }
 
   notifyOrderUpdated(order: any) {
-    this.server.emit('orderUpdated', order);
+    this.server?.emit('orderUpdated', order);
   }
 
   notifySaleUpdate(sale: any) {
-    this.server.emit('salesUpdate', sale);
+    this.server?.emit('salesUpdate', sale);
   }
 }

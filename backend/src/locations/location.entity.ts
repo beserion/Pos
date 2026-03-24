@@ -24,7 +24,7 @@ export class Location {
   @Column({ nullable: true })
   phone: string;
 
-  @Column({ default: true })
+  @Column({ default: false })
   isActive: boolean;
 
   @OneToMany(() => Zone, (zone) => zone.location)

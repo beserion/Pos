@@ -198,7 +198,7 @@ export function PageClient() {
                             <i className="fat fa-plus-circle"></i> Yeni Hesap Ekle
                         </button>
                         <button
-                            onClick={() => router.push(`/${locale}/finance`)}
+                            onClick={() => router.push(`/${locale}/dashboard`)}
                             className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-300 font-bold shadow-sm hover:bg-slate-50 transition-all"
                         >
                             <i className="fat fa-reply"></i> Geri Dön
@@ -212,18 +212,18 @@ export function PageClient() {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 flex-shrink-0 mb-8">
                             {currencyTotals.map(({ ccy, total, count, config }) => (
                                 <div key={ccy} className={`group relative ${ccy === 'TL' ? 'bg-emerald-100/80 dark:bg-emerald-900/30' : 'bg-slate-100/90 dark:bg-slate-800/90'} backdrop-blur-2xl p-7 rounded-[40px] border border-white/50 dark:border-slate-700/50 transition-all duration-500 hover:-translate-y-1 shadow-xl hover:shadow-2xl overflow-hidden ${config.color === 'emerald' ? 'hover:shadow-emerald-500/20 border-t-emerald-500' :
-                                        config.color === 'blue' ? 'hover:shadow-blue-500/20 border-t-blue-500' :
-                                            config.color === 'indigo' ? 'hover:shadow-indigo-500/20 border-t-indigo-500' :
-                                                'hover:shadow-rose-500/20 border-t-rose-500'
+                                    config.color === 'blue' ? 'hover:shadow-blue-500/20 border-t-blue-500' :
+                                        config.color === 'indigo' ? 'hover:shadow-indigo-500/20 border-t-indigo-500' :
+                                            'hover:shadow-rose-500/20 border-t-rose-500'
                                     } border-t-4`}>
-                                    
+
                                     <div className={`absolute -right-10 -bottom-10 w-32 h-32 rounded-full bg-gradient-to-br ${config.gradient} opacity-50 blur-3xl transition-all duration-700 group-hover:scale-150`}></div>
 
                                     {/* Rhombus Icon Container at Bottom Right */}
                                     <div className={`absolute -bottom-8 -right-8 w-32 h-32 rotate-[35deg] flex items-center justify-center transition-all duration-700 group-hover:scale-110 group-hover:rotate-[25deg] ${config.color === 'emerald' ? 'bg-emerald-500/10 text-emerald-500/20 dark:text-emerald-400/10' :
-                                            config.color === 'blue' ? 'bg-blue-500/10 text-blue-500/20 dark:text-blue-400/10' :
-                                                config.color === 'indigo' ? 'bg-indigo-500/10 text-indigo-500/20 dark:text-indigo-400/10' :
-                                                    'bg-rose-500/10 text-rose-500/20 dark:text-rose-400/10'
+                                        config.color === 'blue' ? 'bg-blue-500/10 text-blue-500/20 dark:text-blue-400/10' :
+                                            config.color === 'indigo' ? 'bg-indigo-500/10 text-indigo-500/20 dark:text-indigo-400/10' :
+                                                'bg-rose-500/10 text-rose-500/20 dark:text-rose-400/10'
                                         }`}>
                                         <i className={`fat ${config.icon} text-6xl -rotate-[35deg] group-hover:rotate-[-25deg] transition-all duration-700`}></i>
                                     </div>
@@ -232,22 +232,22 @@ export function PageClient() {
                                         <div className="flex items-center justify-between mb-4">
                                             <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">{config.name}</p>
                                             <div className={`px-4 py-1.5 rounded-2xl text-[11px] font-black uppercase tracking-wider shadow-sm flex-shrink-0 ${config.color === 'emerald' ? 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400' :
-                                                    config.color === 'blue' ? 'bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400' :
-                                                        config.color === 'indigo' ? 'bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400' :
-                                                            'bg-rose-500/10 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400'
+                                                config.color === 'blue' ? 'bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400' :
+                                                    config.color === 'indigo' ? 'bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400' :
+                                                        'bg-rose-500/10 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400'
                                                 }`}>
                                                 {count} Hesap
                                             </div>
                                         </div>
-                                        
+
                                         <div className="flex items-baseline gap-2">
                                             <h3 className={`text-3xl font-black tracking-tight transition-colors ${total >= 0 ? 'text-slate-800 dark:text-white' : 'text-rose-600'}`}>
                                                 {total.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                                             </h3>
                                             <span className={`text-base font-black opacity-40 ${config.color === 'emerald' ? 'text-emerald-500' :
-                                                    config.color === 'blue' ? 'text-blue-500' :
-                                                        config.color === 'indigo' ? 'text-indigo-500' :
-                                                            'text-rose-500'
+                                                config.color === 'blue' ? 'text-blue-500' :
+                                                    config.color === 'indigo' ? 'text-indigo-500' :
+                                                        'text-rose-500'
                                                 }`}>{ccy}</span>
                                         </div>
                                     </div>
@@ -272,11 +272,11 @@ export function PageClient() {
                                                     <div className="flex items-start justify-between gap-3 mb-5">
                                                         <div className="flex items-center gap-4 min-w-0">
                                                             <div className={`w-14 h-14 flex-shrink-0 rounded-[20px] flex items-center justify-center text-2xl ${account.type === 'CASH' ? 'bg-emerald-500/10 text-emerald-500' :
-                                                                    account.type === 'BANK' ? 'bg-blue-500/10 text-blue-500' : 'bg-indigo-500/10 text-indigo-500'
+                                                                account.type === 'BANK' ? 'bg-blue-500/10 text-blue-500' : 'bg-indigo-500/10 text-indigo-500'
                                                                 }`}>
                                                                 <i className={`fat ${account.type === 'CASH' ? 'fa-wallet' :
-                                                                        account.type === 'BANK' ? 'fa-building-columns' :
-                                                                            'fa-credit-card'
+                                                                    account.type === 'BANK' ? 'fa-building-columns' :
+                                                                        'fa-credit-card'
                                                                     }`}></i>
                                                             </div>
                                                             <div className="min-w-0">

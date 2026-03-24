@@ -638,7 +638,7 @@ export function PageClient() {
                         <button onClick={openNewInvoice} className="px-5 py-3 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
                             <i className="fat fa-plus-circle text-lg"></i> Yeni Fatura
                         </button>
-                        <button onClick={() => router.push(`/${locale}`)} className="px-5 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md dark:hover:bg-slate-700 transition-all flex items-center gap-2">
+                        <button onClick={() => router.push(`/${locale}/dashboard`)} className="px-5 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md dark:hover:bg-slate-700 transition-all flex items-center gap-2">
                             <i className="fat fa-home text-lg"></i> Ana Menü
                         </button>
                     </div>

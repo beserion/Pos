@@ -364,8 +364,8 @@ export function PageClient() {
                         <button onClick={handleEndOfDay} className="px-6 py-3 bg-gradient-to-r from-slate-900 to-slate-800 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl hover:shadow-indigo-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95 border border-slate-700">
                             <i className="fat fa-moon-stars text-lg text-indigo-400"></i> Gün Sonu Al
                         </button>
-                        <button onClick={() => router.push(`/${locale}/pos?view=quicksale`)} className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center gap-2">
-                            <i className="fat fa-reply"></i> Hızlı Satış
+                        <button onClick={() => router.push(`/${locale}/admin`)} className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center gap-2">
+                            <i className="fat fa-reply"></i> Geri Dön
                         </button>
                     </div>
                 </div>
