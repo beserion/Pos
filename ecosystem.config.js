@@ -1,22 +1,22 @@
 module.exports = {
   apps: [
     {
-      name: "BOSNAK-backend",
+      name: "backend",
       script: "dist/src/main.js",
       cwd: "./backend",
       env: {
         NODE_ENV: "production",
-        PORT: 3051,
+        PORT: 3050,
       }
     },
     {
-      name: "BOSNAK-frontend",
+      name: "frontend",
       script: "npm",
       args: "start",
       cwd: "./frontend",
       env: {
         NODE_ENV: "production",
-        PORT: 3001,
+        PORT: 3000,
       }
     }
   ]
