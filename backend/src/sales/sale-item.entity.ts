@@ -61,4 +61,16 @@ export class SaleItem {
 
   @Column({ nullable: true , default: 0 })
   refundedByUserId: number;
+
+  // --- Yazdırma / KDS Gönderim Takibi ---
+  @Column({ default: false })
+  isSentToPrinter: boolean;
+
+  // Hangi çıktı profiline göre gönderildi
+  @Column({ nullable: true, default: 0 })
+  sentOutputProfileId: number;
+
+  // Ürün cinsi (raporlama için snapshot)
+  @Column({ nullable: true })
+  productTypeName: string;
 }

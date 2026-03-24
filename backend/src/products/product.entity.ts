@@ -8,11 +8,14 @@ import {
   ManyToOne,
   ManyToMany,
   JoinTable,
+  JoinColumn,
 } from 'typeorm';
 import type { Stock } from '../stocks/stock.entity';
 import type { Printer } from '../printers/printer.entity';
 import type { Recipe } from '../recipes/recipe.entity';
 import type { Modifier } from '../modifiers/modifier.entity';
+import type { ProductType } from '../product-types/product-type.entity';
+import type { OutputProfile } from '../output-profiles/output-profile.entity';
 
 @Entity('products')
 export class Product {
@@ -57,6 +60,22 @@ export class Product {
 
   @Column({ default: false })
   isIngredient: boolean;
+
+  // Ürün Cinsi (zorunlu)
+  @Column({ nullable: true, default: 0 })
+  productTypeId: number;
+
+  @ManyToOne('ProductType', { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'productTypeId' })
+  productType: ProductType;
+
+  // Stok Kartı bazında çıktı profili override (en yüksek öncelik)
+  @Column({ nullable: true, default: 0 })
+  outputProfileId: number;
+
+  @ManyToOne('OutputProfile', { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'outputProfileId' })
+  outputProfile: OutputProfile;
 
   @ManyToOne('Printer', 'products', {
     nullable: true,

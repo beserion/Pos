@@ -287,6 +287,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                         name: item.product.name,
                         quantity: item.quantity,
                         printerId: item.product.printerId,
+                        productId: item.product.id,
                         isWaiting: params.mars_enabled ? (item.isWaiting || false) : false
                     }))
                 };

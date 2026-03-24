@@ -189,7 +189,8 @@ export function PageClient() {
                     items: kitchenItems.map(item => ({
                         name: item.product.name,
                         quantity: item.quantity,
-                        printerId: item.product.printerId
+                        printerId: item.product.printerId,
+                        productId: item.product.id
                     }))
                 };
 
