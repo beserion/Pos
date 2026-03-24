@@ -128,7 +128,9 @@ export function PageClient() {
                 if (params.beep_on_new_order) {
                     try {
                         const audio = new Audio('/notification.mp3');
-                        audio.play().catch(e => console.log('Audio autoplay blocked', e));
+                        audio.play().catch(e => {
+                            if (e.name !== 'NotAllowedError') console.log('Audio autoplay blocked', e);
+                        });
                     } catch (e) { }
                 }
                 const zoneText = order?.table?.zone?.name ? `${order.table.zone.name} - ` : '';

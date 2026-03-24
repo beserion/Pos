@@ -109,6 +109,26 @@ export class Sale {
   @Column({ default: 0 })
   subCheckIndex: number;
 
+  // --- Transfer Alanları ---
+  @Column({ nullable: true })
+  transferredFromTableId: number;
+
+  @Column({ nullable: true, length: 100 })
+  transferredFromTableName: string;
+
+  @Column({ nullable: true, length: 50 })
+  transferCode: string;
+
+  // --- Kullanıcı Takip Alanları ---
+  @Column({ nullable: true })
+  createdByUserId: number;
+
+  @Column({ nullable: true })
+  transferredByUserId: number;
+
+  @Column({ nullable: true })
+  lastUpdatedByUserId: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

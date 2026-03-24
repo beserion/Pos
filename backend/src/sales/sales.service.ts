@@ -4,6 +4,7 @@ import { Repository, In } from 'typeorm';
 import { Recipe } from '../recipes/recipe.entity';
 import { Sale } from './sale.entity';
 import { SaleItem } from './sale-item.entity';
+import { TransferLog } from './transfer-log.entity';
 import { RecipesService } from '../recipes/recipes.service';
 import { StocksService } from '../stocks/stocks.service';
 import { Table } from '../tables/table.entity';
@@ -24,6 +25,8 @@ export class SalesService implements OnModuleInit {
     private saleRepository: Repository<Sale>,
     @InjectRepository(SaleItem)
     private saleItemRepository: Repository<SaleItem>,
+    @InjectRepository(TransferLog)
+    private transferLogRepository: Repository<TransferLog>,
     private recipesService: RecipesService,
     private stocksService: StocksService,
     private kitchenGateway: KitchenGateway,
@@ -111,6 +114,39 @@ export class SalesService implements OnModuleInit {
           default: 0
         } as any);
       }
+
+      // --- Transfer Alanları (Sale) ---
+      if (table && !table.columns.find(c => c.name === 'transferredFromTableId')) {
+        this.logger.log('Adding transferredFromTableId column to sales table...');
+        await queryRunner.addColumn('sales', { name: 'transferredFromTableId', type: 'int', isNullable: true, default: null } as any);
+      }
+      if (table && !table.columns.find(c => c.name === 'transferredFromTableName')) {
+        await queryRunner.addColumn('sales', { name: 'transferredFromTableName', type: 'nvarchar', length: '100', isNullable: true, default: null } as any);
+      }
+      if (table && !table.columns.find(c => c.name === 'transferCode')) {
+        await queryRunner.addColumn('sales', { name: 'transferCode', type: 'nvarchar', length: '50', isNullable: true, default: null } as any);
+      }
+      if (table && !table.columns.find(c => c.name === 'createdByUserId')) {
+        await queryRunner.addColumn('sales', { name: 'createdByUserId', type: 'int', isNullable: true, default: null } as any);
+      }
+      if (table && !table.columns.find(c => c.name === 'transferredByUserId')) {
+        await queryRunner.addColumn('sales', { name: 'transferredByUserId', type: 'int', isNullable: true, default: null } as any);
+      }
+      if (table && !table.columns.find(c => c.name === 'lastUpdatedByUserId')) {
+        await queryRunner.addColumn('sales', { name: 'lastUpdatedByUserId', type: 'int', isNullable: true, default: null } as any);
+      }
+
+      // --- Set Menü / Fix Menü Hazırlık Alanları (SaleItem) ---
+      if (itemsTable && !itemsTable.columns.find(c => c.name === 'parentItemId')) {
+        this.logger.log('Adding parentItemId column to sale_items table...');
+        await queryRunner.addColumn('sale_items', { name: 'parentItemId', type: 'int', isNullable: true, default: null } as any);
+      }
+      if (itemsTable && !itemsTable.columns.find(c => c.name === 'menuGroupId')) {
+        this.logger.log('Adding menuGroupId column to sale_items table...');
+        await queryRunner.addColumn('sale_items', { name: 'menuGroupId', type: 'nvarchar', length: '50', isNullable: true, default: null } as any);
+      }
+
+      // transfer_logs tablosu synchronize: true tarafından otomatik oluşturulur
 
       await queryRunner.release();
     } catch (error) {
@@ -1263,5 +1299,845 @@ export class SalesService implements OnModuleInit {
 
       return mapped[0];
     });
+  }
+  // ==============================
+  // Transfer Metotları
+  // ==============================
+
+  private generateTransferCode(sourceTableId: number, subCheckIndex: number): string {
+    const ts = Date.now().toString(36).toUpperCase().slice(-3);
+    return `TRF-M${sourceTableId}-A${subCheckIndex}-${ts}`;
+  }
+
+  private async createTransferLogEntry(manager: any, data: Partial<TransferLog>): Promise<TransferLog> {
+    const log = manager.create(TransferLog, data);
+    return manager.save(TransferLog, log);
+  }
+
+  /**
+   * Ürün(ler)i başka masaya transfer et.
+   * Hedef masada yeni alt adisyon oluşturur.
+   */
+  async transferItemsToTable(body: {
+    sourceSubCheckId: number;
+    targetTableId: number;
+    itemIds: number[];
+    quantities?: Record<number, number>;
+    confirmed?: boolean;
+  }, userId: number): Promise<any> {
+    return await this.saleRepository.manager.transaction(async (manager) => {
+      // 1. Kaynak adisyonu al
+      const sourceSale = await manager.findOne(Sale, {
+        where: { id: body.sourceSubCheckId },
+        relations: ['items', 'table'],
+      });
+      if (!sourceSale) throw new NotFoundException('Kaynak adisyon bulunamadı.');
+
+      // 2. Hedef masayı al
+      const targetTable = await manager.findOne(Table, { where: { id: body.targetTableId, isDeleted: false } });
+      if (!targetTable) throw new NotFoundException('Hedef masa bulunamadı.');
+
+      // 3. Aynı masa kontrolü → Bu metot farklı masaya taşır
+      if (sourceSale.tableId === body.targetTableId) {
+        throw new BadRequestException('Aynı masaya ürün transferi için transferItemsWithinTable kullanın.');
+      }
+
+      // 4. Dolu masa onay kontrolü
+      if (targetTable.status === 'DOLU' && !body.confirmed) {
+        return { requireConfirmation: true, message: 'Dolu bir masaya taşıma yapıyorsunuz. Onaylıyor musunuz?' };
+      }
+
+      // 5. Taşınacak item'ları bul
+      const items = await manager.find(SaleItem, {
+        where: { id: In(body.itemIds), sale: { id: body.sourceSubCheckId } },
+      });
+      if (items.length === 0) throw new BadRequestException('Taşınacak ürün bulunamadı.');
+
+      // 6. Transfer kodu oluştur
+      const transferCode = this.generateTransferCode(sourceSale.tableId, sourceSale.subCheckIndex || 0);
+
+      // 7. Hedef masada parent sale bul
+      let targetParentSale = await manager.findOne(Sale, {
+        where: { tableId: body.targetTableId, parentSaleId: null as any, status: In(['NEW', 'PREPARATION', 'READY', 'SERVED']) },
+        relations: ['subChecks'],
+      });
+
+      let targetSaleForItems: Sale;
+      const sourceLabel = sourceSale.subCheckLabel || `Adisyon ${sourceSale.subCheckIndex + 1}`;
+      const newLabel = `${sourceSale.tableName || 'Paket'} / ${sourceLabel}'den Taşınan`;
+
+      if (!targetParentSale) {
+        // Hedef masa boşsa, direkt kök adisyon olarak transfer adisyonunu oluştur
+        targetParentSale = manager.create(Sale, {
+          tableId: body.targetTableId,
+          tableName: targetTable.name,
+          waiterId: sourceSale.waiterId,
+          userId: sourceSale.userId,
+          partnerId: sourceSale.partnerId,
+          companyId: sourceSale.companyId,
+          status: sourceSale.status || 'NEW',
+          totalAmount: 0,
+          discountAmount: 0,
+          serviceFee: 0,
+          subCheckLabel: newLabel,
+          subCheckIndex: 0,
+          transferredFromTableId: sourceSale.tableId,
+          transferredFromTableName: sourceSale.tableName,
+          transferCode,
+          transferredByUserId: userId,
+          createdByUserId: sourceSale.createdByUserId || sourceSale.userId,
+        });
+        targetParentSale = await manager.save(Sale, targetParentSale);
+        targetSaleForItems = targetParentSale;
+      } else {
+        // Hedef masa doluysa, mevcut kök adisyon altına yeni bir alt adisyon aç
+        const existingCount = await manager.count(Sale, { where: { parentSaleId: targetParentSale.id } });
+        const subCheckIndex = existingCount + 1;
+
+        const newSubCheck = manager.create(Sale, {
+          parentSaleId: targetParentSale.id,
+          subCheckLabel: newLabel,
+          subCheckIndex,
+          tableId: body.targetTableId,
+          tableName: targetTable.name,
+          waiterId: sourceSale.waiterId,
+          userId: sourceSale.userId,
+          partnerId: sourceSale.partnerId,
+          companyId: sourceSale.companyId,
+          status: sourceSale.status || 'NEW',
+          totalAmount: 0,
+          discountAmount: 0,
+          serviceFee: 0,
+          transferredFromTableId: sourceSale.tableId,
+          transferredFromTableName: sourceSale.tableName,
+          transferCode,
+          transferredByUserId: userId,
+          createdByUserId: sourceSale.createdByUserId || sourceSale.userId,
+        });
+        targetSaleForItems = await manager.save(Sale, newSubCheck);
+      }
+
+      // 9. Ürünleri taşı
+      let movedTotal = 0;
+      const transferredItemsList: any[] = [];
+      const newItems: SaleItem[] = [];
+
+      for (const item of items) {
+        const splitQty = body.quantities?.[item.id];
+
+        // Ürün bilgisini al
+        let productName = `Ürün #${item.productId}`;
+        try {
+          const rawProduct = await manager.query(`SELECT name FROM products WHERE id = ${item.productId}`);
+          if (rawProduct[0]) productName = rawProduct[0].name;
+        } catch { }
+
+        if (splitQty && splitQty < Number(item.quantity)) {
+          // Miktar bölme
+          const remainingQty = Number(item.quantity) - splitQty;
+          await manager.update(SaleItem, item.id, {
+            quantity: remainingQty,
+            total: remainingQty * Number(item.unitPrice),
+          });
+
+          const newItem = manager.create(SaleItem, {
+            productId: item.productId,
+            quantity: splitQty,
+            unitPrice: item.unitPrice,
+            costPrice: item.costPrice,
+            total: splitQty * Number(item.unitPrice),
+            note: item.note,
+            isMarshed: item.isMarshed,
+            isWaiting: item.isWaiting,
+            isReady: item.isReady,
+            isPaid: false,
+            status: item.status,
+            productTypeName: item.productTypeName,
+            sale: targetSaleForItems,
+          });
+          await manager.save(SaleItem, newItem);
+          newItems.push(newItem);
+          const itemTotal = splitQty * Number(item.unitPrice);
+          movedTotal += itemTotal;
+          transferredItemsList.push({ productId: item.productId, name: productName, quantity: splitQty, total: itemTotal });
+        } else {
+          // Tam taşıma
+          const itemTotal = Number(item.total || Number(item.unitPrice) * Number(item.quantity));
+          await manager.query(`UPDATE sale_items SET saleId = ${targetSaleForItems.id} WHERE id = ${item.id}`);
+          movedTotal += itemTotal;
+          transferredItemsList.push({ productId: item.productId, name: productName, quantity: Number(item.quantity), total: itemTotal });
+        }
+      }
+
+      // 10. Tutarları güncelle
+      await manager.update(Sale, targetSaleForItems.id, { totalAmount: Math.max(0, movedTotal) });
+
+      const newSourceTotal = Math.max(0, Number(sourceSale.totalAmount) - movedTotal);
+      await manager.update(Sale, sourceSale.id, { totalAmount: newSourceTotal });
+
+      // Target parent totalAmount update
+      const targetParentTotal = Number(targetParentSale.totalAmount || 0) + movedTotal;
+      await manager.update(Sale, targetParentSale.id, { totalAmount: targetParentTotal });
+
+      // 11. Masa durumlarını güncelle
+      // Hedef masa
+      await manager.update(Table, body.targetTableId, {
+        status: 'DOLU',
+        currentTotal: Number(targetTable.currentTotal || 0) + movedTotal,
+      });
+
+      // Kaynak masayı kontrol et
+      if (sourceSale.tableId) {
+        const sourceTable = await manager.findOne(Table, { where: { id: sourceSale.tableId } });
+        if (sourceTable) {
+          const newSourceTableTotal = Math.max(0, Number(sourceTable.currentTotal || 0) - movedTotal);
+          if (newSourceTableTotal <= 0) {
+            // Kaynak masada başka aktif satış var mı?
+            const remainingSales = await manager.count(Sale, {
+              where: { tableId: sourceSale.tableId, status: In(['NEW', 'PREPARATION', 'READY', 'SERVED']) },
+            });
+            const remainingItems = await manager.query(`
+              SELECT COUNT(*) as cnt FROM sale_items si
+              JOIN sales s ON s.id = si.saleId
+              WHERE s.tableId = ${sourceSale.tableId} AND s.status IN ('NEW','PREPARATION','READY','SERVED') AND si.status = 'ACTIVE'
+            `);
+            const hasItems = Number(remainingItems[0]?.cnt || 0) > 0;
+
+            await manager.update(Table, sourceSale.tableId, {
+              status: hasItems ? 'DOLU' : 'BOŞ',
+              currentTotal: hasItems ? newSourceTableTotal : 0,
+              waiterName: hasItems ? sourceTable.waiterName : '',
+              orderStartTime: hasItems ? sourceTable.orderStartTime : (null as any),
+            });
+          } else {
+            await manager.update(Table, sourceSale.tableId, { currentTotal: newSourceTableTotal });
+          }
+        }
+      }
+
+      // 12. Transfer log oluştur
+      await this.createTransferLogEntry(manager, {
+        transferType: 'ITEM_TRANSFER',
+        sourceTableId: sourceSale.tableId,
+        sourceTableName: sourceSale.tableName,
+        sourceSubCheckId: sourceSale.id,
+        sourceSubCheckLabel: sourceLabel,
+        targetTableId: body.targetTableId,
+        targetTableName: targetTable.name,
+        targetSubCheckId: targetSaleForItems.id,
+        targetSubCheckLabel: newLabel,
+        transferredItems: JSON.stringify(transferredItemsList),
+        userId,
+        amountBefore: Number(sourceSale.totalAmount),
+        amountAfter: newSourceTotal,
+        transferCode,
+        companyId: sourceSale.companyId || 1,
+      });
+
+      // 13. WebSocket bildirim
+      const cleanSource = await manager.findOne(Sale, { where: { id: sourceSale.id }, relations: ['items'] });
+      const cleanTarget = await manager.findOne(Sale, { where: { id: targetSaleForItems.id }, relations: ['items'] });
+      if (cleanSource) this.kitchenGateway.notifySaleUpdate(cleanSource);
+      if (cleanTarget) this.kitchenGateway.notifySaleUpdate(cleanTarget);
+
+      return {
+        success: true,
+        transferCode,
+        sourceSubCheck: { id: sourceSale.id, newTotal: newSourceTotal },
+        targetSubCheck: { id: targetSaleForItems.id, label: newLabel, total: movedTotal },
+        transferredItems: transferredItemsList,
+      };
+    });
+  }
+
+  /**
+   * Aynı masa içinde ürün(ler)i farklı alt adisyona taşır.
+   * targetSubCheckId = 'NEW' ise yeni alt adisyon oluşturur.
+   */
+  async transferItemsWithinTable(body: {
+    sourceSubCheckId: number;
+    targetSubCheckId: number | 'NEW';
+    itemIds: number[];
+    quantities?: Record<number, number>;
+    newLabel?: string;
+  }, userId: number): Promise<any> {
+    return await this.saleRepository.manager.transaction(async (manager) => {
+      const sourceSale = await manager.findOne(Sale, {
+        where: { id: body.sourceSubCheckId },
+        relations: ['items'],
+      });
+      if (!sourceSale) throw new NotFoundException('Kaynak adisyon bulunamadı.');
+
+      let targetSale: Sale;
+
+      if (body.targetSubCheckId === 'NEW') {
+        // Yeni alt adisyon oluştur
+        const rootSaleId = sourceSale.parentSaleId || sourceSale.id;
+        const existingCount = await manager.count(Sale, { where: { parentSaleId: rootSaleId } });
+        const subCheckIndex = existingCount + 1;
+        const label = body.newLabel || `Adisyon ${subCheckIndex + 1}`;
+
+        // Ana adisyona label ata (ilk kez)
+        if (!sourceSale.subCheckLabel && !sourceSale.parentSaleId) {
+          await manager.update(Sale, rootSaleId, { subCheckLabel: 'Adisyon 1', subCheckIndex: 0 });
+        }
+
+        const newCheck = manager.create(Sale, {
+          parentSaleId: rootSaleId,
+          subCheckLabel: label,
+          subCheckIndex,
+          tableId: sourceSale.tableId,
+          tableName: sourceSale.tableName,
+          waiterId: sourceSale.waiterId,
+          userId: sourceSale.userId,
+          cashRegisterId: sourceSale.cashRegisterId,
+          shiftId: sourceSale.shiftId,
+          partnerId: sourceSale.partnerId,
+          companyId: sourceSale.companyId,
+          status: sourceSale.status || 'NEW',
+          totalAmount: 0,
+          discountAmount: 0,
+          serviceFee: 0,
+        });
+        targetSale = await manager.save(Sale, newCheck);
+      } else {
+        targetSale = await manager.findOne(Sale, {
+          where: { id: body.targetSubCheckId as number },
+          relations: ['items'],
+        }) as Sale;
+        if (!targetSale) throw new NotFoundException('Hedef adisyon bulunamadı.');
+
+        // Aynı masa kontrolü
+        if (sourceSale.tableId !== targetSale.tableId) {
+          throw new BadRequestException('Masa içi taşıma sadece aynı masanın adisyonları arasında yapılabilir.');
+        }
+      }
+
+      // Taşınacak item'ları bul
+      const items = await manager.find(SaleItem, {
+        where: { id: In(body.itemIds), sale: { id: body.sourceSubCheckId } },
+      });
+      if (items.length === 0) throw new BadRequestException('Taşınacak ürün bulunamadı.');
+
+      let movedTotal = 0;
+
+      for (const item of items) {
+        const splitQty = body.quantities?.[item.id];
+
+        if (splitQty && splitQty < Number(item.quantity)) {
+          const remainingQty = Number(item.quantity) - splitQty;
+          await manager.update(SaleItem, item.id, {
+            quantity: remainingQty,
+            total: remainingQty * Number(item.unitPrice),
+          });
+
+          const newItem = manager.create(SaleItem, {
+            productId: item.productId,
+            quantity: splitQty,
+            unitPrice: item.unitPrice,
+            costPrice: item.costPrice,
+            total: splitQty * Number(item.unitPrice),
+            note: item.note,
+            isMarshed: item.isMarshed,
+            isWaiting: item.isWaiting,
+            isReady: item.isReady,
+            isPaid: false,
+            status: item.status,
+            productTypeName: item.productTypeName,
+            sale: targetSale,
+          });
+          await manager.save(SaleItem, newItem);
+          movedTotal += splitQty * Number(item.unitPrice);
+        } else {
+          await manager.query(`UPDATE sale_items SET saleId = ${targetSale.id} WHERE id = ${item.id}`);
+          movedTotal += Number(item.total || Number(item.unitPrice) * Number(item.quantity));
+        }
+      }
+
+      // Tutarları güncelle
+      await manager.update(Sale, sourceSale.id, {
+        totalAmount: Math.max(0, Number(sourceSale.totalAmount) - movedTotal),
+      });
+      await manager.update(Sale, targetSale.id, {
+        totalAmount: Number(targetSale.totalAmount) + movedTotal,
+      });
+
+      // Transfer log
+      await this.createTransferLogEntry(manager, {
+        transferType: 'ITEM_TRANSFER',
+        sourceTableId: sourceSale.tableId,
+        sourceTableName: sourceSale.tableName,
+        sourceSubCheckId: sourceSale.id,
+        sourceSubCheckLabel: sourceSale.subCheckLabel,
+        targetTableId: targetSale.tableId,
+        targetTableName: targetSale.tableName,
+        targetSubCheckId: targetSale.id,
+        targetSubCheckLabel: targetSale.subCheckLabel,
+        userId,
+        amountBefore: Number(sourceSale.totalAmount),
+        amountAfter: Math.max(0, Number(sourceSale.totalAmount) - movedTotal),
+        companyId: sourceSale.companyId || 1,
+      });
+
+      // WebSocket bildirim
+      this.kitchenGateway.notifySaleUpdate(sourceSale);
+      this.kitchenGateway.notifySaleUpdate(targetSale);
+
+      const updatedSource = await manager.findOne(Sale, { where: { id: sourceSale.id }, relations: ['items'] }) as Sale;
+      const updatedTarget = await manager.findOne(Sale, { where: { id: targetSale.id }, relations: ['items'] }) as Sale;
+
+      return { source: updatedSource, target: updatedTarget };
+    });
+  }
+
+  /**
+   * Alt adisyonu komple başka masaya transfer et.
+   * Hedef masada yeni alt adisyon oluşturur.
+   */
+  async transferSubCheckToTable(body: {
+    subCheckId: number;
+    targetTableId: number;
+    confirmed?: boolean;
+  }, userId: number): Promise<any> {
+    return await this.saleRepository.manager.transaction(async (manager) => {
+      // 1. Kaynak alt adisyonu al
+      const sourceSale = await manager.findOne(Sale, {
+        where: { id: body.subCheckId },
+        relations: ['items', 'table'],
+      });
+      if (!sourceSale) throw new NotFoundException('Kaynak alt adisyon bulunamadı.');
+
+      // Kapalı veya ödenmiş adisyon kontrolü
+      if (sourceSale.status === 'COMPLETED' || sourceSale.status === 'CANCELLED') {
+        throw new BadRequestException('Kapalı veya iptal edilmiş alt adisyon transfer edilemez.');
+      }
+
+      // Kısmen ödenmiş kontrolü
+      if (sourceSale.items) {
+        const hasPaidItems = sourceSale.items.some(i => i.isPaid);
+        if (hasPaidItems) {
+          throw new BadRequestException('Kısmen ödenmiş alt adisyon transfer edilemez.');
+        }
+      }
+
+      // 2. Hedef masayı al
+      const targetTable = await manager.findOne(Table, { where: { id: body.targetTableId, isDeleted: false } });
+      if (!targetTable) throw new NotFoundException('Hedef masa bulunamadı.');
+
+      if (sourceSale.tableId === body.targetTableId) {
+        throw new BadRequestException('Alt adisyon aynı masaya transfer edilemez.');
+      }
+
+      // 3. Dolu masa onayı
+      if (targetTable.status === 'DOLU' && !body.confirmed) {
+        return { requireConfirmation: true, message: 'Dolu bir masaya taşıma yapıyorsunuz. Onaylıyor musunuz?' };
+      }
+
+      // 4. Transfer kodu oluştur
+      const transferCode = this.generateTransferCode(sourceSale.tableId, sourceSale.subCheckIndex || 0);
+
+      // 5. Hedef masada parent sale bul
+      let targetParentSale = await manager.findOne(Sale, {
+        where: { tableId: body.targetTableId, parentSaleId: null as any, status: In(['NEW', 'PREPARATION', 'READY', 'SERVED']) },
+        relations: ['subChecks'],
+      });
+
+      let targetSubSale: Sale;
+      const sourceLabel = sourceSale.subCheckLabel || `Adisyon ${sourceSale.subCheckIndex + 1}`;
+      const newLabel = `${sourceSale.tableName || 'Paket'} / ${sourceLabel}'den Taşınan`;
+
+      if (!targetParentSale) {
+        targetParentSale = manager.create(Sale, {
+          tableId: body.targetTableId,
+          tableName: targetTable.name,
+          waiterId: sourceSale.waiterId,
+          userId: sourceSale.userId,
+          partnerId: sourceSale.partnerId,
+          companyId: sourceSale.companyId,
+          status: 'NEW',
+          totalAmount: 0,
+          discountAmount: 0,
+          serviceFee: 0,
+          subCheckLabel: newLabel,
+          subCheckIndex: 0,
+          transferredFromTableId: sourceSale.tableId,
+          transferredFromTableName: sourceSale.tableName,
+          transferCode,
+          transferredByUserId: userId,
+          createdByUserId: sourceSale.createdByUserId || sourceSale.userId,
+        });
+        targetParentSale = await manager.save(Sale, targetParentSale);
+        targetSubSale = targetParentSale;
+      } else {
+        // 6. Hedef masada yeni alt adisyon oluştur
+        const existingCount = await manager.count(Sale, { where: { parentSaleId: targetParentSale.id } });
+        const subCheckIndex = existingCount + 1;
+
+        const newSubCheck = manager.create(Sale, {
+          parentSaleId: targetParentSale.id,
+          subCheckLabel: newLabel,
+          subCheckIndex,
+          tableId: body.targetTableId,
+          tableName: targetTable.name,
+          waiterId: sourceSale.waiterId,
+          userId: sourceSale.userId,
+          partnerId: sourceSale.partnerId,
+          companyId: sourceSale.companyId,
+          status: sourceSale.status || 'NEW',
+          totalAmount: 0,
+          discountAmount: 0,
+          serviceFee: 0,
+          transferredFromTableId: sourceSale.tableId,
+          transferredFromTableName: sourceSale.tableName,
+          transferCode,
+          transferredByUserId: userId,
+          createdByUserId: sourceSale.createdByUserId || sourceSale.userId,
+        });
+        targetSubSale = await manager.save(Sale, newSubCheck);
+      }
+
+      // 7. Tüm item'ları yeni alt adisyona taşı
+      if (sourceSale.items && sourceSale.items.length > 0) {
+        for (const item of sourceSale.items) {
+          await manager.query(`UPDATE sale_items SET saleId = ${targetSubSale.id} WHERE id = ${item.id}`);
+        }
+      }
+
+      const movedTotal = Number(sourceSale.totalAmount);
+
+      // 8. Kaynak alt adisyonu temizle
+      await manager.update(Sale, sourceSale.id, { totalAmount: 0, status: 'CANCELLED' });
+
+      // Update targetSubSale's totalAmount
+      await manager.update(Sale, targetSubSale.id, { totalAmount: movedTotal });
+
+      // Target parent total güncelle
+      await manager.update(Sale, targetParentSale.id, {
+        totalAmount: Number(targetParentSale.totalAmount || 0) + movedTotal,
+      });
+
+      // 9. Masa durumlarını güncelle
+      await manager.update(Table, body.targetTableId, {
+        status: 'DOLU',
+        currentTotal: Number(targetTable.currentTotal || 0) + movedTotal,
+      });
+
+      // Kaynak masa
+      if (sourceSale.tableId) {
+        const sourceTable = await manager.findOne(Table, { where: { id: sourceSale.tableId } });
+        if (sourceTable) {
+          const newSourceTableTotal = Math.max(0, Number(sourceTable.currentTotal || 0) - movedTotal);
+          const remainingItems = await manager.query(`
+            SELECT COUNT(*) as cnt FROM sale_items si
+            JOIN sales s ON s.id = si.saleId
+            WHERE s.tableId = ${sourceSale.tableId} AND s.status IN ('NEW','PREPARATION','READY','SERVED') AND si.status = 'ACTIVE'
+          `);
+          const hasItems = Number(remainingItems[0]?.cnt || 0) > 0;
+
+          await manager.update(Table, sourceSale.tableId, {
+            status: hasItems ? 'DOLU' : 'BOŞ',
+            currentTotal: hasItems ? newSourceTableTotal : 0,
+            waiterName: hasItems ? sourceTable.waiterName : '',
+            orderStartTime: hasItems ? sourceTable.orderStartTime : (null as any),
+          });
+        }
+      }
+
+      // 10. Transfer log
+      const transferredItemsList = (sourceSale.items || []).map(i => ({
+        productId: i.productId, quantity: Number(i.quantity), total: Number(i.total),
+      }));
+
+      await this.createTransferLogEntry(manager, {
+        transferType: 'SUBCHECK_TRANSFER',
+        sourceTableId: sourceSale.tableId,
+        sourceTableName: sourceSale.tableName,
+        sourceSubCheckId: sourceSale.id,
+        sourceSubCheckLabel: sourceLabel,
+        targetTableId: body.targetTableId,
+        targetTableName: targetTable.name,
+        targetSubCheckId: targetSubSale.id,
+        targetSubCheckLabel: newLabel,
+        transferredItems: JSON.stringify(transferredItemsList),
+        userId,
+        amountBefore: movedTotal,
+        amountAfter: 0,
+        transferCode,
+        companyId: sourceSale.companyId || 1,
+      });
+
+      // 11. WebSocket bildirim
+      const cleanSource = await manager.findOne(Sale, { where: { id: sourceSale.id }, relations: ['items'] });
+      const cleanTarget = await manager.findOne(Sale, { where: { id: targetSubSale.id }, relations: ['items'] });
+      if (cleanSource) this.kitchenGateway.notifySaleUpdate(cleanSource);
+      if (cleanTarget) this.kitchenGateway.notifySaleUpdate(cleanTarget);
+
+      return {
+        success: true,
+        transferCode,
+        sourceSubCheck: { id: sourceSale.id, status: 'CANCELLED' },
+        targetSubCheck: { id: targetSubSale.id, label: newLabel, total: movedTotal },
+      };
+    });
+  }
+
+  /**
+   * Tüm masayı başka masaya transfer et.
+   * Kaynak masadaki tüm açık alt adisyonlar hedef masaya taşınır.
+   */
+  async transferTable(body: {
+    sourceTableId: number;
+    targetTableId: number;
+    confirmed?: boolean;
+  }, userId: number): Promise<any> {
+    return await this.saleRepository.manager.transaction(async (manager) => {
+      // 1. Kaynak ve hedef masaları al
+      const sourceTable = await manager.findOne(Table, { where: { id: body.sourceTableId, isDeleted: false } });
+      const targetTable = await manager.findOne(Table, { where: { id: body.targetTableId, isDeleted: false } });
+      if (!sourceTable) throw new NotFoundException('Kaynak masa bulunamadı.');
+      if (!targetTable) throw new NotFoundException('Hedef masa bulunamadı.');
+
+      if (body.sourceTableId === body.targetTableId) {
+        throw new BadRequestException('Aynı masaya transfer yapılamaz.');
+      }
+
+      // 2. Dolu masa onayı
+      if (targetTable.status === 'DOLU' && !body.confirmed) {
+        return { requireConfirmation: true, message: 'Dolu bir masaya taşıma yapıyorsunuz. Onaylıyor musunuz?' };
+      }
+
+      // 3. Kaynak masadaki tüm açık satışları al
+      const sourceSales = await manager.find(Sale, {
+        where: {
+          tableId: body.sourceTableId,
+          status: In(['NEW', 'PREPARATION', 'READY', 'SERVED']),
+        },
+        relations: ['items', 'subChecks', 'subChecks.items'],
+      });
+
+      if (sourceSales.length === 0) {
+        throw new BadRequestException('Kaynak masada taşınacak adisyon bulunamadı.');
+      }
+
+      // 4. Kısmen ödenmiş kontrolü
+      for (const sale of sourceSales) {
+        const allItems = [...(sale.items || [])];
+        if (sale.subChecks) {
+          sale.subChecks.forEach(sub => {
+            allItems.push(...(sub.items || []));
+          });
+        }
+        const hasPaidItems = allItems.some(i => i.isPaid);
+        if (hasPaidItems) {
+          throw new BadRequestException('Kısmen ödenmiş alt adisyon bulunduğundan masa transferi yapılamaz.');
+        }
+      }
+
+      // 5. Transfer kodu
+      const transferCode = this.generateTransferCode(body.sourceTableId, 0);
+
+      // 6. Hedef masada parent sale bul
+      let targetParentSale = await manager.findOne(Sale, {
+        where: { tableId: body.targetTableId, parentSaleId: null as any, status: In(['NEW', 'PREPARATION', 'READY', 'SERVED']) },
+        relations: ['subChecks'],
+      });
+
+      let totalMovedAmount = 0;
+      const allTransferredItems: any[] = [];
+
+      // 7. Her açık alt adisyonu taşı
+      const allChecksToTransfer: Sale[] = [];
+      for (const rootSale of sourceSales) {
+        // Kök adisyonu listeye ekle (eğer item'ları varsa)
+        if (rootSale.items && rootSale.items.length > 0) {
+          allChecksToTransfer.push(rootSale);
+        }
+        // Alt adisyonları ekle
+        if (rootSale.subChecks) {
+          for (const sub of rootSale.subChecks) {
+            if (sub.status !== 'COMPLETED' && sub.status !== 'CANCELLED') {
+              allChecksToTransfer.push(sub);
+            }
+          }
+        }
+      }
+
+      for (const check of allChecksToTransfer) {
+        const checkLabel = check.subCheckLabel || `Adisyon ${check.subCheckIndex + 1}`;
+        const newLabel = `${sourceTable.name} / ${checkLabel}'den Taşınan`;
+
+        let targetSubSale: Sale;
+
+        if (!targetParentSale) {
+          // Boş masa, ilk gelen adisyon kök oluyor
+          targetParentSale = manager.create(Sale, {
+            tableId: body.targetTableId,
+            tableName: targetTable.name,
+            waiterId: check.waiterId,
+            userId: check.userId,
+            cashRegisterId: check.cashRegisterId,
+            shiftId: check.shiftId,
+            partnerId: check.partnerId,
+            companyId: check.companyId,
+            status: check.status || 'NEW',
+            totalAmount: 0,
+            discountAmount: 0,
+            serviceFee: 0,
+            subCheckLabel: newLabel,
+            subCheckIndex: 0,
+            parentSaleId: null as any,
+            transferredFromTableId: body.sourceTableId,
+            transferredFromTableName: sourceTable.name,
+            transferCode,
+            transferredByUserId: userId,
+            createdByUserId: check.createdByUserId || check.userId,
+          });
+          targetParentSale = await manager.save(Sale, targetParentSale);
+          targetSubSale = targetParentSale;
+        } else {
+          // Hedef masa dolu veya ilk adisyon eklendi, diğerleri alt adisyon oluyor
+          const existingCount = await manager.count(Sale, { where: { parentSaleId: targetParentSale.id } });
+          targetSubSale = manager.create(Sale, {
+            parentSaleId: targetParentSale.id,
+            subCheckLabel: newLabel,
+            subCheckIndex: existingCount + 1,
+            tableId: body.targetTableId,
+            tableName: targetTable.name,
+            waiterId: check.waiterId,
+            userId: check.userId,
+            cashRegisterId: check.cashRegisterId,
+            shiftId: check.shiftId,
+            partnerId: check.partnerId,
+            companyId: check.companyId,
+            status: check.status || 'NEW',
+            totalAmount: 0,
+            discountAmount: 0,
+            serviceFee: 0,
+            transferredFromTableId: body.sourceTableId,
+            transferredFromTableName: sourceTable.name,
+            transferCode,
+            transferredByUserId: userId,
+            createdByUserId: check.createdByUserId || check.userId,
+          });
+          targetSubSale = await manager.save(Sale, targetSubSale);
+        }
+
+        const itemsToMove = check.items || [];
+        if (itemsToMove.length === 0) continue;
+
+        let checkMovedAmount = 0;
+        const newItems: SaleItem[] = [];
+
+        for (const item of itemsToMove) {
+          await manager.query(`UPDATE sale_items SET saleId = ${targetSubSale.id} WHERE id = ${item.id}`);
+          const itemTotal = Number(item.total || Number(item.unitPrice) * Number(item.quantity));
+          checkMovedAmount += itemTotal;
+          allTransferredItems.push({
+            productId: item.productId,
+            name: item.productTypeName || 'Ürün',
+            quantity: Number(item.quantity),
+            total: itemTotal,
+          });
+          newItems.push({ ...item, sale: targetSubSale } as SaleItem); // Update local reference for the object
+        }
+
+        totalMovedAmount += checkMovedAmount;
+
+        // Update targetSubSale totals
+        await manager.update(Sale, targetSubSale.id, { totalAmount: checkMovedAmount });
+
+        // Kaynak alt adisyonu kapat
+        await manager.update(Sale, check.id, { totalAmount: 0, status: 'CANCELLED' });
+      }
+
+      // 8. Kaynak kök adisyonları da kapat
+      for (const rootSale of sourceSales) {
+        await manager.update(Sale, rootSale.id, { totalAmount: 0, status: 'CANCELLED' });
+      }
+
+      // Hedef parent total güncelle
+      await manager.update(Sale, targetParentSale!.id, {
+        totalAmount: Number(targetParentSale!.totalAmount || 0) + totalMovedAmount,
+      });
+
+      // 9. Masa durumlarını güncelle
+      await manager.update(Table, body.targetTableId, {
+        status: 'DOLU',
+        currentTotal: Number(targetTable.currentTotal || 0) + totalMovedAmount,
+      });
+
+      if (body.sourceTableId) {
+        await manager.update(Table, body.sourceTableId, {
+          status: 'BOŞ',
+          currentTotal: 0,
+          waiterName: '',
+          orderStartTime: null as any,
+        });
+      }
+
+      // 10. Transfer log
+      await this.createTransferLogEntry(manager, {
+        transferType: 'TABLE_TRANSFER',
+        sourceTableId: body.sourceTableId,
+        sourceTableName: sourceTable.name,
+        targetTableId: body.targetTableId,
+        targetTableName: targetTable.name,
+        transferredItems: JSON.stringify(allTransferredItems),
+        userId,
+        amountBefore: totalMovedAmount,
+        amountAfter: 0,
+        transferCode,
+        companyId: sourceSales[0]?.companyId || 1,
+      });
+
+      // 11. WebSocket bildirim
+      const cleanTargetParent = await manager.findOne(Sale, { where: { id: targetParentSale!.id }, relations: ['items', 'subChecks', 'subChecks.items'] });
+      if (cleanTargetParent) this.kitchenGateway.notifySaleUpdate(cleanTargetParent);
+
+      return {
+        success: true,
+        transferCode,
+        movedSubCheckCount: allChecksToTransfer.length,
+        totalMovedAmount,
+        sourceTable: { id: body.sourceTableId, name: sourceTable.name, status: 'BOŞ' },
+        targetTable: { id: body.targetTableId, name: targetTable.name, status: 'DOLU' },
+      };
+    });
+  }
+
+  /**
+   * Transfer log listesi (raporlama/filtreleme)
+   */
+  async getTransferLogs(filters: {
+    startDate?: string;
+    endDate?: string;
+    sourceTableId?: number;
+    targetTableId?: number;
+    transferType?: string;
+  }): Promise<TransferLog[]> {
+    const qb = this.transferLogRepository.createQueryBuilder('tl')
+      .orderBy('tl.timestamp', 'DESC');
+
+    if (filters.startDate) {
+      const start = new Date(filters.startDate);
+      start.setHours(0, 0, 0, 0);
+      qb.andWhere('tl.timestamp >= :startDate', { startDate: start });
+    }
+    if (filters.endDate) {
+      const end = new Date(filters.endDate);
+      end.setHours(23, 59, 59, 999);
+      qb.andWhere('tl.timestamp <= :endDate', { endDate: end });
+    }
+    if (filters.sourceTableId) {
+      qb.andWhere('tl.sourceTableId = :sourceTableId', { sourceTableId: filters.sourceTableId });
+    }
+    if (filters.targetTableId) {
+      qb.andWhere('tl.targetTableId = :targetTableId', { targetTableId: filters.targetTableId });
+    }
+    if (filters.transferType) {
+      qb.andWhere('tl.transferType = :transferType', { transferType: filters.transferType });
+    }
+
+    return qb.take(200).getMany();
   }
 }

@@ -43,8 +43,9 @@ export function AlertsBell({ notifications, unreadCount, onMarkAsRead, onMarkAll
   useEffect(() => {
     if (unreadCount > prevUnreadCountRef.current) {
       const audio = new Audio('/notification.mp3');
-      audio.volume = 0.5; // Orta ses seviyesi
-      audio.play().catch(e => console.error('Bildirim sesi çalınamadı:', e));
+      audio.play().catch(e => {
+        if (e.name !== 'NotAllowedError') console.error('Bildirim sesi çalınamadı:', e);
+      });
     }
     prevUnreadCountRef.current = unreadCount;
   }, [unreadCount]);

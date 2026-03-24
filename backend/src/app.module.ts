@@ -34,6 +34,7 @@ import { Product } from './products/product.entity';
 import { Stock } from './stocks/stock.entity';
 import { Sale } from './sales/sale.entity';
 import { SaleItem } from './sales/sale-item.entity';
+import { TransferLog } from './sales/transfer-log.entity';
 import { Invoice } from './invoices/invoice.entity';
 import { InvoiceItem } from './invoices/invoice-item.entity';
 import { Delivery } from './deliveries/delivery.entity';
@@ -136,6 +137,7 @@ import { ScheduleModule } from '@nestjs/schedule';
             AuditLog,
             ProductType,
             OutputProfile,
+            TransferLog,
           ],
           synchronize: true, // Auto-sync enabled by user permission
           logging: true,

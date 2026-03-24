@@ -574,4 +574,52 @@ export class ReportsService {
 
     return { dateFilter, params };
   }
+
+  // ─── TRANSFER RAPORU ──────────────────────────────────────────────────────────
+
+  async getTransferReport(filters: { startDate?: string; endDate?: string }) {
+    const { dateFilter, params } = this.buildDateFilter({ startDate: filters.startDate, endDate: filters.endDate });
+
+    // İşlem türüne göre sayılar
+    const typeCountsRes = await this.dataSource.query(`
+      SELECT transferType, COUNT(*) as adet
+      FROM transfer_logs tl
+      WHERE 1=1 ${dateFilter.replace(/s\./g, 'tl.')}
+      GROUP BY transferType
+    `, params).catch(() => []);
+
+    // Masa bazlı transfer yoğunluğu
+    const tableStatsRes = await this.dataSource.query(`
+      SELECT sourceTableName, COUNT(*) as transferSayisi,
+        SUM(CAST(amountBefore AS DECIMAL(18,2))) as toplamTutar
+      FROM transfer_logs tl
+      WHERE 1=1 ${dateFilter.replace(/s\./g, 'tl.')}
+      GROUP BY sourceTableName
+      ORDER BY transferSayisi DESC
+    `, params).catch(() => []);
+
+    // Toplam
+    const toplamRes = await this.dataSource.query(`
+      SELECT COUNT(*) as toplamTransfer,
+        SUM(CAST(amountBefore AS DECIMAL(18,2))) as toplamTutar
+      FROM transfer_logs tl
+      WHERE 1=1 ${dateFilter.replace(/s\./g, 'tl.')}
+    `, params).catch(() => [{}]);
+
+    return {
+      islemTurleri: typeCountsRes.map((t: any) => ({
+        tur: t.transferType,
+        adet: Number(t.adet || 0),
+      })),
+      masaBazliYogunluk: tableStatsRes.map((m: any) => ({
+        masaAdi: m.sourceTableName,
+        transferSayisi: Number(m.transferSayisi || 0),
+        toplamTutar: Number(m.toplamTutar || 0),
+      })),
+      genelToplam: {
+        toplamTransfer: Number(toplamRes[0]?.toplamTransfer || 0),
+        toplamTutar: Number(toplamRes[0]?.toplamTutar || 0),
+      },
+    };
+  }
 }

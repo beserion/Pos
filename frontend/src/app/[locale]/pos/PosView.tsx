@@ -6,6 +6,7 @@ import { showSwal, toastSwal } from '../utils/swal';
 import { useLocale, useTranslations } from 'next-intl';
 import { useTheme } from 'next-themes';
 import ShiftManager from '@/components/shifts/ShiftManager';
+import TransferModal from './TransferModal';
 
 interface Product {
     id: number;
@@ -61,6 +62,11 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const [splitQuantities, setSplitQuantities] = useState<Record<number, number>>({});
     const [isAddSubCheckOpen, setIsAddSubCheckOpen] = useState(false);
     const [newSubCheckLabel, setNewSubCheckLabel] = useState('');
+
+    // --- Transfer Modal State ---
+    const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+    const [transferMode, setTransferMode] = useState<'ITEM_TO_TABLE' | 'ITEM_WITHIN_TABLE' | 'SUBCHECK_TO_TABLE' | 'TABLE_TRANSFER'>('ITEM_TO_TABLE');
+    const [transferSelectedItemIds, setTransferSelectedItemIds] = useState<number[]>([]);
 
     // Shift & Cash Register state
     const [activeShift, setActiveShift] = useState<any>(null);
@@ -784,7 +790,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                         <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-600 dark:from-indigo-400 dark:to-blue-400">₺{grandTotal.toFixed(2)}</span>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3 mb-3">
+                    <div className="grid grid-cols-4 gap-3 mb-3">
                         <button
                             onClick={() => setSelectedTable(null)}
                             className="py-3 rounded-2xl bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-bold text-sm shadow-sm transition-all active:scale-[0.98]"
@@ -815,6 +821,25 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                             disabled={!selectedTable || cart.length === 0 || activeSubCheckId === 'ALL'}
                         >
                             <i className="fat fa-scissors mr-1"></i> Böl
+                        </button>
+                        <button
+                            onClick={() => {
+                                if (!selectedTable) return;
+                                // Seçili ürünler varsa ürün transferi, yoksa masa transferi
+                                const unpaidItems = cart.filter(i => !i.product.isQuickSale);
+                                if (activeSubCheckId && activeSubCheckId !== 'ALL') {
+                                    setTransferMode('SUBCHECK_TO_TABLE');
+                                    setTransferSelectedItemIds([]);
+                                } else {
+                                    setTransferMode('TABLE_TRANSFER');
+                                    setTransferSelectedItemIds([]);
+                                }
+                                setIsTransferModalOpen(true);
+                            }}
+                            className="py-3 rounded-2xl bg-yellow-50 dark:bg-yellow-500/10 border border-yellow-200 dark:border-yellow-500/30 text-yellow-700 dark:text-yellow-400 font-bold text-sm shadow-sm transition-all active:scale-[0.98]"
+                            disabled={!selectedTable || cart.length === 0}
+                        >
+                            <i className="fat fa-arrow-right-arrow-left mr-1"></i> Transfer
                         </button>
                         <button
                             onClick={handleCancelAdisyon}
@@ -1326,6 +1351,26 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     </div>
                 )
             }
+            {/* Transfer Modal */}
+            <TransferModal
+                isOpen={isTransferModalOpen}
+                onClose={() => setIsTransferModalOpen(false)}
+                mode={transferMode}
+                sourceSubCheckId={typeof activeSubCheckId === 'number' ? activeSubCheckId : undefined}
+                sourceTableId={selectedTable?.id}
+                sourceTableName={selectedTable?.name}
+                selectedItemIds={transferSelectedItemIds}
+                allFlatChecks={allFlatChecks}
+                tables={tables}
+                zones={allZones}
+                onTransferComplete={() => {
+                    if (selectedTable) {
+                        // Refresh table data
+                        fetchData();
+                        setSelectedTable(null);
+                    }
+                }}
+            />
         </div >
     );
 }

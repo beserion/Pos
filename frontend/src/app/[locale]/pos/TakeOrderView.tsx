@@ -7,6 +7,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import Cookies from 'js-cookie';
 import { useTheme } from 'next-themes';
 import { useParameters } from '../utils/useParameters';
+import TransferModal from './TransferModal';
 
 interface Modifier {
     id: number;
@@ -70,6 +71,14 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [activeSubCheckId, setActiveSubCheckId] = useState<number | 'ALL' | null>(null);
     const [isAddSubCheckOpen, setIsAddSubCheckOpen] = useState(false);
     const [newSubCheckLabel, setNewSubCheckLabel] = useState('');
+
+    // --- Transfer Modal State ---
+    const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+    const [transferMode, setTransferMode] = useState<'ITEM_TO_TABLE' | 'ITEM_WITHIN_TABLE' | 'SUBCHECK_TO_TABLE' | 'TABLE_TRANSFER'>('TABLE_TRANSFER');
+    const [transferSourceTableId, setTransferSourceTableId] = useState<number | undefined>(undefined);
+    const [transferSourceTableName, setTransferSourceTableName] = useState<string | undefined>(undefined);
+    const [transferSelectedItemIds, setTransferSelectedItemIds] = useState<number[]>([]);
+    const [transferSourceSubCheckId, setTransferSourceSubCheckId] = useState<number | undefined>(undefined);
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
     const { params } = useParameters();
@@ -648,8 +657,16 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
                                         <button
                                             onClick={(e) => {
-
-                                                // TODO: Implement Table Transfer backend
+                                                e.stopPropagation();
+                                                if (table.status !== 'DOLU') {
+                                                    toastSwal({ icon: 'warning', title: 'Boş masa transfer edilemez!' });
+                                                    return;
+                                                }
+                                                setTransferSourceTableId(table.id);
+                                                setTransferSourceTableName(table.name);
+                                                setTransferMode('TABLE_TRANSFER');
+                                                setTransferSelectedItemIds([]);
+                                                setIsTransferModalOpen(true);
                                             }}
                                             className="absolute top-3 left-3 w-8 h-8 flex items-center justify-center rounded-xl bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-500/30 transition-all opacity-70 hover:opacity-100"
                                             title="Masa Transfer"
@@ -772,22 +789,37 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                     <span className="ml-1 opacity-70">₺{allFlatChecks.reduce((sum, c) => sum + Number(c.totalAmount || 0), 0).toFixed(0)}</span>
                                 </button>
                                 {allFlatChecks.map((check: any) => (
-                                    <button
-                                        key={check.id}
-                                        onClick={() => {
-                                            setActiveSubCheckId(check.id);
-                                            setExistingOrders([check]);
-                                        }}
-                                        className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${activeSubCheckId === check.id
-                                            ? 'bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-500/20'
-                                            : 'bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-emerald-400'
-                                            }`}
-                                    >
-                                        {check.subCheckLabel || `Adisyon ${check.subCheckIndex + 1}`}
-                                        {check.totalAmount > 0 && (
-                                            <span className="ml-1 opacity-70">₺{Number(check.totalAmount).toFixed(0)}</span>
+                                    <div key={check.id} className="flex items-center gap-1">
+                                        <button
+                                            onClick={() => {
+                                                setActiveSubCheckId(check.id);
+                                                setExistingOrders([check]);
+                                            }}
+                                            className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${activeSubCheckId === check.id
+                                                ? 'bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-500/20'
+                                                : 'bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-emerald-400'
+                                                }`}
+                                        >
+                                            {check.subCheckLabel || `Adisyon ${check.subCheckIndex + 1}`}
+                                            {check.totalAmount > 0 && (
+                                                <span className="ml-1 opacity-70">₺{Number(check.totalAmount).toFixed(0)}</span>
+                                            )}
+                                        </button>
+                                        {activeSubCheckId === check.id && (
+                                            <button
+                                                onClick={() => {
+                                                    setTransferSourceSubCheckId(check.id);
+                                                    setTransferSelectedItemIds([]);
+                                                    setTransferMode('SUBCHECK_TO_TABLE');
+                                                    setIsTransferModalOpen(true);
+                                                }}
+                                                className="w-7 h-7 flex items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-200 dark:hover:bg-yellow-500/40 transition-colors shrink-0 shadow-sm"
+                                                title="Adisyonu Başka Masaya Taşı"
+                                            >
+                                                <i className="fat fa-arrow-right-arrow-left text-[10px]"></i>
+                                            </button>
                                         )}
-                                    </button>
+                                    </div>
                                 ))}
                                 <button
                                     onClick={() => { setIsAddSubCheckOpen(true); setNewSubCheckLabel(''); }}
@@ -837,6 +869,12 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                         <span className="text-xs font-bold text-slate-400">Birim: ₺{item.unitPrice} &nbsp;·&nbsp; {item.quantity} Adet</span>
                                         {!item.isPaid && (
                                             <button
+                                                onClick={() => {
+                                                    setTransferSourceSubCheckId(item.saleId);
+                                                    setTransferSelectedItemIds([item.id]);
+                                                    setTransferMode('ITEM_TO_TABLE');
+                                                    setIsTransferModalOpen(true);
+                                                }}
                                                 className="text-[10px] font-black uppercase text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 border border-yellow-200 dark:border-yellow-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1"
                                             >
                                                 <i className="fat fa-arrow-right-arrow-left text-[10px]"></i> Transfer
@@ -1166,6 +1204,28 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                     </div>
                 </div>
             )}
+            {/* Transfer Modal */}
+            <TransferModal
+                isOpen={isTransferModalOpen}
+                onClose={() => {
+                    setIsTransferModalOpen(false);
+                    setTransferSourceSubCheckId(undefined);
+                    setTransferSelectedItemIds([]);
+                }}
+                mode={transferMode}
+                sourceSubCheckId={transferSourceSubCheckId || (typeof activeSubCheckId === 'number' ? activeSubCheckId : undefined)}
+                sourceTableId={transferSourceTableId || selectedTable?.id}
+                sourceTableName={transferSourceTableName || selectedTable?.name}
+                selectedItemIds={transferSelectedItemIds}
+                allFlatChecks={allFlatChecks}
+                tables={tables}
+                zones={zones}
+                onTransferComplete={() => {
+                    fetchData();
+                    setSelectedTable(null);
+                    setActiveTab('tables');
+                }}
+            />
         </div>
     );
 }

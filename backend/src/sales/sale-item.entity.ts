@@ -73,4 +73,11 @@ export class SaleItem {
   // Ürün cinsi (raporlama için snapshot)
   @Column({ nullable: true })
   productTypeName: string;
+
+  // --- Set Menü / Fix Menü Hazırlık Alanları (Gelecek Faz) ---
+  @Column('int', { nullable: true })
+  parentItemId: number;
+
+  @Column({ nullable: true, length: 50 })
+  menuGroupId: string;
 }

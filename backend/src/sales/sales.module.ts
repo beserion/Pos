@@ -4,6 +4,7 @@ import { SalesService } from './sales.service';
 import { SalesController } from './sales.controller';
 import { Sale } from './sale.entity';
 import { SaleItem } from './sale-item.entity';
+import { TransferLog } from './transfer-log.entity';
 import { SecurityModule } from '../auth/security.module';
 import { RecipesModule } from '../recipes/recipes.module';
 import { StocksModule } from '../stocks/stocks.module';
@@ -17,7 +18,7 @@ import { AlertsModule } from '../alerts/alerts.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Sale, SaleItem, Table, User]),
+    TypeOrmModule.forFeature([Sale, SaleItem, Table, User, TransferLog]),
     SecurityModule,
     RecipesModule,
     StocksModule,

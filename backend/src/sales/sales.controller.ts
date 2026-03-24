@@ -57,6 +57,23 @@ export class SalesController {
     return this.salesService.endOfDay(userId);
   }
 
+  @Get('transfer/logs')
+  getTransferLogs(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('sourceTableId') sourceTableId?: string,
+    @Query('targetTableId') targetTableId?: string,
+    @Query('transferType') transferType?: string,
+  ) {
+    return this.salesService.getTransferLogs({
+      startDate,
+      endDate,
+      sourceTableId: sourceTableId ? parseInt(sourceTableId) : undefined,
+      targetTableId: targetTableId ? parseInt(targetTableId) : undefined,
+      transferType,
+    });
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.salesService.findOne(+id);
@@ -162,4 +179,63 @@ export class SalesController {
   appendItems(@Param('id') id: string, @Body('items') items: any[]) {
     return this.salesService.appendItems(+id, items);
   }
+
+  // --- Transfer Endpointleri ---
+
+  @Post('transfer/items-to-table')
+  transferItemsToTable(
+    @Body() body: {
+      sourceSubCheckId: number;
+      targetTableId: number;
+      itemIds: number[];
+      quantities?: Record<number, number>;
+      confirmed?: boolean;
+    },
+    @Request() req: any,
+  ) {
+    const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
+    return this.salesService.transferItemsToTable(body, userId);
+  }
+
+  @Post('transfer/items-within-table')
+  transferItemsWithinTable(
+    @Body() body: {
+      sourceSubCheckId: number;
+      targetSubCheckId: number | 'NEW';
+      itemIds: number[];
+      quantities?: Record<number, number>;
+      newLabel?: string;
+    },
+    @Request() req: any,
+  ) {
+    const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
+    return this.salesService.transferItemsWithinTable(body, userId);
+  }
+
+  @Post('transfer/subcheck-to-table')
+  transferSubCheckToTable(
+    @Body() body: {
+      subCheckId: number;
+      targetTableId: number;
+      confirmed?: boolean;
+    },
+    @Request() req: any,
+  ) {
+    const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
+    return this.salesService.transferSubCheckToTable(body, userId);
+  }
+
+  @Post('transfer/table')
+  transferTable(
+    @Body() body: {
+      sourceTableId: number;
+      targetTableId: number;
+      confirmed?: boolean;
+    },
+    @Request() req: any,
+  ) {
+    const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
+    return this.salesService.transferTable(body, userId);
+  }
+
 }

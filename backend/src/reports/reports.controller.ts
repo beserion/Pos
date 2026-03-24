@@ -143,4 +143,12 @@ export class ReportsController {
       limit: limit ? Number(limit) : 50,
     });
   }
+  // ── 6. Transfer Raporu ──
+  @Get('transfers')
+  async getTransferReport(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return await this.reportsService.getTransferReport({ startDate, endDate });
+  }
 }
