@@ -312,19 +312,73 @@ export class SalesService implements OnModuleInit {
         const savedSale = await manager.save(Sale, newSale);
 
         if (items && items.length > 0) {
-          const saleItems = items.map(item => manager.create(SaleItem, {
-            productId: item.productId,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            costPrice: item.costPrice || 0,
-            total: item.total || (Number(item.quantity) * Number(item.unitPrice)),
-            note: item.note,
-            isWaiting: item.isWaiting || false,
-            isMarshed: false,
-            sale: savedSale,
-            isPaid: savedSale.status === 'COMPLETED'
-          }));
-          await manager.save(SaleItem, saleItems);
+          const saleItems: SaleItem[] = [];
+          for (const item of items as any[]) {
+            let rawSetMenu = null;
+            if (!item.subItems || item.subItems.length === 0) {
+              const rawProducts = await manager.query(`SELECT isSet FROM products WHERE id = ${item.productId}`);
+              if (rawProducts[0]?.isSet) {
+                 rawSetMenu = await manager.query(`SELECT id, setType FROM set_menus WHERE productId = ${item.productId}`);
+              }
+            }
+
+            const parentItem = manager.create(SaleItem, {
+              productId: item.productId,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              costPrice: item.costPrice || 0,
+              total: item.total || (Number(item.quantity) * Number(item.unitPrice)),
+              note: item.note,
+              isWaiting: item.isWaiting || false,
+              isMarshed: false,
+              sale: savedSale,
+              isPaid: savedSale.status === 'COMPLETED'
+            });
+            const savedParent = await manager.save(SaleItem, parentItem);
+            saleItems.push(savedParent);
+
+            if (item.subItems && item.subItems.length > 0) {
+              for (const subItem of item.subItems) {
+                const newSub = manager.create(SaleItem, {
+                  productId: subItem.productId,
+                  quantity: subItem.quantity * item.quantity,
+                  unitPrice: subItem.unitPrice || 0,
+                  costPrice: subItem.costPrice || 0,
+                  total: (subItem.unitPrice || 0) * (subItem.quantity * item.quantity),
+                  parentItemId: savedParent.id,
+                  menuGroupId: String(subItem.menuGroupId || ''),
+                  isMarshed: false,
+                  sale: savedSale,
+                  isPaid: savedSale.status === 'COMPLETED'
+                });
+                const savedSub = await manager.save(SaleItem, newSub);
+                saleItems.push(savedSub);
+              }
+            } else if (rawSetMenu && rawSetMenu.length > 0 && rawSetMenu[0].setType === 'FIX') {
+               const defaultItems = await manager.query(`
+                 SELECT sgi.productId, sgi.priceDiff, sg.id as groupId 
+                 FROM set_group_items sgi
+                 JOIN set_groups sg ON sg.id = sgi.setGroupId
+                 WHERE sg.setMenuId = ${rawSetMenu[0].id} AND sgi.isDefault = 1 AND sgi.isActive = 1
+               `);
+               for (const defItem of defaultItems) {
+                 const newSub = manager.create(SaleItem, {
+                    productId: defItem.productId,
+                    quantity: item.quantity,
+                    unitPrice: defItem.priceDiff || 0,
+                    costPrice: 0,
+                    total: (defItem.priceDiff || 0) * item.quantity,
+                    parentItemId: savedParent.id,
+                    menuGroupId: String(defItem.groupId),
+                    isMarshed: false,
+                    sale: savedSale,
+                    isPaid: savedSale.status === 'COMPLETED'
+                 });
+                 const savedSub = await manager.save(SaleItem, newSub);
+                 saleItems.push(savedSub);
+               }
+            }
+          }
           savedSale.items = saleItems;
         }
 
@@ -410,48 +464,59 @@ export class SalesService implements OnModuleInit {
     });
   }
 
-  async marsItem(itemId: number): Promise<SaleItem> {
+  async marsItem(itemId: number): Promise<any> {
     const item = await this.saleItemRepository.findOne({
       where: { id: itemId },
-      relations: ['sale', 'sale.table']
+      relations: ['sale', 'sale.table', 'sale.table.zone']
     });
     if (!item) throw new NotFoundException('Ürün bulunamadı');
 
-    item.isMarshed = true;
-    const updated = await this.saleItemRepository.save(item);
-
-    // Mutfak bildirimini gönder
-    this.kitchenGateway.server.emit('itemMarshed', {
-      itemId: item.id,
-      saleId: item.sale?.id,
-      tableName: item.sale?.tableName,
-      productId: item.productId,
-      isMarshed: true
+    const itemsToMars = [item];
+    
+    // Eğer bu bir Set Menü ise, aktif alt ürünleri de bul ve marş et
+    const children = await this.saleItemRepository.find({
+      where: { parentItemId: item.id, status: 'ACTIVE' }
     });
+    itemsToMars.push(...children);
 
-    // Yazıcıya gönder
-    const rawProduct = await this.saleRepository.query(`
-      SELECT p.name, p.printerId FROM products p WHERE p.id = ${item.productId}
-    `);
+    for (const targetItem of itemsToMars) {
+      targetItem.isMarshed = true;
+      await this.saleItemRepository.save(targetItem);
 
-    if (rawProduct && rawProduct.length > 0) {
-      // Alt adisyon bilgisini yazıcıya gönder: MASA X / Aile Y
-      const printTableName = item.sale?.subCheckLabel
-        ? `${item.sale?.tableName} / ${item.sale.subCheckLabel}`
-        : item.sale?.tableName;
+      // Mutfak bildirimini gönder
+      if (this.kitchenGateway?.server) {
+        this.kitchenGateway.server.emit('itemMarshed', {
+          itemId: targetItem.id,
+          saleId: item.sale?.id,
+          tableName: item.sale?.tableName,
+          productId: targetItem.productId,
+          isMarshed: true
+        });
+      }
 
-      await this.printersService.printMars({
-        tableName: printTableName,
-        item: {
-          name: rawProduct[0].name,
-          quantity: item.quantity,
-          note: item.note,
-          printerId: rawProduct[0].printerId
-        }
-      });
+      // Yazıcıya gönder
+      const rawProduct = await this.saleRepository.query(`
+        SELECT p.name, p.printerId FROM products p WHERE p.id = ${targetItem.productId}
+      `);
+
+      if (rawProduct && rawProduct.length > 0) {
+        const printTableName = item.sale?.subCheckLabel
+          ? `${item.sale?.tableName} / ${item.sale.subCheckLabel}`
+          : item.sale?.tableName;
+
+        await this.printersService.printMars({
+          tableName: printTableName,
+          item: {
+            name: rawProduct[0].name,
+            quantity: targetItem.quantity,
+            note: targetItem.note,
+            printerId: rawProduct[0].printerId
+          }
+        });
+      }
     }
 
-    return updated;
+    return item;
   }
 
   async readyItem(itemId: number): Promise<SaleItem> {
@@ -754,6 +819,11 @@ export class SalesService implements OnModuleInit {
       relations: ['sale', 'sale.table'],
     });
     if (!item) throw new NotFoundException('Ürün bulunamadı.');
+
+    if (item.parentItemId) {
+      throw new BadRequestException('Set menü içerikleri tek tek iptal edilemez. Lütfen ana menüyü iptal ediniz.');
+    }
+
     if (item.isMarshed) {
       throw new BadRequestException('Bu ürün mutfağa gönderilmiştir. İptal yerine iade işlemi yapınız.');
     }
@@ -763,6 +833,14 @@ export class SalesService implements OnModuleInit {
     (item as any).cancelledByUserId = userId;
 
     const updated = await this.saleItemRepository.save(item);
+
+    const childItems = await this.saleItemRepository.find({ where: { parentItemId: item.id, status: 'ACTIVE' } });
+    for (const child of childItems) {
+      child.status = 'CANCELLED';
+      child.cancelReason = reason;
+      (child as any).cancelledByUserId = userId;
+      await this.saleItemRepository.save(child);
+    }
 
     // Stok geri alımı (varsa)
     try {
@@ -793,11 +871,23 @@ export class SalesService implements OnModuleInit {
     });
     if (!item) throw new NotFoundException('Ürün bulunamadı.');
 
+    if (item.parentItemId) {
+      throw new BadRequestException('Set menü içerikleri tek tek iade edilemez. Lütfen ana menüyü iade ediniz.');
+    }
+
     item.status = 'REFUNDED';
     item.refundReason = reason;
     (item as any).refundedByUserId = userId;
 
     const updated = await this.saleItemRepository.save(item);
+
+    const childItems = await this.saleItemRepository.find({ where: { parentItemId: item.id, status: 'ACTIVE' } });
+    for (const child of childItems) {
+      child.status = 'REFUNDED';
+      child.refundReason = reason;
+      (child as any).refundedByUserId = userId;
+      await this.saleItemRepository.save(child);
+    }
 
     // Denetim logu
     try {
@@ -972,20 +1062,73 @@ export class SalesService implements OnModuleInit {
 
       if (!items || items.length === 0) return sale;
 
-      const newSaleItems = items.map(item => manager.create(SaleItem, {
-        productId: item.productId,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        costPrice: item.costPrice || 0,
-        total: item.total || (Number(item.quantity) * Number(item.unitPrice)),
-        note: item.note,
-        isWaiting: item.isWaiting || false,
-        isMarshed: false,
-        sale: sale,
-        isPaid: sale.status === 'COMPLETED'
-      }));
+      const newSaleItems: SaleItem[] = [];
+      for (const item of items) {
+        let rawSetMenu = null;
+        if (!item.subItems || item.subItems.length === 0) {
+          const rawProducts = await manager.query(`SELECT isSet FROM products WHERE id = ${item.productId}`);
+          if (rawProducts[0]?.isSet) {
+             rawSetMenu = await manager.query(`SELECT id, setType FROM set_menus WHERE productId = ${item.productId}`);
+          }
+        }
 
-      await manager.save(SaleItem, newSaleItems);
+        const parentItem = manager.create(SaleItem, {
+          productId: item.productId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          costPrice: item.costPrice || 0,
+          total: item.total || (Number(item.quantity) * Number(item.unitPrice)),
+          note: item.note,
+          isWaiting: item.isWaiting || false,
+          isMarshed: false,
+          sale: sale,
+          isPaid: sale.status === 'COMPLETED'
+        });
+        const savedParent = await manager.save(SaleItem, parentItem);
+        newSaleItems.push(savedParent);
+
+        if (item.subItems && item.subItems.length > 0) {
+          for (const subItem of item.subItems) {
+            const newSub = manager.create(SaleItem, {
+              productId: subItem.productId,
+              quantity: subItem.quantity * item.quantity,
+              unitPrice: subItem.unitPrice || 0,
+              costPrice: subItem.costPrice || 0,
+              total: (subItem.unitPrice || 0) * (subItem.quantity * item.quantity),
+              parentItemId: savedParent.id,
+              menuGroupId: String(subItem.menuGroupId || ''),
+              isMarshed: false,
+              sale: sale,
+              isPaid: sale.status === 'COMPLETED'
+            });
+            const savedSub = await manager.save(SaleItem, newSub);
+            newSaleItems.push(savedSub);
+          }
+        } else if (rawSetMenu && rawSetMenu.length > 0 && rawSetMenu[0].setType === 'FIX') {
+           const defaultItems = await manager.query(`
+             SELECT sgi.productId, sgi.priceDiff, sg.id as groupId 
+             FROM set_group_items sgi
+             JOIN set_groups sg ON sg.id = sgi.setGroupId
+             WHERE sg.setMenuId = ${rawSetMenu[0].id} AND sgi.isDefault = 1 AND sgi.isActive = 1
+           `);
+           for (const defItem of defaultItems) {
+             const newSub = manager.create(SaleItem, {
+                productId: defItem.productId,
+                quantity: item.quantity,
+                unitPrice: defItem.priceDiff || 0,
+                costPrice: 0,
+                total: (defItem.priceDiff || 0) * item.quantity,
+                parentItemId: savedParent.id,
+                menuGroupId: String(defItem.groupId),
+                isMarshed: false,
+                sale: sale,
+                isPaid: sale.status === 'COMPLETED'
+             });
+             const savedSub = await manager.save(SaleItem, newSub);
+             newSaleItems.push(savedSub);
+           }
+        }
+      }
 
       const newItemsTotal = newSaleItems.reduce((sum, i) => sum + Number(i.total || (Number(i.quantity) * Number(i.unitPrice))), 0);
 
@@ -1043,13 +1186,26 @@ export class SalesService implements OnModuleInit {
       });
       if (!sourceSale) throw new NotFoundException('Kaynak adisyon bulunamadı.');
 
-      // Taşınacak item'ları doğrula
-      const sourceItems = await manager.find(SaleItem, {
+      // Taşınacak item'ları doğrula (Seçilenler + Alt Ürünler)
+      const selectedItems = await manager.find(SaleItem, {
         where: { id: In(itemIds), sale: { id: saleId } },
       });
-      if (sourceItems.length === 0) {
-        throw new BadRequestException('Taşınacak ürün bulunamadı.');
+      if (selectedItems.length === 0) throw new BadRequestException('Taşınacak ürün bulunamadı.');
+
+      const allItemIds = new Set(itemIds);
+      for (const item of selectedItems) {
+        if (item.parentItemId && !allItemIds.has(item.parentItemId)) {
+          throw new BadRequestException('Set menü içeriği tek başına taşınamaz. Lütfen ana menüyü seçiniz.');
+        }
+        const children = await manager.find(SaleItem, {
+          where: { parentItemId: item.id, status: 'ACTIVE' }
+        });
+        children.forEach(c => allItemIds.add(c.id));
       }
+
+      const sourceItems = await manager.find(SaleItem, {
+        where: { id: In(Array.from(allItemIds)), sale: { id: saleId } },
+      });
 
       // Yeni alt adisyon oluştur
       const rootSaleId = sourceSale.parentSaleId || sourceSale.id;
@@ -1090,6 +1246,12 @@ export class SalesService implements OnModuleInit {
         const splitQty = quantities?.[item.id];
 
         if (splitQty && splitQty < Number(item.quantity)) {
+          // Set menü kontrolü: Parçalı taşıma yasaktır
+          const hasChildren = await manager.count(SaleItem, { where: { parentItemId: item.id, status: 'ACTIVE' } });
+          if (item.parentItemId || (hasChildren > 0)) {
+            throw new BadRequestException('Set menüler parçalı olarak taşınamaz.');
+          }
+
           // Miktar bölme: kaynak miktarını azalt, yeni item oluştur
           const remainingQty = Number(item.quantity) - splitQty;
           await manager.update(SaleItem, item.id, {
@@ -1195,17 +1357,39 @@ export class SalesService implements OnModuleInit {
         throw new BadRequestException('Ürün taşıma sadece aynı masa içinde yapılabilir.');
       }
 
-      const items = await manager.find(SaleItem, {
+      // Taşınacak item'ları bul (Seçilenler + Alt Ürünler)
+      const selectedItems = await manager.find(SaleItem, {
         where: { id: In(itemIds), sale: { id: sourceId } },
       });
-      if (items.length === 0) throw new BadRequestException('Taşınacak ürün bulunamadı.');
+      if (selectedItems.length === 0) throw new BadRequestException('Taşınacak ürün bulunamadı.');
+
+      const allItemIds = new Set(itemIds);
+      for (const item of selectedItems) {
+        if (item.parentItemId && !allItemIds.has(item.parentItemId)) {
+          throw new BadRequestException('Set menü içeriği tek başına taşınamaz. Lütfen ana menüyü seçiniz.');
+        }
+        
+        const children = await manager.find(SaleItem, {
+          where: { parentItemId: item.id, status: 'ACTIVE' }
+        });
+        children.forEach(c => allItemIds.add(c.id));
+      }
+
+      const items = await manager.find(SaleItem, {
+        where: { id: In(Array.from(allItemIds)), sale: { id: sourceId } },
+      });
 
       let movedTotal = 0;
 
       for (const item of items) {
         const splitQty = quantities?.[item.id];
-
         if (splitQty && splitQty < Number(item.quantity)) {
+          // Set menü kontrolü: Parçalı taşıma yasaktır
+          const hasChildren = await manager.count(SaleItem, { where: { parentItemId: item.id, status: 'ACTIVE' } });
+          if (item.parentItemId || (hasChildren > 0)) {
+            throw new BadRequestException('Set menüler parçalı olarak taşınamaz.');
+          }
+
           const remainingQty = Number(item.quantity) - splitQty;
           await manager.update(SaleItem, item.id, {
             quantity: remainingQty,
@@ -1347,11 +1531,27 @@ export class SalesService implements OnModuleInit {
         return { requireConfirmation: true, message: 'Dolu bir masaya taşıma yapıyorsunuz. Onaylıyor musunuz?' };
       }
 
-      // 5. Taşınacak item'ları bul
-      const items = await manager.find(SaleItem, {
+      // 5. Taşınacak item'ları bul (Seçilenler + Alt Ürünler)
+      const selectedItems = await manager.find(SaleItem, {
         where: { id: In(body.itemIds), sale: { id: body.sourceSubCheckId } },
       });
-      if (items.length === 0) throw new BadRequestException('Taşınacak ürün bulunamadı.');
+      if (selectedItems.length === 0) throw new BadRequestException('Taşınacak ürün bulunamadı.');
+
+      const allItemIds = new Set(body.itemIds);
+      for (const item of selectedItems) {
+        if (item.parentItemId && !allItemIds.has(item.parentItemId)) {
+          throw new BadRequestException('Set menü içeriği tek başına taşınamaz. Lütfen ana menüyü seçiniz.');
+        }
+        
+        const children = await manager.find(SaleItem, {
+          where: { parentItemId: item.id, status: 'ACTIVE' }
+        });
+        children.forEach(c => allItemIds.add(c.id));
+      }
+
+      const items = await manager.find(SaleItem, {
+        where: { id: In(Array.from(allItemIds)), sale: { id: body.sourceSubCheckId } },
+      });
 
       // 6. Transfer kodu oluştur
       const transferCode = this.generateTransferCode(sourceSale.tableId, sourceSale.subCheckIndex || 0);
@@ -1433,6 +1633,12 @@ export class SalesService implements OnModuleInit {
         } catch { }
 
         if (splitQty && splitQty < Number(item.quantity)) {
+          // Set menü kontrolü: Parçalı taşıma yasaktır
+          const hasChildren = await manager.count(SaleItem, { where: { parentItemId: item.id, status: 'ACTIVE' } });
+          if (item.parentItemId || (hasChildren > 0)) {
+            throw new BadRequestException('Set menüler parçalı olarak taşınamaz.');
+          }
+
           // Miktar bölme
           const remainingQty = Number(item.quantity) - splitQty;
           await manager.update(SaleItem, item.id, {
@@ -1613,11 +1819,27 @@ export class SalesService implements OnModuleInit {
         }
       }
 
-      // Taşınacak item'ları bul
-      const items = await manager.find(SaleItem, {
+      // Taşınacak item'ları bul (Seçilenler + Alt Ürünler)
+      const selectedItems = await manager.find(SaleItem, {
         where: { id: In(body.itemIds), sale: { id: body.sourceSubCheckId } },
       });
-      if (items.length === 0) throw new BadRequestException('Taşınacak ürün bulunamadı.');
+      if (selectedItems.length === 0) throw new BadRequestException('Taşınacak ürün bulunamadı.');
+
+      const allItemIds = new Set(body.itemIds);
+      for (const item of selectedItems) {
+        if (item.parentItemId && !allItemIds.has(item.parentItemId)) {
+          throw new BadRequestException('Set menü içeriği tek başına taşınamaz. Lütfen ana menüyü seçiniz.');
+        }
+        
+        const children = await manager.find(SaleItem, {
+          where: { parentItemId: item.id, status: 'ACTIVE' }
+        });
+        children.forEach(c => allItemIds.add(c.id));
+      }
+
+      const items = await manager.find(SaleItem, {
+        where: { id: In(Array.from(allItemIds)), sale: { id: body.sourceSubCheckId } },
+      });
 
       let movedTotal = 0;
 
@@ -1625,6 +1847,12 @@ export class SalesService implements OnModuleInit {
         const splitQty = body.quantities?.[item.id];
 
         if (splitQty && splitQty < Number(item.quantity)) {
+          // Set menü kontrolü: Parçalı taşıma yasaktır
+          const hasChildren = await manager.count(SaleItem, { where: { parentItemId: item.id, status: 'ACTIVE' } });
+          if (item.parentItemId || (hasChildren > 0)) {
+            throw new BadRequestException('Set menüler parçalı olarak taşınamaz.');
+          }
+
           const remainingQty = Number(item.quantity) - splitQty;
           await manager.update(SaleItem, item.id, {
             quantity: remainingQty,

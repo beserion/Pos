@@ -10,6 +10,8 @@ import { printReceipt } from '../utils/print';
 import { useTheme } from 'next-themes';
 import ShiftManager from '@/components/shifts/ShiftManager';
 
+import SetMenuSelectionModal from './SetMenuSelectionModal';
+
 interface Product {
     id: number;
     name: string;
@@ -19,11 +21,29 @@ interface Product {
     isQuickSale: boolean;
     sku: string;
     barcode?: string;
+    isSet?: boolean;
+    setMenu?: {
+        setType: string;
+        groups: {
+            id?: number;
+            groupName: string;
+            minSelect: number;
+            maxSelect: number;
+            items: {
+                productId: number;
+                priceDiff: number;
+                isDefault: boolean;
+            }[];
+        }[];
+    };
 }
 
 interface CartItem {
     product: Product;
     quantity: number;
+    subItems?: any[];
+    extraPrice?: number;
+    uniqueId?: string;
 }
 
 export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => void }) {
@@ -50,6 +70,25 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [activeShift, setActiveShift] = useState<any | null>(null);
     const [activeCashRegister, setActiveCashRegister] = useState<any | null>(null);
     const [shiftReady, setShiftReady] = useState(false);
+
+    const [selectedSetMenuProduct, setSelectedSetMenuProduct] = useState<Product | null>(null);
+    const [isSetMenuModalOpen, setIsSetMenuModalOpen] = useState(false);
+
+    const handleSetMenuConfirm = (subItems: any[], extraPrice: number) => {
+        if (!selectedSetMenuProduct) return;
+        setCart(prev => [
+            ...prev,
+            {
+                product: selectedSetMenuProduct,
+                quantity: 1,
+                subItems,
+                extraPrice,
+                uniqueId: Date.now().toString() + Math.random().toString(36).substring(7)
+            }
+        ]);
+        setIsSetMenuModalOpen(false);
+        setSelectedSetMenuProduct(null);
+    };
 
     useEffect(() => {
         if (activeCashRegister?.allowedPaymentMethods?.length > 0) {
@@ -129,24 +168,39 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     }, [products, selectedCategory, searchQuery]);
 
     const addToCart = (product: Product) => {
+        if (product.isSet && product.setMenu?.setType !== 'FIX') {
+            setSelectedSetMenuProduct(product);
+            setIsSetMenuModalOpen(true);
+            return;
+        }
+
         setCart(prev => {
-            const existing = prev.find(item => item.product.id === product.id);
+            const existing = prev.find(item => item.product.id === product.id && !item.uniqueId);
             if (existing) {
                 return prev.map(item =>
-                    item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+                    (item.product.id === product.id && !item.uniqueId) ? { ...item, quantity: item.quantity + 1 } : item
                 );
             }
             return [...prev, { product, quantity: 1 }];
         });
     };
 
-    const removeFromCart = (productId: number) => {
-        setCart(prev => prev.filter(item => item.product.id !== productId));
+    const removeFromCart = (itemToRemove: CartItem) => {
+        setCart(prev => {
+            if (itemToRemove.uniqueId) {
+                return prev.filter(i => i.uniqueId !== itemToRemove.uniqueId);
+            }
+            return prev.filter(item => item.product.id !== itemToRemove.product.id || item.uniqueId);
+        });
     };
 
-    const updateQuantity = (productId: number, delta: number) => {
+    const updateQuantity = (itemToUpdate: CartItem, delta: number) => {
         setCart(prev => prev.map(item => {
-            if (item.product.id === productId) {
+            const isMatch = itemToUpdate.uniqueId
+                ? item.uniqueId === itemToUpdate.uniqueId
+                : item.product.id === itemToUpdate.product.id && !item.uniqueId;
+
+            if (isMatch) {
                 const newQty = Math.max(1, item.quantity + delta);
                 return { ...item, quantity: newQty };
             }
@@ -155,7 +209,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     };
 
     const totalAmount = useMemo(() => {
-        return cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+        return cart.reduce((sum, item) => sum + ((item.product.price + (item.extraPrice || 0)) * item.quantity), 0);
     }, [cart]);
 
     const handleCompleteSale = async (paymentMethod: string, shouldPrint: boolean = true) => {
@@ -180,8 +234,9 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 items: cart.map(item => ({
                     productId: item.product.id,
                     quantity: item.quantity,
-                    unitPrice: item.product.price,
-                    total: item.product.price * item.quantity
+                    unitPrice: item.product.price + (item.extraPrice || 0),
+                    total: (item.product.price + (item.extraPrice || 0)) * item.quantity,
+                    subItems: item.subItems
                 }))
             };
 
@@ -195,8 +250,9 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 items: cart.map(item => ({
                     name: item.product.name,
                     quantity: item.quantity,
-                    price: item.product.price,
-                    total: item.product.price * item.quantity
+                    price: item.product.price + (item.extraPrice || 0),
+                    total: (item.product.price + (item.extraPrice || 0)) * item.quantity,
+                    subItems: item.subItems
                 })),
                 totalAmount: totalAmount,
                 paymentMethod: paymentMethod,
@@ -413,25 +469,44 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                    {cart.map(item => (
-                        <div key={item.product.id} className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between group">
-                            <div className="flex-1">
-                                <div className="text-xs font-black text-slate-800 dark:text-white uppercase line-clamp-1">{item.product.name}</div>
-                                <div className="text-[10px] font-bold text-slate-500 mt-1">
-                                    {item.product.price.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺ x {item.quantity}
-                                </div>
-                            </div>
+                    {cart.map((item, idx) => {
+                        const uniqueKey = item.uniqueId || `cart-${item.product.id}-${idx}`;
+                        return (
+                            <div key={uniqueKey} className="flex flex-col gap-1">
+                                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between group">
+                                    <div className="flex-1">
+                                        <div className="text-xs font-black text-slate-800 dark:text-white uppercase line-clamp-1">
+                                            {item.product.name}
+                                            {item.extraPrice ? <span className="text-indigo-500 ml-1">(+₺{item.extraPrice})</span> : null}
+                                        </div>
+                                        <div className="text-[10px] font-bold text-slate-500 mt-1">
+                                            {(item.product.price + (item.extraPrice || 0)).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺ x {item.quantity}
+                                        </div>
+                                    </div>
 
-                            <div className="flex items-center gap-2">
-                                <div className="flex items-center bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-1">
-                                    <button onClick={() => updateQuantity(item.product.id, -1)} className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-orange-500"><i className="fat fa-minus"></i></button>
-                                    <span className="w-8 text-center text-xs font-black text-slate-800 dark:text-white">{item.quantity}</span>
-                                    <button onClick={() => updateQuantity(item.product.id, 1)} className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-orange-500"><i className="fat fa-plus"></i></button>
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex items-center bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-1">
+                                            <button onClick={() => updateQuantity(item, -1)} className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-orange-500"><i className="fat fa-minus"></i></button>
+                                            <span className="w-8 text-center text-xs font-black text-slate-800 dark:text-white">{item.quantity}</span>
+                                            <button onClick={() => updateQuantity(item, 1)} className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-orange-500"><i className="fat fa-plus"></i></button>
+                                        </div>
+                                        <button onClick={() => removeFromCart(item)} className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"><i className="fat fa-trash"></i></button>
+                                    </div>
                                 </div>
-                                <button onClick={() => removeFromCart(item.product.id)} className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"><i className="fat fa-trash"></i></button>
+                                {item.subItems && item.subItems.length > 0 && (
+                                    <div className="ml-6 flex flex-col gap-1 mb-2">
+                                        {item.subItems.map((sub: any, sIdx: number) => (
+                                            <div key={sIdx} className="text-[10px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-2">
+                                                <i className="fat fa-caret-right"></i>
+                                                <span>{sub.product?.name || `Ürün #${sub.productId}`}</span>
+                                                {sub.unitPrice > 0 && <span className="text-indigo-400">(+₺{sub.unitPrice})</span>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
 
                 <div className="p-6 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700 space-y-4">
@@ -538,6 +613,16 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                         </button>
                     </div>
                 </div>
+            )}
+
+            {selectedSetMenuProduct && (
+                <SetMenuSelectionModal
+                    isOpen={isSetMenuModalOpen}
+                    product={selectedSetMenuProduct}
+                    allProducts={products}
+                    onClose={() => setIsSetMenuModalOpen(false)}
+                    onConfirm={handleSetMenuConfirm}
+                />
             )}
         </div>
     );

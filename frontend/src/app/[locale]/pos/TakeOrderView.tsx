@@ -8,6 +8,7 @@ import Cookies from 'js-cookie';
 import { useTheme } from 'next-themes';
 import { useParameters } from '../utils/useParameters';
 import TransferModal from './TransferModal';
+import SetMenuSelectionModal from './SetMenuSelectionModal';
 
 interface Modifier {
     id: number;
@@ -23,12 +24,27 @@ interface Product {
     imageUrl?: string;
     printerId?: number;
     modifiers?: Modifier[];
+    isSet?: boolean;
+    setMenu?: {
+        setType: string;
+        groups: {
+            id?: number;
+            groupName: string;
+            minSelect: number;
+            maxSelect: number;
+            items: {
+                productId: number;
+                priceDiff: number;
+                isDefault: boolean;
+            }[];
+        }[];
+    };
 }
-interface OrderItem { product: Product; quantity: number; note?: string; isWaiting?: boolean; }
+interface OrderItem { product: Product; quantity: number; note?: string; isWaiting?: boolean; subItems?: any[]; extraPrice?: number; uniqueId?: string; }
 interface ExistingOrder {
     id: number;
     totalAmount: number;
-    items: { id: number; product: { id: number; name: string; price: number }; quantity: number; unitPrice: number; isPaid: boolean; isWaiting: boolean; isMarshed: boolean; }[];
+    items: { id: number; product: { id: number; name: string; price: number; isSet?: boolean }; quantity: number; unitPrice: number; isPaid: boolean; isWaiting: boolean; isMarshed: boolean; parentItemId?: number; }[];
 }
 interface Zone { id: number; name: string; }
 interface Table { id: number; name: string; status: string; waiterName?: string; orderStartTime?: string; currentTotal?: number; zone: { id: number } }
@@ -79,6 +95,9 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [transferSourceTableName, setTransferSourceTableName] = useState<string | undefined>(undefined);
     const [transferSelectedItemIds, setTransferSelectedItemIds] = useState<number[]>([]);
     const [transferSourceSubCheckId, setTransferSourceSubCheckId] = useState<number | undefined>(undefined);
+
+    const [selectedSetMenuProduct, setSelectedSetMenuProduct] = useState<Product | null>(null);
+    const [isSetMenuModalOpen, setIsSetMenuModalOpen] = useState(false);
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
     const { params } = useParameters();
@@ -241,41 +260,79 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     };
 
     const addToCart = (product: Product, note?: string) => {
+        if (product.isSet && product.setMenu?.setType !== 'FIX') {
+            setSelectedSetMenuProduct(product);
+            setIsSetMenuModalOpen(true);
+            return;
+        }
+
         setCart(prev => {
-            const existing = prev.find(item => item.product.id === product.id && item.note === note);
+            const existing = prev.find(item => item.product.id === product.id && item.note === note && !item.uniqueId);
             if (existing) {
-                return prev.map(item => (item.product.id === product.id && item.note === note) ? { ...item, quantity: item.quantity + 1 } : item);
+                return prev.map(item => (item.product.id === product.id && item.note === note && !item.uniqueId) ? { ...item, quantity: item.quantity + 1 } : item);
             }
             // mars_default_items parametresi aktifse ve mars_enabled aciksa beklet konumunda acilsin
             return [...prev, { product, quantity: 1, note, isWaiting: params.mars_enabled ? (params.mars_default_items || false) : false }];
         });
     };
 
+    const handleSetMenuConfirm = (subItems: any[], extraPrice: number) => {
+        if (!selectedSetMenuProduct) return;
+        setCart(prev => [
+            ...prev,
+            {
+                product: selectedSetMenuProduct,
+                quantity: 1,
+                subItems,
+                extraPrice,
+                uniqueId: Date.now().toString() + Math.random().toString(36).substring(7),
+                isWaiting: params.mars_enabled ? (params.mars_default_items || false) : false
+            }
+        ]);
+        setIsSetMenuModalOpen(false);
+        setSelectedSetMenuProduct(null);
+    };
+
     const removeFromCart = (itemToRemove: OrderItem) => {
         setCart(prev => {
-            const existing = prev.find(item => item.product.id === itemToRemove.product.id && item.note === itemToRemove.note);
-            if (existing && existing.quantity === 1) return prev.filter(i => !(i.product.id === itemToRemove.product.id && i.note === itemToRemove.note));
-            return prev.map(item => (item.product.id === itemToRemove.product.id && item.note === itemToRemove.note) ? { ...item, quantity: item.quantity - 1 } : item);
+            if (itemToRemove.uniqueId) {
+                const existing = prev.find(item => item.uniqueId === itemToRemove.uniqueId);
+                if (existing && existing.quantity === 1) return prev.filter(i => i.uniqueId !== itemToRemove.uniqueId);
+                return prev.map(item => item.uniqueId === itemToRemove.uniqueId ? { ...item, quantity: item.quantity - 1 } : item);
+            }
+            const existing = prev.find(item => item.product.id === itemToRemove.product.id && item.note === itemToRemove.note && !item.uniqueId);
+            if (existing && existing.quantity === 1) return prev.filter(i => !(i.product.id === itemToRemove.product.id && i.note === itemToRemove.note && !i.uniqueId));
+            return prev.map(item => (item.product.id === itemToRemove.product.id && item.note === itemToRemove.note && !item.uniqueId) ? { ...item, quantity: item.quantity - 1 } : item);
         });
     };
 
     const removeEntireItem = (itemToRemove: OrderItem) => {
-        setCart(prev => prev.filter(i => !(i.product.id === itemToRemove.product.id && i.note === itemToRemove.note)));
+        setCart(prev => {
+            if (itemToRemove.uniqueId) return prev.filter(i => i.uniqueId !== itemToRemove.uniqueId);
+            return prev.filter(i => !(i.product.id === itemToRemove.product.id && i.note === itemToRemove.note && !i.uniqueId));
+        });
     };
 
     const handleSaveNote = () => {
         if (!noteModalItem) return;
 
-        // Remove the old item
-        const updatedCart = cart.filter(i => !(i.product.id === noteModalItem.product.id && i.note === noteModalItem.note));
-
-        // Add it back with the new note
-        const existingWithNewNote = updatedCart.find(i => i.product.id === noteModalItem.product.id && i.note === tempNote.trim());
-        if (existingWithNewNote) {
-            existingWithNewNote.quantity += noteModalItem.quantity;
-            setCart([...updatedCart]);
+        let updatedCart;
+        if (noteModalItem.uniqueId) {
+            updatedCart = cart.filter(i => i.uniqueId !== noteModalItem.uniqueId);
         } else {
-            setCart([...updatedCart, { ...noteModalItem, note: tempNote.trim() || undefined }]);
+            updatedCart = cart.filter(i => !(i.product.id === noteModalItem.product.id && i.note === noteModalItem.note && !i.uniqueId));
+        }
+
+        if (noteModalItem.uniqueId) {
+             setCart([...updatedCart, { ...noteModalItem, note: tempNote.trim() || undefined }]);
+        } else {
+            const existingWithNewNote = updatedCart.find(i => i.product.id === noteModalItem.product.id && i.note === tempNote.trim() && !i.uniqueId);
+            if (existingWithNewNote) {
+                existingWithNewNote.quantity += noteModalItem.quantity;
+                setCart([...updatedCart]);
+            } else {
+                setCart([...updatedCart, { ...noteModalItem, note: tempNote.trim() || undefined }]);
+            }
         }
         setNoteModalItem(null);
     };
@@ -298,9 +355,10 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                     items: cart.map(item => ({
                         productId: item.product.id,
                         quantity: item.quantity,
-                        unitPrice: item.product.price,
+                        unitPrice: item.product.price + (item.extraPrice || 0),
                         note: item.note,
-                        isWaiting: params.mars_enabled ? (item.isWaiting || false) : false
+                        isWaiting: params.mars_enabled ? (item.isWaiting || false) : false,
+                        subItems: item.subItems
                     }))
                 };
                 orderRes = await fetch(`${API_URL}/sales/${activeSubCheckId}/items`, {
@@ -312,14 +370,15 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                 const orderPayload = {
                     tableId: selectedTable.id,
                     userId: pinWaiter?.id || user?.id,
-                    totalAmount: cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0),
+                    totalAmount: cart.reduce((sum, item) => sum + ((item.product.price + (item.extraPrice || 0)) * item.quantity), 0),
                     status: 'NEW',
                     items: cart.map(item => ({
                         productId: item.product.id,
                         quantity: item.quantity,
-                        unitPrice: item.product.price,
+                        unitPrice: item.product.price + (item.extraPrice || 0),
                         note: item.note,
-                        isWaiting: params.mars_enabled ? (item.isWaiting || false) : false
+                        isWaiting: params.mars_enabled ? (item.isWaiting || false) : false,
+                        subItems: item.subItems
                     }))
                 };
                 orderRes = await fetch(`${API_URL}/sales`, {
@@ -391,7 +450,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
         return matchesCategory && matchesSearch;
     });
-    const cartTotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+    const cartTotal = cart.reduce((sum, item) => sum + ((item.product.price + (item.extraPrice || 0)) * item.quantity), 0);
     const allExistingItems = existingOrders.flatMap(o => o.items);
     const paidItems = allExistingItems.filter(i => i.isPaid);
     const unpaidItems = allExistingItems.filter(i => !i.isPaid);
@@ -838,62 +897,83 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                             const allItems = existingOrders.flatMap(order => order.items);
                             const displayItems = activeSubCheckId === 'ALL'
                                 ? allItems.reduce((merged: any[], item) => {
-                                    const existing = merged.find(m => m.product.id === item.product.id && m.isPaid === item.isPaid);
+                                    // If it's a child item, don't include it in the top-level merged list
+                                    if (item.parentItemId) return merged;
+
+                                    const existing = merged.find(m => m.product.id === item.product.id && m.isPaid === item.isPaid && !item.product.isSet && !item.parentItemId);
                                     if (existing) {
                                         existing.quantity += item.quantity;
                                     } else {
-                                        merged.push({ ...item });
+                                        const children = allItems.filter(sub => sub.parentItemId === item.id);
+                                        merged.push({ ...item, subItems: children });
                                     }
                                     return merged;
                                 }, [])
-                                : allItems;
+                                : allItems.filter(item => !item.parentItemId).map(item => ({
+                                    ...item,
+                                    subItems: allItems.filter(sub => sub.parentItemId === item.id)
+                                }));
 
                             return displayItems.map((item: any, idx: number) => (
-                                <div key={`ex-${item.id}-${idx}`} className={`flex flex-col gap-2 p-3 rounded-2xl border shadow-sm transition-all ${item.isPaid ? 'bg-emerald-50/60 dark:bg-emerald-900/10 border-emerald-200/50 dark:border-emerald-500/20 opacity-70' : 'bg-slate-100/50 dark:bg-slate-700/30 border-slate-200/50 dark:border-slate-700/50'}`}>
-                                    <div className="flex justify-between items-start">
-                                        <span className="block font-medium text-slate-600 dark:text-slate-400">
-                                            {item.product.name}
-                                            {item.isPaid ? (
-                                                <span className="text-[10px] ml-1 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-500/30 inline-flex items-center gap-1">
-                                                    <i className="fat fa-check text-[8px]"></i> Ödendi
-                                                </span>
-                                            ) : (
-                                                <span className="text-[10px] ml-1 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-600">Bekliyor</span>
-                                            )}
-                                        </span>
-                                        <span className={`font-bold ${item.isPaid ? 'text-emerald-600 dark:text-emerald-400 line-through' : 'text-slate-600 dark:text-slate-300'}`}>
-                                            ₺{(item.quantity * item.unitPrice).toFixed(2)}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between items-center mt-1">
-                                        <span className="text-xs font-bold text-slate-400">Birim: ₺{item.unitPrice} &nbsp;·&nbsp; {item.quantity} Adet</span>
-                                        {!item.isPaid && (
-                                            <button
-                                                onClick={() => {
-                                                    setTransferSourceSubCheckId(item.saleId);
-                                                    setTransferSelectedItemIds([item.id]);
-                                                    setTransferMode('ITEM_TO_TABLE');
-                                                    setIsTransferModalOpen(true);
-                                                }}
-                                                className="text-[10px] font-black uppercase text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 border border-yellow-200 dark:border-yellow-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1"
-                                            >
-                                                <i className="fat fa-arrow-right-arrow-left text-[10px]"></i> Transfer
-                                            </button>
-                                        )}
-                                        {params.mars_enabled && item.isWaiting && !item.isMarshed && (
-                                            <button
-                                                onClick={() => marsItem(item.id)}
-                                                className="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400 hover:text-rose-700 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 border border-rose-200 dark:border-rose-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1 animate-pulse"
-                                            >
-                                                <i className="fat fa-fire-flame-curved text-[10px]"></i> MARŞ VER
-                                            </button>
-                                        )}
-                                        {params.mars_enabled && item.isWaiting && item.isMarshed && (
-                                            <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-full flex items-center gap-1">
-                                                <i className="fat fa-check text-[10px]"></i> Marshed
+                                <div key={`ex-${item.id}-${idx}`} className="flex flex-col gap-1">
+                                    <div className={`flex flex-col gap-2 p-3 rounded-2xl border shadow-sm transition-all ${item.isPaid ? 'bg-emerald-50/60 dark:bg-emerald-900/10 border-emerald-200/50 dark:border-emerald-500/20 opacity-70' : 'bg-slate-100/50 dark:bg-slate-700/30 border-slate-200/50 dark:border-slate-700/50'}`}>
+                                        <div className="flex justify-between items-start">
+                                            <span className="block font-medium text-slate-600 dark:text-slate-400">
+                                                {item.product.name}
+                                                {item.isPaid ? (
+                                                    <span className="text-[10px] ml-1 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-500/30 inline-flex items-center gap-1">
+                                                        <i className="fat fa-check text-[8px]"></i> Ödendi
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] ml-1 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-600">Bekliyor</span>
+                                                )}
                                             </span>
-                                        )}
+                                            <span className={`font-bold ${item.isPaid ? 'text-emerald-600 dark:text-emerald-400 line-through' : 'text-slate-600 dark:text-slate-300'}`}>
+                                                ₺{(item.quantity * item.unitPrice).toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between items-center mt-1">
+                                            <span className="text-xs font-bold text-slate-400">Birim: ₺{item.unitPrice} &nbsp;·&nbsp; {item.quantity} Adet</span>
+                                            {!item.isPaid && (
+                                                <button
+                                                    onClick={() => {
+                                                        setTransferSourceSubCheckId(item.saleId);
+                                                        setTransferSelectedItemIds([item.id]);
+                                                        setTransferMode('ITEM_TO_TABLE');
+                                                        setIsTransferModalOpen(true);
+                                                    }}
+                                                    className="text-[10px] font-black uppercase text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 border border-yellow-200 dark:border-yellow-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1"
+                                                >
+                                                    <i className="fat fa-arrow-right-arrow-left text-[10px]"></i> Transfer
+                                                </button>
+                                            )}
+                                            {params.mars_enabled && item.isWaiting && !item.isMarshed && (
+                                                <button
+                                                    onClick={() => marsItem(item.id)}
+                                                    className="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400 hover:text-rose-700 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 border border-rose-200 dark:border-rose-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1 animate-pulse"
+                                                >
+                                                    <i className="fat fa-fire-flame-curved text-[10px]"></i> MARŞ VER
+                                                </button>
+                                            )}
+                                            {params.mars_enabled && item.isWaiting && item.isMarshed && (
+                                                <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-full flex items-center gap-1">
+                                                    <i className="fat fa-check text-[10px]"></i> Marshed
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
+                                    {/* Sub-items for existing orders */}
+                                    {item.subItems && item.subItems.length > 0 && (
+                                        <div className="ml-8 flex flex-col gap-1 mb-2">
+                                            {item.subItems.map((sub: any, sIdx: number) => (
+                                                <div key={sIdx} className="text-[10px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-2">
+                                                    <i className="fat fa-caret-right text-slate-400"></i>
+                                                    <span>{sub.product?.name || `Ürün #${sub.productId}`}</span>
+                                                    {sub.unitPrice > 0 && <span className="text-indigo-400">(+₺{sub.unitPrice})</span>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             ));
                         })()}
@@ -911,11 +991,26 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                             {item.product.name}
                                             {existingOrders.length > 0 && <span className="text-[10px] ml-1 bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full animate-pulse border border-teal-200 inline-block">Yeni Eklendi</span>}
                                         </span>
-                                        <span className="font-bold text-slate-800 dark:text-slate-100">₺{(item.quantity * item.product.price).toFixed(2)}</span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-100">₺{(item.quantity * (item.product.price + (item.extraPrice || 0))).toFixed(2)}</span>
                                     </div>
                                     <div className="flex justify-between items-center mt-1">
                                         <div className="flex flex-col gap-1 w-full max-w-[150px]">
-                                            <span className="text-xs font-bold text-slate-400">Birim: ₺{item.product.price}</span>
+                                            <span className="text-xs font-bold text-slate-400">Birim: ₺{item.product.price + (item.extraPrice || 0)}</span>
+                                            {item.subItems && item.subItems.length > 0 && (
+                                                <div className="mt-1 flex flex-col gap-0.5 max-h-[60px] overflow-y-auto custom-scrollbar">
+                                                    {item.subItems.map((sub: any, sIdx: number) => {
+                                                        const p = products.find(p => p.id === sub.productId);
+                                                        return (
+                                                            <span key={sIdx} className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
+                                                                <i className="fat fa-caret-right text-slate-400"></i>
+                                                                {sub.quantity > 1 ? `${sub.quantity}x ` : ''}
+                                                                {p ? p.name : 'Seçim'} 
+                                                                {sub.unitPrice > 0 ? ` (+₺${sub.unitPrice})` : ''}
+                                                            </span>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
                                             {item.note && (
                                                 <span className="text-[10px] bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 px-2 py-0.5 rounded-md truncate font-bold" title={item.note}>
                                                     Not: {item.note}
@@ -1226,6 +1321,16 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                     setActiveTab('tables');
                 }}
             />
+            {selectedSetMenuProduct && (
+                <SetMenuSelectionModal
+                    isOpen={isSetMenuModalOpen}
+                    product={selectedSetMenuProduct}
+                    allProducts={products}
+                    onClose={() => setIsSetMenuModalOpen(false)}
+                    onConfirm={handleSetMenuConfirm}
+                />
+            )}
+
         </div>
     );
 }

@@ -15,6 +15,21 @@ interface Product {
     category: string;
     imageUrl?: string;
     isQuickSale?: boolean;
+    isSet?: boolean;
+    setMenu?: {
+        setType: string;
+        groups: {
+            id?: number;
+            groupName: string;
+            minSelect: number;
+            maxSelect: number;
+            items: {
+                productId: number;
+                priceDiff: number;
+                isDefault: boolean;
+            }[];
+        }[];
+    };
 }
 
 interface Zone { id: number; name: string; }
@@ -38,7 +53,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const [allZones, setAllZones] = useState<Zone[]>([]);
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
     const [selectedZone, setSelectedZone] = useState<number | 'ALL'>('ALL');
-    const [cart, setCart] = useState<{ product: Product; quantity: number }[]>([]);
+    const [cart, setCart] = useState<{ product: Product; quantity: number; itemId?: number; subCheckId?: number; subItems?: any[] }[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string>('Tümü');
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [isSplitPaymentOpen, setIsSplitPaymentOpen] = useState(false);
@@ -275,15 +290,27 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                     .filter((item: any) => item.status === 'ACTIVE')
                                     .forEach((item: any) => {
                                         const product = item.product || { id: item.productId, name: `Ürün #${item.productId}`, price: item.unitPrice };
-                                        const existing = newCart.find(c => c.product.id === product.id);
-                                        if (existing) {
+                                        
+                                        // If it's a child item, don't add it as a top-level product in the merged view
+                                        // unless we are specifically looking for it (but usually we want to group by parent)
+                                        if (item.parentItemId) return;
+
+                                        // For Sets, we might not want to merge if they are unique instances
+                                        // But for now, let's keep the merging logic but add subItems to the cart item
+                                        const existing = newCart.find(c => c.product.id === product.id && !item.parentItemId);
+                                        
+                                        // Get children for this specific item
+                                        const children = check.items.filter((sub: any) => sub.parentItemId === item.id);
+
+                                        if (existing && !product.isSet) {
                                             existing.quantity += item.quantity;
                                         } else {
                                             newCart.push({
                                                 product,
                                                 quantity: item.quantity,
                                                 itemId: item.id,
-                                                subCheckId: check.id
+                                                subCheckId: check.id,
+                                                subItems: children
                                             });
                                         }
                                     });
@@ -296,13 +323,17 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                         const activeCheck = flat.find((s: any) => s.id === activeSubCheckId);
                         if (activeCheck && activeCheck.items) {
                             const newCart = activeCheck.items
-                                .filter((item: any) => item.status === 'ACTIVE')
-                                .map((item: any) => ({
-                                    product: item.product || { id: item.productId, name: `Ürün #${item.productId}`, price: item.unitPrice },
-                                    quantity: item.quantity,
-                                    itemId: item.id,
-                                    subCheckId: activeCheck.id
-                                }));
+                                .filter((item: any) => item.status === 'ACTIVE' && !item.parentItemId)
+                                .map((item: any) => {
+                                    const children = activeCheck.items.filter((sub: any) => sub.parentItemId === item.id);
+                                    return {
+                                        product: item.product || { id: item.productId, name: `Ürün #${item.productId}`, price: item.unitPrice },
+                                        quantity: item.quantity,
+                                        itemId: item.id,
+                                        subCheckId: activeCheck.id,
+                                        subItems: children
+                                    };
+                                });
                             setCart(newCart);
                             setActiveOrderIds([activeCheck.id]);
                         } else {
@@ -386,7 +417,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const handleCheckout = async (paymentMethod: 'Nakit' | 'Kart' | 'Parçalı', cashAmount: number = 0, creditAmount: number = 0) => {
         if (!selectedTable) return;
 
-        const itemsToPay = cart.filter(item => selectedPosItems.includes(item.product.id));
+        const itemsToPay = cart.filter(item => selectedPosItems.includes(item.itemId || item.product.id));
         if (itemsToPay.length === 0) {
             toastSwal({ icon: 'warning', title: 'Ödenecek ürün seçmediniz!' });
             return;
@@ -737,12 +768,25 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                             <p>{t('noProductAdded') || 'Henüz ürün eklenmedi'}</p>
                         </div>
                     ) : (
-                        cart.map((item, index) => (
-                            <div key={index} className="flex flex-col gap-2 p-3 bg-white/50 dark:bg-slate-800/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
-                                <div className="flex justify-between items-start">
-                                    <span className="block font-medium text-slate-800 dark:text-slate-200">{item.product.name} <span className="text-sm text-indigo-500 font-bold ml-1">x{item.quantity}</span></span>
-                                    <span className="font-bold text-slate-800 dark:text-slate-100">₺{item.quantity * item.product.price}</span>
+                        cart.map((item: any, index) => (
+                            <div key={index} className="flex flex-col gap-1">
+                                <div className="flex flex-col gap-2 p-3 bg-white/50 dark:bg-slate-800/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
+                                    <div className="flex justify-between items-start">
+                                        <span className="block font-medium text-slate-800 dark:text-slate-200">{item.product.name} <span className="text-sm text-indigo-500 font-bold ml-1">x{item.quantity}</span></span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-100">₺{item.quantity * item.product.price}</span>
+                                    </div>
                                 </div>
+                                {item.subItems && item.subItems.length > 0 && (
+                                    <div className="ml-6 flex flex-col gap-1 mb-2">
+                                        {item.subItems.map((sub: any, sIdx: number) => (
+                                            <div key={sIdx} className="text-xs font-bold text-slate-400 dark:text-slate-500 flex items-center gap-2">
+                                                <i className="fat fa-caret-right"></i>
+                                                <span>{sub.product?.name || `Ürün #${sub.productId}`}</span>
+                                                {sub.unitPrice > 0 && <span className="text-indigo-400">(+₺{sub.unitPrice})</span>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         ))
                     )}
@@ -853,7 +897,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     <button
                         onClick={() => {
                             setIsCheckoutOpen(true);
-                            setSelectedPosItems(cart.map(i => i.product.id));
+                            setSelectedPosItems(cart.map(i => i.itemId || i.product.id));
                         }}
                         className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold text-lg shadow-lg shadow-blue-500/30 transition-all active:scale-[0.98] disabled:opacity-50 disabled:grayscale"
                         disabled={cart.length === 0}
@@ -883,27 +927,45 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
                             <div className="overflow-y-auto p-4 bg-slate-50/50 dark:bg-slate-900/30">
                                 <div className="space-y-2">
-                                    {cart.map(item => (
-                                        <div
-                                            key={item.product.id}
-                                            onClick={() => {
-                                                if (selectedPosItems.includes(item.product.id)) {
-                                                    setSelectedPosItems(prev => prev.filter(id => id !== item.product.id));
-                                                } else {
-                                                    setSelectedPosItems(prev => [...prev, item.product.id]);
-                                                }
-                                            }}
-                                            className={`flex justify-between items-center p-3 rounded-2xl cursor-pointer transition-all border ${selectedPosItems.includes(item.product.id) ? 'bg-indigo-50/80 border-indigo-200 dark:bg-indigo-500/20 dark:border-indigo-500/30' : 'bg-white border-transparent dark:bg-slate-800 opacity-60'}`}
-                                        >
-                                            <div className="flex items-center gap-4">
-                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-colors ${selectedPosItems.includes(item.product.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700'}`}>
-                                                    {selectedPosItems.includes(item.product.id) && <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
+                                    {cart.map((item, idx) => {
+                                        const uniqueKey = item.itemId || `cart-${item.product.id}-${idx}`;
+                                        const isSelected = selectedPosItems.includes(item.itemId || item.product.id);
+                                        return (
+                                            <div key={uniqueKey} className="flex flex-col gap-1">
+                                                <div
+                                                    onClick={() => {
+                                                        const id = item.itemId || item.product.id;
+                                                        if (selectedPosItems.includes(id)) {
+                                                            setSelectedPosItems(prev => prev.filter(pId => pId !== id));
+                                                        } else {
+                                                            setSelectedPosItems(prev => [...prev, id]);
+                                                        }
+                                                    }}
+                                                    className={`flex justify-between items-center p-3 rounded-2xl cursor-pointer transition-all border ${isSelected ? 'bg-indigo-50/80 border-indigo-200 dark:bg-indigo-500/20 dark:border-indigo-500/30' : 'bg-white border-transparent dark:bg-slate-800 opacity-60'}`}
+                                                >
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-colors ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700'}`}>
+                                                            {isSelected && <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
+                                                        </div>
+                                                        <span className="font-bold text-slate-700 dark:text-slate-200">{item.product.name} <span className="text-sm font-extrabold text-indigo-500 bg-indigo-100 dark:bg-indigo-500/20 dark:text-indigo-300 px-2 py-0.5 rounded-full ml-1">x{item.quantity}</span></span>
+                                                    </div>
+                                                    <span className="font-bold text-slate-800 dark:text-slate-100">₺{(item.product.price * item.quantity * 1.1).toFixed(2)}</span>
                                                 </div>
-                                                <span className="font-bold text-slate-700 dark:text-slate-200">{item.product.name} <span className="text-sm font-extrabold text-indigo-500 bg-indigo-100 dark:bg-indigo-500/20 dark:text-indigo-300 px-2 py-0.5 rounded-full ml-1">x{item.quantity}</span></span>
+                                                {/* Display sub-items if present */}
+                                                {(item as any).subItems && (item as any).subItems.length > 0 && (
+                                                    <div className="ml-10 space-y-1 mb-2">
+                                                        {(item as any).subItems.map((sub: any, sIdx: number) => (
+                                                            <div key={sIdx} className="text-[10px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-2">
+                                                                <i className="fat fa-caret-right"></i>
+                                                                <span>{sub.product?.name || sub.productId}</span>
+                                                                {sub.unitPrice > 0 && <span className="text-indigo-400">(+₺{sub.unitPrice})</span>}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
-                                            <span className="font-bold text-slate-800 dark:text-slate-100">₺{(item.product.price * item.quantity * 1.1).toFixed(2)}</span>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
 

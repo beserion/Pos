@@ -228,8 +228,8 @@ export function PageClient() {
                 unit: 'piece',
                 isQuickSale: true,
                 isIngredient: false,
-                productTypeId: 0,
-                outputProfileId: 0,
+                productTypeId: null,
+                outputProfileId: null,
                 recipes: [],
                 modifiers: []
             });
@@ -309,6 +309,9 @@ export function PageClient() {
                         <button onClick={() => router.push(`/${locale}/admin/departments`)} className="px-6 py-3 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
                             <i className="fat fa-layer-group text-lg"></i> Kategoriler
                         </button>
+                        <button onClick={() => router.push(`/${locale}/admin/products/set-menus`)} className="px-6 py-3 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
+                            <i className="fat fa-layer-group text-lg"></i> {t('setMenus')}
+                        </button>
                         <button onClick={() => openModal()} className="px-6 py-3 bg-teal-50 dark:bg-teal-500/10 border border-teal-200 dark:border-teal-500/20 text-teal-600 dark:text-teal-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-teal-100 dark:hover:bg-teal-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
                             <i className="fat fa-plus-circle text-lg"></i> {t('newProduct')}
                         </button>
@@ -336,6 +339,15 @@ export function PageClient() {
                         </div>
                         <div className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
                             <i className="fat fa-tags text-3xl"></i>
+                        </div>
+                    </div>
+                    <div onClick={() => router.push(`/${locale}/admin/products/set-menus`)} className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:shadow-[0_8px_30px_-5px_rgba(79,70,229,0.3)] hover:scale-[1.02] cursor-pointer">
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('setMenuCount')}</p>
+                            <h3 className="text-3xl font-black text-slate-800 dark:text-white">{products.filter(p => (p as any).isSet).length}</h3>
+                        </div>
+                        <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                            <i className="fat fa-layer-group text-3xl"></i>
                         </div>
                     </div>
                 </div>

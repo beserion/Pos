@@ -18,7 +18,7 @@ export class ProductType {
   name: string;
 
   // Bu cinse bağlı varsayılan çıktı profili
-  @Column({ nullable: true, default: 0 })
+  @Column({ nullable: true })
   outputProfileId: number;
 
   @ManyToOne(() => OutputProfile, { nullable: true, onDelete: 'SET NULL' })

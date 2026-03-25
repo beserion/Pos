@@ -22,7 +22,7 @@ export class ProductsService {
 
     async findAll(): Promise<Product[]> {
         const products = await this.productRepository.find({
-            relations: ['recipes', 'printer', 'productType', 'outputProfile'],
+            relations: ['recipes', 'printer', 'productType', 'outputProfile', 'setMenu', 'setMenu.groups', 'setMenu.groups.items'],
         });
 
         if (products.length > 0) {
@@ -59,7 +59,7 @@ export class ProductsService {
     async findOne(id: number): Promise<Product> {
         const product = await this.productRepository.findOne({
             where: { id },
-            relations: ['recipes', 'printer', 'productType', 'outputProfile'],
+            relations: ['recipes', 'printer', 'productType', 'outputProfile', 'setMenu', 'setMenu.groups', 'setMenu.groups.items'],
         });
         if (!product) {
             throw new NotFoundException(`Product with ID ${id} not found`);

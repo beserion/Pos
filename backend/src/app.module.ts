@@ -72,6 +72,9 @@ import { ZReport } from './reports/z-report.entity';
 import { AuditLog } from './reports/audit-log.entity';
 import { ProductType } from './product-types/product-type.entity';
 import { OutputProfile } from './output-profiles/output-profile.entity';
+import { SetMenu } from './products/set-menu.entity';
+import { SetGroup } from './products/set-group.entity';
+import { SetGroupItem } from './products/set-group-item.entity';
 import { ProductTypesModule } from './product-types/product-types.module';
 import { OutputProfilesModule } from './output-profiles/output-profiles.module';
 import { OrderRoutingModule } from './order-routing/order-routing.module';
@@ -138,6 +141,9 @@ import { ScheduleModule } from '@nestjs/schedule';
             ProductType,
             OutputProfile,
             TransferLog,
+            SetMenu,
+            SetGroup,
+            SetGroupItem,
           ],
           synchronize: true, // Auto-sync enabled by user permission
           logging: true,

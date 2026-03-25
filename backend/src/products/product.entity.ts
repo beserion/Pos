@@ -16,6 +16,8 @@ import type { Recipe } from '../recipes/recipe.entity';
 import type { Modifier } from '../modifiers/modifier.entity';
 import type { ProductType } from '../product-types/product-type.entity';
 import type { OutputProfile } from '../output-profiles/output-profile.entity';
+import { SetMenu } from './set-menu.entity';
+import { OneToOne } from 'typeorm';
 
 @Entity('products')
 export class Product {
@@ -43,7 +45,7 @@ export class Product {
   @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
   imageUrl: string;
 
-  @Column({ nullable: true , default: 0 })
+  @Column({ nullable: true })
   printerId: number;
 
   @Column('decimal', { precision: 10, scale: 2, default: 0, nullable: true })
@@ -61,8 +63,14 @@ export class Product {
   @Column({ default: false })
   isIngredient: boolean;
 
+  @Column({ default: false })
+  isSet: boolean;
+
+  @OneToOne(() => SetMenu, (setMenu) => setMenu.product, { cascade: true })
+  setMenu: SetMenu;
+
   // Ürün Cinsi (zorunlu)
-  @Column({ nullable: true, default: 0 })
+  @Column({ nullable: true })
   productTypeId: number;
 
   @ManyToOne('ProductType', { nullable: true, onDelete: 'SET NULL' })
@@ -70,7 +78,7 @@ export class Product {
   productType: ProductType;
 
   // Stok Kartı bazında çıktı profili override (en yüksek öncelik)
-  @Column({ nullable: true, default: 0 })
+  @Column({ nullable: true })
   outputProfileId: number;
 
   @ManyToOne('OutputProfile', { nullable: true, onDelete: 'SET NULL' })

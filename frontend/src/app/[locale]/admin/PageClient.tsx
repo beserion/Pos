@@ -29,6 +29,7 @@ export function PageClient() {
         { key: 'WAREHOUSES', title: tAdmin('warehouses'), subtitle: tAdmin('warehousesDesc'), path: `/${locale}/admin/warehouses`, icon: 'fa-warehouse-full', color: 'text-amber-500' },
         { key: 'SALES', title: 'POS Kasa Yönetimi', subtitle: 'Kasa terminallerini ve yazıcılarını yönet', path: `/${locale}/admin/cash-registers`, icon: 'fa-cash-register', color: 'text-emerald-500' },
         { key: 'PRODUCTS', title: tAdmin('products'), subtitle: tAdmin('productsDesc'), path: `/${locale}/admin/products`, icon: 'fa-mug-hot', color: 'text-teal-500' },
+        { key: 'PRODUCTS', title: tAdmin('setMenus'), subtitle: tAdmin('setMenusDesc'), path: `/${locale}/admin/products/set-menus`, icon: 'fa-layer-group', color: 'text-indigo-500' },
         { key: 'MODIFIERS', title: tAdmin('modifiers'), subtitle: tAdmin('modifiersDesc'), path: `/${locale}/admin/modifiers`, icon: 'fa-tags', color: 'text-amber-500' },
         { key: 'INGREDIENTS', title: tAdmin('ingredients'), subtitle: tAdmin('ingredientsDesc'), path: `/${locale}/admin/ingredients`, icon: 'fa-leaf', color: 'text-emerald-500' },
         { key: 'PRINTERS', title: 'Ürün Cinsleri', subtitle: 'Ürün cinslerini tanımla ve çıktı profilleri ata', path: `/${locale}/admin/product-types`, icon: 'fa-shapes', color: 'text-fuchsia-500' },
