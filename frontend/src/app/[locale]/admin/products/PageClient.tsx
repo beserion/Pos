@@ -57,7 +57,7 @@ export function PageClient() {
     const [loading, setLoading] = useState(true);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState<'genel' | 'gorsel' | 'recete' | 'ozellik'>('genel');
+    const [activeTab, setActiveTab] = useState<'genel' | 'gorsel' | 'recete' | 'ozellik' | 'yonlendirme'>('genel');
     const [formData, setFormData] = useState<Product>({
         id: 0,
         name: '',
@@ -467,7 +467,7 @@ export function PageClient() {
             {/* Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xl animate-in fade-in zoom-in duration-300">
-                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-4xl shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col h-[820px] max-h-[90vh]">
+                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-4xl shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col h-[875px] max-h-[90vh]">
                         {/* Modal Header */}
                         <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20 shrink-0 h-[100px]">
                             <div>
@@ -485,6 +485,7 @@ export function PageClient() {
                                 {/* Tabs */}
                                 <div className="flex bg-slate-100 dark:bg-slate-900/50 p-1 mx-8 mt-8 rounded-2xl shrink-0">
                                     <button type="button" onClick={() => setActiveTab('genel')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'genel' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabGeneral')}</button>
+                                    <button type="button" onClick={() => setActiveTab('yonlendirme')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'yonlendirme' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Yönlendirme</button>
                                     <button type="button" onClick={() => setActiveTab('gorsel')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'gorsel' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabImage')}</button>
                                     <button type="button" onClick={() => setActiveTab('recete')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'recete' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabRecipe')}</button>
                                     <button type="button" onClick={() => setActiveTab('ozellik')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'ozellik' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Özellikler</button>
@@ -495,47 +496,6 @@ export function PageClient() {
                                         {activeTab === 'genel' && (
                                             <div className="space-y-6">
                                                 <div className="grid grid-cols-1 gap-6">
-                                                    <div>
-                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">ÜRÜN CİNSİ</label>
-                                                        <div className="relative">
-                                                            <i className="fat fa-shapes absolute left-4 top-4 text-teal-500/50"></i>
-                                                            <select value={formData.productTypeId || ''} onChange={(e) => setFormData({ ...formData, productTypeId: e.target.value ? parseInt(e.target.value) : 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                                <option value="">Cins Seçin (Zorunlu)</option>
-                                                                {productTypes.map(pt => (
-                                                                    <option key={pt.id} value={pt.id}>{pt.name}</option>
-                                                                ))}
-                                                            </select>
-                                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                                        </div>
-                                                    </div>
-
-                                                    <div>
-                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">ÇIKTI PROFİLİ OVERRIDE</label>
-                                                        <div className="relative">
-                                                            <i className="fat fa-route absolute left-4 top-4 text-teal-500/50"></i>
-                                                            <select value={formData.outputProfileId || ''} onChange={(e) => setFormData({ ...formData, outputProfileId: e.target.value ? parseInt(e.target.value) : 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                                <option value="">Varsayılanı Kullan</option>
-                                                                {outputProfiles.map(op => (
-                                                                    <option key={op.id} value={op.id}>{op.name}</option>
-                                                                ))}
-                                                            </select>
-                                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                                        </div>
-                                                    </div>
-
-                                                    <div>
-                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCategory')}</label>
-                                                        <div className="relative">
-                                                            <i className="fat fa-folder-tree absolute left-4 top-4 text-teal-500/50"></i>
-                                                            <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                                <option value="">{t('selectCategory')}</option>
-                                                                {categoryOptions.map(cat => (
-                                                                    <option key={cat.value} value={cat.value}>{cat.value}</option>
-                                                                ))}
-                                                            </select>
-                                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                                        </div>
-                                                    </div>
 
                                                     <div>
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelName')}</label>
@@ -596,56 +556,101 @@ export function PageClient() {
                                                     </div>
                                                 </div>
 
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                                    <div>
-                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelPrinter')}</label>
-                                                        <div className="relative">
-                                                            <i className="fat fa-print absolute left-4 top-4 text-teal-500/50"></i>
-                                                            <select value={formData.printerId || ''} onChange={(e) => setFormData({ ...formData, printerId: e.target.value ? parseInt(e.target.value) : null })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                                <option value="">{t('selectPrinter')}</option>
-                                                                {printers.map(printer => (
-                                                                    <option key={printer.id} value={printer.id}>{printer.name}</option>
-                                                                ))}
-                                                            </select>
-                                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                                        </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelPrinter')}</label>
+                                                    <div className="relative">
+                                                        <i className="fat fa-print absolute left-4 top-4 text-teal-500/50"></i>
+                                                        <select value={formData.printerId || ''} onChange={(e) => setFormData({ ...formData, printerId: e.target.value ? parseInt(e.target.value) : null })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                            <option value="">{t('selectPrinter')}</option>
+                                                            {printers.map(printer => (
+                                                                <option key={printer.id} value={printer.id}>{printer.name}</option>
+                                                            ))}
+                                                        </select>
+                                                        <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
                                                     </div>
+                                                </div>
 
-                                                    <div>
-                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">ÜRÜN DURUMU & ÖZELLİKLERİ</label>
-                                                        <div className="grid grid-cols-2 gap-4">
-                                                            <div 
-                                                                onClick={() => setFormData({ ...formData, isQuickSale: !formData.isQuickSale })}
-                                                                className={`cursor-pointer group flex flex-col p-4 rounded-3xl border-2 transition-all duration-300 ${formData.isQuickSale ? 'bg-teal-50 border-teal-500 dark:bg-teal-500/10 shadow-lg shadow-teal-500/10' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800 hover:border-teal-300'}`}
-                                                            >
-                                                                <div className="flex items-center justify-between mb-2">
-                                                                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-colors ${formData.isQuickSale ? 'bg-white text-teal-600 shadow-sm' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>
-                                                                        <i className="fat fa-bolt text-lg"></i>
-                                                                    </div>
-                                                                    <div className={`w-5 h-5 rounded-full border-2 transition-all flex items-center justify-center ${formData.isQuickSale ? 'border-teal-600 bg-teal-600' : 'border-slate-300'}`}>
-                                                                        {formData.isQuickSale && <i className="fat fa-check text-[10px] text-white"></i>}
-                                                                    </div>
-                                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">ÜRÜN DURUMU & ÖZELLİKLERİ</label>
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div
+                                                            onClick={() => setFormData({ ...formData, isQuickSale: !formData.isQuickSale })}
+                                                            className={`cursor-pointer group flex items-center p-4 rounded-3xl border-2 transition-all duration-300 ${formData.isQuickSale ? 'bg-teal-50 border-teal-500 dark:bg-teal-500/10 shadow-lg shadow-teal-500/10' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800 hover:border-teal-300'}`}
+                                                        >
+                                                            <div className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center transition-colors ${formData.isQuickSale ? 'bg-white text-teal-600 shadow-sm' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>
+                                                                <i className="fat fa-bolt text-xl"></i>
+                                                            </div>
+                                                            <div className="flex-1 ml-4 text-left">
                                                                 <h6 className={`text-sm font-black mb-0.5 tracking-tight ${formData.isQuickSale ? 'text-teal-900 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>{t('labelQuickSale')}</h6>
                                                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none m-0">Hızlı Satış Aktif</p>
                                                             </div>
+                                                            <div className={`w-6 h-6 shrink-0 rounded-full border-2 transition-all flex items-center justify-center ${formData.isQuickSale ? 'border-teal-600 bg-teal-600' : 'border-slate-300'}`}>
+                                                                {formData.isQuickSale && <i className="fat fa-check text-[10px] text-white"></i>}
+                                                            </div>
+                                                        </div>
 
-                                                            <div 
-                                                                onClick={() => setFormData({ ...formData, isIngredient: !formData.isIngredient })}
-                                                                className={`cursor-pointer group flex flex-col p-4 rounded-3xl border-2 transition-all duration-300 ${formData.isIngredient ? 'bg-emerald-50 border-emerald-500 dark:bg-emerald-500/10 shadow-lg shadow-emerald-500/10' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800 hover:border-emerald-300'}`}
-                                                            >
-                                                                <div className="flex items-center justify-between mb-2">
-                                                                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-colors ${formData.isIngredient ? 'bg-white text-emerald-600 shadow-sm' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>
-                                                                        <i className="fat fa-leaf text-lg"></i>
-                                                                    </div>
-                                                                    <div className={`w-5 h-5 rounded-full border-2 transition-all flex items-center justify-center ${formData.isIngredient ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300'}`}>
-                                                                        {formData.isIngredient && <i className="fat fa-check text-[10px] text-white"></i>}
-                                                                    </div>
-                                                                </div>
+                                                        <div
+                                                            onClick={() => setFormData({ ...formData, isIngredient: !formData.isIngredient })}
+                                                            className={`cursor-pointer group flex items-center p-4 rounded-3xl border-2 transition-all duration-300 ${formData.isIngredient ? 'bg-emerald-50 border-emerald-500 dark:bg-emerald-500/10 shadow-lg shadow-emerald-500/10' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800 hover:border-emerald-300'}`}
+                                                        >
+                                                            <div className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center transition-colors ${formData.isIngredient ? 'bg-white text-emerald-600 shadow-sm' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>
+                                                                <i className="fat fa-leaf text-xl"></i>
+                                                            </div>
+                                                            <div className="flex-1 ml-4 text-left">
                                                                 <h6 className={`text-sm font-black mb-0.5 tracking-tight ${formData.isIngredient ? 'text-emerald-900 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}>{t('labelIngredient')}</h6>
                                                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none m-0">Hammadde Olarak Kullan</p>
                                                             </div>
+                                                            <div className={`w-6 h-6 shrink-0 rounded-full border-2 transition-all flex items-center justify-center ${formData.isIngredient ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300'}`}>
+                                                                {formData.isIngredient && <i className="fat fa-check text-[10px] text-white"></i>}
+                                                            </div>
                                                         </div>
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {activeTab === 'yonlendirme' && (
+                                            <div className="space-y-6">
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">ÜRÜN CİNSİ</label>
+                                                    <div className="relative">
+                                                        <i className="fat fa-shapes absolute left-4 top-4 text-teal-500/50"></i>
+                                                        <select value={formData.productTypeId || ''} onChange={(e) => setFormData({ ...formData, productTypeId: e.target.value ? parseInt(e.target.value) : 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                            <option value="">Cins Seçin (Zorunlu)</option>
+                                                            {productTypes.map(pt => (
+                                                                <option key={pt.id} value={pt.id}>{pt.name}</option>
+                                                            ))}
+                                                        </select>
+                                                        <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">ÇIKTI PROFİLİ OVERRIDE</label>
+                                                    <div className="relative">
+                                                        <i className="fat fa-route absolute left-4 top-4 text-teal-500/50"></i>
+                                                        <select value={formData.outputProfileId || ''} onChange={(e) => setFormData({ ...formData, outputProfileId: e.target.value ? parseInt(e.target.value) : 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                            <option value="">Varsayılanı Kullan</option>
+                                                            {outputProfiles.map(op => (
+                                                                <option key={op.id} value={op.id}>{op.name}</option>
+                                                            ))}
+                                                        </select>
+                                                        <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCategory')}</label>
+                                                    <div className="relative">
+                                                        <i className="fat fa-folder-tree absolute left-4 top-4 text-teal-500/50"></i>
+                                                        <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                            <option value="">{t('selectCategory')}</option>
+                                                            {categoryOptions.map(cat => (
+                                                                <option key={cat.value} value={cat.value}>{cat.value}</option>
+                                                            ))}
+                                                        </select>
+                                                        <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
                                                     </div>
                                                 </div>
                                             </div>

@@ -50,7 +50,7 @@ export function PageClient() {
     const [loading, setLoading] = useState(true);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState<'genel' | 'gorsel' | 'recete' | 'ozellik'>('genel');
+    const [activeTab, setActiveTab] = useState<'genel' | 'gorsel' | 'recete' | 'ozellik' | 'yonlendirme'>('genel');
     const [formData, setFormData] = useState<Product>({
         id: 0,
         name: '',
@@ -355,13 +355,13 @@ export function PageClient() {
                                             <td className="px-8 py-3">
                                                 <div className="flex items-center gap-4">
                                                     {prod.imageUrl ? (
-                                                        <img 
-                                                            src={prod.imageUrl.startsWith('http') || prod.imageUrl.startsWith('data:') || prod.imageUrl.startsWith('/') 
-                                                                ? prod.imageUrl 
+                                                        <img
+                                                            src={prod.imageUrl.startsWith('http') || prod.imageUrl.startsWith('data:') || prod.imageUrl.startsWith('/')
+                                                                ? prod.imageUrl
                                                                 : `/uploads/products/${prod.imageUrl}`
-                                                            } 
-                                                            alt={prod.name} 
-                                                            className="w-12 h-12 rounded-2xl object-cover border border-slate-100 dark:border-slate-700 shadow-sm transition-transform group-hover:scale-110" 
+                                                            }
+                                                            alt={prod.name}
+                                                            className="w-12 h-12 rounded-2xl object-cover border border-slate-100 dark:border-slate-700 shadow-sm transition-transform group-hover:scale-110"
                                                         />
                                                     ) : (
                                                         <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-center font-black text-teal-600 dark:text-teal-400 group-hover:scale-110 transition-transform">
@@ -451,6 +451,7 @@ export function PageClient() {
                                 <div className="flex bg-slate-100 dark:bg-slate-900/50 p-1 mx-8 mt-8 rounded-2xl shrink-0">
                                     <button type="button" onClick={() => setActiveTab('genel')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'genel' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabGeneral')}</button>
                                     <button type="button" onClick={() => setActiveTab('gorsel')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'gorsel' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabImage')}</button>
+                                    <button type="button" onClick={() => setActiveTab('yonlendirme')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'yonlendirme' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Yönlendirme</button>
                                     <button type="button" onClick={() => setActiveTab('recete')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'recete' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabRecipe')}</button>
                                     <button type="button" onClick={() => setActiveTab('ozellik')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'ozellik' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Özellikler</button>
                                 </div>
@@ -568,6 +569,13 @@ export function PageClient() {
                                             </div>
                                         )}
 
+                                        {activeTab === 'yonlendirme' && (
+                                            <div className="space-y-6 min-h-[420px] flex flex-col items-center justify-center opacity-50">
+                                                <i className="fat fa-route text-6xl mb-4 text-slate-300"></i>
+                                                <p className="text-slate-500 font-bold uppercase tracking-widest text-sm text-center">Yönlendi Ayarları<br /><span className="text-[10px] lowercase font-medium">Bu bölüm yakında eklenecektir.</span></p>
+                                            </div>
+                                        )}
+
                                         {activeTab === 'gorsel' && (
                                             <div className="space-y-6">
                                                 <div>
@@ -611,13 +619,13 @@ export function PageClient() {
                                                 >
                                                     {formData.imageUrl ? (
                                                         <div className="relative group w-48 h-48">
-                                                            <img 
-                                                                src={formData.imageUrl.startsWith('http') || formData.imageUrl.startsWith('data:') || formData.imageUrl.startsWith('/') 
-                                                                    ? formData.imageUrl 
+                                                            <img
+                                                                src={formData.imageUrl.startsWith('http') || formData.imageUrl.startsWith('data:') || formData.imageUrl.startsWith('/')
+                                                                    ? formData.imageUrl
                                                                     : `/uploads/products/${formData.imageUrl}`
-                                                                } 
-                                                                alt={t('preview')} 
-                                                                className="w-full h-full object-cover rounded-2xl shadow-lg" 
+                                                                }
+                                                                alt={t('preview')}
+                                                                className="w-full h-full object-cover rounded-2xl shadow-lg"
                                                             />
                                                             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex items-center justify-center backdrop-blur-sm">
                                                                 <div className="text-white text-center">
