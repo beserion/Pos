@@ -57,6 +57,8 @@ async function bootstrap() {
       'http://127.0.0.1:3000',
       'https://api.posnetx.com',
       'https://posnetx.com',
+      'https://apitest.posnetx.com',
+      'https://test.posnetx.com',
     ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
