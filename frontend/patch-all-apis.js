@@ -18,7 +18,7 @@ function walk(dir) {
     return results;
 }
 
-const files = walk('d:/GitHub/POSAPP/frontend/src');
+const files = walk(path.join(__dirname, 'src'));
 let changedCount = 0;
 
 const dynamicApiUrl = "(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))";
