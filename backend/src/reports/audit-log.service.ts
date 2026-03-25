@@ -70,12 +70,10 @@ export class AuditLogService {
     if (filters.tableNo) qb.andWhere('al.tableNo LIKE :tableNo', { tableNo: `%${filters.tableNo}%` });
 
     if (filters.startDate) {
-      qb.andWhere('al.timestamp >= :startDate', { startDate: new Date(filters.startDate) });
+      qb.andWhere('al.timestamp >= :startDate', { startDate: `${filters.startDate} 00:00:00` });
     }
     if (filters.endDate) {
-      const end = new Date(filters.endDate);
-      end.setHours(23, 59, 59, 999);
-      qb.andWhere('al.timestamp <= :endDate', { endDate: end });
+      qb.andWhere('al.timestamp <= :endDate', { endDate: `${filters.endDate} 23:59:59.999` });
     }
 
     const [data, total] = await qb

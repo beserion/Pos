@@ -9,6 +9,7 @@ import { useTheme } from 'next-themes';
 import { useParameters } from '../utils/useParameters';
 import TransferModal from './TransferModal';
 import SetMenuSelectionModal from './SetMenuSelectionModal';
+import ShiftManager from '@/components/shifts/ShiftManager';
 
 interface Modifier {
     id: number;
@@ -70,10 +71,8 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [searchQuery, setSearchQuery] = useState('');
     const [dataLoading, setDataLoading] = useState(true);
 
-    const [waiters, setWaiters] = useState<any[]>([]);
-    const [pinWaiter, setPinWaiter] = useState<any | null>(null);
-    const [pinCode, setPinCode] = useState('');
-    const [isPinRequired, setIsPinRequired] = useState(true);
+    const [activeShift, setActiveShift] = useState<any | null>(null);
+    const [activeCashRegister, setActiveCashRegister] = useState<any | null>(null);
 
     const [noteModalItem, setNoteModalItem] = useState<OrderItem | null>(null);
     const [tempNote, setTempNote] = useState('');
@@ -130,76 +129,8 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         if (!loading && !user) router.push(`/${locale}/login`);
         if (!loading && user) {
             fetchData();
-            const cachedSession = sessionStorage.getItem('posActiveSession');
-            if (cachedSession) {
-                try {
-                    const sessionData = JSON.parse(cachedSession);
-                    setPinWaiter(sessionData);
-                    setIsPinRequired(false);
-                } catch (e) {
-                    console.error('Error parsing POS session:', e);
-                }
-            }
         }
-    }, [user, loading]); // router kasıtlı olarak çıkarıldı — her render'da yeni ref döner, sonsuz döngüye yol açar
-
-    // ─── Hareketsizlik zamanlayıcısı ─────────────────────────────────
-    useEffect(() => {
-        const timeoutMinutes = params.screen_timeout;
-        if (!timeoutMinutes || timeoutMinutes <= 0) return; // 0 = kapalı
-
-        const timeoutMs = timeoutMinutes * 1000; // artık saniye cinsinden
-        let timer: ReturnType<typeof setTimeout>;
-
-        const resetTimer = () => {
-            clearTimeout(timer);
-            timer = setTimeout(() => {
-                // Zaman aşımı — PIN ekranına kilitle
-                setIsPinRequired(true);
-                sessionStorage.removeItem('posActiveSession');
-            }, timeoutMs);
-        };
-
-        const events = ['mousemove', 'mousedown', 'touchstart', 'keydown', 'click', 'scroll'];
-        events.forEach(e => window.addEventListener(e, resetTimer, { passive: true }));
-        resetTimer(); // İlk başlatma
-
-        return () => {
-            clearTimeout(timer);
-            events.forEach(e => window.removeEventListener(e, resetTimer));
-        };
-    }, [params.screen_timeout]); // isPinRequired'a bağlı değil — her pin girişinde yeniden başlar
-
-    const handlePinSubmit = async (val: string) => {
-        try {
-            const loggedInUser = await loginPinOnly(val);
-            if (loggedInUser) {
-                setPinWaiter(loggedInUser);
-                setIsPinRequired(false);
-                setPinCode('');
-                // Save to shared session
-                sessionStorage.setItem('posActiveSession', JSON.stringify(loggedInUser));
-                toastSwal({ icon: 'success', title: `${tc('success')}, ${loggedInUser.firstName}` });
-            } else {
-                setPinCode('');
-                showSwal({ icon: 'error', title: t('invalidPin') || 'Hatalı PIN', text: t('invalidPinDesc') || 'Lütfen tekrar deneyin.' });
-            }
-        } catch (e) {
-            setPinCode('');
-            showSwal({ icon: 'error', title: t('invalidPin') || 'Hatalı PIN', text: t('invalidPinDesc') || 'Lütfen tekrar deneyin.' });
-        }
-    };
-
-    const handlePinClick = (num: string) => {
-        const newPin = pinCode + num;
-        if (newPin.length <= 4) {
-            setPinCode(newPin);
-            if (newPin.length === 4) {
-                handlePinSubmit(newPin);
-            }
-        }
-    };
-
+    }, [user, loading]);
 
     const formatTime = (dateStr?: string) => {
         if (!dateStr) return '';
@@ -369,7 +300,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             } else {
                 const orderPayload = {
                     tableId: selectedTable.id,
-                    userId: pinWaiter?.id || user?.id,
+                    userId: activeShift?.user?.id || activeShift?.userId || user?.id || user?.sub,
                     totalAmount: cart.reduce((sum, item) => sum + ((item.product.price + (item.extraPrice || 0)) * item.quantity), 0),
                     status: 'NEW',
                     items: cart.map(item => ({
@@ -432,7 +363,6 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             setSelectedTable(null);
             setActiveTab('tables');
             fetchData(); // Refresh table status
-            setIsPinRequired(true);
         } catch (error) {
             showSwal({
                 icon: 'error',
@@ -646,11 +576,18 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                         )}
 
 
-                        <button
-                            onClick={() => { setIsPinRequired(true); setPinWaiter(null); }}
-                            className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-all bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 backdrop-blur-md px-5 py-2.5 rounded-full border border-emerald-500/20 shadow-sm active:scale-95">
-                            <i className="fat fa-users text-emerald-500"></i> Garson
-                        </button>
+                        <ShiftManager
+                            user={user}
+                            apiUrl={API_URL}
+                            onShiftOpen={(shift: any, cashRegister: any) => {
+                                setActiveShift(shift);
+                                setActiveCashRegister(cashRegister);
+                            }}
+                            onShiftClose={() => {
+                                setActiveShift(null);
+                                setActiveCashRegister(null);
+                            }}
+                        />
 
                         <button
                             onClick={onSwitchToPos}
@@ -680,8 +617,6 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                 {theme === 'dark' ? '☀️' : '🌙'}
                             </button>
                         )} */}
-
-
                     </div>
                 </div>
 
@@ -1085,71 +1020,6 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                 )}
                             </button>
                         </div>
-                    </div>
-                </div>
-            )}
-
-            {/* PIN Entry Overlay */}
-            {isPinRequired && (
-                <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4">
-                    <div className="w-full max-w-md bg-slate-900 rounded-[40px] shadow-2xl p-8 flex flex-col items-center relative overflow-hidden border border-white/10">
-                        {/* Decorative Background for Dark Mode */}
-                        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-emerald-500/5 blur-[80px] pointer-events-none"></div>
-
-                        <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mb-6 border border-emerald-500/30">
-                            <span className="text-4xl">🔐</span>
-                        </div>
-
-                        <h2 className="text-2xl font-black text-white mb-2 uppercase tracking-tight">Garson Girişi</h2>
-                        <p className="text-slate-400 mb-8 text-center px-4">Lütfen işleme devam etmek için 4 haneli PIN kodunuzu girin.</p>
-
-                        <div className="flex items-center justify-center gap-4 mb-10">
-                            {[0, 1, 2, 3].map(i => (
-                                <div
-                                    key={i}
-                                    className={`w-4 h-4 rounded-full border-2 border-emerald-500/50 transition-all duration-300 ${pinCode.length > i ? 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.8)] scale-110' : 'bg-slate-800'}`}
-                                />
-                            ))}
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-6 w-full max-w-[280px]">
-                            {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(n => (
-                                <button
-                                    key={n}
-                                    onClick={() => handlePinClick(n)}
-                                    className="w-16 h-16 rounded-full bg-slate-800 hover:bg-slate-700 text-2xl font-black text-white transition-all active:scale-90 border border-white/5 shadow-lg"
-                                >
-                                    {n}
-                                </button>
-                            ))}
-                            <button
-                                onClick={() => setPinCode('')}
-                                className="w-16 h-16 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-400 transition-colors bg-slate-800/50 hover:bg-rose-500/10 border border-white/5"
-                            >
-                                <i className="fat fa-xmark text-xl"></i>
-                            </button>
-                            <button
-                                onClick={() => handlePinClick('0')}
-                                className="w-16 h-16 rounded-full bg-slate-800 hover:bg-slate-700 text-2xl font-black text-white transition-all active:scale-90 border border-white/5 shadow-lg"
-                            >
-                                0
-                            </button>
-                            <button
-                                onClick={() => setPinCode(pinCode.slice(0, -1))}
-                                className="w-16 h-16 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-400 transition-colors bg-slate-800/50 hover:bg-rose-500/10 border border-white/5"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414-6.414a2 2 0 012.828 0L21 16.414A2 2 0 0119.586 21H7.414a2 2 0 01-1.414-.586L3 12z" />
-                                </svg>
-                            </button>
-                        </div>
-
-                        <button
-                            onClick={onSwitchToPos}
-                            className="mt-10 text-emerald-500 hover:text-emerald-400 font-bold text-sm uppercase tracking-widest flex items-center gap-2 transition-colors py-2 px-4 rounded-full hover:bg-emerald-500/10"
-                        >
-                            <i className="fat fa-reply"></i> İptal - POS'a Dön
-                        </button>
                     </div>
                 </div>
             )}

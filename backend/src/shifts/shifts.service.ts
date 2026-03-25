@@ -89,7 +89,14 @@ export class ShiftsService {
       openedAt: now,
     });
 
-    return this.shiftRepo.save(shift);
+    const saved = await this.shiftRepo.save(shift);
+    try {
+      await this.shiftRepo.query(`
+        INSERT INTO audit_logs (timestamp, userId, actionType, amount, description, companyId, cashRegisterId, shiftId)
+        VALUES (GETDATE(), @0, 'SHIFT_OPEN', @1, @2, @3, @4, @5)
+      `, [userId, openingCash, `Vardiya Açıldı. Açılış: ${openingCash} ₺`, companyId, cashRegisterId, saved.id]);
+    } catch { /* sessiz geç */ }
+    return saved;
   }
 
   /** Close a specific shift */
@@ -114,7 +121,14 @@ export class ShiftsService {
     shift.cashDifference = Number((closingCash - expectedCash).toFixed(2));
     if (note) shift.note = note;
 
-    return this.shiftRepo.save(shift);
+    const saved = await this.shiftRepo.save(shift);
+    try {
+      await this.shiftRepo.query(`
+        INSERT INTO audit_logs (timestamp, userId, actionType, amount, description, companyId, cashRegisterId, shiftId)
+        VALUES (GETDATE(), @0, 'SHIFT_CLOSE', @1, @2, @3, @4, @5)
+      `, [shift.userId, closingCash, `Vardiya Kapatıldı. Kapanış: ${closingCash} ₺, Beklenen: ${expectedCash} ₺, Fark: ${shift.cashDifference} ₺`, shift.companyId, shift.cashRegisterId, shift.id]);
+    } catch { /* sessiz geç */ }
+    return saved;
   }
 
   /** Transfer a shift to another user (Faz 2 — basic stub) */

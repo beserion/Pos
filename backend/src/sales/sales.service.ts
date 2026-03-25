@@ -435,6 +435,12 @@ export class SalesService implements OnModuleInit {
             description: `İndirim uygulandı: %${discountRate.toFixed(1)} (₺${data.discountAmount}) — Masa: ${data.tableName || '-'}`,
             numericValue: discountRate,
           }).catch(() => {});
+          try {
+            await manager.query(`
+              INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId)
+              VALUES (GETDATE(), @0, 'DISCOUNT', @1, @2, @3, @4, @5)
+            `, [data.waiterId || (data as any).userId || 0, savedSale.id, data.tableName, data.discountAmount, `İndirim uygulandı: %${discountRate.toFixed(1)}`, data.companyId || 1]);
+          } catch { /* sessizce geç */ }
         }
 
         // İkram bildirimi (toplam tutar 0)
@@ -446,6 +452,12 @@ export class SalesService implements OnModuleInit {
             tableName: data.tableName,
             description: `İkram yapıldı — Masa: ${data.tableName || '-'}`,
           }).catch(() => {});
+          try {
+            await manager.query(`
+              INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId)
+              VALUES (GETDATE(), @0, 'COMPLIMENTARY', @1, @2, @3, @4, @5)
+            `, [data.waiterId || (data as any).userId || 0, savedSale.id, data.tableName, 0, `İkram kaydedildi`, data.companyId || 1]);
+          } catch { /* sessizce geç */ }
         }
 
         // Notify real-time listeners (Admin, POS, etc.)
@@ -773,6 +785,14 @@ export class SalesService implements OnModuleInit {
 
     const grandTotal = cashTotal + cardTotal + bankTotal;
 
+    // Denetim logu
+    try {
+      await this.saleRepository.query(`
+        INSERT INTO audit_logs (timestamp, userId, actionType, amount, description, companyId)
+        VALUES (GETDATE(), @0, 'END_OF_DAY', @1, @2, 1)
+      `, [userId || 0, grandTotal, `Gün Sonu Kapatıldı. Toplam Hasılat: ₺${grandTotal}`]);
+    } catch { /* sessizce geç */ }
+
     // Bildirim tetikle (Manuel ve Otomatik Ortak)
     this.alertsService.trigger('END_OF_DAY', {
       triggerUserId: userId,
@@ -811,6 +831,14 @@ export class SalesService implements OnModuleInit {
       tableId,
       description: `Masa #${tableId} adisyonu iptal edildi.`,
     }).catch(() => {});
+
+    // Denetim logu
+    try {
+      await this.saleRepository.query(`
+        INSERT INTO audit_logs (timestamp, actionType, tableNo, description, companyId)
+        VALUES (GETDATE(), 'ADISYON_CANCEL', @0, @1, 1)
+      `, [String(tableId), `Masa #${tableId} toplu adisyon iptali`]);
+    } catch { /* sessiz geç */ }
   }
 
   async cancelItem(itemId: number, reason: string, userId: number): Promise<SaleItem> {
