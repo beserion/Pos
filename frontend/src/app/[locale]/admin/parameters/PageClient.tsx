@@ -46,6 +46,16 @@ const defaultModules: Module[] = [
         ]
     },
     {
+        id: 'half_double', icon: 'fa-glass-half', color: 'text-orange-500', bgGradient: 'from-orange-500/10 to-orange-500/0',
+        borderColor: 'border-orange-500/30', title: 'Yarım / Duble Parametreleri', subtitle: 'Yarım ve duble satış tipi katsayı ayarları',
+        params: [
+            { key: 'half_price_multiplier', label: 'Yarım Fiyat Katsayısı', description: 'Ürün fiyatı bu katsayı ile çarpılır (örn: 0.50 = yarı fiyat)', type: 'number', value: 0.50 },
+            { key: 'double_price_multiplier', label: 'Duble Fiyat Katsayısı', description: 'Ürün fiyatı bu katsayı ile çarpılır (örn: 1.70)', type: 'number', value: 1.70 },
+            { key: 'half_recipe_multiplier', label: 'Yarım Reçete Katsayısı', description: 'Stok düşümü bu katsayı ile çarpılır', type: 'number', value: 0.50 },
+            { key: 'double_recipe_multiplier', label: 'Duble Reçete Katsayısı', description: 'Stok düşümü bu katsayı ile çarpılır', type: 'number', value: 2.00 },
+        ]
+    },
+    {
         id: 'kitchen', icon: 'fa-fire-burner', color: 'text-amber-500', bgGradient: 'from-amber-500/10 to-amber-500/0',
         borderColor: 'border-amber-500/30', title: 'Mutfak (KDS)', subtitle: 'Mutfak ekranı, hazırlık ve modül ayarları',
         params: [

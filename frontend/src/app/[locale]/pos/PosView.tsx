@@ -277,7 +277,9 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                                 quantity: item.quantity,
                                                 itemId: item.id,
                                                 subCheckId: check.id,
-                                                subItems: children
+                                                subItems: children,
+                                                saleType: item.saleType,
+                                                saleTypeMultiplier: item.saleTypeMultiplier
                                             });
                                         }
                                     });
@@ -298,7 +300,9 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                         quantity: item.quantity,
                                         itemId: item.id,
                                         subCheckId: activeCheck.id,
-                                        subItems: children
+                                        subItems: children,
+                                        saleType: item.saleType,
+                                        saleTypeMultiplier: item.saleTypeMultiplier
                                     };
                                 });
                             setCart(newCart);
@@ -708,8 +712,16 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                             <div key={index} className="flex flex-col gap-1">
                                 <div className="flex flex-col gap-2 p-3 bg-white/50 dark:bg-slate-800/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
                                     <div className="flex justify-between items-start">
-                                        <span className="block font-medium text-slate-800 dark:text-slate-200">{item.product.name} <span className="text-sm text-indigo-500 font-bold ml-1">x{item.quantity}</span></span>
-                                        <span className="font-bold text-slate-800 dark:text-slate-100">₺{item.quantity * item.product.price}</span>
+                                        <span className="block font-medium text-slate-800 dark:text-slate-200">
+                                            {item.product.name}
+                                            {item.saleType && item.saleType !== 'STANDARD' && (
+                                                <span className={`text-[10px] ml-1 px-2 py-0.5 rounded-full inline-block font-bold border ${item.saleType === 'HALF' ? 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/20 dark:text-orange-400' : 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-400'}`}>
+                                                    {item.saleType === 'HALF' ? 'YARIM' : 'DUBLE'}
+                                                </span>
+                                            )}
+                                            <span className="text-sm text-indigo-500 font-bold ml-1">x{item.quantity}</span>
+                                        </span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-100">₺{(item.quantity * item.product.price * (item.saleTypeMultiplier || 1)).toFixed(2)}</span>
                                     </div>
                                 </div>
                                 {item.subItems && item.subItems.length > 0 && (

@@ -80,4 +80,11 @@ export class SaleItem {
 
   @Column({ nullable: true, length: 50 })
   menuGroupId: string;
+
+  // --- Satış Tipi (Yarım / Duble) ---
+  @Column({ length: 20, default: 'STANDARD' })
+  saleType: string;
+
+  @Column('decimal', { precision: 5, scale: 2, default: 1.00 })
+  saleTypeMultiplier: number;
 }

@@ -145,6 +145,16 @@ export class SalesService implements OnModuleInit {
         this.logger.log('Adding menuGroupId column to sale_items table...');
         await queryRunner.addColumn('sale_items', { name: 'menuGroupId', type: 'nvarchar', length: '50', isNullable: true, default: null } as any);
       }
+      
+      // --- Satış Tipi (Yarım / Duble) ---
+      if (itemsTable && !itemsTable.columns.find(c => c.name === 'saleType')) {
+        this.logger.log('Adding saleType column to sale_items table...');
+        await queryRunner.addColumn('sale_items', { name: 'saleType', type: 'nvarchar', length: '20', isNullable: false, default: "'STANDARD'" } as any);
+      }
+      if (itemsTable && !itemsTable.columns.find(c => c.name === 'saleTypeMultiplier')) {
+        this.logger.log('Adding saleTypeMultiplier column to sale_items table...');
+        await queryRunner.addColumn('sale_items', { name: 'saleTypeMultiplier', type: 'decimal', precision: 5, scale: 2, isNullable: false, default: 1.00 } as any);
+      }
 
       // transfer_logs tablosu synchronize: true tarafından otomatik oluşturulur
 
@@ -326,6 +336,8 @@ export class SalesService implements OnModuleInit {
               productId: item.productId,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
+              saleType: item.saleType || 'STANDARD',
+              saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
               costPrice: item.costPrice || 0,
               total: item.total || (Number(item.quantity) * Number(item.unitPrice)),
               note: item.note,
@@ -343,6 +355,8 @@ export class SalesService implements OnModuleInit {
                   productId: subItem.productId,
                   quantity: subItem.quantity * item.quantity,
                   unitPrice: subItem.unitPrice || 0,
+                  saleType: item.saleType || 'STANDARD',
+                  saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
                   costPrice: subItem.costPrice || 0,
                   total: (subItem.unitPrice || 0) * (subItem.quantity * item.quantity),
                   parentItemId: savedParent.id,
@@ -366,6 +380,8 @@ export class SalesService implements OnModuleInit {
                     productId: defItem.productId,
                     quantity: item.quantity,
                     unitPrice: defItem.priceDiff || 0,
+                    saleType: item.saleType || 'STANDARD',
+                    saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
                     costPrice: 0,
                     total: (defItem.priceDiff || 0) * item.quantity,
                     parentItemId: savedParent.id,
@@ -502,7 +518,8 @@ export class SalesService implements OnModuleInit {
           saleId: item.sale?.id,
           tableName: item.sale?.tableName,
           productId: targetItem.productId,
-          isMarshed: true
+          isMarshed: true,
+          saleType: targetItem.saleType
         });
       }
 
@@ -516,10 +533,14 @@ export class SalesService implements OnModuleInit {
           ? `${item.sale?.tableName} / ${item.sale.subCheckLabel}`
           : item.sale?.tableName;
 
+        const displayName = targetItem.saleType && targetItem.saleType !== 'STANDARD'
+          ? `${rawProduct[0].name} - ${targetItem.saleType === 'HALF' ? 'Yarım' : 'Duble'}`
+          : rawProduct[0].name;
+
         await this.printersService.printMars({
           tableName: printTableName,
           item: {
-            name: rawProduct[0].name,
+            name: displayName,
             quantity: targetItem.quantity,
             note: targetItem.note,
             printerId: rawProduct[0].printerId
@@ -969,6 +990,15 @@ export class SalesService implements OnModuleInit {
     return updated;
   }
 
+  private async getRecipeMultiplier(saleType: string, manager: any): Promise<number> {
+    if (!saleType || saleType === 'STANDARD') return 1.0;
+    const paramKey = saleType === 'HALF' ? 'half_recipe_multiplier' : 'double_recipe_multiplier';
+    const result = await manager.query(
+      `SELECT value FROM system_parameters WHERE [module] = 'pos' AND [key] = '${paramKey}'`
+    );
+    return result[0]?.value ? Number(result[0].value) : 1.0;
+  }
+
   private async deductStockForSale(sale: Sale, manager: any): Promise<void> {
     const items = sale.items;
     if (!items || items.length === 0) return;
@@ -995,18 +1025,20 @@ export class SalesService implements OnModuleInit {
       const productId = item.productId;
       if (!productId) continue;
 
+      const recipeMultiplier = await this.getRecipeMultiplier(item.saleType, manager);
+
       const recipes = recipeMap.get(productId) || [];
       let totalCost = 0;
 
       if (recipes.length > 0) {
         for (const recipe of recipes) {
-          const qty = Number(recipe.quantity) * Number(item.quantity);
+          const qty = Number(recipe.quantity) * Number(item.quantity) * recipeMultiplier;
           deductions.set(recipe.ingredientId, (deductions.get(recipe.ingredientId) || 0) + qty);
           const ingredientCost = Number(recipe.ingredient?.costPrice || recipe.ingredient?.price || 0);
           totalCost += ingredientCost * Number(recipe.quantity);
         }
       } else {
-        deductions.set(productId, (deductions.get(productId) || 0) + Number(item.quantity));
+        deductions.set(productId, (deductions.get(productId) || 0) + (Number(item.quantity) * recipeMultiplier));
         const rawProduct = await manager.query(`SELECT costPrice FROM products WHERE id = ${productId}`);
         totalCost = Number(rawProduct[0]?.costPrice || 0);
       }
@@ -1104,6 +1136,8 @@ export class SalesService implements OnModuleInit {
           productId: item.productId,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
+          saleType: item.saleType || 'STANDARD',
+          saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
           costPrice: item.costPrice || 0,
           total: item.total || (Number(item.quantity) * Number(item.unitPrice)),
           note: item.note,
@@ -1121,6 +1155,8 @@ export class SalesService implements OnModuleInit {
               productId: subItem.productId,
               quantity: subItem.quantity * item.quantity,
               unitPrice: subItem.unitPrice || 0,
+              saleType: item.saleType || 'STANDARD',
+              saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
               costPrice: subItem.costPrice || 0,
               total: (subItem.unitPrice || 0) * (subItem.quantity * item.quantity),
               parentItemId: savedParent.id,
@@ -1144,6 +1180,8 @@ export class SalesService implements OnModuleInit {
                 productId: defItem.productId,
                 quantity: item.quantity,
                 unitPrice: defItem.priceDiff || 0,
+                saleType: item.saleType || 'STANDARD',
+                saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
                 costPrice: 0,
                 total: (defItem.priceDiff || 0) * item.quantity,
                 parentItemId: savedParent.id,
@@ -1299,6 +1337,8 @@ export class SalesService implements OnModuleInit {
             isReady: item.isReady,
             isPaid: false,
             status: item.status,
+            saleType: item.saleType || 'STANDARD',
+            saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
             sale: savedNewCheck,
           });
           await manager.save(SaleItem, newItem);
@@ -1436,6 +1476,8 @@ export class SalesService implements OnModuleInit {
             isReady: item.isReady,
             isPaid: false,
             status: item.status,
+            saleType: item.saleType || 'STANDARD',
+            saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
             sale: targetSale,
           });
           await manager.save(SaleItem, newItem);
@@ -1687,6 +1729,8 @@ export class SalesService implements OnModuleInit {
             isPaid: false,
             status: item.status,
             productTypeName: item.productTypeName,
+            saleType: item.saleType || 'STANDARD',
+            saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
             sale: targetSaleForItems,
           });
           await manager.save(SaleItem, newItem);
@@ -1900,6 +1944,8 @@ export class SalesService implements OnModuleInit {
             isPaid: false,
             status: item.status,
             productTypeName: item.productTypeName,
+            saleType: item.saleType || 'STANDARD',
+            saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
             sale: targetSale,
           });
           await manager.save(SaleItem, newItem);

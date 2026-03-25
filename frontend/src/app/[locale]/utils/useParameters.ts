@@ -55,6 +55,12 @@ export interface AppParameters {
 
   // Görünüm
   dashboard_column_count: number;
+
+  // Yarım / Duble
+  half_price_multiplier: number;
+  double_price_multiplier: number;
+  half_recipe_multiplier: number;
+  double_recipe_multiplier: number;
 }
 
 // Varsayılan değerler (DB'den gelmezse fallback)
@@ -102,6 +108,11 @@ export const DEFAULT_PARAMS: AppParameters = {
   auto_invoice: false,
 
   dashboard_column_count: 4,
+
+  half_price_multiplier: 0.50,
+  double_price_multiplier: 1.70,
+  half_recipe_multiplier: 0.50,
+  double_recipe_multiplier: 2.00,
 };
 
 // Tip dönüşüm yardımcısı

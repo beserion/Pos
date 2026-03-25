@@ -14,6 +14,7 @@ export class ParametersService implements OnModuleInit {
 
   async onModuleInit() {
     await this.ensureSchema();
+    await this.seedDefaults();
   }
 
   private async ensureSchema() {
@@ -42,6 +43,27 @@ export class ParametersService implements OnModuleInit {
       await queryRunner.release();
     } catch (err) {
       this.logger.error('ensureSchema error:', err);
+    }
+  }
+
+  private async seedDefaults() {
+    try {
+      const defaultParams = [
+        { module: 'pos', key: 'half_price_multiplier', value: '0.50', label: 'Yarım Fiyat Katsayısı', type: 'number', description: 'Yarım satışlarda fiyat çarpanı' },
+        { module: 'pos', key: 'double_price_multiplier', value: '1.70', label: 'Duble Fiyat Katsayısı', type: 'number', description: 'Duble satışlarda fiyat çarpanı' },
+        { module: 'pos', key: 'half_recipe_multiplier', value: '0.50', label: 'Yarım Reçete Katsayısı', type: 'number', description: 'Yarım satışlarda stok düşüm çarpanı' },
+        { module: 'pos', key: 'double_recipe_multiplier', value: '2.00', label: 'Duble Reçete Katsayısı', type: 'number', description: 'Duble satışlarda stok düşüm çarpanı' }
+      ];
+
+      for (const p of defaultParams) {
+        const existing = await this.repo.findOne({ where: { module: p.module, key: p.key } });
+        if (!existing) {
+          await this.repo.save(this.repo.create(p));
+          this.logger.log(`Seeded parameter: ${p.module}.${p.key}`);
+        }
+      }
+    } catch (err) {
+      this.logger.error('seedDefaults error:', err);
     }
   }
 

@@ -18,6 +18,7 @@ interface OrderItem {
     isWaiting: boolean;
     isMarshed: boolean;
     isReady: boolean;
+    saleType?: string;
 }
 
 interface OrderTicket {
@@ -401,7 +402,18 @@ export function PageClient() {
                                                     <span className={`font-black text-lg ${item.isReady ? 'text-rose-600' : (params.mars_enabled && item.isWaiting && !item.isMarshed ? 'text-slate-400' : (params.mars_enabled && item.isWaiting && item.isMarshed ? 'text-rose-500 animate-pulse' : 'text-indigo-500 dark:text-indigo-400'))}`}>{item.quantity}x</span>
                                                     <div className="flex-1">
                                                         <div className="flex items-center justify-between">
-                                                            <span className={`font-bold text-lg ${item.isReady ? 'text-rose-600 line-through decoration-rose-400/50' : (params.mars_enabled && item.isWaiting && !item.isMarshed ? 'text-slate-400' : 'text-slate-800 dark:text-white')}`}>{item.product?.name}</span>
+                                                            <span className={`font-bold text-lg ${item.isReady ? 'text-rose-600 line-through decoration-rose-400/50' : (params.mars_enabled && item.isWaiting && !item.isMarshed ? 'text-slate-400' : 'text-slate-800 dark:text-white')}`}>
+                                                                {item.product?.name}
+                                                                {item.saleType && item.saleType !== 'STANDARD' && (
+                                                                    <span className={`ml-2 text-[10px] font-black uppercase px-2 py-0.5 rounded-full align-middle border ${
+                                                                        item.saleType === 'HALF'
+                                                                            ? 'bg-orange-100 text-orange-700 border-orange-300 dark:bg-orange-500/20 dark:text-orange-400 dark:border-orange-500/40'
+                                                                            : 'bg-indigo-100 text-indigo-700 border-indigo-300 dark:bg-indigo-500/20 dark:text-indigo-400 dark:border-indigo-500/40'
+                                                                    }`}>
+                                                                        {item.saleType === 'HALF' ? 'YARIM' : 'DUBLE'}
+                                                                    </span>
+                                                                )}
+                                                            </span>
                                                             <div className="flex items-center gap-1">
                                                                 {isItemUpdating && <i className="fat fa-spinner animate-spin text-slate-400 text-sm"></i>}
                                                                 {item.isReady && !isItemUpdating && <i className="fat fa-check-double text-rose-500 text-sm"></i>}
