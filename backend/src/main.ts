@@ -50,16 +50,26 @@ async function bootstrap() {
 
   // Enable CORS
   app.enableCors({
-    origin: [
-      'https://pos.beserion.com.tr',
-      'https://posbackend.beserion.com.tr',
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-      'https://api.posnetx.com',
-      'https://posnetx.com',
-      'https://apitest.posnetx.com',
-      'https://test.posnetx.com',
-    ],
+    origin: (origin, callback) => {
+      // Allow all origins in development
+      if (!origin || origin.indexOf('localhost') !== -1 || origin.indexOf('127.0.0.1') !== -1 || origin.indexOf('192.168.') !== -1) {
+        callback(null, true);
+        return;
+      }
+      const allowedOrigins = [
+        'https://pos.beserion.com.tr',
+        'https://posbackend.beserion.com.tr',
+        'https://api.posnetx.com',
+        'https://posnetx.com',
+        'https://apitest.posnetx.com',
+        'https://test.posnetx.com',
+      ];
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
     allowedHeaders: 'Content-Type, Accept, Authorization',
