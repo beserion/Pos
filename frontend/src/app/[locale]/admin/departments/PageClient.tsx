@@ -19,7 +19,7 @@ interface Department {
     outputProfile?: OutputProfile;
 }
 
-const EMPTY: Department = { id: 0, name: '', isActive: true, outputProfileId: 0 };
+const EMPTY: Department = { id: 0, name: '', isActive: true, outputProfileId: null };
 
 export function PageClient() {
     const locale = useLocale();

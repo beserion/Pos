@@ -17,10 +17,10 @@ export class Sale {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ nullable: true , default: 0 })
+  @Column({ nullable: true })
   partnerId: number;
 
-  @Column({ nullable: true , default: 0 })
+  @Column({ nullable: true })
   userId: number; // Operator / Cashier
 
   @Column('decimal', { precision: 12, scale: 2, default: 0 })
@@ -70,10 +70,10 @@ export class Sale {
   @Column({ default: false })
   isEndOfDayClosed: boolean;
 
-  @Column({ nullable: true , default: 0 })
+  @Column({ nullable: true })
   cashRegisterId: number;
 
-  @Column({ nullable: true , default: 0 })
+  @Column({ nullable: true })
   shiftId: number;
 
   // --- İade (Refund) Alanları ---
@@ -86,10 +86,10 @@ export class Sale {
   @Column({ type: 'datetime2', nullable: true })
   refundedAt: Date;
 
-  @Column({ nullable: true , default: 0 })
+  @Column({ nullable: true })
   refundedByUserId: number;
 
-  @Column({ nullable: true , default: 0 })
+  @Column({ nullable: true })
   companyId: number;
 
   // --- Alt Adisyon (Sub-Check) Alanları ---

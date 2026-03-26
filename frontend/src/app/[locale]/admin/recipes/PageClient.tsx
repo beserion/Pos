@@ -10,16 +10,36 @@ interface Product {
     id: number;
     name: string;
     category: string;
+    price: number;
+    isActive: boolean;
 }
 
-interface Recipe {
+interface StockCard {
     id: number;
-    productId: number;
-    product: Product;
-    ingredientId: number;
-    ingredient: Product;
+    name: string;
+    code: string;
+    baseUnit: string;
+    costPerBaseUnit: number;
+    isActive: boolean;
+}
+
+interface RecipeLine {
+    id?: number;
+    stockCardId: number;
+    stockCard?: StockCard;
     quantity: number;
     unit: string;
+    isRequired: boolean;
+    description?: string;
+}
+
+interface RecipeHeader {
+    id: number;
+    productId: number;
+    name: string;
+    isActive: boolean;
+    note: string;
+    lines: RecipeLine[];
 }
 
 export function PageClient() {
@@ -29,130 +49,193 @@ export function PageClient() {
     const router = useRouter();
     const { user } = useAuth();
 
-    const [recipes, setRecipes] = useState<Recipe[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [formData, setFormData] = useState({ id: 0, productId: 0, ingredientId: 0, quantity: 0, unit: 'adet' });
+    const [stockCards, setStockCards] = useState<StockCard[]>([]);
+    const [currentRecipe, setCurrentRecipe] = useState<RecipeHeader | null>(null);
+    const [recipeSummary, setRecipeSummary] = useState<any>(null);
+    
+    const [loading, setLoading] = useState(true);
+    const [loadingRecipe, setLoadingRecipe] = useState(false);
 
     useEffect(() => {
         if (user?.token) {
-            fetchData();
+            fetchInitialData();
         } else if (user === null) {
             setLoading(false);
         }
     }, [user]);
 
-    const fetchData = async () => {
+    const fetchInitialData = async () => {
         if (!user?.token) return;
         try {
-            const [recipeRes, prodRes] = await Promise.all([
-                axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/recipes', { headers: { Authorization: `Bearer ${user.token}` } }),
-                axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/products', { headers: { Authorization: `Bearer ${user.token}` } })
+            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+            const [prodRes, cardsRes] = await Promise.all([
+                axios.get(`${API_URL}/products`, { headers: { Authorization: `Bearer ${user.token}` } }),
+                axios.get(`${API_URL}/stock-cards?limit=1000`, { headers: { Authorization: `Bearer ${user.token}` } })
             ]);
-            setRecipes(recipeRes.data);
+            
             setProducts(prodRes.data);
+            setFilteredProducts(prodRes.data);
+            setStockCards(cardsRes.data.data.filter((c: StockCard) => c.isActive) || []);
         } catch (error) {
-            console.error('Error fetching data', error);
+            console.error('Error fetching initial data', error);
             showSwal({ title: tc('error'), text: tc('loadingError'), icon: 'error' });
         } finally {
             setLoading(false);
         }
     };
 
-    const handleSave = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!user?.token) return;
+    useEffect(() => {
+        const lowerQuery = searchQuery.toLowerCase();
+        setFilteredProducts(products.filter(p => p.name.toLowerCase().includes(lowerQuery) || p.category.toLowerCase().includes(lowerQuery)));
+    }, [searchQuery, products]);
 
-        if (formData.productId === 0 || formData.ingredientId === 0 || formData.quantity <= 0) {
-            showSwal({ title: tc('error'), text: t('validationError'), icon: 'warning' });
+    const handleSelectProduct = async (product: Product) => {
+        setSelectedProduct(product);
+        setLoadingRecipe(true);
+        setCurrentRecipe(null);
+        setRecipeSummary(null);
+
+        try {
+            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+            const [recipeRes, summaryRes] = await Promise.all([
+                axios.get(`${API_URL}/recipes/product/${product.id}`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: null })),
+                axios.get(`${API_URL}/recipes/cost/${product.id}`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: null }))
+            ]);
+
+            if (recipeRes.data) {
+                setCurrentRecipe(recipeRes.data);
+            } else {
+                // Initialize empty recipe for this product
+                setCurrentRecipe({
+                    id: 0,
+                    productId: product.id,
+                    name: `${product.name} Reçetesi`,
+                    isActive: true,
+                    note: '',
+                    lines: []
+                });
+            }
+
+            if (summaryRes.data) {
+                setRecipeSummary(summaryRes.data);
+            }
+        } catch (error) {
+            console.error('Error fetching recipe details', error);
+        } finally {
+            setLoadingRecipe(false);
+        }
+    };
+
+    const handleAddLine = () => {
+        if (!currentRecipe) return;
+        setCurrentRecipe({
+            ...currentRecipe,
+            lines: [
+                ...currentRecipe.lines,
+                { stockCardId: 0, quantity: 1, unit: 'adet', isRequired: true }
+            ]
+        });
+    };
+
+    const handleRemoveLine = (index: number) => {
+        if (!currentRecipe) return;
+        const newLines = [...currentRecipe.lines];
+        newLines.splice(index, 1);
+        setCurrentRecipe({ ...currentRecipe, lines: newLines });
+    };
+
+    const handleLineChange = (index: number, field: keyof RecipeLine, value: any) => {
+        if (!currentRecipe) return;
+        const newLines = [...currentRecipe.lines];
+        const line = { ...newLines[index], [field]: value };
+        
+        // Auto-fill unit based on stock card selection
+        if (field === 'stockCardId' && value > 0) {
+            const card = stockCards.find(c => c.id === parseInt(value));
+            if (card) {
+                line.unit = card.baseUnit;
+            }
+        }
+        
+        newLines[index] = line;
+        setCurrentRecipe({ ...currentRecipe, lines: newLines });
+    };
+
+    const handleSaveRecipe = async () => {
+        if (!currentRecipe || !user?.token) return;
+
+        // Validation
+        const invalidLines = currentRecipe.lines.filter(l => l.stockCardId === 0 || l.quantity <= 0);
+        if (invalidLines.length > 0) {
+            showSwal({ title: 'Hata', text: 'Lütfen tüm reçete satırları için geçerli bir stok kartı ve miktar giriniz.', icon: 'warning' });
             return;
         }
 
         try {
+            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const payload = { ...formData, quantity: Number(formData.quantity) };
-
-            if (formData.id === 0) {
-                const { id, ...postData } = payload;
-                await axios.post((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/recipes', postData, config);
-                toastSwal({ title: tc('success'), text: tc('added'), icon: 'success' });
+            
+            if (currentRecipe.id === 0) {
+                const { id, ...postData } = currentRecipe;
+                await axios.post(`${API_URL}/recipes`, postData, config);
+                toastSwal({ title: tc('success'), text: 'Reçete başarıyla oluşturuldu.', icon: 'success' });
             } else {
-                await axios.put(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/recipes/${formData.id}`, payload, config);
-                toastSwal({ title: tc('success'), text: tc('saved'), icon: 'success' });
+                await axios.put(`${API_URL}/recipes/${currentRecipe.id}`, currentRecipe, config);
+                toastSwal({ title: tc('success'), text: 'Reçete başarıyla güncellendi.', icon: 'success' });
             }
-            setIsModalOpen(false);
-            fetchData();
+            
+            // Reload recipe
+            if (selectedProduct) {
+                handleSelectProduct(selectedProduct);
+            }
         } catch (error: any) {
             console.error('Error saving recipe', error);
             showSwal({ title: tc('error'), text: error?.response?.data?.message || tc('saveError'), icon: 'error' });
         }
     };
 
-    const handleDelete = async (id: number) => {
+    const handleDeleteRecipe = async () => {
+        if (!currentRecipe || currentRecipe.id === 0 || !user?.token) return;
+
         const result = await showSwal({
-            title: t('deleteConfirmTitle'),
-            text: t('deleteConfirmText'),
+            title: 'Reçeteyi Sil',
+            text: 'Bu reçeteyi silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
             icon: 'warning',
             showCancelButton: true,
-            confirmButtonText: tc('confirmDelete'),
+            confirmButtonText: 'Evet, Sil',
             cancelButtonText: tc('cancel')
         });
 
-        if (result.isConfirmed && user?.token) {
+        if (result.isConfirmed) {
             try {
-                await axios.delete(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/recipes/${id}`, {
-                    headers: { Authorization: `Bearer ${user.token}` }
-                });
-                toastSwal({ title: tc('deleted'), text: t('deleteSuccess'), icon: 'success' });
-                fetchData();
-            } catch (error) {
+                const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+                await axios.delete(`${API_URL}/recipes/${currentRecipe.id}`, { headers: { Authorization: `Bearer ${user.token}` } });
+                toastSwal({ title: tc('success'), text: 'Reçete başarıyla silindi.', icon: 'success' });
+                
+                if (selectedProduct) {
+                    handleSelectProduct(selectedProduct);
+                }
+            } catch (error: any) {
                 console.error('Error deleting recipe', error);
-                showSwal({ title: tc('error'), text: tc('deleteError'), icon: 'error' });
+                showSwal({ title: tc('error'), text: error?.response?.data?.message || tc('deleteError'), icon: 'error' });
             }
         }
     };
 
-    const openModal = (recipe?: Recipe) => {
-        if (recipe) {
-            setFormData({
-                id: recipe.id,
-                productId: recipe.productId,
-                ingredientId: recipe.ingredientId,
-                quantity: recipe.quantity,
-                unit: recipe.unit
-            });
-        }
-        else setFormData({ id: 0, productId: 0, ingredientId: 0, quantity: 0, unit: 'adet' });
-        setIsModalOpen(true);
-    };
-
-    // Calculate total recipes per product
-    const uniqueProductsWithRecipes = new Set(recipes.map(r => r.productId)).size;
-
-    const getUnitName = (unit: string | null) => {
-        if (!unit) return '-';
-        switch (unit.toLowerCase()) {
-            case 'gr': return t('unitGr');
-            case 'kg': return t('unitKg');
-            case 'ml': return t('unitMl');
-            case 'lt': return t('unitLt');
-            case 'adet': return t('unitPiece');
-            case 'porsiyon': return t('unitPortion');
-            default: return unit;
-        }
-    };
-
     return (
-        <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">
+        <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">
             {/* Background Decorations */}
             <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-orange-500/5 blur-[120px] pointer-events-none z-0"></div>
             <div className="absolute bottom-[-10%] left-[-5%] w-[40%] h-[40%] rounded-full bg-rose-500/5 blur-[120px] pointer-events-none z-0"></div>
 
-            <div className="w-full px-[50px] py-8 relative z-10">
+            <div className="w-full px-[50px] pt-8 pb-4 relative z-10 shrink-0">
                 {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
                         <i className="fat fa-blender text-orange-500/80 drop-shadow-sm transition-transform hover:scale-110 hover:rotate-3 duration-300 ease-out" style={{ fontSize: '50px' }}></i>
                         <div className="flex flex-col">
@@ -166,195 +249,273 @@ export function PageClient() {
                         </div>
                     </div>
                     <div className="flex gap-3">
-                        <button onClick={() => openModal()} className="px-6 py-3 bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-orange-600 dark:text-orange-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:border-orange-200 dark:hover:border-orange-500/30 transition-all flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98]">
-                            <i className="fat fa-plus-circle text-lg"></i> {t('newRecipeItem')}
-                        </button>
                         <button onClick={() => router.push(`/${locale}/admin`)} className="px-6 py-3 bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98]">
                             <i className="fat fa-reply"></i> {tc('back')}
                         </button>
                     </div>
                 </div>
-
-                {/* KPI Bar */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-orange-300 dark:hover:border-orange-500/40 hover:shadow-[0_8px_30px_-5px_rgba(249,115,22,0.3)] hover:scale-[1.02] cursor-pointer">
-                        <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('totalRecipeItems')}</p>
-                            <h3 className="text-3xl font-black text-slate-800 dark:text-white">{recipes.length}</h3>
-                        </div>
-                        <div className="w-16 h-16 rounded-2xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center text-orange-600 dark:text-orange-400">
-                            <i className="fat fa-scroll text-3xl"></i>
-                        </div>
-                    </div>
-
-                    <div className="relative overflow-hidden bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-rose-300 dark:hover:border-rose-500/40 hover:shadow-[0_8px_30px_-5px_rgba(244,63,94,0.3)] hover:scale-[1.02] cursor-pointer group">
-                        <div className="absolute -bottom-8 -right-8 w-32 h-32 bg-rose-500/10 rounded-full blur-2xl group-hover:bg-rose-500/20 transition-all duration-500"></div>
-                        <div className="relative z-10">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1.5 drop-shadow-sm">
-                                <i className="fat fa-sparkles text-rose-400/70"></i> {t('uniqueProducts')}
-                            </p>
-                            <h3 className="text-3xl font-black text-slate-800 dark:text-white drop-shadow-sm leading-none">{uniqueProductsWithRecipes}</h3>
-                        </div>
-                        <div className="relative z-10 w-16 h-16 rounded-2xl bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center text-rose-600 dark:text-rose-400 shadow-[inset_0_2px_10px_rgba(0,0,0,0.02)] border border-rose-100 dark:border-rose-500/20">
-                            <i className="fat fa-layer-group text-3xl group-hover:scale-110 transition-transform duration-300"></i>
-                        </div>
-                    </div>
-                </div>
-
-                {loading ? (
-                    <div className="flex flex-col items-center justify-center p-20">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mb-4"></div>
-                        <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t('loadingRecipes')}</p>
-                    </div>
-                ) : (
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl rounded-[40px] border border-white dark:border-slate-700/50 overflow-hidden">
-                        <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 340px)' }}>
-                            <table className="w-full text-left border-collapse">
-                                <thead className="sticky top-0 z-10">
-                                    <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-700/50">
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest" style={{ width: '40px' }}>ID</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableProduct')}</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableIngredient')}</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableQuantity')}</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t('tableActions')}</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
-                                    {recipes.map(recipe => (
-                                        <tr key={recipe.id} className="hover:bg-orange-500/5 dark:hover:bg-orange-500/10 transition-all group">
-                                            <td className="px-8 py-3">
-                                                <span className="text-sm font-black text-slate-400">#{recipe.id}</span>
-                                            </td>
-                                            <td className="px-8 py-3 border-r border-slate-50/50 dark:border-slate-700/30">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-center font-black text-orange-600 dark:text-orange-400 group-hover:scale-110 transition-transform">
-                                                        <i className="fat fa-bowl-food"></i>
-                                                    </div>
-                                                    <span className="font-black text-slate-800 dark:text-white tracking-tight leading-none text-lg capitalize">{recipe.product.name}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-8 py-3">
-                                                <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-700">
-                                                    <i className="fat fa-leaf text-emerald-500 text-xs"></i>
-                                                    <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                                                        {recipe.ingredient.name}
-                                                    </span>
-                                                </div>
-                                            </td>
-                                            <td className="px-8 py-3 text-orange-600 dark:text-orange-400 font-black">
-                                                {recipe.quantity} {getUnitName(recipe.unit)}
-                                            </td>
-                                            <td className="px-8 py-3 text-right">
-                                                <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
-                                                    <button onClick={() => openModal(recipe)} className="w-10 h-10 bg-white dark:bg-slate-800 text-blue-600 hover:text-white hover:bg-blue-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center">
-                                                        <i className="fat fa-pen-field text-lg"></i>
-                                                    </button>
-                                                    <button onClick={() => handleDelete(recipe.id)} className="w-10 h-10 bg-white dark:bg-slate-800 text-red-600 hover:text-white hover:bg-red-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center">
-                                                        <i className="fat fa-trash-can text-lg"></i>
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {recipes.length === 0 && (
-                                        <tr>
-                                            <td colSpan={5} className="p-20 text-center">
-                                                <div className="flex flex-col items-center opacity-40">
-                                                    <i className="fat fa-scroll text-6xl mb-4 text-slate-300"></i>
-                                                    <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">{t('notFound')}</p>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                )}
             </div>
 
-            {/* Modal */}
-            {isModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xl">
-                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-4xl shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-300">
-                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20 shrink-0 h-[100px]">
-                            <div>
-                                <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase mb-0">
-                                    <i className={`fat ${formData.id === 0 ? 'fa-plus-circle' : 'fa-pen-to-square'} text-orange-600`}></i>
-                                    {formData.id === 0 ? t('modalNew') : t('modalEdit')}
-                                </h2>
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-0">{t('modalSubtitle')}</p>
+            {loading ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-20 z-10">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mb-4"></div>
+                    <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t('loadingRecipes')}</p>
+                </div>
+            ) : (
+                <div className="flex-1 flex gap-6 px-[50px] pb-8 relative z-10 overflow-hidden min-h-0">
+                    
+                    {/* LEFT PANEL: Products List */}
+                    <div className="w-[380px] flex flex-col bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border border-white dark:border-slate-700/50 rounded-[32px] overflow-hidden shadow-sm shrink-0">
+                        <div className="p-6 border-b border-slate-100 dark:border-slate-700/50 shrink-0">
+                            <h4 className="text-sm font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest mb-4">Ürünler</h4>
+                            <div className="relative">
+                                <i className="fat fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                                <input
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="Ürün Ara..."
+                                    className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold text-sm focus:ring-4 focus:ring-orange-500/10 outline-none transition-shadow text-sm"
+                                />
                             </div>
-                            <button type="button" onClick={() => setIsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white shadow-sm transition-all">&times;</button>
                         </div>
-                        <div className="flex-1 overflow-hidden w-full flex flex-col">
-                            <form onSubmit={handleSave} className="flex flex-col h-full w-full">
-                                <div className="flex-1 overflow-y-auto p-8 space-y-6">
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelProduct')}</label>
-                                        <div className="relative">
-                                            <i className="fat fa-bowl-food absolute left-4 top-4 text-orange-500/50"></i>
-                                            <select required value={formData.productId || ''} onChange={(e) => setFormData({ ...formData, productId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-orange-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                <option value="">{t('selectProduct')}</option>
-                                                {products.map(p => (
-                                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                                ))}
-                                            </select>
-                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                            {filteredProducts.map(product => (
+                                <div 
+                                    key={product.id}
+                                    onClick={() => handleSelectProduct(product)}
+                                    className={`p-4 rounded-2xl cursor-pointer transition-all border flex items-center justify-between ${
+                                        selectedProduct?.id === product.id 
+                                            ? 'bg-orange-50 border-orange-200 dark:bg-orange-500/10 dark:border-orange-500/30 shadow-sm' 
+                                            : 'bg-transparent border-transparent hover:bg-slate-50 hover:border-slate-200 dark:hover:bg-slate-800/50 dark:hover:border-slate-700'
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${selectedProduct?.id === product.id ? 'bg-orange-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                                            <i className="fat fa-bowl-food text-sm"></i>
                                         </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('tableIngredient')}</label>
-                                        <div className="relative">
-                                            <i className="fat fa-leaf absolute left-4 top-4 text-emerald-500/50"></i>
-                                            <select required value={formData.ingredientId || ''} onChange={(e) => setFormData({ ...formData, ingredientId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-orange-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                <option value="">{t('selectIngredient')}</option>
-                                                {products.filter(p => (p as any).isIngredient).map(i => (
-                                                    <option key={i.id} value={i.id}>{i.name}</option>
-                                                ))}
-                                            </select>
-                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelQuantity')}</label>
-                                            <div className="relative">
-                                                <i className="fat fa-scale-balanced absolute left-4 top-4 text-orange-500/50"></i>
-                                                <input type="number" step="0.001" value={formData.quantity} onChange={(e) => setFormData({ ...formData, quantity: parseFloat(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-orange-500/10 outline-none transition-shadow" placeholder="0" />
+                                            <p className={`font-bold text-sm leading-tight ${selectedProduct?.id === product.id ? 'text-orange-900 dark:text-orange-300' : 'text-slate-700 dark:text-slate-300'}`}>
+                                                {product.name}
+                                            </p>
+                                            <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mt-0.5">{product.category}</p>
+                                        </div>
+                                    </div>
+                                    <i className={`fat fa-chevron-right text-xs ${selectedProduct?.id === product.id ? 'text-orange-500' : 'text-slate-300'}`}></i>
+                                </div>
+                            ))}
+                            {filteredProducts.length === 0 && (
+                                <div className="text-center p-8 opacity-50">
+                                    <i className="fat fa-inbox text-3xl text-slate-400 mb-2"></i>
+                                    <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Ürün Bulunamadı</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* RIGHT PANEL: Recipe Details */}
+                    <div className="flex-1 flex flex-col bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border border-white dark:border-slate-700/50 rounded-[32px] overflow-hidden shadow-sm relative">
+                        {!selectedProduct ? (
+                            <div className="flex-1 flex flex-col items-center justify-center p-8 opacity-40">
+                                <i className="fat fa-hand-pointer text-6xl text-slate-400 mb-4 animate-bounce"></i>
+                                <p className="text-sm font-black uppercase tracking-widest text-slate-500">Reçetesini yönetmek için sol menüden bir ürün seçin</p>
+                            </div>
+                        ) : loadingRecipe ? (
+                            <div className="flex-1 flex flex-col items-center justify-center p-20">
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mb-4"></div>
+                                <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Reçete yükleniyor...</p>
+                            </div>
+                        ) : currentRecipe ? (
+                            <div className="flex-1 flex flex-col h-full absolute inset-0">
+                                <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-700/50 flex justify-between items-start shrink-0">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-14 h-14 rounded-2xl bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 flex items-center justify-center shadow-inner">
+                                            <i className="fat fa-receipt text-2xl"></i>
+                                        </div>
+                                        <div>
+                                            <h2 className="text-2xl font-black text-slate-800 dark:text-white capitalize tracking-tighter leading-tight">
+                                                {selectedProduct.name}
+                                            </h2>
+                                            <div className="flex items-center gap-3 mt-1">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                                                    {selectedProduct.category}
+                                                </span>
+                                                <span className="text-[10px] font-bold text-orange-500 uppercase tracking-widest">
+                                                    Satış Fiyatı: ₺{selectedProduct.price.toFixed(2)}
+                                                </span>
                                             </div>
                                         </div>
+                                    </div>
+                                    
+                                    <div className="flex gap-2">
+                                        {currentRecipe.id > 0 && (
+                                            <button onClick={handleDeleteRecipe} className="px-4 py-2 bg-red-50 text-red-600 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-red-500 hover:text-white transition-colors border border-red-100">
+                                                <i className="fat fa-trash-can mr-1"></i> Reçeteyi Sil
+                                            </button>
+                                        )}
+                                        <button onClick={handleSaveRecipe} className="px-6 py-2 bg-gradient-to-r from-orange-500 to-rose-500 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-md hover:shadow-lg transition-all active:scale-95 border border-orange-600">
+                                            <i className="fat fa-floppy-disk mr-1"></i> {tc('save')}
+                                        </button>
+                                    </div>
+                                </div>
 
+                                <div className="flex-1 overflow-y-auto p-8 space-y-8">
+                                    {/* Header Info */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50/50 dark:bg-slate-900/20 p-6 rounded-[24px] border border-slate-100 dark:border-slate-700/50">
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelUnit')}</label>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Reçete Adı (Opsiyonel)</label>
                                             <div className="relative">
-                                                <i className="fat fa-ruler-combined absolute left-4 top-4 text-orange-500/50"></i>
-                                                <select value={formData.unit} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-orange-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                    <option value="kg">{t('unitKg')}</option>
-                                                    <option value="gr">{t('unitGr')}</option>
-                                                    <option value="lt">{t('unitLt')}</option>
-                                                    <option value="ml">{t('unitMl')}</option>
-                                                    <option value="adet">{t('unitPiece')}</option>
-                                                    <option value="porsiyon">{t('unitPortion')}</option>
-                                                </select>
-                                                <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                <i className="fat fa-tag absolute left-4 top-3.5 text-slate-400 text-sm"></i>
+                                                <input 
+                                                    type="text" 
+                                                    value={currentRecipe.name} 
+                                                    onChange={(e) => setCurrentRecipe({ ...currentRecipe, name: e.target.value })} 
+                                                    className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-2 focus:ring-orange-500/50 outline-none transition-shadow" 
+                                                    placeholder="Örn: Standart Margarita" 
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center pt-6">
+                                            <div
+                                                onClick={() => setCurrentRecipe({ ...currentRecipe, isActive: !currentRecipe.isActive })}
+                                                className={`cursor-pointer flex items-center p-2.5 px-4 rounded-xl border transition-all duration-300 ${currentRecipe.isActive ? 'bg-emerald-50 border-emerald-500 dark:bg-emerald-500/10' : 'bg-white border-slate-200 dark:bg-slate-800 dark:border-slate-600'}`}
+                                            >
+                                                <div className={`w-6 h-6 shrink-0 rounded flex items-center justify-center transition-colors ${currentRecipe.isActive ? 'bg-white text-emerald-600' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`}>
+                                                    {currentRecipe.isActive && <i className="fat fa-check text-xs"></i>}
+                                                </div>
+                                                <div className="ml-3 text-left">
+                                                    <h6 className={`text-xs font-black tracking-widest uppercase m-0 ${currentRecipe.isActive ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>Reçete Aktif</h6>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
 
+                                    {/* Lines */}
+                                    <div>
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h4 className="text-sm font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2">
+                                                <i className="fat fa-list-check text-orange-500"></i> İçindekiler / Stok Kullanımı
+                                            </h4>
+                                            <button onClick={handleAddLine} className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-orange-600 dark:text-orange-400 font-bold text-[10px] uppercase tracking-widest rounded-lg shadow-sm hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all flex items-center gap-1.5">
+                                                <i className="fat fa-plus"></i> Satır Ekle
+                                            </button>
+                                        </div>
+
+                                        {currentRecipe.lines.length === 0 ? (
+                                            <div className="text-center p-12 bg-slate-50 dark:bg-slate-900/30 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700">
+                                                <i className="fat fa-scroll text-4xl text-slate-300 mb-3"></i>
+                                                <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Reçete henüz boş. İçerik eklemeye başlayın.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl overflow-hidden shadow-sm">
+                                                <table className="w-full text-left border-collapse">
+                                                    <thead>
+                                                        <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+                                                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[40%]">Stok Kartı (Kullanılacak Hammadde)</th>
+                                                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Miktar</th>
+                                                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Birim</th>
+                                                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Zorunlu</th>
+                                                            <th className="px-6 py-4"></th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                                        {currentRecipe.lines.map((line, idx) => (
+                                                            <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                                                                <td className="px-6 py-3">
+                                                                    <div className="relative">
+                                                                        <select 
+                                                                            value={line.stockCardId || ''} 
+                                                                            onChange={(e) => handleLineChange(idx, 'stockCardId', e.target.value ? parseInt(e.target.value) : 0)} 
+                                                                            className="w-full pl-3 pr-8 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-800 dark:text-white font-bold text-sm focus:border-orange-500 outline-none transition-colors appearance-none"
+                                                                        >
+                                                                            <option value="">Stok Kartı Seçin...</option>
+                                                                            {stockCards.map(c => (
+                                                                                <option key={c.id} value={c.id}>{c.name} ({c.baseUnit})</option>
+                                                                            ))}
+                                                                        </select>
+                                                                        <i className="fat fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] pointer-events-none"></i>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-6 py-3">
+                                                                    <input 
+                                                                        type="number" 
+                                                                        step="0.0001" 
+                                                                        value={line.quantity || ''} 
+                                                                        onChange={(e) => handleLineChange(idx, 'quantity', parseFloat(e.target.value) || 0)} 
+                                                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-800 dark:text-white font-black text-sm text-center focus:border-orange-500 outline-none transition-colors"
+                                                                    />
+                                                                </td>
+                                                                <td className="px-6 py-3">
+                                                                    <input 
+                                                                        type="text" 
+                                                                        value={line.unit || ''} 
+                                                                        onChange={(e) => handleLineChange(idx, 'unit', e.target.value)} 
+                                                                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 font-bold text-xs uppercase focus:outline-none"
+                                                                    />
+                                                                </td>
+                                                                <td className="px-6 py-3 text-center">
+                                                                    <button 
+                                                                        type="button" 
+                                                                        onClick={() => handleLineChange(idx, 'isRequired', !line.isRequired)}
+                                                                        className={`w-8 h-8 rounded-lg flex items-center justify-center mx-auto transition-colors ${line.isRequired ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-slate-100 text-slate-400 dark:bg-slate-800'}`}
+                                                                    >
+                                                                        <i className={`fat ${line.isRequired ? 'fa-check' : 'fa-minus'} text-xs`}></i>
+                                                                    </button>
+                                                                </td>
+                                                                <td className="px-6 py-3 text-right">
+                                                                    <button type="button" onClick={() => handleRemoveLine(idx)} className="w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-colors flex items-center justify-center inline-flex">
+                                                                        <i className="fat fa-trash-can text-sm"></i>
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Cost Summary Section */}
+                                    {recipeSummary && currentRecipe.lines.length > 0 && currentRecipe.id > 0 && (
+                                        <div className="bg-gradient-to-br from-slate-50 to-orange-50 dark:from-slate-900/50 dark:to-orange-900/10 p-6 rounded-[32px] border border-orange-100 dark:border-orange-500/20">
+                                            <h4 className="text-sm font-black text-orange-600 dark:text-orange-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                                                <i className="fat fa-chart-pie"></i> Reçete Maliyet Özeti
+                                            </h4>
+                                            
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-100 dark:border-slate-700">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Satış Fiyatı</p>
+                                                    <p className="text-xl font-black text-slate-800 dark:text-white">₺{recipeSummary.salePrice.toFixed(2)}</p>
+                                                </div>
+                                                <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-rose-100 dark:border-rose-900/30">
+                                                    <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-1">Toplam Maliyet</p>
+                                                    <p className="text-xl font-black text-rose-600 dark:text-rose-400">₺{recipeSummary.totalCost.toFixed(2)}</p>
+                                                </div>
+                                                <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-emerald-100 dark:border-emerald-900/30">
+                                                    <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Kâr Tutarı</p>
+                                                    <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">₺{recipeSummary.profitAmount.toFixed(2)}</p>
+                                                </div>
+                                                <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-indigo-100 dark:border-indigo-900/30">
+                                                    <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1">Cost Oranı</p>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                            <div 
+                                                                className={`h-full rounded-full ${recipeSummary.costPercentage > 50 ? 'bg-rose-500' : recipeSummary.costPercentage > 30 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
+                                                                style={{ width: `${Math.min(recipeSummary.costPercentage, 100)}%` }}
+                                                            ></div>
+                                                        </div>
+                                                        <p className="text-base leading-none font-black text-indigo-600 dark:text-indigo-400">
+                                                            %{recipeSummary.costPercentage.toFixed(1)}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
                                 </div>
-                                <div className="p-8 pt-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20 shrink-0 flex justify-between h-[100px] items-center">
-                                    <button type="button" onClick={() => setIsModalOpen(false)} className="w-[200px] py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
-                                        <i className="fat fa-xmark text-lg"></i> {tc('cancel')}
-                                    </button>
-                                    <button type="submit" className="w-[200px] py-4 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-md shadow-orange-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2">
-                                        <i className="fat fa-check text-lg"></i> {t('saveButton')}
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
+                            </div>
+                        ) : null}
                     </div>
                 </div>
             )}

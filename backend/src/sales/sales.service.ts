@@ -15,6 +15,7 @@ import { PartnersService } from '../partners/partners.service';
 import { PrintersService } from '../printers/printers.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AlertsService } from '../alerts/alerts.service';
+import { StockMovementsService } from '../stock-movements/stock-movements.service';
 
 @Injectable()
 export class SalesService implements OnModuleInit {
@@ -34,6 +35,7 @@ export class SalesService implements OnModuleInit {
     private partnersService: PartnersService,
     private printersService: PrintersService,
     private alertsService: AlertsService,
+    private stockMovementsService: StockMovementsService,
   ) { }
 
   async onModuleInit() {
@@ -909,6 +911,21 @@ export class SalesService implements OnModuleInit {
       `, [userId, item.sale?.id, `Ürün #${item.productId}`, item.total, reason || 'İptal edildi']);
     } catch { /* audit log hatası sessizce geç */ }
 
+    // Yeni: Reçete bazlı stok geri yükleme (StockMovement)
+    try {
+      const recipeMultiplier = item.saleTypeMultiplier ? Number(item.saleTypeMultiplier) : 1;
+      await this.stockMovementsService.createReverseConsumption(
+        item.productId,
+        Number(item.quantity),
+        recipeMultiplier,
+        'SALE',
+        item.sale?.id,
+        userId,
+      );
+    } catch (err) {
+      this.logger.warn('StockMovement cancel reverse error (non-fatal):', err?.message);
+    }
+
     this.kitchenGateway.notifySaleUpdate(item.sale as any);
     return updated;
   }
@@ -986,6 +1003,26 @@ export class SalesService implements OnModuleInit {
       `, [userId, saleId, sale.tableName, sale.totalAmount, reason || 'Tam adisyon iadesi']);
     } catch { /* sessizce geç */ }
 
+    // Yeni: Reçete bazlı stok geri yükleme (tüm kalemler için)
+    try {
+      if (sale.items?.length) {
+        for (const item of sale.items) {
+          if (!item.productId) continue;
+          const recipeMultiplier = item.saleTypeMultiplier ? Number(item.saleTypeMultiplier) : 1;
+          await this.stockMovementsService.createReverseConsumption(
+            item.productId,
+            Number(item.quantity),
+            recipeMultiplier,
+            'SALE',
+            saleId,
+            userId,
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.warn('StockMovement refund reverse error (non-fatal):', err?.message);
+    }
+
     this.kitchenGateway.notifySaleUpdate(updated as any);
     return updated;
   }
@@ -1006,6 +1043,7 @@ export class SalesService implements OnModuleInit {
     const productIds = Array.from(new Set(items.map(i => i.productId).filter(Boolean)));
     if (productIds.length === 0) return;
 
+    // ── Legacy stock deduction (old recipe system) ──
     const allRecipes = await manager.getRepository(Recipe).find({
       where: { productId: In(productIds) },
       relations: ['ingredient']
@@ -1051,6 +1089,25 @@ export class SalesService implements OnModuleInit {
 
     for (const [itemId, cost] of itemCostMap.entries()) {
       await manager.getRepository(SaleItem).update(itemId, { costPrice: cost });
+    }
+
+    // ── New: Recipe-based StockMovement creation ──
+    try {
+      for (const item of items) {
+        if (!item.productId) continue;
+        const recipeMultiplier = await this.getRecipeMultiplier(item.saleType, manager);
+        await this.stockMovementsService.createRecipeConsumption(
+          item.productId,
+          Number(item.quantity),
+          recipeMultiplier,
+          'SALE',
+          sale.id,
+          sale.userId || sale.waiterId,
+          manager,
+        );
+      }
+    } catch (err) {
+      this.logger.warn('StockMovement recipe consumption error (non-fatal):', err?.message);
     }
   }
 

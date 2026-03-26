@@ -19,11 +19,13 @@ export class DepartmentsService {
   }
 
   async create(data: Partial<Department>) {
+    if (data.id) delete data.id;
     const dep = this.repository.create(data);
     return this.repository.save(dep);
   }
 
   async update(id: number, data: Partial<Department>) {
+    if (data.id) delete data.id;
     await this.repository.update(id, data);
     return this.findOne(id);
   }

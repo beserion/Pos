@@ -15,6 +15,7 @@ import { Table } from '../tables/table.entity';
 import { User } from '../users/user.entity';
 import { KitchenGateway } from '../orders/kitchen.gateway';
 import { AlertsModule } from '../alerts/alerts.module';
+import { StockMovementsModule } from '../stock-movements/stock-movements.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { AlertsModule } from '../alerts/alerts.module';
     PartnersModule,
     PrintersModule,
     AlertsModule,
+    StockMovementsModule,
   ],
   providers: [SalesService, KitchenGateway],
   controllers: [SalesController],

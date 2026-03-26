@@ -15,14 +15,14 @@ export class Shift {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ default: 0 })
+  @Column()
   userId: number;
 
   @ManyToOne(() => User, { nullable: false })
   @JoinColumn({ name: 'userId' })
   user: User;
 
-  @Column({ default: 0 })
+  @Column()
   cashRegisterId: number;
 
   @ManyToOne(() => CashRegister, { nullable: false })
@@ -53,7 +53,7 @@ export class Shift {
   @Column('decimal', { precision: 12, scale: 2, nullable: true , default: 0 })
   cashDifference: number;
 
-  @Column({ nullable: true , default: 0 })
+  @Column({ nullable: true })
   transferredToUserId: number;
 
   @Column({ length: 500, nullable: true })

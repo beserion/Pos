@@ -16,7 +16,7 @@ export class SaleItem {
   @JoinColumn({ name: 'saleId' })
   sale: Sale;
 
-  @Column({ default: 0 })
+  @Column()
   productId: number;
 
   @Column('decimal', { precision: 10, scale: 2 , default: 0 })
@@ -56,10 +56,10 @@ export class SaleItem {
   @Column({ length: 500, nullable: true })
   refundReason: string;
 
-  @Column({ nullable: true , default: 0 })
+  @Column({ nullable: true })
   cancelledByUserId: number;
 
-  @Column({ nullable: true , default: 0 })
+  @Column({ nullable: true })
   refundedByUserId: number;
 
   // --- Yazdırma / KDS Gönderim Takibi ---
@@ -67,7 +67,7 @@ export class SaleItem {
   isSentToPrinter: boolean;
 
   // Hangi çıktı profiline göre gönderildi
-  @Column({ nullable: true, default: 0 })
+  @Column({ nullable: true })
   sentOutputProfileId: number;
 
   // Ürün cinsi (raporlama için snapshot)

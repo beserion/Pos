@@ -52,7 +52,10 @@ export class ParametersService implements OnModuleInit {
         { module: 'pos', key: 'half_price_multiplier', value: '0.50', label: 'Yarım Fiyat Katsayısı', type: 'number', description: 'Yarım satışlarda fiyat çarpanı' },
         { module: 'pos', key: 'double_price_multiplier', value: '1.70', label: 'Duble Fiyat Katsayısı', type: 'number', description: 'Duble satışlarda fiyat çarpanı' },
         { module: 'pos', key: 'half_recipe_multiplier', value: '0.50', label: 'Yarım Reçete Katsayısı', type: 'number', description: 'Yarım satışlarda stok düşüm çarpanı' },
-        { module: 'pos', key: 'double_recipe_multiplier', value: '2.00', label: 'Duble Reçete Katsayısı', type: 'number', description: 'Duble satışlarda stok düşüm çarpanı' }
+        { module: 'pos', key: 'double_recipe_multiplier', value: '2.00', label: 'Duble Reçete Katsayısı', type: 'number', description: 'Duble satışlarda stok düşüm çarpanı' },
+        { module: 'inventory', key: 'stock_restore_on_cancel', value: 'true', label: 'İptal/İade Stok Geri Yükleme', type: 'boolean', description: 'İptal veya iade durumunda stok otomatik geri yüklensin mi?' },
+        { module: 'inventory', key: 'default_warehouse_id', value: '0', label: 'Varsayılan Depo', type: 'number', description: 'Varsayılan depo ID (0 = belirtilmemiş)' },
+        { module: 'inventory', key: 'blind_count_default', value: 'false', label: 'Kör Sayım Varsayılanı', type: 'boolean', description: 'Sayım başlatılırken kör sayım seçili mi?' },
       ];
 
       for (const p of defaultParams) {

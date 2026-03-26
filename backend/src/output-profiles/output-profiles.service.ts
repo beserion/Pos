@@ -28,16 +28,22 @@ export class OutputProfilesService {
   }
 
   async create(data: Partial<OutputProfile>): Promise<OutputProfile> {
-    if (data.mainPrinterId === 0 || data.mainPrinterId as any === '') data.mainPrinterId = null as any;
-    if (data.infoPrinterId === 0 || data.infoPrinterId as any === '') data.infoPrinterId = null as any;
+    if (data.mainPrinterId === 0 || (data.mainPrinterId as any) === '') data.mainPrinterId = null as any;
+    if (data.infoPrinterId === 0 || (data.infoPrinterId as any) === '') data.infoPrinterId = null as any;
     
+    // SQL Server'da identity column hatası almamak için
+    if (data.id) delete data.id;
+
     const profile = this.repo.create(data);
     return this.repo.save(profile);
   }
 
   async update(id: number, data: Partial<OutputProfile>): Promise<OutputProfile> {
-    if (data.mainPrinterId === 0 || data.mainPrinterId as any === '') data.mainPrinterId = null as any;
-    if (data.infoPrinterId === 0 || data.infoPrinterId as any === '') data.infoPrinterId = null as any;
+    if (data.mainPrinterId === 0 || (data.mainPrinterId as any) === '') data.mainPrinterId = null as any;
+    if (data.infoPrinterId === 0 || (data.infoPrinterId as any) === '') data.infoPrinterId = null as any;
+
+    // SQL Server'da identity column hatası almamak için
+    if (data.id) delete data.id;
 
     await this.findOne(id);
     await this.repo.update(id, data);
