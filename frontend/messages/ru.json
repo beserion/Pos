@@ -367,7 +367,7 @@
         "labelName": "Название продукта",
         "labelSku": "Штрих-код (SKU)",
         "labelPrice": "Цена (₽)",
-        "labelCategory": "Категория",
+        "labelCategory": "Категория/Группа продуктов",
         "selectCategory": "Выберите категорию",
         "labelCost": "Цена за единицу (₽)",
         "labelMinStock": "Мин. запас",

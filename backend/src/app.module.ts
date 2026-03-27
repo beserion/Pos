@@ -78,6 +78,17 @@ import { SetGroupItem } from './products/set-group-item.entity';
 import { ProductTypesModule } from './product-types/product-types.module';
 import { OutputProfilesModule } from './output-profiles/output-profiles.module';
 import { OrderRoutingModule } from './order-routing/order-routing.module';
+import { StockCardsModule } from './stock-cards/stock-cards.module';
+import { StockMovementsModule } from './stock-movements/stock-movements.module';
+import { InventoryModule } from './inventory/inventory.module';
+
+import { StockCard } from './stock-cards/stock-card.entity';
+import { UnitConversion } from './stock-cards/unit-conversion.entity';
+import { RecipeHeader } from './recipes/recipe-header.entity';
+import { RecipeLine } from './recipes/recipe-line.entity';
+import { StockMovement } from './stock-movements/stock-movement.entity';
+import { InventorySession } from './inventory/inventory-session.entity';
+import { InventorySessionLine } from './inventory/inventory-session-line.entity';
 
 import { ScheduleModule } from '@nestjs/schedule';
 
@@ -144,6 +155,13 @@ import { ScheduleModule } from '@nestjs/schedule';
             SetMenu,
             SetGroup,
             SetGroupItem,
+            StockCard,
+            UnitConversion,
+            RecipeHeader,
+            RecipeLine,
+            StockMovement,
+            InventorySession,
+            InventorySessionLine,
           ],
           synchronize: true, // Auto-sync enabled by user permission
           logging: true,
@@ -203,6 +221,9 @@ import { ScheduleModule } from '@nestjs/schedule';
     ProductTypesModule,
     OutputProfilesModule,
     OrderRoutingModule,
+    StockCardsModule,
+    StockMovementsModule,
+    InventoryModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -267,6 +267,30 @@ export function PageClient() {
         }
     };
 
+    const generateSku = (categoryName: string) => {
+        if (!categoryName) return '';
+        // İlk 3 karakter (Türkçe karakter uyumu için toLocaleLowerCase('tr'))
+        const prefix = categoryName.substring(0, 3).toLocaleLowerCase('tr');
+        const sameCategorySkus = products
+            .filter(p => p.sku && p.sku.toLocaleLowerCase('tr').startsWith(`${prefix}-`))
+            .map(p => {
+                const parts = p.sku.split('-');
+                return parseInt(parts[1]) || 0;
+            });
+        const maxNumber = sameCategorySkus.length > 0 ? Math.max(...sameCategorySkus) : 0;
+        const nextNumber = maxNumber + 1;
+        const suffix = nextNumber.toString().padStart(4, '0');
+        return `${prefix}-${suffix}`;
+    };
+
+    const handleCategoryChange = (val: string) => {
+        let newSku = formData.sku;
+        if (formData.id === 0 && val) {
+            newSku = generateSku(val);
+        }
+        setFormData({ ...formData, category: val, sku: newSku });
+    };
+
     const categoryOptions = departments.filter(d => d.isActive).map(d => ({ key: d.name, value: d.name }));
 
     const unitOptions = [
@@ -508,6 +532,32 @@ export function PageClient() {
 
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                                     <div>
+                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">ÜRÜN CİNSİ</label>
+                                                        <div className="relative">
+                                                            <i className="fat fa-shapes absolute left-4 top-4 text-teal-500/50"></i>
+                                                            <select value={formData.productTypeId || ''} onChange={(e) => setFormData({ ...formData, productTypeId: e.target.value ? parseInt(e.target.value) : 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                                <option value="">Cins Seçin (Zorunlu)</option>
+                                                                {productTypes.map(pt => (
+                                                                    <option key={pt.id} value={pt.id}>{pt.name}</option>
+                                                                ))}
+                                                            </select>
+                                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCategory')}</label>
+                                                        <div className="relative">
+                                                            <i className="fat fa-folder-tree absolute left-4 top-4 text-teal-500/50"></i>
+                                                            <select value={formData.category} onChange={(e) => handleCategoryChange(e.target.value)} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                                <option value="">{t('selectCategory')}</option>
+                                                                {categoryOptions.map(cat => (
+                                                                    <option key={cat.value} value={cat.value}>{cat.value}</option>
+                                                                ))}
+                                                            </select>
+                                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                        </div>
+                                                    </div>
+                                                    <div>
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelSku')}</label>
                                                         <div className="relative">
                                                             <i className="fat fa-barcode-read absolute left-4 top-4 text-teal-500/50"></i>
@@ -614,19 +664,7 @@ export function PageClient() {
 
                                         {activeTab === 'yonlendirme' && (
                                             <div className="space-y-6">
-                                                <div>
-                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">ÜRÜN CİNSİ</label>
-                                                    <div className="relative">
-                                                        <i className="fat fa-shapes absolute left-4 top-4 text-teal-500/50"></i>
-                                                        <select value={formData.productTypeId || ''} onChange={(e) => setFormData({ ...formData, productTypeId: e.target.value ? parseInt(e.target.value) : 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                            <option value="">Cins Seçin (Zorunlu)</option>
-                                                            {productTypes.map(pt => (
-                                                                <option key={pt.id} value={pt.id}>{pt.name}</option>
-                                                            ))}
-                                                        </select>
-                                                        <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                                    </div>
-                                                </div>
+
                                                 <div>
                                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">ÇIKTI PROFİLİ OVERRIDE</label>
                                                     <div className="relative">
@@ -640,19 +678,7 @@ export function PageClient() {
                                                         <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
                                                     </div>
                                                 </div>
-                                                <div>
-                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCategory')}</label>
-                                                    <div className="relative">
-                                                        <i className="fat fa-folder-tree absolute left-4 top-4 text-teal-500/50"></i>
-                                                        <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                            <option value="">{t('selectCategory')}</option>
-                                                            {categoryOptions.map(cat => (
-                                                                <option key={cat.value} value={cat.value}>{cat.value}</option>
-                                                            ))}
-                                                        </select>
-                                                        <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                                    </div>
-                                                </div>
+
                                             </div>
                                         )}
 

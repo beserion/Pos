@@ -13,11 +13,11 @@ export class Department {
   @ManyToOne(() => Location, { nullable: true })
   location: Location;
 
-  @Column({ nullable: true , default: 0 })
+  @Column({ nullable: true })
   locationId: number;
 
   // Stok Grubu bazında çıktı profili override
-  @Column({ nullable: true, default: 0 })
+  @Column({ nullable: true })
   outputProfileId: number;
 
   @ManyToOne('OutputProfile', { nullable: true, onDelete: 'SET NULL' })

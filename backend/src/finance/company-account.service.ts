@@ -26,11 +26,13 @@ export class CompanyAccountService {
   }
 
   async create(data: Partial<CompanyAccount>): Promise<CompanyAccount> {
+    if (data.id) delete data.id;
     const account = this.accountRepository.create(data);
     return await this.accountRepository.save(account);
   }
 
   async update(id: number, data: Partial<CompanyAccount>): Promise<CompanyAccount> {
+    if (data.id) delete data.id;
     await this.findOne(id);
     await this.accountRepository.update(id, data);
     return this.findOne(id);

@@ -77,6 +77,7 @@ export class FinanceService {
   async create(data: Partial<AccountTransaction>, manager?: any): Promise<AccountTransaction> {
     const repo = manager ? manager.getRepository(AccountTransaction) : this.transactionRepository;
     
+    if (data.id) delete data.id;
     (data as any).partnerId = data.partnerId || null;
     (data as any).userId = data.userId || null;
     (data as any).companyAccountId = data.companyAccountId || null;
@@ -135,6 +136,7 @@ export class FinanceService {
     id: number,
     data: Partial<AccountTransaction>,
   ): Promise<AccountTransaction> {
+    if (data.id) delete data.id;
     await this.findOne(id);
     await this.transactionRepository.update(id, data);
     return this.findOne(id);

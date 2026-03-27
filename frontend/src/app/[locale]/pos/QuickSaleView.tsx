@@ -62,10 +62,6 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [cart, setCart] = useState<CartItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'CASH' | 'CREDIT_CARD'>('CASH');
-    const [pinCashier, setPinCashier] = useState<any | null>(null);
-    const [pinCode, setPinCode] = useState('');
-    const [isPinRequired, setIsPinRequired] = useState(true);
-    const { loginPinOnly } = useAuth();
 
     const [activeShift, setActiveShift] = useState<any | null>(null);
     const [activeCashRegister, setActiveCashRegister] = useState<any | null>(null);
@@ -122,42 +118,9 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
         if (!authLoading && !user) router.push(`/${locale}/login`);
         if (user) {
             fetchData();
-            const cachedCashier = sessionStorage.getItem('posActiveSession');
-            if (cachedCashier) {
-                setPinCashier(JSON.parse(cachedCashier));
-                setIsPinRequired(false);
-            }
         }
     }, [user, authLoading, locale]);
 
-    const handlePinSubmit = async (val: string) => {
-        try {
-            const loggedInUser = await loginPinOnly(val);
-            if (loggedInUser) {
-                setPinCashier(loggedInUser);
-                setIsPinRequired(false);
-                setPinCode('');
-                sessionStorage.setItem('posActiveSession', JSON.stringify(loggedInUser));
-                toastSwal({ icon: 'success', title: `${loggedInUser.firstName}` });
-            } else {
-                setPinCode('');
-                showSwal({ icon: 'error', title: t('invalidPin') || 'Hatalı PIN', text: t('invalidPinDesc') || 'Lütfen tekrar deneyin.' });
-            }
-        } catch (e) {
-            setPinCode('');
-            showSwal({ icon: 'error', title: t('invalidPin') || 'Hatalı PIN', text: t('invalidPinDesc') || 'Lütfen tekrar deneyin.' });
-        }
-    };
-
-    const handlePinClick = (num: string) => {
-        const newPin = pinCode + num;
-        if (newPin.length <= 4) {
-            setPinCode(newPin);
-            if (newPin.length === 4) {
-                handlePinSubmit(newPin);
-            }
-        }
-    };
 
     const filteredProducts = useMemo(() => {
         return products.filter(p => {
@@ -230,7 +193,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 status: 'COMPLETED',
                 tableName: 'QUICKSALE',
                 description: 'Perakende Müşteri',
-                waiterId: pinCashier?.id || user?.id,
+                waiterId: activeShift?.user?.id || activeShift?.userId || user?.id || user?.sub,
                 items: cart.map(item => ({
                     productId: item.product.id,
                     quantity: item.quantity,
@@ -245,7 +208,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
             // Prepare Print Data
             const printData = {
                 companyName: 'ANTIGRAVITY POS',
-                cashierName: pinCashier?.firstName || user?.name || 'Kasiyer',
+                cashierName: activeShift?.user?.firstName || user?.firstName || user?.name || 'Kasiyer',
                 date: new Date(),
                 items: cart.map(item => ({
                     name: item.product.name,
@@ -560,60 +523,6 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 </div>
             </div>
 
-            {/* PIN Entry Overlay */}
-            {isPinRequired && (
-                <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4">
-                    <div className="w-full max-w-md flex flex-col items-center">
-                        <div className="w-24 h-24 bg-orange-500/20 rounded-[32px] flex items-center justify-center mb-8 border border-orange-500/20 shadow-2xl shadow-orange-500/10">
-                            <i className="fat fa-bolt text-5xl text-orange-500"></i>
-                        </div>
-
-                        <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-tighter">HIZLI SATIŞ GİRİŞİ</h2>
-                        <p className="text-slate-400 font-bold mb-10 tracking-widest text-xs uppercase">Devam etmek için 4 haneli PIN kodunuzu girin</p>
-
-                        <div className="flex items-center justify-center gap-5 mb-12">
-                            {[0, 1, 2, 3].map(i => (
-                                <div
-                                    key={i}
-                                    className={`w-5 h-5 rounded-full border-2 transition-all duration-300 ${pinCode.length > i ? 'bg-orange-500 border-orange-500 shadow-[0_0_20px_rgba(249,115,22,0.6)] scale-110' : 'bg-transparent border-slate-700'}`}
-                                />
-                            ))}
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-6 w-full max-w-[320px]">
-                            {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(n => (
-                                <button
-                                    key={n}
-                                    onClick={() => handlePinClick(n)}
-                                    className="w-20 h-20 rounded-[28px] bg-white/5 hover:bg-white/10 text-3xl font-black text-white transition-all active:scale-90 border border-white/5 shadow-xl backdrop-blur-sm"
-                                >
-                                    {n}
-                                </button>
-                            ))}
-                            <div />
-                            <button
-                                onClick={() => handlePinClick('0')}
-                                className="w-20 h-20 rounded-[28px] bg-white/5 hover:bg-white/10 text-3xl font-black text-white transition-all active:scale-90 border border-white/5 shadow-xl backdrop-blur-sm"
-                            >
-                                0
-                            </button>
-                            <button
-                                onClick={() => setPinCode('')}
-                                className="w-20 h-20 rounded-[28px] flex items-center justify-center text-slate-400 hover:text-rose-400 transition-colors bg-white/5 hover:bg-rose-500/10 border border-white/5"
-                            >
-                                <i className="fat fa-delete-left text-2xl"></i>
-                            </button>
-                        </div>
-
-                        <button
-                            onClick={() => router.push(`/${locale}/dashboard`)}
-                            className="mt-12 text-slate-500 hover:text-white font-bold text-sm uppercase tracking-widest flex items-center gap-2 transition-colors py-3 px-6 rounded-full hover:bg-white/5"
-                        >
-                            <i className="fat fa-reply"></i> İptal - Panoya Dön
-                        </button>
-                    </div>
-                </div>
-            )}
 
             {selectedSetMenuProduct && (
                 <SetMenuSelectionModal

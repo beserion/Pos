@@ -128,8 +128,20 @@ export class ProductsService {
             product.modifiers = fetchedModifiers;
         }
 
+        const oldPrice = parseFloat(String(product.price || 0));
+        const newPrice = data.price !== undefined ? parseFloat(String(data.price)) : oldPrice;
+
         this.productRepository.merge(product, data);
         const savedProduct = await this.productRepository.save(product);
+
+        if (newPrice !== oldPrice) {
+            try {
+                await this.productRepository.query(`
+                    INSERT INTO audit_logs (timestamp, actionType, productName, oldValue, newValue, description, companyId)
+                    VALUES (GETDATE(), 'PRICE_CHANGE', @0, @1, @2, @3, 1)
+                `, [product.name, String(oldPrice), String(newPrice), 'Ürün taban fiyatı güncellendi']);
+            } catch { /* sessiz geç */ }
+        }
 
         if (recipes !== undefined) {
             // Delete existing recipes for this product

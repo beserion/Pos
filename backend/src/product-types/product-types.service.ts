@@ -28,11 +28,13 @@ export class ProductTypesService {
   }
 
   async create(data: Partial<ProductType>): Promise<ProductType> {
+    if (data.id) delete data.id;
     const type = this.repo.create(data);
     return this.repo.save(type);
   }
 
   async update(id: number, data: Partial<ProductType>): Promise<ProductType> {
+    if (data.id) delete data.id;
     await this.findOne(id);
     await this.repo.update(id, data);
     return this.findOne(id);

@@ -15,6 +15,7 @@ import { PartnersService } from '../partners/partners.service';
 import { PrintersService } from '../printers/printers.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AlertsService } from '../alerts/alerts.service';
+import { StockMovementsService } from '../stock-movements/stock-movements.service';
 
 @Injectable()
 export class SalesService implements OnModuleInit {
@@ -34,6 +35,7 @@ export class SalesService implements OnModuleInit {
     private partnersService: PartnersService,
     private printersService: PrintersService,
     private alertsService: AlertsService,
+    private stockMovementsService: StockMovementsService,
   ) { }
 
   async onModuleInit() {
@@ -144,6 +146,16 @@ export class SalesService implements OnModuleInit {
       if (itemsTable && !itemsTable.columns.find(c => c.name === 'menuGroupId')) {
         this.logger.log('Adding menuGroupId column to sale_items table...');
         await queryRunner.addColumn('sale_items', { name: 'menuGroupId', type: 'nvarchar', length: '50', isNullable: true, default: null } as any);
+      }
+      
+      // --- Satış Tipi (Yarım / Duble) ---
+      if (itemsTable && !itemsTable.columns.find(c => c.name === 'saleType')) {
+        this.logger.log('Adding saleType column to sale_items table...');
+        await queryRunner.addColumn('sale_items', { name: 'saleType', type: 'nvarchar', length: '20', isNullable: false, default: "'STANDARD'" } as any);
+      }
+      if (itemsTable && !itemsTable.columns.find(c => c.name === 'saleTypeMultiplier')) {
+        this.logger.log('Adding saleTypeMultiplier column to sale_items table...');
+        await queryRunner.addColumn('sale_items', { name: 'saleTypeMultiplier', type: 'decimal', precision: 5, scale: 2, isNullable: false, default: 1.00 } as any);
       }
 
       // transfer_logs tablosu synchronize: true tarafından otomatik oluşturulur
@@ -326,6 +338,8 @@ export class SalesService implements OnModuleInit {
               productId: item.productId,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
+              saleType: item.saleType || 'STANDARD',
+              saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
               costPrice: item.costPrice || 0,
               total: item.total || (Number(item.quantity) * Number(item.unitPrice)),
               note: item.note,
@@ -343,6 +357,8 @@ export class SalesService implements OnModuleInit {
                   productId: subItem.productId,
                   quantity: subItem.quantity * item.quantity,
                   unitPrice: subItem.unitPrice || 0,
+                  saleType: item.saleType || 'STANDARD',
+                  saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
                   costPrice: subItem.costPrice || 0,
                   total: (subItem.unitPrice || 0) * (subItem.quantity * item.quantity),
                   parentItemId: savedParent.id,
@@ -366,6 +382,8 @@ export class SalesService implements OnModuleInit {
                     productId: defItem.productId,
                     quantity: item.quantity,
                     unitPrice: defItem.priceDiff || 0,
+                    saleType: item.saleType || 'STANDARD',
+                    saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
                     costPrice: 0,
                     total: (defItem.priceDiff || 0) * item.quantity,
                     parentItemId: savedParent.id,
@@ -435,6 +453,12 @@ export class SalesService implements OnModuleInit {
             description: `İndirim uygulandı: %${discountRate.toFixed(1)} (₺${data.discountAmount}) — Masa: ${data.tableName || '-'}`,
             numericValue: discountRate,
           }).catch(() => {});
+          try {
+            await manager.query(`
+              INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId)
+              VALUES (GETDATE(), @0, 'DISCOUNT', @1, @2, @3, @4, @5)
+            `, [data.waiterId || (data as any).userId || 0, savedSale.id, data.tableName, data.discountAmount, `İndirim uygulandı: %${discountRate.toFixed(1)}`, data.companyId || 1]);
+          } catch { /* sessizce geç */ }
         }
 
         // İkram bildirimi (toplam tutar 0)
@@ -446,6 +470,12 @@ export class SalesService implements OnModuleInit {
             tableName: data.tableName,
             description: `İkram yapıldı — Masa: ${data.tableName || '-'}`,
           }).catch(() => {});
+          try {
+            await manager.query(`
+              INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId)
+              VALUES (GETDATE(), @0, 'COMPLIMENTARY', @1, @2, @3, @4, @5)
+            `, [data.waiterId || (data as any).userId || 0, savedSale.id, data.tableName, 0, `İkram kaydedildi`, data.companyId || 1]);
+          } catch { /* sessizce geç */ }
         }
 
         // Notify real-time listeners (Admin, POS, etc.)
@@ -490,7 +520,8 @@ export class SalesService implements OnModuleInit {
           saleId: item.sale?.id,
           tableName: item.sale?.tableName,
           productId: targetItem.productId,
-          isMarshed: true
+          isMarshed: true,
+          saleType: targetItem.saleType
         });
       }
 
@@ -504,10 +535,14 @@ export class SalesService implements OnModuleInit {
           ? `${item.sale?.tableName} / ${item.sale.subCheckLabel}`
           : item.sale?.tableName;
 
+        const displayName = targetItem.saleType && targetItem.saleType !== 'STANDARD'
+          ? `${rawProduct[0].name} - ${targetItem.saleType === 'HALF' ? 'Yarım' : 'Duble'}`
+          : rawProduct[0].name;
+
         await this.printersService.printMars({
           tableName: printTableName,
           item: {
-            name: rawProduct[0].name,
+            name: displayName,
             quantity: targetItem.quantity,
             note: targetItem.note,
             printerId: rawProduct[0].printerId
@@ -773,6 +808,14 @@ export class SalesService implements OnModuleInit {
 
     const grandTotal = cashTotal + cardTotal + bankTotal;
 
+    // Denetim logu
+    try {
+      await this.saleRepository.query(`
+        INSERT INTO audit_logs (timestamp, userId, actionType, amount, description, companyId)
+        VALUES (GETDATE(), @0, 'END_OF_DAY', @1, @2, 1)
+      `, [userId || 0, grandTotal, `Gün Sonu Kapatıldı. Toplam Hasılat: ₺${grandTotal}`]);
+    } catch { /* sessizce geç */ }
+
     // Bildirim tetikle (Manuel ve Otomatik Ortak)
     this.alertsService.trigger('END_OF_DAY', {
       triggerUserId: userId,
@@ -811,6 +854,14 @@ export class SalesService implements OnModuleInit {
       tableId,
       description: `Masa #${tableId} adisyonu iptal edildi.`,
     }).catch(() => {});
+
+    // Denetim logu
+    try {
+      await this.saleRepository.query(`
+        INSERT INTO audit_logs (timestamp, actionType, tableNo, description, companyId)
+        VALUES (GETDATE(), 'ADISYON_CANCEL', @0, @1, 1)
+      `, [String(tableId), `Masa #${tableId} toplu adisyon iptali`]);
+    } catch { /* sessiz geç */ }
   }
 
   async cancelItem(itemId: number, reason: string, userId: number): Promise<SaleItem> {
@@ -859,6 +910,21 @@ export class SalesService implements OnModuleInit {
         VALUES (GETDATE(), @0, 'ITEM_CANCEL', @1, @2, @3, @4, 1)
       `, [userId, item.sale?.id, `Ürün #${item.productId}`, item.total, reason || 'İptal edildi']);
     } catch { /* audit log hatası sessizce geç */ }
+
+    // Yeni: Reçete bazlı stok geri yükleme (StockMovement)
+    try {
+      const recipeMultiplier = item.saleTypeMultiplier ? Number(item.saleTypeMultiplier) : 1;
+      await this.stockMovementsService.createReverseConsumption(
+        item.productId,
+        Number(item.quantity),
+        recipeMultiplier,
+        'SALE',
+        item.sale?.id,
+        userId,
+      );
+    } catch (err) {
+      this.logger.warn('StockMovement cancel reverse error (non-fatal):', err?.message);
+    }
 
     this.kitchenGateway.notifySaleUpdate(item.sale as any);
     return updated;
@@ -937,8 +1003,37 @@ export class SalesService implements OnModuleInit {
       `, [userId, saleId, sale.tableName, sale.totalAmount, reason || 'Tam adisyon iadesi']);
     } catch { /* sessizce geç */ }
 
+    // Yeni: Reçete bazlı stok geri yükleme (tüm kalemler için)
+    try {
+      if (sale.items?.length) {
+        for (const item of sale.items) {
+          if (!item.productId) continue;
+          const recipeMultiplier = item.saleTypeMultiplier ? Number(item.saleTypeMultiplier) : 1;
+          await this.stockMovementsService.createReverseConsumption(
+            item.productId,
+            Number(item.quantity),
+            recipeMultiplier,
+            'SALE',
+            saleId,
+            userId,
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.warn('StockMovement refund reverse error (non-fatal):', err?.message);
+    }
+
     this.kitchenGateway.notifySaleUpdate(updated as any);
     return updated;
+  }
+
+  private async getRecipeMultiplier(saleType: string, manager: any): Promise<number> {
+    if (!saleType || saleType === 'STANDARD') return 1.0;
+    const paramKey = saleType === 'HALF' ? 'half_recipe_multiplier' : 'double_recipe_multiplier';
+    const result = await manager.query(
+      `SELECT value FROM system_parameters WHERE [module] = 'pos' AND [key] = '${paramKey}'`
+    );
+    return result[0]?.value ? Number(result[0].value) : 1.0;
   }
 
   private async deductStockForSale(sale: Sale, manager: any): Promise<void> {
@@ -948,6 +1043,7 @@ export class SalesService implements OnModuleInit {
     const productIds = Array.from(new Set(items.map(i => i.productId).filter(Boolean)));
     if (productIds.length === 0) return;
 
+    // ── Legacy stock deduction (old recipe system) ──
     const allRecipes = await manager.getRepository(Recipe).find({
       where: { productId: In(productIds) },
       relations: ['ingredient']
@@ -967,18 +1063,20 @@ export class SalesService implements OnModuleInit {
       const productId = item.productId;
       if (!productId) continue;
 
+      const recipeMultiplier = await this.getRecipeMultiplier(item.saleType, manager);
+
       const recipes = recipeMap.get(productId) || [];
       let totalCost = 0;
 
       if (recipes.length > 0) {
         for (const recipe of recipes) {
-          const qty = Number(recipe.quantity) * Number(item.quantity);
+          const qty = Number(recipe.quantity) * Number(item.quantity) * recipeMultiplier;
           deductions.set(recipe.ingredientId, (deductions.get(recipe.ingredientId) || 0) + qty);
           const ingredientCost = Number(recipe.ingredient?.costPrice || recipe.ingredient?.price || 0);
           totalCost += ingredientCost * Number(recipe.quantity);
         }
       } else {
-        deductions.set(productId, (deductions.get(productId) || 0) + Number(item.quantity));
+        deductions.set(productId, (deductions.get(productId) || 0) + (Number(item.quantity) * recipeMultiplier));
         const rawProduct = await manager.query(`SELECT costPrice FROM products WHERE id = ${productId}`);
         totalCost = Number(rawProduct[0]?.costPrice || 0);
       }
@@ -991,6 +1089,25 @@ export class SalesService implements OnModuleInit {
 
     for (const [itemId, cost] of itemCostMap.entries()) {
       await manager.getRepository(SaleItem).update(itemId, { costPrice: cost });
+    }
+
+    // ── New: Recipe-based StockMovement creation ──
+    try {
+      for (const item of items) {
+        if (!item.productId) continue;
+        const recipeMultiplier = await this.getRecipeMultiplier(item.saleType, manager);
+        await this.stockMovementsService.createRecipeConsumption(
+          item.productId,
+          Number(item.quantity),
+          recipeMultiplier,
+          'SALE',
+          sale.id,
+          sale.userId || sale.waiterId,
+          manager,
+        );
+      }
+    } catch (err) {
+      this.logger.warn('StockMovement recipe consumption error (non-fatal):', err?.message);
     }
   }
 
@@ -1076,6 +1193,8 @@ export class SalesService implements OnModuleInit {
           productId: item.productId,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
+          saleType: item.saleType || 'STANDARD',
+          saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
           costPrice: item.costPrice || 0,
           total: item.total || (Number(item.quantity) * Number(item.unitPrice)),
           note: item.note,
@@ -1093,6 +1212,8 @@ export class SalesService implements OnModuleInit {
               productId: subItem.productId,
               quantity: subItem.quantity * item.quantity,
               unitPrice: subItem.unitPrice || 0,
+              saleType: item.saleType || 'STANDARD',
+              saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
               costPrice: subItem.costPrice || 0,
               total: (subItem.unitPrice || 0) * (subItem.quantity * item.quantity),
               parentItemId: savedParent.id,
@@ -1116,6 +1237,8 @@ export class SalesService implements OnModuleInit {
                 productId: defItem.productId,
                 quantity: item.quantity,
                 unitPrice: defItem.priceDiff || 0,
+                saleType: item.saleType || 'STANDARD',
+                saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
                 costPrice: 0,
                 total: (defItem.priceDiff || 0) * item.quantity,
                 parentItemId: savedParent.id,
@@ -1271,6 +1394,8 @@ export class SalesService implements OnModuleInit {
             isReady: item.isReady,
             isPaid: false,
             status: item.status,
+            saleType: item.saleType || 'STANDARD',
+            saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
             sale: savedNewCheck,
           });
           await manager.save(SaleItem, newItem);
@@ -1408,6 +1533,8 @@ export class SalesService implements OnModuleInit {
             isReady: item.isReady,
             isPaid: false,
             status: item.status,
+            saleType: item.saleType || 'STANDARD',
+            saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
             sale: targetSale,
           });
           await manager.save(SaleItem, newItem);
@@ -1659,6 +1786,8 @@ export class SalesService implements OnModuleInit {
             isPaid: false,
             status: item.status,
             productTypeName: item.productTypeName,
+            saleType: item.saleType || 'STANDARD',
+            saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
             sale: targetSaleForItems,
           });
           await manager.save(SaleItem, newItem);
@@ -1872,6 +2001,8 @@ export class SalesService implements OnModuleInit {
             isPaid: false,
             status: item.status,
             productTypeName: item.productTypeName,
+            saleType: item.saleType || 'STANDARD',
+            saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
             sale: targetSale,
           });
           await manager.save(SaleItem, newItem);

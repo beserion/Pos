@@ -42,7 +42,7 @@ export function PageClient() {
         { key: 'DELIVERY', title: tAdmin('deliveries'), subtitle: tAdmin('deliveriesDesc'), path: `/${locale}/admin/deliveries`, icon: 'fa-truck-fast', color: 'text-indigo-500' },
         { key: 'WAITER', title: tAdmin('tablet'), subtitle: tAdmin('tabletDesc'), path: `/${locale}/waiter`, icon: 'fa-tablet-screen-button', color: 'text-rose-500' },
         { key: 'SYSTEM', title: 'Parametreler', subtitle: 'Modül bazlı sistem ayarları', path: `/${locale}/admin/parameters`, icon: 'fa-sliders', color: 'text-violet-500' },
-        //{ key: 'ALERTS', title: tDashboard('alerts'), subtitle: tDashboard('alertsDesc'), path: `/${locale}/admin/alerts`, icon: 'fa-bell-on', color: 'text-rose-500' },
+        { key: 'ALERTS', title: tDashboard('alerts'), subtitle: tDashboard('alertsDesc'), path: `/${locale}/admin/alerts`, icon: 'fa-bell-on', color: 'text-rose-500' },
     ];
 
     const filteredSections = sections.filter(sec => hasPermission(`${sec.key}:VIEW`));

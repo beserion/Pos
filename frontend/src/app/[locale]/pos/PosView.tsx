@@ -36,7 +36,7 @@ interface Zone { id: number; name: string; }
 interface Table { id: number; name: string; status: string; waiterName?: string; orderStartTime?: string; currentTotal?: number; zone: { id: number } }
 
 export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { onSwitchToQuickSale: () => void, onSwitchToTakeOrder: () => void }) {
-    const { user, loginPin, logout, loading } = useAuth();
+    const { user, loading } = useAuth();
     const router = useRouter();
     const locale = useLocale();
     const t = useTranslations('Admin');
@@ -59,10 +59,6 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const [isSplitPaymentOpen, setIsSplitPaymentOpen] = useState(false);
     const [splitAmounts, setSplitAmounts] = useState({ cash: 0, creditCard: 0 });
     const [dataLoading, setDataLoading] = useState(true);
-    const [cashiers, setCashiers] = useState<any[]>([]);
-    const [pinCashier, setPinCashier] = useState<any | null>(null);
-    const [pinCode, setPinCode] = useState('');
-    const [isPinRequired, setIsPinRequired] = useState(true);
     const [activeOrderIds, setActiveOrderIds] = useState<number[]>([]);
     const [selectedPosItems, setSelectedPosItems] = useState<number[]>([]);
     const [discount, setDiscount] = useState<number>(0);
@@ -89,22 +85,6 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const [shiftReady, setShiftReady] = useState(false);
 
     const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')));
-
-    const fetchCashiers = async () => {
-        try {
-            const token = (user as any)?.token || localStorage.getItem('token');
-            if (!token) return;
-            const res = await fetch(`${API_URL}/auth/cashiers`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setCashiers(data);
-            }
-        } catch (error) {
-            console.error('Error fetching cashiers:', error);
-        }
-    };
 
     const fetchData = async () => {
         try {
@@ -159,19 +139,6 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
         if (!loading && !user) router.push(`/${locale}/login`);
         if (user) {
             fetchData();
-            fetchCashiers();
-
-            // Check for shared POS session
-            const cachedSession = sessionStorage.getItem('posActiveSession');
-            if (cachedSession) {
-                try {
-                    const sessionData = JSON.parse(cachedSession);
-                    setPinCashier(sessionData);
-                    setIsPinRequired(false);
-                } catch (e) {
-                    console.error('Error parsing POS session:', e);
-                }
-            }
         }
     }, [user, loading, router]);
 
@@ -310,7 +277,9 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                                 quantity: item.quantity,
                                                 itemId: item.id,
                                                 subCheckId: check.id,
-                                                subItems: children
+                                                subItems: children,
+                                                saleType: item.saleType,
+                                                saleTypeMultiplier: item.saleTypeMultiplier
                                             });
                                         }
                                     });
@@ -331,7 +300,9 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                         quantity: item.quantity,
                                         itemId: item.id,
                                         subCheckId: activeCheck.id,
-                                        subItems: children
+                                        subItems: children,
+                                        saleType: item.saleType,
+                                        saleTypeMultiplier: item.saleTypeMultiplier
                                     };
                                 });
                             setCart(newCart);
@@ -381,31 +352,6 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
         };
         fetchTableOrders();
     }, [selectedTable, activeSubCheckId]);
-    const handlePinSubmit = async (val: string) => {
-        if (!pinCashier) return;
-        try {
-            await loginPin(pinCashier.id, val);
-            setIsPinRequired(false);
-            setPinCode('');
-            // Save to shared session
-            sessionStorage.setItem('posActiveSession', JSON.stringify(pinCashier));
-            toastSwal({ icon: 'success', title: `${tc('success')}, ${pinCashier.firstName}` });
-        } catch (e) {
-            setPinCode('');
-            showSwal({ icon: 'error', title: t('invalidPin') || 'Hatalı PIN', text: t('invalidPinDesc') || 'Lütfen tekrar deneyin.' });
-        }
-    };
-
-    const handlePinClick = (num: string) => {
-        const newPin = pinCode + num;
-        if (newPin.length <= 4) {
-            setPinCode(newPin);
-            if (newPin.length === 4) {
-                handlePinSubmit(newPin);
-            }
-        }
-    };
-
     const formatTime = (dateStr?: string) => {
         if (!dateStr) return '';
         const date = new Date(dateStr);
@@ -565,17 +511,11 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                 {activeCashRegister ? activeCashRegister.name : 'KASA POS'}
                             </h3>
                             <h5 className="text-slate-500 text-xs font-medium uppercase tracking-widest leading-tight">
-                                {activeShift ? (pinCashier ? `${pinCashier.firstName} ${pinCashier.lastName || ''}`.trim() : user ? `${(user as any).firstName} ${(user as any).lastName || ''}`.trim() : 'Aktif Kasiyer') : (t('selectTableDesc') || 'İşlem yapmak istediğiniz masayı seçin')}
+                                {activeShift ? (activeShift.user ? `${activeShift.user.firstName} ${activeShift.user.lastName || ''}`.trim() : user ? `${(user as any).firstName} ${(user as any).lastName || ''}`.trim() : 'Aktif Kasiyer') : (t('selectTableDesc') || 'İşlem yapmak istediğiniz masayı seçin')}
                             </h5>
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
-
-                        {/* <button
-                            onClick={() => { setIsPinRequired(true); setPinCashier(null); }}
-                            className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-all bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 backdrop-blur-md px-5 py-2.5 rounded-full border border-rose-500/20 shadow-sm active:scale-95">
-                            <i className="fat fa-users text-rose-500"></i> Kasiyer
-                        </button> */}
 
                         {/* Shift Manager Overlay / Vardiya Kapat Butonu */}
                         <ShiftManager
@@ -772,8 +712,16 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                             <div key={index} className="flex flex-col gap-1">
                                 <div className="flex flex-col gap-2 p-3 bg-white/50 dark:bg-slate-800/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
                                     <div className="flex justify-between items-start">
-                                        <span className="block font-medium text-slate-800 dark:text-slate-200">{item.product.name} <span className="text-sm text-indigo-500 font-bold ml-1">x{item.quantity}</span></span>
-                                        <span className="font-bold text-slate-800 dark:text-slate-100">₺{item.quantity * item.product.price}</span>
+                                        <span className="block font-medium text-slate-800 dark:text-slate-200">
+                                            {item.product.name}
+                                            {item.saleType && item.saleType !== 'STANDARD' && (
+                                                <span className={`text-[10px] ml-1 px-2 py-0.5 rounded-full inline-block font-bold border ${item.saleType === 'HALF' ? 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/20 dark:text-orange-400' : 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-400'}`}>
+                                                    {item.saleType === 'HALF' ? 'YARIM' : 'DUBLE'}
+                                                </span>
+                                            )}
+                                            <span className="text-sm text-indigo-500 font-bold ml-1">x{item.quantity}</span>
+                                        </span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-100">₺{(item.quantity * item.product.price * (item.saleTypeMultiplier || 1)).toFixed(2)}</span>
                                     </div>
                                 </div>
                                 {item.subItems && item.subItems.length > 0 && (
@@ -1327,92 +1275,6 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
             </button> */}
-            {/* PIN Entry Overlay */}
-            {
-                isPinRequired && (
-                    <div className="fixed inset-0 z-[100] bg-slate-900 flex items-center justify-center p-4">
-                        <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-[40px] shadow-2xl p-8 flex flex-col items-center">
-                            <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-500/20 rounded-full flex items-center justify-center mb-6">
-                                <span className="text-4xl">🔐</span>
-                            </div>
-
-                            {!pinCashier ? (
-                                <>
-                                    <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-2 uppercase tracking-tight">{t('cashierSelection') || 'Kasiyer Seçimi'}</h2>
-                                    <p className="text-slate-500 dark:text-slate-400 mb-8">{t('cashierSelectionDesc') || 'Lütfen giriş yapmak için adınızı seçin.'}</p>
-                                    <div className="grid grid-cols-2 w-full gap-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
-                                        {cashiers.map(c => (
-                                            <button
-                                                key={c.id}
-                                                onClick={() => setPinCashier(c)}
-                                                className="w-full py-4 px-6 rounded-2xl bg-slate-50 dark:bg-slate-900/50 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500 text-left font-bold text-slate-800 dark:text-slate-200 transition-all flex items-center justify-between group"
-                                            >
-                                                <span>{c.firstName} {c.lastName}</span>
-                                                <span className="opacity-0 group-hover:opacity-100 transition-opacity">➡️</span>
-                                            </button>
-                                        ))}
-                                        {cashiers.length === 0 && (
-                                            <p className="text-center text-slate-500 italic py-4">{t('noCashierFound') || 'Sistemde kasiyer bulunamadı.'}</p>
-                                        )}
-                                    </div>
-                                </>
-                            ) : (
-                                <>
-                                    <button
-                                        onClick={() => setPinCashier(null)}
-                                        className="absolute top-10 left-10 text-slate-400 hover:text-indigo-500 flex items-center gap-2 font-bold"
-                                    >
-                                        {tc('back')}
-                                    </button>
-                                    <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-2 uppercase tracking-tight">{pinCashier.firstName} {pinCashier.lastName}</h2>
-                                    <p className="text-slate-500 dark:text-slate-400 mb-8">{t('enterPin') || '4 haneli PIN kodunuzu girin.'}</p>
-
-                                    <div className="flex items-center justify-center gap-4 mb-10">
-                                        {[0, 1, 2, 3].map(i => (
-                                            <div
-                                                key={i}
-                                                className={`w-4 h-4 rounded-full border-2 border-indigo-400 ${pinCode.length > i ? 'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]' : 'bg-transparent'}`}
-                                            />
-                                        ))}
-                                    </div>
-
-                                    <div className="grid grid-cols-3 gap-6 w-full max-w-[280px]">
-                                        {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(n => (
-                                            <button
-                                                key={n}
-                                                onClick={() => handlePinClick(n)}
-                                                className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-700 text-2xl font-black text-slate-800 dark:text-white transition-all active:scale-90"
-                                            >
-                                                {n}
-                                            </button>
-                                        ))}
-                                        <div />
-                                        <button
-                                            onClick={() => handlePinClick('0')}
-                                            className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-700 text-2xl font-black text-slate-800 dark:text-white transition-all active:scale-90"
-                                        >
-                                            0
-                                        </button>
-                                        <button
-                                            onClick={() => setPinCode('')}
-                                            className="w-16 h-16 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-500 transition-colors"
-                                        >
-                                            {tc('delete')}
-                                        </button>
-                                    </div>
-                                </>
-                            )}
-
-                            <button
-                                onClick={() => router.push(`/${locale}/dashboard`)}
-                                className="mt-10 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold text-sm uppercase tracking-widest"
-                            >
-                                İptal
-                            </button>
-                        </div>
-                    </div>
-                )
-            }
             {/* Transfer Modal */}
             <TransferModal
                 isOpen={isTransferModalOpen}

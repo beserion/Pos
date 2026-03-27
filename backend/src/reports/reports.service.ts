@@ -234,6 +234,20 @@ export class ReportsService {
       ORDER BY toplam DESC
     `, params);
 
+    // Satış Tipi Kırılımı (Yarım/Duble)
+    const saleTypeRes = await this.dataSource.query(`
+      SELECT p.name as urunAdi,
+        si.saleType,
+        SUM(CAST(si.quantity AS DECIMAL(18,2))) as adet,
+        SUM(CAST(si.total AS DECIMAL(18,2))) as toplam
+      FROM sale_items si
+      JOIN products p ON p.id = si.productId
+      JOIN sales s ON s.id = si.saleId
+      WHERE s.status = 'COMPLETED' AND si.status = 'ACTIVE' ${dateFilter}
+      GROUP BY p.name, si.saleType
+      ORDER BY p.name, si.saleType
+    `, params);
+
     // Grup bazlı satış (kategori)
     const grupRes = await this.dataSource.query(`
       SELECT ISNULL(p.category, 'Diğer') as kategori,
@@ -301,6 +315,12 @@ export class ReportsService {
         urunAdi: u.urunAdi,
         adet: Number(u.adet || 0),
         toplam: Number(u.toplam || 0),
+      })),
+      satisTipiKirilim: saleTypeRes.map((r: any) => ({
+        urunAdi: r.urunAdi,
+        satisTipi: r.saleType === 'HALF' ? 'Yarım' : r.saleType === 'DOUBLE' ? 'Duble' : 'Standart',
+        adet: Number(r.adet || 0),
+        toplam: Number(r.toplam || 0),
       })),
       grupSatisToplam: grupRes.map((g: any) => ({
         kategori: g.kategori,

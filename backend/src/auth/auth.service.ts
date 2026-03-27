@@ -5,6 +5,8 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { UsersService } from '../users/users.service';
 import { AlertsService } from '../alerts/alerts.service';
 import * as bcrypt from 'bcrypt';
@@ -20,6 +22,7 @@ export class AuthService {
     private usersService: UsersService,
     private jwtService: JwtService,
     private alertsService: AlertsService,
+    @InjectDataSource() private dataSource: DataSource,
   ) { }
 
   async validateUser(identifier: string, pass: string): Promise<any> {
@@ -47,6 +50,13 @@ export class AuthService {
       description: `"${identifier}" hesabında ${count}. başarısız giriş denemesi.`,
       numericValue: count,
     }).catch(() => {});
+
+    try {
+      await this.dataSource.query(`
+        INSERT INTO audit_logs (timestamp, actionType, description, companyId)
+        VALUES (GETDATE(), 'FAILED_LOGIN', @0, 1)
+      `, [`Başarısız giriş denemesi: ${identifier}`]);
+    } catch { /* sessiz geç */ }
 
     return null;
   }
@@ -97,6 +107,13 @@ export class AuthService {
       numericValue: count,
     }).catch(() => {});
 
+    try {
+      await this.dataSource.query(`
+        INSERT INTO audit_logs (timestamp, actionType, description, companyId)
+        VALUES (GETDATE(), 'FAILED_LOGIN', @0, 1)
+      `, [`Geçersiz ortak PIN denemesi`]);
+    } catch { /* sessiz geç */ }
+
     return null;
   }
 
@@ -107,6 +124,14 @@ export class AuthService {
       role: user.role?.name,
       cashRegisterId: user.cashRegisterId || null,
     };
+
+    try {
+      await this.dataSource.query(`
+        INSERT INTO audit_logs (timestamp, userId, actionType, description, companyId)
+        VALUES (GETDATE(), @0, 'USER_LOGIN', @1, @2)
+      `, [user.id || 0, `Kullanıcı girişi yapıldı: ${user.firstName} ${user.lastName}`, user.companyId || 1]);
+    } catch { /* sessiz geç */ }
+
     return {
       access_token: this.jwtService.sign(payload),
       user: user,

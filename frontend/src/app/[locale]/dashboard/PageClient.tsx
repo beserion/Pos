@@ -307,7 +307,7 @@ export function PageClient() {
                             onClick={() => router.push(`/${locale}/reports`)}
                         />
                     )}
-                    {/* Alerts/Notifications Card */}
+                    {/* Alerts/Notifications Card
                     {hasPermission('ALERTS:VIEW') && (
                         <DashboardCard
                             title={tDashboard('alerts')}
@@ -317,7 +317,7 @@ export function PageClient() {
                             bg="bg-violet-500"
                             onClick={() => router.push(`/${locale}/admin/alerts`)}
                         />
-                    )}
+                    )} */}
 
                 </div>
 
