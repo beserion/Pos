@@ -50,7 +50,7 @@ async function bootstrap() {
 
   // Enable CORS
   app.enableCors({
-    origin: (origin, callback) => {
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       // Allow all origins in development
       if (!origin || origin.indexOf('localhost') !== -1 || origin.indexOf('127.0.0.1') !== -1 || origin.indexOf('192.168.') !== -1) {
         callback(null, true);
