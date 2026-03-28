@@ -43,15 +43,15 @@ export function PageClient() {
     const containerRef = useRef<HTMLDivElement>(null);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [formData, setFormData] = useState<any>({ 
-        id: 0, 
-        productId: 0, 
-        quantity: 0, 
-        location: '', 
-        lotNumber: '', 
+    const [formData, setFormData] = useState<any>({
+        id: 0,
+        productId: 0,
+        quantity: 0,
+        location: '',
+        lotNumber: '',
         barcode: '',
         description: '',
-        expirationDate: '' 
+        expirationDate: ''
     });
 
     const fetchStocks = async () => {
@@ -126,9 +126,9 @@ export function PageClient() {
             };
 
             if (formData.id === 0) {
-            await axios.post((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/stocks', data, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+                await axios.post((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/stocks', data, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
             } else {
                 await axios.put(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/stocks/${formData.id}`, data, {
                     headers: { Authorization: `Bearer ${token}` }
@@ -180,15 +180,15 @@ export function PageClient() {
                 expirationDate: stock.expirationDate || ''
             });
         } else {
-            setFormData({ 
-                id: 0, 
-                productId: 0, 
-                quantity: 0, 
-                location: '', 
-                lotNumber: '', 
+            setFormData({
+                id: 0,
+                productId: 0,
+                quantity: 0,
+                location: '',
+                lotNumber: '',
                 barcode: '',
                 description: '',
-                expirationDate: '' 
+                expirationDate: ''
             });
         }
         setIsModalOpen(true);
@@ -244,14 +244,29 @@ export function PageClient() {
                     </div>
 
                     <div className="flex gap-3">
-                        <button className="px-5 py-2.5 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md border border-white/50 dark:border-slate-700/50 text-slate-700 dark:text-slate-300 rounded-2xl font-medium hover:bg-white/80 dark:hover:bg-slate-700/80 transition-colors shadow-sm">
-                            Dışa Aktar
+                        <button
+                            onClick={() => router.push(`/${locale}/admin/stock-cards`)}
+                            className="px-6 py-3 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 text-orange-600 dark:text-orange-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-orange-100 dark:hover:bg-orange-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95"
+                        >
+                            <i className="fat fa-boxes-stacked"></i> Stok Kartları
                         </button>
-                        <button 
+                        <button
+                            onClick={() => router.push(`/${locale}/inventory/movements`)}
+                            className="px-6 py-3 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 text-orange-600 dark:text-orange-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-orange-100 dark:hover:bg-orange-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95"
+                        >
+                            <i className="fat fa-exchange text-lg"></i> Stok Hareketleri
+                        </button>
+                        <button
+                            onClick={() => router.push(`/${locale}/inventory/count`)}
+                            className="px-6 py-3 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-blue-600 dark:text-blue-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95"
+                        >
+                            <i className="fat fa-list-check text-lg"></i> Sayım Ekranı
+                        </button>
+                        <button
                             onClick={() => openModal()}
                             className="px-6 py-3 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95"
                         >
-                            <i className="fat fa-plus-circle text-lg"></i> Yeni Ürün Girişi
+                            <i className="fat fa-plus-circle text-lg"></i> Stok Girişi
                         </button>
                         <button
                             onClick={() => router.push(`/${locale}/dashboard`)}
@@ -320,7 +335,7 @@ export function PageClient() {
                         {/* Warehouse Dropdown - Right */}
                         <div className="flex-1 flex justify-end min-w-[200px]">
                             <div className="relative w-48 shrink-0">
-                                <select 
+                                <select
                                     value={selectedLocation}
                                     onChange={(e) => { setSelectedLocation(e.target.value); setPage(1); }}
                                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-white/50 dark:bg-slate-800/50 backdrop-blur-md text-slate-900 dark:text-slate-100 text-sm focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all shadow-inner appearance-none cursor-pointer"
@@ -336,7 +351,7 @@ export function PageClient() {
                             </div>
                         </div>
                     </div>
-                    
+
                     <div ref={containerRef} className="flex-1 overflow-y-auto">
                         <table className="w-full text-left border-collapse min-w-[800px]">
                             <thead className="sticky top-0 z-10 bg-slate-50/80 dark:bg-slate-700/80 backdrop-blur-sm text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-200/50 dark:border-slate-800/50">
@@ -395,14 +410,14 @@ export function PageClient() {
                                             </td>
                                             <td className="px-6 py-2 text-right">
                                                 <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-all">
-                                                    <button 
+                                                    <button
                                                         onClick={() => openModal(s)}
                                                         className="text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors p-1.5 rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
                                                     >
                                                         <i className="fat fa-pen-to-square text-lg"></i>
                                                     </button>
                                                     {user?.role === 'ADMIN' && (
-                                                        <button 
+                                                        <button
                                                             onClick={() => handleDelete(s.id)}
                                                             className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors p-1.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-900/30"
                                                         >
@@ -424,7 +439,7 @@ export function PageClient() {
                             <span className="font-bold text-slate-700 dark:text-slate-200">{total}</span>
                             <span>kayıt bulundu</span>
                         </div>
-                        
+
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={() => setPage(1)}
@@ -441,7 +456,7 @@ export function PageClient() {
                             >
                                 <i className="fat fa-angle-left"></i>
                             </button>
-                            
+
                             <div className="h-10 px-4 rounded-xl bg-white dark:bg-slate-800 flex items-center justify-center shadow-sm border border-slate-100 dark:border-slate-700">
                                 <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{page}</span>
                                 <span className="mx-2 text-slate-300 dark:text-slate-600">/</span>
