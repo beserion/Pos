@@ -1,0 +1,113 @@
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "node update-ip.js && next dev -H 0.0.0.0",
+    "build": "node update-ip.js && next build",
+    "start": "node update-ip.js && next start -H 0.0.0.0",
+    "lint": "eslint",
+    "electron:dev": "electron .",
+    "electron:build": "set NEXT_OUTPUT=standalone && next build && electron-builder",
+    "android:build": "next build && npx cap copy && npx cap sync",
+    "android:open": "npx cap open android"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.2.0",
+    "@capacitor/cli": "^8.2.0",
+    "@capacitor/core": "^8.2.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@fullcalendar/core": "^6.1.20",
+    "@fullcalendar/daygrid": "^6.1.20",
+    "@fullcalendar/interaction": "^6.1.20",
+    "@fullcalendar/react": "^6.1.20",
+    "@fullcalendar/timegrid": "^6.1.20",
+    "@mui/icons-material": "^7.3.8",
+    "@mui/material": "^7.3.8",
+    "@tailwindcss/postcss": "^4",
+    "@types/js-cookie": "^3.0.6",
+    "@types/leaflet": "^1.9.21",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "axios": "^1.13.6",
+    "chart.js": "^4.5.1",
+    "electron": "^41.0.2",
+    "electron-builder": "^26.8.1",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "js-cookie": "^3.0.5",
+    "jsonwebtoken": "^9.0.3",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.575.0",
+    "next": "^16.2.1",
+    "next-intl": "^4.8.3",
+    "next-themes": "^0.4.6",
+    "react": "19.2.3",
+    "react-chartjs-2": "^5.3.1",
+    "react-dom": "19.2.3",
+    "react-leaflet": "^5.0.0",
+    "socket.io-client": "^4.8.3",
+    "sweetalert2": "^11.26.21",
+    "sweetalert2-react-content": "^5.1.1",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  },
+  "build": {
+    "npmRebuild": false,
+    "appId": "com.posapp.app",
+    "productName": "POSAPP",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "icon": "public/favicon.ico",
+      "asar": false
+    },
+    "files": [
+      "electron/**/*",
+      "package.json",
+      "!node_modules"
+    ],
+    "extraFiles": [
+      {
+        "from": ".next/standalone/server.js",
+        "to": "server/server.js"
+      },
+      {
+        "from": ".next/standalone/node_modules",
+        "to": "server/node_modules",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": ".next/standalone/.next",
+        "to": "server/.next",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "public",
+        "to": "server/public",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": ".next/static",
+        "to": "server/.next/static",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
+  }
+}

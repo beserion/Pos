@@ -1,0 +1,479 @@
+'use client';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useLocale } from 'next-intl';
+import { showSwal } from '../../utils/swal';
+import { useParameters, invalidateParameterCache } from '../../utils/useParameters';
+
+// ─── Parametre tipleri ────────────────────────────────────────────
+type ParamType = 'text' | 'number' | 'boolean' | 'select' | 'color';
+
+interface Param {
+    key: string;
+    label: string;
+    description?: string;
+    type: ParamType;
+    value: any;
+    options?: string[];      // select için
+    unit?: string;           // number için (örn. "dk", "₺", "%")
+    compact?: boolean;       // text alanı dar/inline kalacaksa true
+}
+
+interface Module {
+    id: string;
+    icon: string;
+    color: string;
+    bgGradient: string;
+    borderColor: string;
+    title: string;
+    subtitle: string;
+    params: Param[];
+}
+
+// ─── Varsayılan modüller ve parametreler ─────────────────────────
+const defaultModules: Module[] = [
+    {
+        id: 'pos', icon: 'fa-cash-register', color: 'text-indigo-500', bgGradient: 'from-indigo-500/10 to-indigo-500/0',
+        borderColor: 'border-indigo-500/30', title: 'POS & Satış', subtitle: 'Kasa ve sipariş ayarları',
+        params: [
+            { key: 'default_payment_method', label: 'Varsayılan Ödeme Yöntemi', type: 'select', value: 'KASA', options: ['KASA', 'KREDI_KARTI', 'HAVALE'] },
+            { key: 'service_fee_rate', label: 'Servis Ücreti (%)', description: 'Toplam tutara eklenen servis bedeli', type: 'number', value: 10, unit: '%' },
+            { key: 'tax_rate', label: 'KDV Oranı (%)', type: 'number', value: 8, unit: '%' },
+            { key: 'allow_discount', label: 'İndirime İzin Ver', type: 'boolean', value: true },
+            { key: 'max_discount_rate', label: 'Maksimum İndirim (%)', type: 'number', value: 20, unit: '%' },
+            { key: 'receipt_footer', label: 'Fiş Alt Yazısı', type: 'text', value: 'Teşekkür ederiz! Tekrar bekleriz.' },
+            { key: 'screen_timeout', label: 'Ekran Zaman Aşımı', description: 'Belirlenen süre hareketsizlik sonrası şifre ekranına döner. 0 = kapalı', type: 'number', value: 180, unit: 'sn' },
+        ]
+    },
+    {
+        id: 'half_double', icon: 'fa-glass-half', color: 'text-orange-500', bgGradient: 'from-orange-500/10 to-orange-500/0',
+        borderColor: 'border-orange-500/30', title: 'Yarım / Duble Parametreleri', subtitle: 'Yarım ve duble satış tipi katsayı ayarları',
+        params: [
+            { key: 'half_price_multiplier', label: 'Yarım Fiyat Katsayısı', description: 'Ürün fiyatı bu katsayı ile çarpılır (örn: 0.50 = yarı fiyat)', type: 'number', value: 0.50 },
+            { key: 'double_price_multiplier', label: 'Duble Fiyat Katsayısı', description: 'Ürün fiyatı bu katsayı ile çarpılır (örn: 1.70)', type: 'number', value: 1.70 },
+            { key: 'half_recipe_multiplier', label: 'Yarım Reçete Katsayısı', description: 'Stok düşümü bu katsayı ile çarpılır', type: 'number', value: 0.50 },
+            { key: 'double_recipe_multiplier', label: 'Duble Reçete Katsayısı', description: 'Stok düşümü bu katsayı ile çarpılır', type: 'number', value: 2.00 },
+        ]
+    },
+    {
+        id: 'kitchen', icon: 'fa-fire-burner', color: 'text-amber-500', bgGradient: 'from-amber-500/10 to-amber-500/0',
+        borderColor: 'border-amber-500/30', title: 'Mutfak (KDS)', subtitle: 'Mutfak ekranı, hazırlık ve modül ayarları',
+        params: [
+            { key: 'kitchen_display_enabled', label: 'Görsel Mutfak Ekranı Aktif', description: 'Kapatıldığında KDS sayfası devre dışı olur, siparişler yazıcıya iletilir.', type: 'boolean', value: true },
+            { key: 'kitchen_item_selection_enabled', label: 'Mutfak Ürün Seçimi', description: 'Aktif olduğunda mutfak ekranında ürünler tek tek seçilebilir.', type: 'boolean', value: true },
+            { key: 'warning_time', label: 'Uyarı Süresi', description: 'Bu süreyi aşan siparişler turuncu olur', type: 'number', value: 10, unit: 'dk' },
+            { key: 'critical_time', label: 'Kritik Süre', description: 'Bu süreyi aşan siparişler kırmızı olur', type: 'number', value: 20, unit: 'dk' },
+            { key: 'auto_refresh_interval', label: 'Otomatik Yenileme', type: 'number', value: 10, unit: 'sn' },
+            { key: 'kitchen_finished_screen_timeout', label: 'Bitenleri Gösterme Süresi', description: 'Bitenler sekmesinde işlem yapılmadığında belirtilen saniye sonra aktif ekrana döner. (0 = Sürekli kalır)', type: 'number', value: 30, unit: 'sn' },
+            { key: 'beep_on_new_order', label: 'Yeni Siparişte Sesli Uyarı', type: 'boolean', value: true },
+            { key: 'show_waiter_name', label: 'Garson Adını Göster', type: 'boolean', value: true },
+        ]
+    },
+    {
+        id: 'printer', icon: 'fa-print', color: 'text-sky-500', bgGradient: 'from-sky-500/10 to-sky-500/0',
+        borderColor: 'border-sky-500/30', title: 'Yazıcı', subtitle: 'Fiş ve mutfak yazıcı ayarları',
+        params: [
+            { key: 'receipt_copies', label: 'Fiş Kopya Adedi', type: 'number', value: 1 },
+            { key: 'kitchen_copies', label: 'Mutfak Fişi Kopya Adedi', type: 'number', value: 1 },
+            { key: 'print_logo', label: 'Logolu Fiş Bas', type: 'boolean', value: false },
+            { key: 'paper_width', label: 'Kağıt Genişliği', type: 'select', value: '80mm', options: ['58mm', '80mm'] },
+            { key: 'company_name', label: 'İşletme Adı', type: 'text', value: '' },
+            { key: 'company_address', label: 'İşletme Adresi', type: 'text', value: '' },
+            { key: 'company_phone', label: 'İşletme Telefonu', type: 'text', value: '' },
+        ]
+    },
+    {
+        id: 'mars', icon: 'fa-fire-flame-curved', color: 'text-rose-500', bgGradient: 'from-rose-500/10 to-rose-500/0',
+        borderColor: 'border-rose-500/30', title: 'Marş Sistemi', subtitle: 'Beklet ve marş ver ayarları',
+        params: [
+            { key: 'mars_enabled', label: 'Marş Sistemi Aktif', type: 'boolean', value: true },
+            { key: 'mars_default_items', label: 'Varsayılan Olarak Beklet', description: 'Yeni ürünler otomatik beklet modunda açılsın', type: 'boolean', value: false },
+            { key: 'mars_sound', label: 'Marş Geldiğinde Sesli Uyarı', type: 'boolean', value: true },
+        ]
+    },
+    {
+        id: 'table', icon: 'fa-chair-office', color: 'text-purple-500', bgGradient: 'from-purple-500/10 to-purple-500/0',
+        borderColor: 'border-purple-500/30', title: 'Masa Yönetimi', subtitle: 'Masa ve oturma planı ayarları',
+        params: [
+            { key: 'auto_close_table', label: 'Ödeme Sonrası Masayı Otomatik Kapat', type: 'boolean', value: true },
+            { key: 'show_table_total', label: 'Masa Kartında Toplam Göster', type: 'boolean', value: true },
+            { key: 'show_waiter_on_table', label: 'Masa Kartında Garson Göster', type: 'boolean', value: true },
+            { key: 'order_start_alert', label: 'Sipariş Başlangıç Süresi Uyarısı', type: 'number', value: 30, unit: 'dk' },
+        ]
+    },
+    {
+        id: 'finance', icon: 'fa-building-columns', color: 'text-emerald-500', bgGradient: 'from-emerald-500/10 to-emerald-500/0',
+        borderColor: 'border-emerald-500/30', title: 'Finans', subtitle: 'Muhasebe ve ödeme ayarları',
+        params: [
+            { key: 'currency', label: 'Para Birimi', type: 'select', value: 'TRY', options: ['TRY', 'USD', 'EUR'] },
+            { key: 'currency_symbol', label: 'Para Birimi Sembolü', type: 'text', value: '₺', compact: true },
+            { key: 'fiscal_year_start', label: 'Mali Yıl Başlangıcı', type: 'select', value: 'Ocak', options: ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'] },
+            { key: 'auto_invoice', label: 'Satışta Otomatik Fatura Oluştur', type: 'boolean', value: false },
+        ]
+    },
+    {
+        id: 'partners', icon: 'fa-address-book', color: 'text-cyan-500', bgGradient: 'from-cyan-500/10 to-cyan-500/0',
+        borderColor: 'border-cyan-500/30', title: 'Cariler', subtitle: 'Müşteri ve tedarikçi ayarları',
+        params: [
+            { key: 'partner_default_type', label: 'Varsayılan Cari Türü', type: 'select', value: 'MÜŞTERİ', options: ['MÜŞTERİ', 'TEDARKİÇİ', 'HEMÇİ'] },
+            { key: 'partner_credit_limit_enabled', label: 'Kredi Limiti Kullan', description: 'Carilere kredi limiti tanımlanabilsin', type: 'boolean', value: false },
+            { key: 'partner_default_credit_limit', label: 'Varsayılan Kredi Limiti', type: 'number', value: 0, unit: '₺' },
+            { key: 'partner_show_balance', label: 'Cari Kartında Bakiye Göster', type: 'boolean', value: true },
+            { key: 'partner_auto_code', label: 'Otomatik Cari Kodu Üret', type: 'boolean', value: true },
+            { key: 'partner_code_prefix', label: 'Cari Kod Öneki', description: 'Örn: C, MUS, CLI', type: 'text', value: 'C', compact: true },
+            { key: 'partner_payment_terms', label: 'Varsayılan Ödeme Vadesi', type: 'number', value: 30, unit: 'gün' },
+        ]
+    },
+    {
+        id: 'invoices', icon: 'fa-file-invoice', color: 'text-teal-500', bgGradient: 'from-teal-500/10 to-teal-500/0',
+        borderColor: 'border-teal-500/30', title: 'Faturalar', subtitle: 'Fatura kural ve numaralandırma ayarları',
+        params: [
+            { key: 'invoice_auto_number', label: 'Otomatik Fatura Numarası', type: 'boolean', value: true },
+            { key: 'invoice_prefix', label: 'Fatura Öneki', description: 'Örn: FTR, INV', type: 'text', value: 'FTR', compact: true },
+            { key: 'invoice_start_number', label: 'Başlangıç Numarası', type: 'number', value: 1 },
+            { key: 'invoice_default_due_days', label: 'Varsayılan Vade Günü', type: 'number', value: 30, unit: 'gün' },
+            { key: 'invoice_show_tax_detail', label: 'KDV Detayını Göster', type: 'boolean', value: true },
+            { key: 'invoice_footer_note', label: 'Fatura Alt Notu', type: 'text', value: '' },
+            { key: 'invoice_require_waybill', label: 'İrsaliye Zorunlu', description: 'Fatura oluşturulmadan önce irsaliye istenir', type: 'boolean', value: false },
+            { key: 'invoice_e_invoice_enabled', label: 'e-Fatura Entegrasyonu Aktif', type: 'boolean', value: false },
+        ]
+    },
+    {
+        id: 'stocks', icon: 'fa-boxes-stacked', color: 'text-lime-600', bgGradient: 'from-lime-500/10 to-lime-500/0',
+        borderColor: 'border-lime-500/30', title: 'Stoklar', subtitle: 'Stok kontrol ve uyarı ayarları',
+        params: [
+            { key: 'stock_tracking_enabled', label: 'Stok Takibi Aktif', description: 'Satışlarda stok düşülüsün', type: 'boolean', value: true },
+            { key: 'stock_negative_allowed', label: 'Negatif Stoğa İzin Ver', description: 'Stok 0’ın altına düşülebilir', type: 'boolean', value: false },
+            { key: 'stock_low_alert_threshold', label: 'Düşük Stok Uyarı Eşiği', description: 'Bu sayının altına düşünce uyarı ver', type: 'number', value: 5, unit: 'adet' },
+            { key: 'stock_unit_default', label: 'Varsayılan Stok Birimi', type: 'select', value: 'Adet', options: ['Adet', 'Kg', 'Lt', 'Paket', 'Kutu', 'Müze'] },
+            { key: 'stock_auto_reorder', label: 'Otomatik Sipariş Hatırlatıcısı', description: 'Düşük stokta satın alma talebi oluştur', type: 'boolean', value: false },
+            { key: 'stock_valuation_method', label: 'Stok Değerleme Yöntemi', type: 'select', value: 'FIFO', options: ['FIFO', 'LIFO', 'Ortalama Maliyet'] },
+            { key: 'stock_warehouse_required', label: 'Depo Seçimi Zorunlu', type: 'boolean', value: false },
+        ]
+    },
+];
+
+// ─── Ana bileşen ──────────────────────────────────────────────────
+export function PageClient() {
+    const router = useRouter();
+    const locale = useLocale();
+    const [activeModule, setActiveModule] = useState<string>('pos');
+    const [modules, setModules] = useState<Module[]>(defaultModules);
+    const [saved, setSaved] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isDirty, setIsDirty] = useState(false);
+
+    const currentModule = modules.find(m => m.id === activeModule)!;
+
+    const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')));
+
+    // Sayfa açılışında tüm parametreleri çek
+    useEffect(() => {
+        const fetchAll = async () => {
+            setLoading(true);
+            try {
+                const token = localStorage.getItem('token');
+                const res = await fetch(`${API_URL}/parameters`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!res.ok) return;
+                const data: { module: string; key: string; value: string; type: string }[] = await res.json();
+                if (data.length === 0) return;
+
+                setModules(prev => prev.map(mod => ({
+                    ...mod,
+                    params: mod.params.map(p => {
+                        const found = data.find(d => d.module === mod.id && d.key === p.key);
+                        if (!found) return p;
+                        let val: any = found.value;
+                        if (p.type === 'boolean') val = found.value === 'true';
+                        if (p.type === 'number') val = Number(found.value);
+                        return { ...p, value: val };
+                    })
+                })));
+            } catch (_) {
+                // API erişilemiyorsa defaults ile devam et
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchAll();
+    }, []);
+
+    const updateParam = (moduleId: string, key: string, value: any) => {
+        setIsDirty(true);
+        setModules(prev => prev.map(mod =>
+            mod.id === moduleId
+                ? { ...mod, params: mod.params.map(p => p.key === key ? { ...p, value } : p) }
+                : mod
+        ));
+    };
+
+    // Tarayıcı kapatma/yenileme koruyucusu
+    useEffect(() => {
+        const handler = (e: BeforeUnloadEvent) => {
+            if (isDirty) { e.preventDefault(); e.returnValue = ''; }
+        };
+        window.addEventListener('beforeunload', handler);
+        return () => window.removeEventListener('beforeunload', handler);
+    }, [isDirty]);
+
+    const handleSave = async () => {
+        if (isSaving) return;
+        const token = localStorage.getItem('token');
+        setIsSaving(true);
+
+        try {
+            // Her modülü bağımsız, paralel olarak kaydet
+            await Promise.all(
+                modules.map(mod => {
+                    const items = mod.params.map(p => ({
+                        module: mod.id,
+                        key: p.key,
+                        value: String(p.value),
+                        label: p.label,
+                        type: p.type,
+                        description: p.description,
+                    }));
+                    return fetch(`${API_URL}/parameters/bulk`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                        body: JSON.stringify({ items }),
+                    }).then(res => { if (!res.ok) throw new Error(`${mod.title} kaydedilemedi`); });
+                })
+            );
+
+            invalidateParameterCache();
+            setIsDirty(false);
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2500);
+            showSwal({
+                icon: 'success',
+                title: 'Parametreler Kaydedildi',
+                timer: 2000,
+                showConfirmButton: false
+            });
+        } catch (err: any) {
+            showSwal({ icon: 'error', title: 'Hata', text: err?.message || 'Parametreler kaydedilemedi.' });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    // Kaydedilmemiş değişiklik varsa SweetAlert ile sor
+    const handleNavigateAway = async (destination: string) => {
+        if (!isDirty) { router.push(destination); return; }
+
+        const result = await showSwal({
+            icon: 'warning',
+            title: 'Kaydedilmemiş Değişiklikler',
+            html: 'Bazı parametreler henüz kaydedilmedi.<br><b>Kaydetmek ister misiniz?</b>',
+            showCancelButton: true,
+            showDenyButton: true,
+            confirmButtonText: '<i class="fas fa-save"></i> Kaydet ve Çık',
+            denyButtonText: '<i class="fas fa-times"></i> Kaydetme, Çık',
+            cancelButtonText: 'İptal',
+        });
+
+        if (result.isConfirmed) {
+            await handleSave();
+            router.push(destination);
+        } else if (result.isDenied) {
+            setIsDirty(false);
+            router.push(destination);
+        }
+    };
+
+    const renderInput = (mod: Module, param: Param) => {
+        const baseClass = "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition w-full";
+
+        switch (param.type) {
+            case 'text':
+                return <input type="text" value={param.value} onChange={e => updateParam(mod.id, param.key, e.target.value)} className={`${baseClass} w-full`} placeholder={param.label} />;
+            case 'number':
+                return (
+                    <div className="flex items-center gap-2">
+                        <input type="number" value={param.value} onChange={e => updateParam(mod.id, param.key, Number(e.target.value))} className={`${baseClass} text-right w-32`} />
+                        {param.unit && <span className="text-xs font-bold text-slate-400 w-6">{param.unit}</span>}
+                    </div>
+                );
+            case 'boolean':
+                return (
+                    <button
+                        onClick={() => updateParam(mod.id, param.key, !param.value)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 focus:outline-none ${param.value ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'}`}
+                    >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform duration-300 ${param.value ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                );
+            case 'select':
+                return (
+                    <select value={param.value} onChange={e => updateParam(mod.id, param.key, e.target.value)} className={`${baseClass} w-52`}>
+                        {param.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
+                );
+            default:
+                return null;
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans transition-colors duration-300">
+
+            {/* Kaydetme overlay spinner */}
+            {isSaving && (
+                <div className="fixed inset-0 z-[200] bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center gap-4">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4 border border-slate-200 dark:border-slate-700">
+                        <i className="fat fa-spinner-third animate-spin text-5xl text-violet-500"></i>
+                        <div className="text-center">
+                            <p className="font-black text-slate-800 dark:text-white text-lg">Kaydediliyor</p>
+                            <p className="text-sm text-slate-400 mt-1">{modules.length} modül paralel olarak veritabanına yazılıyor...</p>
+                        </div>
+                        <div className="flex gap-1 mt-1">
+                            {modules.map((m, i) => (
+                                <div key={m.id} className={`w-2 h-2 rounded-full ${m.color.replace('text-', 'bg-')} animate-pulse`} style={{ animationDelay: `${i * 0.1}s` }} />
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Ambient background */}
+            <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+                <div className="absolute top-[-5%] right-[-5%] w-[40%] h-[40%] rounded-full bg-violet-500/5 dark:bg-violet-600/10 blur-[120px]" />
+                <div className="absolute bottom-[-5%] left-[-5%] w-[40%] h-[40%] rounded-full bg-indigo-500/5 dark:bg-indigo-600/10 blur-[120px]" />
+            </div>
+
+            {/* Header */}
+            <header className="sticky top-0 z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-800/60 shadow-sm">
+                <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+                    {/* Sol: Başlık */}
+                    <div>
+                        <h1 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                            <i className="fat fa-sliders text-violet-500"></i> Parametre Yönetimi
+                        </h1>
+                        <p className="text-xs text-slate-400">Modül bazlı sistem ayarları</p>
+                    </div>
+                    {/* Sağ: Kaydet + Geri */}
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleSave}
+                            disabled={isSaving}
+                            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 border
+                                ${isSaving
+                                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                                    : saved
+                                        ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-500/40'
+                                        : isDirty
+                                            ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-400 dark:border-emerald-500/60 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 shadow-sm'
+                                            : 'bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-300 dark:border-violet-500/40 hover:bg-violet-100 dark:hover:bg-violet-500/20'
+                                }`}
+                        >
+                            <i className={`fat ${isSaving ? 'fa-spinner-third animate-spin' : saved ? 'fa-check' : 'fa-floppy-disk'}`}></i>
+                            {isSaving ? 'Kaydediliyor...' : saved ? 'Kaydedildi!' : 'Kaydet'}
+                        </button>
+                        <button
+                            onClick={() => handleNavigateAway(`/${locale}/admin`)}
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 border bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700"
+                        >
+                            <i className="fat fa-reply"></i>
+                            Geri Dön
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <div className="max-w-7xl mx-auto px-6 py-8 relative z-10 flex gap-6">
+                {/* Sol sidebar – Modüller */}
+                <aside className="w-64 shrink-0">
+                    <div className="bg-white dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/50 shadow-sm overflow-hidden">
+                        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700/50">
+                            <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400">Modüller</p>
+                        </div>
+                        <nav className="p-2 flex flex-col gap-1">
+                            {modules.map(mod => (
+                                <button
+                                    key={mod.id}
+                                    onClick={() => setActiveModule(mod.id)}
+                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-200 group ${activeModule === mod.id ? `bg-gradient-to-r ${mod.bgGradient} border ${mod.borderColor}` : 'hover:bg-slate-100 dark:hover:bg-slate-700/50 border border-transparent'}`}
+                                >
+                                    <div className={`w-10 h-10 flex items-center justify-center rounded-lg ${activeModule === mod.id ? 'bg-white dark:bg-slate-900 shadow' : 'bg-slate-100 dark:bg-slate-700'} transition`}>
+                                        <i className={`fat ${mod.icon} ${mod.color} text-lg`}></i>
+                                    </div>
+                                    <div>
+                                        <p className={`text-sm font-bold leading-none ${activeModule === mod.id ? 'text-slate-800 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}>{mod.title}</p>
+                                        <p className="text-[10px] text-slate-400 mt-0.5">{mod.params.length} parametre</p>
+                                    </div>
+                                    {activeModule === mod.id && <i className="fat fa-chevron-right ml-auto text-xs text-slate-400"></i>}
+                                </button>
+                            ))}
+                        </nav>
+                    </div>
+                </aside>
+
+                {/* Sağ içerik – Parametreler */}
+                <main className="flex-1">
+                    {/* Modül başlığı */}
+                    <div className={`bg-gradient-to-r ${currentModule.bgGradient} border ${currentModule.borderColor} rounded-2xl p-5 mb-5 flex items-center gap-4`}>
+                        <div className="w-14 h-14 flex items-center justify-center bg-white dark:bg-slate-900 rounded-xl shadow">
+                            <i className={`fat ${currentModule.icon} ${currentModule.color} text-2xl`}></i>
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-black text-slate-800 dark:text-white">{currentModule.title}</h2>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">{currentModule.subtitle}</p>
+                        </div>
+                        <span className="ml-auto text-xs font-bold text-slate-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-full">
+                            {currentModule.params.length} parametre
+                        </span>
+                    </div>
+
+                    {/* Parametre listesi */}
+                    <div className="relative bg-white dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/50 shadow-sm overflow-hidden divide-y divide-slate-100 dark:divide-slate-700/50">
+                        {loading && (
+                            <div className="absolute inset-0 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl">
+                                <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400">
+                                    <i className="fat fa-spinner-third animate-spin text-xl text-violet-500"></i>
+                                    <span className="text-sm font-bold">Yükleniyor...</span>
+                                </div>
+                            </div>
+                        )}
+                        {currentModule.params.map((param, idx) => (
+                            param.type === 'text' && !param.compact ? (
+                                /* Text alanları tam genişlik – dikey düzen */
+                                <div key={param.key} className="flex flex-col p-5 gap-2 hover:bg-slate-50 dark:hover:bg-slate-700/20 transition">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-bold text-slate-800 dark:text-white">{param.label}</span>
+                                        <code className="text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-500 px-1.5 py-0.5 rounded font-mono">{param.key}</code>
+                                    </div>
+                                    {param.description && <p className="text-xs text-slate-400">{param.description}</p>}
+                                    {renderInput(currentModule, param)}
+                                </div>
+                            ) : (
+                                /* Diğer tipler – yatay düzen */
+                                <div key={param.key} className="flex items-center justify-between p-5 gap-6 hover:bg-slate-50 dark:hover:bg-slate-700/20 transition group">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-bold text-slate-800 dark:text-white">{param.label}</span>
+                                            <code className="text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-500 px-1.5 py-0.5 rounded font-mono">{param.key}</code>
+                                        </div>
+                                        {param.description && <p className="text-xs text-slate-400 mt-0.5">{param.description}</p>}
+                                    </div>
+                                    <div className="shrink-0">
+                                        {renderInput(currentModule, param)}
+                                    </div>
+                                </div>
+                            )
+                        ))}
+                    </div>
+
+                    {/* Alt bilgi */}
+                    <div className="mt-4 flex items-center gap-2 text-xs text-slate-400 px-1">
+                        <i className="fat fa-circle-info"></i>
+                        <span>Değişiklikler <strong>"Kaydet"</strong> butonuna tıklandığında uygulanır. Bazı ayarlar yeniden başlatma gerektirebilir.</span>
+                    </div>
+                </main>
+            </div>
+        </div>
+    );
+}

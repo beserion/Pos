@@ -1,0 +1,48 @@
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+} from 'typeorm';
+import { Zone } from '../zones/zone.entity';
+
+@Entity('tables')
+export class Table {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  name: string; // e.g., "Masa 1", "Balkon 3"
+
+  @Column({ default: 4 })
+  capacity: number;
+
+  @Column({ default: 'BOŞ' }) // BOŞ, DOLU, REZERVE
+  status: string;
+
+  @ManyToOne(() => Zone, (zone) => zone.tables, { onDelete: 'CASCADE' })
+  zone: Zone;
+
+  @Column({ default: true })
+  isActive: boolean;
+
+  @Column({ nullable: true })
+  waiterName: string;
+
+  @Column({ type: 'datetime', nullable: true })
+  orderStartTime: Date;
+
+  @Column('decimal', { precision: 12, scale: 2, default: 0, nullable: true })
+  currentTotal: number;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+
+  @Column({ default: false })
+  isDeleted: boolean;
+}

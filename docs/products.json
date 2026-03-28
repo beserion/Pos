@@ -1,0 +1,182 @@
+[
+  {
+    "id": 1,
+    "name": "Filtre Kahve"
+  },
+  {
+    "id": 2,
+    "name": "Cafe Latte"
+  },
+  {
+    "id": 3,
+    "name": "Cappuccino"
+  },
+  {
+    "id": 4,
+    "name": "Americano"
+  },
+  {
+    "id": 5,
+    "name": "Espresso (Single)"
+  },
+  {
+    "id": 6,
+    "name": "Espresso (Double)"
+  },
+  {
+    "id": 7,
+    "name": "Macchiato"
+  },
+  {
+    "id": 8,
+    "name": "Flat White"
+  },
+  {
+    "id": 9,
+    "name": "Cortado"
+  },
+  {
+    "id": 10,
+    "name": "Mocha"
+  },
+  {
+    "id": 11,
+    "name": "White Chocolate Mocha"
+  },
+  {
+    "id": 12,
+    "name": "Türk Kahvesi"
+  },
+  {
+    "id": 13,
+    "name": "Fincan Çay"
+  },
+  {
+    "id": 14,
+    "name": "Kış Çayı"
+  },
+  {
+    "id": 15,
+    "name": "Sıcak Çikolata"
+  },
+  {
+    "id": 16,
+    "name": "Ice Latte"
+  },
+  {
+    "id": 17,
+    "name": "Ice Americano"
+  },
+  {
+    "id": 18,
+    "name": "Iced Mocha"
+  },
+  {
+    "id": 19,
+    "name": "Iced White Chocolate Mocha"
+  },
+  {
+    "id": 20,
+    "name": "Frappe (Karamel)"
+  },
+  {
+    "id": 21,
+    "name": "Frappe (Çikolata)"
+  },
+  {
+    "id": 22,
+    "name": "Limonata (Ev Yapımı)"
+  },
+  {
+    "id": 23,
+    "name": "Churchill"
+  },
+  {
+    "id": 24,
+    "name": "Taze Portakal Suyu"
+  },
+  {
+    "id": 25,
+    "name": "Coca Cola (Şişe)"
+  },
+  {
+    "id": 26,
+    "name": "Su (Cam Şişe)"
+  },
+  {
+    "id": 27,
+    "name": "San Sebastian"
+  },
+  {
+    "id": 28,
+    "name": "Tiramisu"
+  },
+  {
+    "id": 29,
+    "name": "Brownie (Sıcak)"
+  },
+  {
+    "id": 30,
+    "name": "Magnolia (Muzlu/Çilekli)"
+  },
+  {
+    "id": 31,
+    "name": "Profiterol"
+  },
+  {
+    "id": 32,
+    "name": "Sufle"
+  },
+  {
+    "id": 33,
+    "name": "Limonlu Cheesecake"
+  },
+  {
+    "id": 34,
+    "name": "Kulüp Sandviç"
+  },
+  {
+    "id": 35,
+    "name": "Margaritha Pizza"
+  },
+  {
+    "id": 36,
+    "name": "Büyük Kahvaltı Tabağı"
+  },
+  {
+    "id": 37,
+    "name": "Pancake Tabağı"
+  },
+  {
+    "id": 38,
+    "name": "Tavuklu Sezar Salata"
+  },
+  {
+    "id": 39,
+    "name": "Fettuccine Alfredo"
+  },
+  {
+    "id": 40,
+    "name": "Penne Arrabbiata"
+  },
+  {
+    "id": 41,
+    "name": "Hamburger (Klasik)"
+  },
+  {
+    "id": 42,
+    "name": "Cheeseburger"
+  },
+  {
+    "id": 43,
+    "name": "Patates Kızartması (Baharatlı)"
+  },
+  {
+    "id": 44,
+    "name": "Soğan Halkası (10'lu)"
+  },
+  {
+    "id": 45,
+    "name": "Mozzarella Stick"
+  }
+]
