@@ -18,7 +18,7 @@ function walk(dir) {
     return results;
 }
 
-const files = walk('d:/GitHub/POSAPP/frontend/src');
+const files = walk(path.join(__dirname, 'src'));
 let changedCount = 0;
 
 files.forEach(file => {

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations, useLocale } from 'next-intl';
 import { useAuth } from '@/app/[locale]/AuthContext';
@@ -11,6 +11,7 @@ export function PageClient() {
     const tDashboard = useTranslations('Dashboard');
     const locale = useLocale();
     const { user, loading, hasPermission, alertsBell } = useAuth();
+    const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
         if (!loading && !user) router.push(`/${locale}/login`);
@@ -31,7 +32,7 @@ export function PageClient() {
         { key: 'PRODUCTS', title: tAdmin('products'), subtitle: tAdmin('productsDesc'), path: `/${locale}/admin/products`, icon: 'fa-mug-hot', color: 'text-teal-500' },
         { key: 'PRODUCTS', title: tAdmin('setMenus'), subtitle: tAdmin('setMenusDesc'), path: `/${locale}/admin/products/set-menus`, icon: 'fa-layer-group', color: 'text-indigo-500' },
         { key: 'MODIFIERS', title: tAdmin('modifiers'), subtitle: tAdmin('modifiersDesc'), path: `/${locale}/admin/modifiers`, icon: 'fa-tags', color: 'text-amber-500' },
-        { key: 'INGREDIENTS', title: tAdmin('ingredients'), subtitle: tAdmin('ingredientsDesc'), path: `/${locale}/admin/ingredients`, icon: 'fa-leaf', color: 'text-emerald-500' },
+        { key: 'INGREDIENTS', title: tAdmin('recipes'), subtitle: tAdmin('recipesDesc'), path: `/${locale}/admin/recipes`, icon: 'fa-blender', color: 'text-emerald-500' },
         { key: 'PRINTERS', title: 'Ürün Cinsleri', subtitle: 'Ürün cinslerini tanımla ve çıktı profilleri ata', path: `/${locale}/admin/product-types`, icon: 'fa-shapes', color: 'text-fuchsia-500' },
         { key: 'PRINTERS', title: 'Çıktı Profilleri', subtitle: 'Yazıcı yönlendirme profillerini yönet', path: `/${locale}/admin/output-profiles`, icon: 'fa-route', color: 'text-cyan-500' },
         { key: 'PRINTERS', title: 'Yönlendirme Kontrolü', subtitle: 'Ürün bazlı yönlendirme kurallarını incele', path: `/${locale}/admin/routing-control`, icon: 'fa-clipboard-list-check', color: 'text-lime-500' },
@@ -45,7 +46,14 @@ export function PageClient() {
         { key: 'ALERTS', title: tDashboard('alerts'), subtitle: tDashboard('alertsDesc'), path: `/${locale}/admin/alerts`, icon: 'fa-bell-on', color: 'text-rose-500' },
     ];
 
-    const filteredSections = sections.filter(sec => hasPermission(`${sec.key}:VIEW`));
+    const filteredSections = sections.filter(sec => {
+        const matchesPermission = hasPermission(`${sec.key}:VIEW`);
+        const query = searchQuery.toLowerCase();
+        const matchesSearch = !searchQuery || 
+            (sec.title?.toLowerCase().includes(query)) || 
+            (sec.subtitle?.toLowerCase().includes(query));
+        return matchesPermission && matchesSearch;
+    });
 
     if (loading) return null;
 
@@ -61,7 +69,18 @@ export function PageClient() {
             <div className="w-[90%] mx-auto px-6 py-8 relative z-10 h-full flex flex-col">
                 {/* Header Section - Properly Centered Block */}
                 <div className="flex flex-col items-center mb-8 px-4 relative shrink-0">
+
                     <div className="md:absolute md:right-4 md:top-0 flex items-center gap-3 mb-8 md:mb-0 z-20">
+                        <div className="relative w-64">
+                            <i className="fat fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Stok adı veya kodu ile ara..."
+                                className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-2 focus:ring-indigo-500/30 outline-none transition-all shadow-sm"
+                            />
+                        </div>
                         {alertsBell}
                         <button
                             onClick={() => router.push(`/${locale}/dashboard`)}
@@ -70,6 +89,7 @@ export function PageClient() {
                             <i className="fat fa-reply group-hover:-translate-x-1 transition-transform"></i>
                             {tCommon('back')}
                         </button>
+
                     </div>
 
                     <div className="flex flex-col items-center text-center gap-2 max-w-4xl mx-auto">
@@ -107,6 +127,23 @@ export function PageClient() {
                             </div>
                         ))}
                     </div>
+                    {filteredSections.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in zoom-in duration-500">
+                            <div className="w-24 h-24 rounded-full bg-slate-100 dark:bg-slate-800/50 flex items-center justify-center mb-6">
+                                <i className="fat fa-search-minus text-4xl text-slate-400"></i>
+                            </div>
+                            <h4 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tighter transition-colors">Arama Sonucu Bulunamadı</h4>
+                            <p className="text-slate-500 dark:text-slate-400 font-bold text-sm max-w-sm">
+                                "<span className="text-indigo-600 dark:text-indigo-400">{searchQuery}</span>" ile eşleşen bir modül veya yetki bulunamadı. Lütfen farklı bir anahtar kelime deneyin.
+                            </p>
+                            <button 
+                                onClick={() => setSearchQuery('')}
+                                className="mt-6 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-95"
+                            >
+                                ARAMAYI TEMİZLE
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

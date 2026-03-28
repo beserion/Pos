@@ -33,7 +33,7 @@ export function PageClient() {
     const locale = useLocale();
     const router = useRouter();
     const { user } = useAuth();
-    
+
     const [stockCards, setStockCards] = useState<StockCard[]>([]);
     const [filteredCards, setFilteredCards] = useState<StockCard[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
@@ -77,7 +77,7 @@ export function PageClient() {
                 axios.get(`${API_URL}/stock-cards/categories`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/warehouses`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: [] }))
             ]);
-            
+
             setStockCards(cardsRes.data.data || []);
             setFilteredCards(cardsRes.data.data || []);
             setCategories(catRes.data || []);
@@ -110,7 +110,7 @@ export function PageClient() {
         try {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            
+
             const payload = { ...formData };
             if (!payload.warehouseId) payload.warehouseId = null;
 
@@ -153,6 +153,29 @@ export function PageClient() {
                 showSwal({ title: tc('error'), text: error?.response?.data?.message || tc('deleteError'), icon: 'error' });
             }
         }
+    };
+
+    const generateStockCode = (categoryName: string) => {
+        if (!categoryName) return '';
+        const prefix = categoryName.substring(0, 3).toLocaleUpperCase('tr');
+        const sameCategoryCodes = stockCards
+            .filter(c => c.code && c.code.toLocaleUpperCase('tr').startsWith(`${prefix}-`))
+            .map(c => {
+                const parts = c.code.split('-');
+                return parseInt(parts[1]) || 0;
+            });
+        const maxNumber = sameCategoryCodes.length > 0 ? Math.max(...sameCategoryCodes) : 0;
+        const nextNumber = maxNumber + 1;
+        const suffix = nextNumber.toString().padStart(4, '0');
+        return `${prefix}${suffix}`;
+    };
+
+    const handleCategoryChange = (val: string) => {
+        let newCode = formData.code;
+        if (formData.id === 0 && val) {
+            newCode = generateStockCode(val);
+        }
+        setFormData({ ...formData, category: val, code: newCode });
     };
 
     const openModal = (card?: StockCard) => {
@@ -308,76 +331,77 @@ export function PageClient() {
                                     {filteredCards.map(card => {
                                         const isLowStock = card.currentStock <= card.minStockLevel && card.minStockLevel > 0;
                                         const isOutOfStock = card.currentStock <= 0;
-                                        
+
                                         return (
-                                        <tr key={card.id} className={`hover:bg-teal-500/5 dark:hover:bg-teal-500/10 transition-all group ${!card.isActive ? 'opacity-50' : ''}`}>
-                                            <td className="px-8 py-4">
-                                                <div className="flex flex-col gap-1">
-                                                    <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300 uppercase tracking-widest bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded inline-block w-max">
-                                                        {card.code}
-                                                    </span>
-                                                    {card.barcode && (
-                                                        <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1">
-                                                            <i className="fat fa-barcode opacity-50"></i> {card.barcode}
+                                            <tr key={card.id} className={`hover:bg-teal-500/5 dark:hover:bg-teal-500/10 transition-all group ${!card.isActive ? 'opacity-50' : ''}`}>
+                                                <td className="px-8 py-4">
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300 uppercase tracking-widest bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded inline-block w-max">
+                                                            {card.code}
                                                         </span>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="px-8 py-4">
-                                                <div>
-                                                    <p className="font-extrabold text-slate-800 dark:text-white tracking-tight leading-none text-base mb-1">{card.name}</p>
-                                                    {!card.isActive && <span className="text-[10px] font-black text-red-500 uppercase tracking-widest bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded-full inline-block">Pasif</span>}
-                                                </div>
-                                            </td>
-                                            <td className="px-8 py-4">
-                                                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-700">
-                                                    <i className="fat fa-folder-tree text-teal-500 text-[10px]"></i>
-                                                    <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                                                        {card.category || '-'}
-                                                    </span>
-                                                </div>
-                                            </td>
-                                            <td className="px-8 py-4">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-black text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-500/10 px-2 py-1 rounded border border-teal-100 dark:border-teal-500/20">{card.baseUnit}</span>
-                                                    {card.purchaseUnit && (
-                                                        <>
-                                                            <i className="fat fa-arrow-right-arrow-left text-slate-300 text-[10px]"></i>
-                                                            <span className="text-xs font-bold text-slate-500 flex items-center gap-1" title={`1 ${card.purchaseUnit} = ${card.conversionRate} ${card.baseUnit}`}>
-                                                                {card.purchaseUnit} (x{card.conversionRate})
+                                                        {card.barcode && (
+                                                            <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1">
+                                                                <i className="fat fa-barcode opacity-50"></i> {card.barcode}
                                                             </span>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="px-8 py-4">
-                                                <div className={`inline-flex items-baseline gap-1.5 ${isOutOfStock ? 'text-red-500' : isLowStock ? 'text-amber-500' : 'text-slate-700 dark:text-slate-300'}`}>
-                                                    <span className="text-lg font-black tracking-tighter">
-                                                        {Number(card.currentStock).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
-                                                    </span>
-                                                    <span className="text-[10px] font-bold uppercase opacity-60 tracking-widest">{card.baseUnit}</span>
-                                                    
-                                                    {isLowStock && !isOutOfStock && <i className="fat fa-triangle-exclamation text-xs ml-1" title={`Kritik seviye: ${card.minStockLevel}`}></i>}
-                                                    {isOutOfStock && <i className="fat fa-ban text-xs ml-1"></i>}
-                                                </div>
-                                            </td>
-                                            <td className="px-8 py-4">
-                                                <div className="font-bold text-slate-600 dark:text-slate-400">
-                                                    ₺{Number(card.costPerBaseUnit).toFixed(4)} <span className="text-[10px] opacity-50 uppercase">/{card.baseUnit}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-8 py-4 text-right">
-                                                <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
-                                                    <button onClick={() => openModal(card)} className="w-9 h-9 bg-white dark:bg-slate-800 text-blue-600 hover:text-white hover:bg-blue-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center">
-                                                        <i className="fat fa-pen-field text-sm"></i>
-                                                    </button>
-                                                    <button onClick={() => handleDelete(card.id)} className="w-9 h-9 bg-white dark:bg-slate-800 text-red-600 hover:text-white hover:bg-red-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center">
-                                                        <i className="fat fa-trash-can text-sm"></i>
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )})}
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-8 py-4">
+                                                    <div>
+                                                        <p className="font-extrabold text-slate-800 dark:text-white tracking-tight leading-none text-base mb-1">{card.name}</p>
+                                                        {!card.isActive && <span className="text-[10px] font-black text-red-500 uppercase tracking-widest bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded-full inline-block">Pasif</span>}
+                                                    </div>
+                                                </td>
+                                                <td className="px-8 py-4">
+                                                    <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-700">
+                                                        <i className="fat fa-folder-tree text-teal-500 text-[10px]"></i>
+                                                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                                                            {card.category || '-'}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-8 py-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs font-black text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-500/10 px-2 py-1 rounded border border-teal-100 dark:border-teal-500/20">{card.baseUnit}</span>
+                                                        {card.purchaseUnit && (
+                                                            <>
+                                                                <i className="fat fa-arrow-right-arrow-left text-slate-300 text-[10px]"></i>
+                                                                <span className="text-xs font-bold text-slate-500 flex items-center gap-1" title={`1 ${card.purchaseUnit} = ${card.conversionRate} ${card.baseUnit}`}>
+                                                                    {card.purchaseUnit} (x{card.conversionRate})
+                                                                </span>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-8 py-4">
+                                                    <div className={`inline-flex items-baseline gap-1.5 ${isOutOfStock ? 'text-red-500' : isLowStock ? 'text-amber-500' : 'text-slate-700 dark:text-slate-300'}`}>
+                                                        <span className="text-lg font-black tracking-tighter">
+                                                            {Number(card.currentStock).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
+                                                        </span>
+                                                        <span className="text-[10px] font-bold uppercase opacity-60 tracking-widest">{card.baseUnit}</span>
+
+                                                        {isLowStock && !isOutOfStock && <i className="fat fa-triangle-exclamation text-xs ml-1" title={`Kritik seviye: ${card.minStockLevel}`}></i>}
+                                                        {isOutOfStock && <i className="fat fa-ban text-xs ml-1"></i>}
+                                                    </div>
+                                                </td>
+                                                <td className="px-8 py-4">
+                                                    <div className="font-bold text-slate-600 dark:text-slate-400">
+                                                        ₺{Number(card.costPerBaseUnit).toFixed(4)} <span className="text-[10px] opacity-50 uppercase">/{card.baseUnit}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-8 py-4 text-right">
+                                                    <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
+                                                        <button onClick={() => openModal(card)} className="w-9 h-9 bg-white dark:bg-slate-800 text-blue-600 hover:text-white hover:bg-blue-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center">
+                                                            <i className="fat fa-pen-field text-sm"></i>
+                                                        </button>
+                                                        <button onClick={() => handleDelete(card.id)} className="w-9 h-9 bg-white dark:bg-slate-800 text-red-600 hover:text-white hover:bg-red-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center">
+                                                            <i className="fat fa-trash-can text-sm"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
                                     {filteredCards.length === 0 && (
                                         <tr>
                                             <td colSpan={7} className="p-20 text-center">
@@ -413,7 +437,7 @@ export function PageClient() {
 
                         <div className="flex-1 overflow-auto p-8">
                             <form id="stockCardForm" onSubmit={handleSave} className="space-y-8">
-                                
+
                                 {/* Temel Bilgiler */}
                                 <div>
                                     <h4 className="text-xs font-black text-teal-600 dark:text-teal-400 uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -428,10 +452,10 @@ export function PageClient() {
                                             </div>
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Kategori (Grup)</label>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Stok Grubu</label>
                                             <div className="relative">
                                                 <i className="fat fa-folder-tree absolute left-4 top-4 text-teal-500/50"></i>
-                                                <input type="text" value={formData.category || ''} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: Alkoller, Sarf, Meşrubat" list="categoryList" />
+                                                <input type="text" value={formData.category || ''} onChange={(e) => handleCategoryChange(e.target.value)} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: Alkoller, Sarf, Meşrubat" list="categoryList" />
                                                 <datalist id="categoryList">
                                                     {categories.map(c => <option key={c} value={c} />)}
                                                 </datalist>
@@ -443,7 +467,7 @@ export function PageClient() {
                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Stok Kodu</label>
                                             <div className="relative">
                                                 <i className="fat fa-barcode-read absolute left-4 top-4 text-teal-500/50"></i>
-                                                <input type="text" required value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold uppercase font-mono focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: ALK001" />
+                                                <input type="text" required value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold uppercase font-mono focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: ALK-0001" />
                                             </div>
                                         </div>
                                         <div>
@@ -475,7 +499,7 @@ export function PageClient() {
                                         <div>
                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Alış Birimi (Opsiyonel)</label>
                                             <div className="relative">
-                                                <input type="text" value={formData.purchaseUnit || ''} onChange={(e) => setFormData({ ...formData, purchaseUnit: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: şişe, koli" list="purchaseUnits"/>
+                                                <input type="text" value={formData.purchaseUnit || ''} onChange={(e) => setFormData({ ...formData, purchaseUnit: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: şişe, koli" list="purchaseUnits" />
                                                 <datalist id="purchaseUnits">
                                                     <option value="şişe" />
                                                     <option value="koli" />
@@ -546,18 +570,18 @@ export function PageClient() {
                                     </div>
                                     <div className="mt-6">
                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Kısa Not</label>
-                                        <textarea 
-                                            value={formData.note || ''} 
-                                            onChange={(e) => setFormData({ ...formData, note: e.target.value })} 
+                                        <textarea
+                                            value={formData.note || ''}
+                                            onChange={(e) => setFormData({ ...formData, note: e.target.value })}
                                             rows={2}
-                                            className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow resize-none" 
+                                            className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow resize-none"
                                             placeholder="Gerekirse not ekleyin..."
                                         ></textarea>
                                     </div>
                                 </div>
                             </form>
                         </div>
-                        
+
                         {/* Footer */}
                         <div className="p-6 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20 shrink-0 flex gap-3 justify-end items-center">
                             <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 py-3.5 rounded-2xl font-black text-sm text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700 shadow-sm transition-all">

@@ -1,12 +1,14 @@
 import { PageClient } from './PageClient';
 
-export function generateMetadata({ params: { id } }: { params: { id: string } }) {
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = await params;
     return {
         title: `Sayım Fişi #${id} | POSAPP`,
         description: 'Sayım fişi detayı',
     };
 }
 
-export default function InventoryCountDetailPage({ params }: { params: { id: string } }) {
-    return <PageClient sessionId={parseInt(params.id)} />;
+export default async function InventoryCountDetailPage({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = await params;
+    return <PageClient sessionId={parseInt(id)} />;
 }

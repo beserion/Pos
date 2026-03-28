@@ -63,7 +63,7 @@ export class Product {
   @Column({ default: false })
   isIngredient: boolean;
 
-  @Column({ default: false })
+  @Column({ default: false, nullable: true })
   isSet: boolean;
 
   @OneToOne(() => SetMenu, (setMenu) => setMenu.product, { cascade: true })

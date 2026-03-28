@@ -21,6 +21,7 @@ interface Product {
     unit: string;
     isQuickSale?: boolean;
     isIngredient?: boolean;
+    isSet?: boolean;
     productTypeId?: number | null;
     productType?: any;
     outputProfileId?: number | null;
@@ -72,8 +73,9 @@ export function PageClient() {
         unit: 'piece',
         isQuickSale: true,
         isIngredient: false,
-        productTypeId: 0,
-        outputProfileId: 0,
+        isSet: false,
+        productTypeId: null,
+        outputProfileId: null,
         recipes: [],
         modifiers: []
     });
@@ -228,6 +230,7 @@ export function PageClient() {
                 unit: 'piece',
                 isQuickSale: true,
                 isIngredient: false,
+                isSet: false,
                 productTypeId: null,
                 outputProfileId: null,
                 recipes: [],
@@ -331,7 +334,7 @@ export function PageClient() {
                             />
                         </div>
                         <button onClick={() => router.push(`/${locale}/admin/departments`)} className="px-6 py-3 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
-                            <i className="fat fa-layer-group text-lg"></i> Kategoriler
+                            <i className="fat fa-layer-group text-lg"></i> {t('tableCategory')}
                         </button>
                         <button onClick={() => router.push(`/${locale}/admin/products/set-menus`)} className="px-6 py-3 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
                             <i className="fat fa-layer-group text-lg"></i> {t('setMenus')}
@@ -535,7 +538,7 @@ export function PageClient() {
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">ÜRÜN CİNSİ</label>
                                                         <div className="relative">
                                                             <i className="fat fa-shapes absolute left-4 top-4 text-teal-500/50"></i>
-                                                            <select value={formData.productTypeId || ''} onChange={(e) => setFormData({ ...formData, productTypeId: e.target.value ? parseInt(e.target.value) : 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                            <select value={formData.productTypeId || ''} onChange={(e) => setFormData({ ...formData, productTypeId: e.target.value ? parseInt(e.target.value) : null })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
                                                                 <option value="">Cins Seçin (Zorunlu)</option>
                                                                 {productTypes.map(pt => (
                                                                     <option key={pt.id} value={pt.id}>{pt.name}</option>
@@ -669,7 +672,7 @@ export function PageClient() {
                                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">ÇIKTI PROFİLİ OVERRIDE</label>
                                                     <div className="relative">
                                                         <i className="fat fa-route absolute left-4 top-4 text-teal-500/50"></i>
-                                                        <select value={formData.outputProfileId || ''} onChange={(e) => setFormData({ ...formData, outputProfileId: e.target.value ? parseInt(e.target.value) : 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                        <select value={formData.outputProfileId || ''} onChange={(e) => setFormData({ ...formData, outputProfileId: e.target.value ? parseInt(e.target.value) : null })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
                                                             <option value="">Varsayılanı Kullan</option>
                                                             {outputProfiles.map(op => (
                                                                 <option key={op.id} value={op.id}>{op.name}</option>
