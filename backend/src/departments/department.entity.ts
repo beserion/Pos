@@ -24,6 +24,18 @@ export class Department {
   @JoinColumn({ name: 'outputProfileId' })
   outputProfile: OutputProfile;
 
+  // Ekstra ürün grubu (Pop-Up içinde çıkacak)
+  @Column({ nullable: true })
+  extraDepartmentId: number;
+
+  @ManyToOne(() => Department, { nullable: true })
+  @JoinColumn({ name: 'extraDepartmentId' })
+  extraDepartment: Department;
+
+  // Ana ürün seçilince ekstrayı otomatik aç
+  @Column({ default: false })
+  autoOpenExtraPopup: boolean;
+
   @Column({ default: true })
   isActive: boolean;
 

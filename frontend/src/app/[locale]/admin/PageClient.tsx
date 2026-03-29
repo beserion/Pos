@@ -49,8 +49,8 @@ export function PageClient() {
     const filteredSections = sections.filter(sec => {
         const matchesPermission = hasPermission(`${sec.key}:VIEW`);
         const query = searchQuery.toLowerCase();
-        const matchesSearch = !searchQuery || 
-            (sec.title?.toLowerCase().includes(query)) || 
+        const matchesSearch = !searchQuery ||
+            (sec.title?.toLowerCase().includes(query)) ||
             (sec.subtitle?.toLowerCase().includes(query));
         return matchesPermission && matchesSearch;
     });
@@ -77,7 +77,7 @@ export function PageClient() {
                                 type="text"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Stok adı veya kodu ile ara..."
+                                placeholder="Modüllerde ve Ayarlarda ara..."
                                 className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-2 focus:ring-indigo-500/30 outline-none transition-all shadow-sm"
                             />
                         </div>
@@ -136,7 +136,7 @@ export function PageClient() {
                             <p className="text-slate-500 dark:text-slate-400 font-bold text-sm max-w-sm">
                                 "<span className="text-indigo-600 dark:text-indigo-400">{searchQuery}</span>" ile eşleşen bir modül veya yetki bulunamadı. Lütfen farklı bir anahtar kelime deneyin.
                             </p>
-                            <button 
+                            <button
                                 onClick={() => setSearchQuery('')}
                                 className="mt-6 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-95"
                             >
