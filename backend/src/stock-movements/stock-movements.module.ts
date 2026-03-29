@@ -6,10 +6,11 @@ import { StockMovementsController } from './stock-movements.controller';
 import { StockCardsModule } from '../stock-cards/stock-cards.module';
 import { RecipesModule } from '../recipes/recipes.module';
 import { ParametersModule } from '../parameters/parameters.module';
+import { Product } from '../products/product.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([StockMovement]),
+    TypeOrmModule.forFeature([StockMovement, Product]),
     StockCardsModule,
     forwardRef(() => RecipesModule),
     ParametersModule,

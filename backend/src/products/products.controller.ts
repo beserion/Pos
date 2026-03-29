@@ -52,4 +52,20 @@ export class ProductsController {
   remove(@Param('id') id: string) {
     return this.productsService.remove(+id);
   }
+
+  // §10: Ürün aktif etme validasyon kontrolü
+  @Get(':id/validate')
+  @Permissions('VIEW_PRODUCTS')
+  async validate(@Param('id') id: string) {
+    const product = await this.productsService.findOne(+id);
+    const errors = await this.productsService.validateForActivation(product);
+    return { valid: errors.length === 0, errors };
+  }
+
+  // §19: Eksik bağı olan aktif ürünlerin review listesi
+  @Get('review/activation')
+  @Permissions('VIEW_PRODUCTS')
+  async getActivationReview() {
+    return this.productsService.getActivationReview();
+  }
 }

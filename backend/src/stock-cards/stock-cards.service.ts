@@ -34,7 +34,7 @@ export class StockCardsService {
     }
 
     if (category) {
-      query.andWhere('sc.category = :category', { category });
+      query.andWhere('sc.stockGroup = :category', { category });
     }
 
     if (warehouseId) {
@@ -91,10 +91,10 @@ export class StockCardsService {
   async getCategories(): Promise<string[]> {
     const result = await this.stockCardRepository
       .createQueryBuilder('sc')
-      .select('DISTINCT sc.category', 'category')
-      .where('sc.category IS NOT NULL')
+      .select('DISTINCT sc.stockGroup', 'stockGroup')
+      .where('sc.stockGroup IS NOT NULL')
       .getRawMany();
-    return result.map((r) => r.category).filter(Boolean);
+    return result.map((r) => r.stockGroup).filter(Boolean);
   }
 
   async getStats(): Promise<{
@@ -108,7 +108,7 @@ export class StockCardsService {
     let empty = 0;
     for (const sc of all) {
       const stock = Number(sc.currentStock);
-      const min = Number(sc.minStockLevel);
+      const min = Number(sc.minStock);
       if (stock <= 0) empty++;
       else if (min > 0 && stock <= min) warning++;
     }

@@ -11,23 +11,51 @@ interface Product {
     name: string;
     sku: string;
     barcode?: string;
-    price: number;
-    category: string;
+    posName?: string;
+    kitchenName?: string;
     isActive: boolean;
-    printerId?: number | null;
     imageUrl?: string;
-    costPrice: number;
-    minStockLevel: number;
-    unit: string;
-    isQuickSale?: boolean;
-    isIngredient?: boolean;
-    isSet?: boolean;
+    // Satış
+    price: number;
+    costPrice?: number;
+    vatRate: number;
+    openPriceEnabled: boolean;
+    discountAllowed: boolean;
+    compAllowed: boolean;
+    // Menü/Ekran
+    productGroup?: string;
+    productSubgroup?: string;
     productTypeId?: number | null;
     productType?: any;
+    buttonOrder: number;
+    buttonColor?: string;
+    // Kanal Uygunluğu
+    posVisible: boolean;
+    takeawayVisible: boolean;
+    deliveryVisible: boolean;
+    qrVisible: boolean;
+    kioskVisible: boolean;
+    // Servis Tipi
+    availableForDineIn: boolean;
+    availableForTakeaway: boolean;
+    availableForDelivery: boolean;
+    // Stok Bağı
+    inventoryLinkType: string;
+    linkedStockCardId?: number | null;
+    linkedStockCard?: any;
+    directStockQty: number;
+    directStockUnit?: string;
+    // Operasyon
+    printerId?: number | null;
     outputProfileId?: number | null;
     outputProfile?: any;
-    recipes?: { ingredientId: number; ingredientName?: string; quantity: number; unit: string }[];
+    // Eski (geriye uyumluluk)
+    isQuickSale?: boolean;
+    isSet?: boolean;
+    // İlişkiler
+    recipes?: any[];
     modifiers?: Modifier[];
+    setMenu?: any;
 }
 
 interface Modifier {
@@ -55,6 +83,7 @@ export function PageClient() {
     const [outputProfiles, setOutputProfiles] = useState<any[]>([]);
     const [departments, setDepartments] = useState<any[]>([]);
     const [allModifiers, setAllModifiers] = useState<Modifier[]>([]);
+    const [stockCards, setStockCards] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -64,18 +93,39 @@ export function PageClient() {
         name: '',
         sku: '',
         barcode: '',
+        posName: '',
+        kitchenName: '',
         price: 0,
-        category: '',
+        vatRate: 0,
+        openPriceEnabled: false,
+        discountAllowed: true,
+        compAllowed: true,
+        productGroup: '',
+        productSubgroup: '',
+        buttonOrder: 0,
+        buttonColor: '',
         isActive: true,
         printerId: null,
-        costPrice: 0,
-        minStockLevel: 0,
-        unit: 'piece',
-        isQuickSale: true,
-        isIngredient: false,
-        isSet: false,
         productTypeId: null,
         outputProfileId: null,
+        // Kanal
+        posVisible: true,
+        takeawayVisible: true,
+        deliveryVisible: true,
+        qrVisible: true,
+        kioskVisible: true,
+        // Servis
+        availableForDineIn: true,
+        availableForTakeaway: true,
+        availableForDelivery: true,
+        // Stok Bağı
+        inventoryLinkType: 'none',
+        linkedStockCardId: null,
+        directStockQty: 0,
+        directStockUnit: 'adet',
+        // Eski
+        isQuickSale: true,
+        isSet: false,
         recipes: [],
         modifiers: []
     });
@@ -94,13 +144,14 @@ export function PageClient() {
         if (!user?.token) return;
         try {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
-            const [prodRes, printRes, modRes, typesRes, profilesRes, depRes] = await Promise.all([
+            const [prodRes, printRes, modRes, typesRes, profilesRes, depRes, stockCardsRes] = await Promise.all([
                 axios.get(`${API_URL}/products`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/printers`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/modifiers`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/product-types`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/output-profiles`, { headers: { Authorization: `Bearer ${user.token}` } }),
-                axios.get(`${API_URL}/departments`, { headers: { Authorization: `Bearer ${user.token}` } })
+                axios.get(`${API_URL}/departments`, { headers: { Authorization: `Bearer ${user.token}` } }),
+                axios.get(`${API_URL}/stock-cards?limit=1000`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: { data: [] } }))
             ]);
             setProducts(prodRes.data);
             setFilteredProducts(prodRes.data);
@@ -109,6 +160,7 @@ export function PageClient() {
             setProductTypes(typesRes.data);
             setOutputProfiles(profilesRes.data);
             setDepartments(depRes.data);
+            setStockCards(stockCardsRes.data.data || []);
         } catch (error) {
             console.error('Error fetching data', error);
             showSwal({ title: tc('error'), text: tc('loadingError'), icon: 'error' });
@@ -123,7 +175,7 @@ export function PageClient() {
             p.name.toLowerCase().includes(lowerQuery) ||
             p.sku.toLowerCase().includes(lowerQuery) ||
             p.barcode?.toLowerCase().includes(lowerQuery) ||
-            p.category?.toLowerCase().includes(lowerQuery)
+            p.productGroup?.toLowerCase().includes(lowerQuery)
         );
         setFilteredProducts(filtered);
     }, [searchQuery, products]);
@@ -183,7 +235,7 @@ export function PageClient() {
             return;
         }
 
-        const ingredient = products.find(p => p.id === ingredientProduct.ingredientId);
+        const ingredient = stockCards.find(p => p.id === ingredientProduct.ingredientId);
         if (!ingredient) return;
 
         // Check if already added
@@ -198,7 +250,7 @@ export function PageClient() {
                 ingredientId: ingredientProduct.ingredientId,
                 ingredientName: ingredient.name,
                 quantity: ingredientProduct.quantity,
-                unit: ingredientProduct.unit
+                unit: ingredient.baseUnit || ingredientProduct.unit
             }]
         }));
 
@@ -221,18 +273,35 @@ export function PageClient() {
                 name: '',
                 sku: '',
                 barcode: '',
+                posName: '',
+                kitchenName: '',
                 price: 0,
-                category: '',
+                vatRate: 0,
+                openPriceEnabled: false,
+                discountAllowed: true,
+                compAllowed: true,
+                productGroup: '',
+                productSubgroup: '',
+                buttonOrder: 0,
+                buttonColor: '',
                 isActive: true,
                 printerId: null,
-                costPrice: 0,
-                minStockLevel: 0,
-                unit: 'piece',
-                isQuickSale: true,
-                isIngredient: false,
-                isSet: false,
                 productTypeId: null,
                 outputProfileId: null,
+                posVisible: true,
+                takeawayVisible: true,
+                deliveryVisible: true,
+                qrVisible: true,
+                kioskVisible: true,
+                availableForDineIn: true,
+                availableForTakeaway: true,
+                availableForDelivery: true,
+                inventoryLinkType: 'none',
+                linkedStockCardId: null,
+                directStockQty: 0,
+                directStockUnit: 'adet',
+                isQuickSale: true,
+                isSet: false,
                 recipes: [],
                 modifiers: []
             });
@@ -291,7 +360,7 @@ export function PageClient() {
         if (formData.id === 0 && val) {
             newSku = generateSku(val);
         }
-        setFormData({ ...formData, category: val, sku: newSku });
+        setFormData({ ...formData, productGroup: val, sku: newSku });
     };
 
     const categoryOptions = departments.filter(d => d.isActive).map(d => ({ key: d.name, value: d.name }));
@@ -362,7 +431,7 @@ export function PageClient() {
                     <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[32px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-emerald-300 dark:hover:border-emerald-500/40 hover:shadow-[0_8px_30px_-5px_rgba(16,185,129,0.3)] hover:scale-[1.02] cursor-pointer">
                         <div>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('activeCategories')}</p>
-                            <h3 className="text-3xl font-black text-slate-800 dark:text-white">{new Set(products.map(p => p.category)).size}</h3>
+                            <h3 className="text-3xl font-black text-slate-800 dark:text-white">{new Set(products.map(p => p.productGroup)).size}</h3>
                         </div>
                         <div className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
                             <i className="fat fa-tags text-3xl"></i>
@@ -439,7 +508,7 @@ export function PageClient() {
                                                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-700">
                                                     <i className="fat fa-tag text-slate-400 text-xs text-teal-500"></i>
                                                     <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                                                        {prod.category || t('categoryOther')}
+                                                        {prod.productGroup || t('categoryOther')}
                                                     </span>
                                                 </div>
                                             </td>
@@ -514,7 +583,9 @@ export function PageClient() {
                                     <button type="button" onClick={() => setActiveTab('genel')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'genel' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabGeneral')}</button>
                                     <button type="button" onClick={() => setActiveTab('yonlendirme')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'yonlendirme' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Yönlendirme</button>
                                     <button type="button" onClick={() => setActiveTab('gorsel')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'gorsel' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabImage')}</button>
-                                    <button type="button" onClick={() => setActiveTab('recete')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'recete' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabRecipe')}</button>
+                                    {formData.inventoryLinkType === 'recipe' && (
+                                        <button type="button" onClick={() => setActiveTab('recete')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'recete' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabRecipe')}</button>
+                                    )}
                                     <button type="button" onClick={() => setActiveTab('ozellik')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'ozellik' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Özellikler</button>
                                 </div>
 
@@ -551,7 +622,7 @@ export function PageClient() {
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCategory')}</label>
                                                         <div className="relative">
                                                             <i className="fat fa-folder-tree absolute left-4 top-4 text-teal-500/50"></i>
-                                                            <select value={formData.category} onChange={(e) => handleCategoryChange(e.target.value)} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                            <select value={formData.productGroup || ''} onChange={(e) => handleCategoryChange(e.target.value)} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
                                                                 <option value="">{t('selectCategory')}</option>
                                                                 {categoryOptions.map(cat => (
                                                                     <option key={cat.value} value={cat.value}>{cat.value}</option>
@@ -586,24 +657,12 @@ export function PageClient() {
                                                         </div>
                                                     </div>
 
-                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                                         <div>
-                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelMinStock')}</label>
+                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">KDV ORANI (%)</label>
                                                             <div className="relative">
-                                                                <i className="fat fa-triangle-exclamation absolute left-4 top-4 text-teal-500/50"></i>
-                                                                <input type="number" step="1" value={formData.minStockLevel ?? ''} onChange={(e) => setFormData({ ...formData, minStockLevel: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0" />
-                                                            </div>
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelUnit')}</label>
-                                                            <div className="relative">
-                                                                <i className="fat fa-scale-balanced absolute left-4 top-4 text-teal-500/50"></i>
-                                                                <select value={formData.unit || ''} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                                    {unitOptions.map(u => (
-                                                                        <option key={u.key} value={u.value}>{t(u.key)}</option>
-                                                                    ))}
-                                                                </select>
-                                                                <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                                <i className="fat fa-percent absolute left-4 top-4 text-teal-500/50"></i>
+                                                                <input type="number" step="1" value={formData.vatRate} onChange={(e) => setFormData({ ...formData, vatRate: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0" />
                                                             </div>
                                                         </div>
                                                     </div>
@@ -642,26 +701,73 @@ export function PageClient() {
                                                             </div>
                                                         </div>
 
+                                                        {/* inventoryLinkType Stok Bağı Seçimi - isIngredient yerine */}
                                                         <div
-                                                            onClick={() => setFormData({ ...formData, isIngredient: !formData.isIngredient })}
-                                                            className={`cursor-pointer group flex items-center p-4 rounded-3xl border-2 transition-all duration-300 ${formData.isIngredient ? 'bg-emerald-50 border-emerald-500 dark:bg-emerald-500/10 shadow-lg shadow-emerald-500/10' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800 hover:border-emerald-300'}`}
+                                                            onClick={() => {
+                                                                const types = ['none', 'direct_stock', 'recipe'];
+                                                                const idx = types.indexOf(formData.inventoryLinkType);
+                                                                const newType = types[(idx + 1) % types.length];
+                                                                setFormData({ ...formData, inventoryLinkType: newType });
+                                                            }}
+                                                            className={`cursor-pointer group flex items-center p-4 rounded-3xl border-2 transition-all duration-300 ${
+                                                                formData.inventoryLinkType === 'direct_stock' ? 'bg-blue-50 border-blue-500 dark:bg-blue-500/10 shadow-lg shadow-blue-500/10' :
+                                                                formData.inventoryLinkType === 'recipe' ? 'bg-emerald-50 border-emerald-500 dark:bg-emerald-500/10 shadow-lg shadow-emerald-500/10' :
+                                                                'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800 hover:border-blue-300'}`}
                                                         >
-                                                            <div className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center transition-colors ${formData.isIngredient ? 'bg-white text-emerald-600 shadow-sm' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>
-                                                                <i className="fat fa-leaf text-xl"></i>
+                                                            <div className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center transition-colors ${
+                                                                formData.inventoryLinkType === 'direct_stock' ? 'bg-white text-blue-600 shadow-sm' :
+                                                                formData.inventoryLinkType === 'recipe' ? 'bg-white text-emerald-600 shadow-sm' :
+                                                                'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>
+                                                                <i className={`fat ${
+                                                                    formData.inventoryLinkType === 'direct_stock' ? 'fa-link' :
+                                                                    formData.inventoryLinkType === 'recipe' ? 'fa-mortar-pestle' :
+                                                                    'fa-unlink'} text-xl`}></i>
                                                             </div>
                                                             <div className="flex-1 ml-4 text-left">
-                                                                <h6 className={`text-sm font-black mb-0.5 tracking-tight ${formData.isIngredient ? 'text-emerald-900 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}>{t('labelIngredient')}</h6>
-                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none m-0">Hammadde Olarak Kullan</p>
+                                                                <h6 className={`text-sm font-black mb-0.5 tracking-tight ${
+                                                                    formData.inventoryLinkType !== 'none' ? 'text-slate-900 dark:text-slate-200' : 'text-slate-600 dark:text-slate-400'}`}>Stok Bağı</h6>
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none m-0">
+                                                                    {formData.inventoryLinkType === 'none' ? 'Stok Bağı Yok' : formData.inventoryLinkType === 'direct_stock' ? 'Direkt Stok' : 'Reçete'}
+                                                                </p>
                                                             </div>
-                                                            <div className={`w-6 h-6 shrink-0 rounded-full border-2 transition-all flex items-center justify-center ${formData.isIngredient ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300'}`}>
-                                                                {formData.isIngredient && <i className="fat fa-check text-[10px] text-white"></i>}
-                                                            </div>
+                                                            <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${
+                                                                formData.inventoryLinkType === 'direct_stock' ? 'bg-blue-100 text-blue-600' :
+                                                                formData.inventoryLinkType === 'recipe' ? 'bg-emerald-100 text-emerald-600' :
+                                                                'bg-slate-200 text-slate-500'}`}>{formData.inventoryLinkType === 'none' ? 'YOK' : formData.inventoryLinkType === 'direct_stock' ? 'DİREKT' : 'REÇETE'}</span>
                                                         </div>
                                                     </div>
                                                 </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
                                                 </div>
+                                                
+                                                {formData.inventoryLinkType === 'direct_stock' && (
+                                                    <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-700/50 p-6 rounded-3xl mt-6">
+                                                        <h4 className="text-sm font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest mb-4">Direkt Stok Bağlantısı</h4>
+                                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                            <div className="md:col-span-2">
+                                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Bağlı Stok Kartı</label>
+                                                                <div className="relative">
+                                                                    <i className="fat fa-box absolute left-4 top-4 text-blue-500/50"></i>
+                                                                    <select required={formData.inventoryLinkType === 'direct_stock'} value={formData.linkedStockCardId || ''} onChange={(e) => setFormData({ ...formData, linkedStockCardId: e.target.value ? parseInt(e.target.value) : null, directStockUnit: stockCards.find(sc => sc.id === parseInt(e.target.value))?.baseUnit || 'adet' })} className="w-full pl-12 pr-4 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-blue-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                                        <option value="">Stok Kartı Seçin</option>
+                                                                        {stockCards.filter(sc => sc.isActive).map(sc => (
+                                                                            <option key={sc.id} value={sc.id}>{sc.name} ({sc.baseUnit})</option>
+                                                                        ))}
+                                                                    </select>
+                                                                    <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                                </div>
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Düşülecek Miktar</label>
+                                                                <div className="relative flex items-center">
+                                                                    <input type="number" step="0.001" required={formData.inventoryLinkType === 'direct_stock'} value={formData.directStockQty} onChange={(e) => setFormData({ ...formData, directStockQty: parseFloat(e.target.value) || 0 })} className="w-full pl-4 pr-16 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-blue-500/10 outline-none transition-shadow" placeholder="0" />
+                                                                    <span className="absolute right-4 text-xs font-black text-slate-400 uppercase tracking-widest">{stockCards.find(sc => sc.id === formData.linkedStockCardId)?.baseUnit || 'BİRİM'}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
 
@@ -765,8 +871,8 @@ export function PageClient() {
                                                                 <i className="fat fa-leaf absolute left-4 top-[14px] text-teal-500/50 text-sm"></i>
                                                                 <select value={ingredientProduct.ingredientId || ''} onChange={(e) => setIngredientProduct({ ...ingredientProduct, ingredientId: parseInt(e.target.value) })} className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
                                                                     <option value="">{t('selectIngredient')}</option>
-                                                                    {products.filter(p => p.isIngredient).map(i => (
-                                                                        <option key={i.id} value={i.id}>{i.name}</option>
+                                                                    {stockCards.filter(p => p.isActive).map(i => (
+                                                                        <option key={i.id} value={i.id}>{i.name} ({i.baseUnit})</option>
                                                                     ))}
                                                                 </select>
                                                                 <i className="fat fa-chevron-down absolute right-4 top-[14px] text-slate-400 text-xs pointer-events-none"></i>
@@ -801,7 +907,7 @@ export function PageClient() {
                                                                 {formData.recipes.map((item, idx) => (
                                                                     <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
                                                                         <td className="px-6 py-3 font-bold text-sm text-slate-700 dark:text-slate-300">
-                                                                            {item.ingredientName || products.find(p => p.id === item.ingredientId)?.name}
+                                                                            {item.ingredientName || stockCards.find(p => p.id === item.ingredientId)?.name}
                                                                         </td>
                                                                         <td className="px-6 py-3 font-bold text-sm text-teal-600 dark:text-teal-400">
                                                                             {item.quantity} {item.unit}
