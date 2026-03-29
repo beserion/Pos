@@ -70,6 +70,8 @@ import { ShiftsModule } from './shifts/shifts.module';
 import { Shift } from './shifts/shift.entity';
 import { ZReport } from './reports/z-report.entity';
 import { AuditLog } from './reports/audit-log.entity';
+import { BusinessDayLog } from './reports/business-day-log.entity';
+import { ClosedDayRecord } from './reports/closed-day-record.entity';
 import { ProductType } from './product-types/product-type.entity';
 import { OutputProfile } from './output-profiles/output-profile.entity';
 import { SetMenu } from './products/set-menu.entity';
@@ -149,6 +151,8 @@ import { ScheduleModule } from '@nestjs/schedule';
             Shift,
             ZReport,
             AuditLog,
+            BusinessDayLog,
+            ClosedDayRecord,
             ProductType,
             OutputProfile,
             TransferLog,

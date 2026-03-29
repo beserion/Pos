@@ -123,6 +123,14 @@ export class PrintersService {
         const nameStr = `${item.quantity}x ${item.name.substring(0, 20)}`;
         const totalStr = `${Number(item.total).toFixed(2)} TL`;
         thermalPrinter.leftRight(nameStr, totalStr);
+
+        // Print subItems if they exist (extras)
+        if (item.subItems && item.subItems.length > 0) {
+          for (const sub of item.subItems) {
+            const subName = sub.product?.name || sub.name || `Urun #${sub.productId}`;
+            thermalPrinter.println(`  + ${subName}`);
+          }
+        }
       }
 
       thermalPrinter.drawLine();
@@ -229,6 +237,15 @@ export class PrintersService {
                   thermalPrinter.leftRight(`${item.quantity}x`, item.name.substring(0,30));
                   thermalPrinter.setTextNormal();
                   thermalPrinter.bold(false);
+                  
+                  // Print subItems if they exist (extras)
+                  if (item.subItems && item.subItems.length > 0) {
+                    for (const sub of item.subItems) {
+                      const subName = sub.product?.name || sub.name || `Urun #${sub.productId}`;
+                      thermalPrinter.println(`  + ${subName}`);
+                    }
+                  }
+
                   if (item.note) thermalPrinter.println(`Not: ${item.note}`);
                 }
 
@@ -242,6 +259,15 @@ export class PrintersService {
                     thermalPrinter.bold(true);
                     thermalPrinter.leftRight(`${item.quantity}x`, item.name.substring(0,30));
                     thermalPrinter.bold(false);
+
+                    // Print subItems if they exist
+                    if (item.subItems && item.subItems.length > 0) {
+                      for (const sub of item.subItems) {
+                        const subName = sub.product?.name || sub.name || `Urun #${sub.productId}`;
+                        thermalPrinter.println(`  + ${subName}`);
+                      }
+                    }
+
                     if (item.note) thermalPrinter.println(`Not: ${item.note}`);
                   }
                 }

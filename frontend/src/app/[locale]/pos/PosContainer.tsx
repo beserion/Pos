@@ -5,6 +5,7 @@ import { useLocale } from 'next-intl';
 import PosView from './PosView';
 import QuickSaleView from './QuickSaleView';
 import TakeOrderView from './TakeOrderView';
+import BusinessDayGuard from '@/components/shifts/BusinessDayGuard';
 
 function PosContainerContent() {
     const searchParams = useSearchParams();
@@ -12,6 +13,11 @@ function PosContainerContent() {
     const locale = useLocale();
     const initialView = searchParams.get('view') as 'pos' | 'quicksale' | 'takeorder' || 'pos';
     const [view, setView] = useState<'pos' | 'quicksale' | 'takeorder'>(initialView);
+    const [businessDayReady, setBusinessDayReady] = useState(false);
+
+    const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+        ? 'http://localhost:3050'
+        : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050');
 
     useEffect(() => {
         const v = searchParams.get('view');
@@ -32,14 +38,27 @@ function PosContainerContent() {
 
     return (
         <div className="h-screen w-full overflow-hidden bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
-            {view === 'pos' && (
-                <PosView onSwitchToQuickSale={() => changeView('quicksale')} onSwitchToTakeOrder={() => changeView('takeorder')} />
+            {/* İş Günü Kontrol Guard'ı — POS içeriğinden önce kontrol eder */}
+            {!businessDayReady && (
+                <BusinessDayGuard
+                    apiUrl={API_URL}
+                    onReady={() => setBusinessDayReady(true)}
+                />
             )}
-            {view === 'quicksale' && (
-                <QuickSaleView onSwitchToPos={() => changeView('pos')} />
-            )}
-            {view === 'takeorder' && (
-                <TakeOrderView onSwitchToPos={() => changeView('pos')} />
+
+            {/* POS içeriği ancak iş günü kontrolü başarılı olduktan sonra render edilir */}
+            {businessDayReady && (
+                <>
+                    {view === 'pos' && (
+                        <PosView onSwitchToQuickSale={() => changeView('quicksale')} onSwitchToTakeOrder={() => changeView('takeorder')} />
+                    )}
+                    {view === 'quicksale' && (
+                        <QuickSaleView onSwitchToPos={() => changeView('pos')} />
+                    )}
+                    {view === 'takeorder' && (
+                        <TakeOrderView onSwitchToPos={() => changeView('pos')} />
+                    )}
+                </>
             )}
         </div>
     );

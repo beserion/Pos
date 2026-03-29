@@ -56,6 +56,13 @@ export class ParametersService implements OnModuleInit {
         { module: 'inventory', key: 'stock_restore_on_cancel', value: 'true', label: 'İptal/İade Stok Geri Yükleme', type: 'boolean', description: 'İptal veya iade durumunda stok otomatik geri yüklensin mi?' },
         { module: 'inventory', key: 'default_warehouse_id', value: '0', label: 'Varsayılan Depo', type: 'number', description: 'Varsayılan depo ID (0 = belirtilmemiş)' },
         { module: 'inventory', key: 'blind_count_default', value: 'false', label: 'Kör Sayım Varsayılanı', type: 'boolean', description: 'Sayım başlatılırken kör sayım seçili mi?' },
+        // ── İş Günü Yönetimi Parametreleri ──
+        { module: 'pos', key: 'active_business_date', value: '', label: 'Aktif Program Tarihi', type: 'text', description: 'Mevcut çalışma günü tarihi (YYYY-MM-DD). Boş ise otomatik hesaplanır.' },
+        { module: 'pos', key: 'last_end_of_day_at', value: '', label: 'Son Gün Sonu Zamanı', type: 'text', description: 'Son başarılı gün sonu tarih/saati (ISO format).' },
+        { module: 'pos', key: 'shift_closure_mode', value: 'warn_only', label: 'Vardiya Kapanış Modu', type: 'select', description: 'Gün sonu öncesi açık vardiya kontrolü: warn_only / authorized_approval / mandatory_close' },
+        { module: 'pos', key: 'z_report_print_mode', value: 'auto_print', label: 'Z Raporu Yazdırma Modu', type: 'select', description: 'Gün sonu sonrası Z raporu: auto_print / manual_print / disabled' },
+        { module: 'pos', key: 'shift_system_enabled', value: 'true', label: 'Vardiyalı Kasiyer Sistemi', type: 'boolean', description: 'Vardiyalı kasiyer sistemi aktif mi?' },
+        { module: 'pos', key: 'end_of_day_min_hours', value: '6', label: 'Gün Sonu Min. Saat Aralığı', type: 'number', description: 'İki gün sonu arasında minimum kaç saat geçmeli?' },
       ];
 
       for (const p of defaultParams) {

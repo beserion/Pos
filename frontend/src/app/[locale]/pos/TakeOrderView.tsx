@@ -63,6 +63,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [products, setProducts] = useState<Product[]>([]);
     const [tables, setTables] = useState<Table[]>([]);
     const [zones, setZones] = useState<Zone[]>([]);
+    const [departments, setDepartments] = useState<any[]>([]);
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
     const [selectedZone, setSelectedZone] = useState<number | null>(null);
     const [cart, setCart] = useState<OrderItem[]>([]);
@@ -71,6 +72,12 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [selectedCategory, setSelectedCategory] = useState<string>('Tümü');
     const [searchQuery, setSearchQuery] = useState('');
     const [dataLoading, setDataLoading] = useState(true);
+
+    // --- Ekstra Popup State ---
+    const [extraPopupOpen, setExtraPopupOpen] = useState(false);
+    const [extraPopupProducts, setExtraPopupProducts] = useState<Product[]>([]);
+    const [extraPopupParentProduct, setExtraPopupParentProduct] = useState<Product | null>(null);
+    const [pendingExtraCartItem, setPendingExtraCartItem] = useState<OrderItem | null>(null);
 
 
 
@@ -105,14 +112,16 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         try {
             const token = Cookies.get('token') || localStorage.getItem('token');
             if (!token) return;
-            const [productsRes, tablesRes, zonesRes] = await Promise.all([
+            const [productsRes, tablesRes, zonesRes, depsRes] = await Promise.all([
                 fetch(`${API_URL}/products`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
                 fetch(`${API_URL}/tables`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-                fetch(`${API_URL}/zones`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json())
+                fetch(`${API_URL}/zones`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+                fetch(`${API_URL}/departments`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => [])
             ]);
             setProducts(Array.isArray(productsRes) ? productsRes : []);
             setTables(Array.isArray(tablesRes) ? tablesRes : []);
             setZones(Array.isArray(zonesRes) ? zonesRes : []);
+            setDepartments(Array.isArray(depsRes) ? depsRes : []);
             if (Array.isArray(zonesRes) && zonesRes.length > 0) setSelectedZone(zonesRes[0].id);
         } catch (error) {
             console.error('Error fetching POS data:', error);
@@ -190,7 +199,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         }
     };
 
-    const addToCart = (product: Product, note?: string) => {
+    const addToCart = (product: Product, note?: string, skipExtraCheck?: boolean) => {
         if (product.isSet && product.setMenu?.setType !== 'FIX') {
             setSelectedSetMenuProduct(product);
             setIsSetMenuModalOpen(true);
@@ -199,14 +208,63 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
         const m = activeSaleType === 'HALF' ? (params.half_price_multiplier || 0.5) : activeSaleType === 'DOUBLE' ? (params.double_price_multiplier || 1.7) : 1.0;
 
+        const newItem: OrderItem = { product, quantity: 1, note, isWaiting: false, saleType: activeSaleType, saleTypeMultiplier: m };
+
+        // Ekstra popup kontrolü
+        if (!skipExtraCheck) {
+            const dept = departments.find(d => d.name === product.category);
+            if (dept?.extraDepartmentId) {
+                const extraProducts = products.filter(p => p.category === departments.find(d => d.id === dept.extraDepartmentId)?.name);
+                if (extraProducts.length > 0) {
+                    if (dept.autoOpenExtraPopup) {
+                        // Önce ürünü sepete ekle, sonra popup aç
+                        setCart(prev => {
+                            const existing = prev.find(item => item.product.id === product.id && item.note === note && item.saleType === activeSaleType && !item.uniqueId);
+                            if (existing) return prev.map(item => (item.product.id === product.id && item.note === note && item.saleType === activeSaleType && !item.uniqueId) ? { ...item, quantity: item.quantity + 1 } : item);
+                            return [...prev, newItem];
+                        });
+                        setPendingExtraCartItem(newItem);
+                        setExtraPopupProducts(extraProducts);
+                        setExtraPopupParentProduct(product);
+                        setExtraPopupOpen(true);
+                        return;
+                    } else {
+                        // Manuel mod: kaydet pending için aşağıda işaret bırak
+                        setPendingExtraCartItem(newItem);
+                        setExtraPopupProducts(extraProducts);
+                        setExtraPopupParentProduct(product);
+                    }
+                }
+            } else {
+                setPendingExtraCartItem(null);
+                setExtraPopupParentProduct(null);
+            }
+        }
+
         setCart(prev => {
             const existing = prev.find(item => item.product.id === product.id && item.note === note && item.saleType === activeSaleType && !item.uniqueId);
             if (existing) {
                 return prev.map(item => (item.product.id === product.id && item.note === note && item.saleType === activeSaleType && !item.uniqueId) ? { ...item, quantity: item.quantity + 1 } : item);
             }
-            // Marş sistemi aktif olsa bile beklemeye alma varsayılan olarak inaktif (false) gelmeli
-            return [...prev, { product, quantity: 1, note, isWaiting: false, saleType: activeSaleType, saleTypeMultiplier: m }];
+            return [...prev, newItem];
         });
+    };
+
+    const handleExtraSelect = (extraProduct: Product) => {
+        if (!pendingExtraCartItem) return;
+        const extraItem = { product: extraProduct, quantity: 1, unitPrice: extraProduct.price, isExtra: true };
+        setCart(prev => prev.map(item =>
+            item.product.id === pendingExtraCartItem.product.id && item.saleType === pendingExtraCartItem.saleType && !item.subItems?.some((s: any) => s.productId === extraProduct.id)
+                ? { ...item, subItems: [...(item.subItems || []), { productId: extraProduct.id, product: extraProduct, quantity: 1, unitPrice: extraProduct.price, isExtra: true }] }
+                : item
+        ));
+        toastSwal({ icon: 'success', title: `${extraProduct.name} eklendi` });
+    };
+
+    const handleExtraClose = () => {
+        setExtraPopupOpen(false);
+        setExtraPopupProducts([]);
+        setExtraPopupParentProduct(null);
     };
 
     const handleSetMenuConfirm = (subItems: any[], extraPrice: number) => {
@@ -305,7 +363,11 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                 const orderPayload = {
                     tableId: selectedTable.id,
                     userId: user?.id || user?.sub,
-                    totalAmount: cart.reduce((sum, item) => sum + (((item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1)) * item.quantity), 0),
+                    totalAmount: cart.reduce((sum, item) => {
+                        const base = ((item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1)) * item.quantity;
+                        const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
+                        return sum + base + extras;
+                    }, 0),
                     status: 'NEW',
                     items: cart.map(item => ({
                         productId: item.product.id,
@@ -346,6 +408,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                         quantity: item.quantity,
                         printerId: item.product.printerId,
                         productId: item.product.id,
+                        subItems: item.subItems,
                         isWaiting: params.mars_enabled ? (item.isWaiting || false) : false
                     }))
                 };
@@ -386,7 +449,11 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
         return matchesCategory && matchesSearch;
     });
-    const cartTotal = cart.reduce((sum, item) => sum + (((item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1)) * item.quantity), 0);
+    const cartTotal = cart.reduce((sum, item) => {
+        const base = ((item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1)) * item.quantity;
+        const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
+        return sum + base + extras;
+    }, 0);
     const allExistingItems = existingOrders.flatMap(o => o.items);
     const paidItems = allExistingItems.filter(i => i.isPaid);
     const unpaidItems = allExistingItems.filter(i => !i.isPaid);
@@ -979,7 +1046,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                             )}
                                             {item.note && (
                                                 <span className="text-[10px] bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 px-2 py-0.5 rounded-md truncate font-bold" title={item.note}>
-                                                    Not: {item.note}
+                                                    * {item.note}
                                                 </span>
                                             )}
                                         </div>
@@ -1012,8 +1079,29 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                             <div className="flex items-center gap-3 bg-slate-100 dark:bg-slate-700/50 rounded-lg p-1">
                                                 <button onClick={() => removeFromCart(item)} className="w-7 h-7 flex items-center justify-center text-red-500 font-bold hover:bg-white dark:hover:bg-slate-600 rounded-md transition-colors">-</button>
                                                 <span className="font-bold text-sm min-w-[1rem] text-center dark:text-white">{item.quantity}</span>
-                                                <button onClick={() => addToCart(item.product, item.note)} className="w-7 h-7 flex items-center justify-center text-emerald-500 font-bold hover:bg-white dark:hover:bg-slate-600 rounded-md transition-colors">+</button>
+                                                <button onClick={() => addToCart(item.product, item.note, true)} className="w-7 h-7 flex items-center justify-center text-emerald-500 font-bold hover:bg-white dark:hover:bg-slate-600 rounded-md transition-colors">+</button>
                                             </div>
+                                            {/* Manuel Ekstra Butonu: autoOpenExtraPopup false olduğunda görünür */}
+                                            {(() => {
+                                                const dept = departments.find((d: any) => d.name === item.product.category);
+                                                if (!dept?.extraDepartmentId || dept?.autoOpenExtraPopup) return null;
+                                                const extraProds = products.filter((p: any) => p.category === departments.find((d: any) => d.id === dept.extraDepartmentId)?.name);
+                                                if (extraProds.length === 0) return null;
+                                                return (
+                                                    <button
+                                                        onClick={() => {
+                                                            setPendingExtraCartItem(item);
+                                                            setExtraPopupProducts(extraProds);
+                                                            setExtraPopupParentProduct(item.product);
+                                                            setExtraPopupOpen(true);
+                                                        }}
+                                                        className="w-8 h-8 flex items-center justify-center text-amber-500 hover:text-amber-600 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded-md transition-colors border border-amber-200 dark:border-amber-500/30"
+                                                        title="Ekstra Ürün Ekle"
+                                                    >
+                                                        <i className="fat fa-plus-circle text-sm"></i>
+                                                    </button>
+                                                );
+                                            })()}
                                         </div>
                                     </div>
                                 </div>
@@ -1139,6 +1227,80 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                 className="w-2/3 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold shadow-lg shadow-emerald-500/30 hover:shadow-teal-500/40 transition hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2"
                             >
                                 <i className="fat fa-check"></i> Kaydet ve Kapat
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Ekstra Ürün Popup Modal */}
+            {extraPopupOpen && extraPopupParentProduct && (
+                <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-4 bg-slate-900/70 backdrop-blur-lg">
+                    <div className="bg-white dark:bg-slate-800 rounded-[32px] w-full max-w-md shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 animate-in slide-in-from-bottom-4 duration-300">
+                        {/* Header */}
+                        <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-700 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-2xl bg-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/30">
+                                        <i className="fat fa-plus-circle text-white text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-base font-black text-slate-800 dark:text-white uppercase tracking-tight">{extraPopupParentProduct.name}</h3>
+                                        <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest">Ekstra Ürün Seç</p>
+                                    </div>
+                                </div>
+                                <button onClick={handleExtraClose} className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/60 dark:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-white border border-slate-200 dark:border-slate-600 transition-all text-sm font-bold">&times;</button>
+                            </div>
+                        </div>
+                        {/* Mevcut Ekstralar */}
+                        {pendingExtraCartItem?.subItems && pendingExtraCartItem.subItems.length > 0 && (
+                            <div className="px-6 pt-4">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Seçili Ekstralar</p>
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                    {(cart.find(c => c.product.id === pendingExtraCartItem?.product.id)?.subItems || []).filter((s: any) => s.isExtra).map((sub: any, i: number) => (
+                                        <span key={i} className="inline-flex items-center gap-1 px-3 py-1 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-full text-xs font-bold text-amber-700 dark:text-amber-400">
+                                            <i className="fat fa-plus text-[10px]"></i>
+                                            {sub.product?.name || `Ürün #${sub.productId}`}
+                                            <span className="opacity-60 ml-0.5">₺{sub.unitPrice}</span>
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {/* Ürün Grid */}
+                        <div className="p-6">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Eklenebilecek Ekstralar</p>
+                            <div className="grid grid-cols-2 gap-3 max-h-[280px] overflow-y-auto custom-scrollbar pr-1">
+                                {extraPopupProducts.map(ep => {
+                                    const currentCartItem = cart.find(c => c.product.id === extraPopupParentProduct?.id);
+                                    const alreadyAdded = currentCartItem?.subItems?.some((s: any) => s.productId === ep.id && s.isExtra);
+                                    return (
+                                        <button
+                                            key={ep.id}
+                                            onClick={() => handleExtraSelect(ep)}
+                                            className={`p-4 rounded-2xl border-2 text-left transition-all active:scale-95 ${alreadyAdded
+                                                ? 'border-amber-400 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/50'
+                                                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-amber-300 dark:hover:border-amber-500/40 hover:bg-amber-50/50 dark:hover:bg-amber-500/5'
+                                            }`}
+                                        >
+                                            <div className="flex items-start justify-between gap-2">
+                                                <span className="font-bold text-sm text-slate-800 dark:text-white leading-tight">{ep.name}</span>
+                                                {alreadyAdded && <i className="fat fa-check-circle text-amber-500 shrink-0"></i>}
+                                            </div>
+                                            <span className="inline-flex items-center mt-2 gap-1 text-[11px] font-black text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-500/20 px-2 py-0.5 rounded-full">
+                                                <i className="fat fa-plus text-[9px]"></i>₺{ep.price}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                        {/* Footer */}
+                        <div className="px-6 pb-6">
+                            <button
+                                onClick={handleExtraClose}
+                                className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-sm uppercase tracking-widest shadow-lg shadow-amber-500/30 hover:scale-[1.01] active:scale-95 transition-all"
+                            >
+                                Tamamla
                             </button>
                         </div>
                     </div>

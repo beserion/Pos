@@ -9,8 +9,13 @@ import { showSwal, toastSwal } from '../utils/swal';
 import { printReceipt } from '../utils/print';
 import { useTheme } from 'next-themes';
 import ShiftManager from '@/components/shifts/ShiftManager';
-
 import SetMenuSelectionModal from './SetMenuSelectionModal';
+
+interface Modifier {
+    id: number;
+    name: string;
+    groupName?: string;
+}
 
 interface Product {
     id: number;
@@ -36,6 +41,7 @@ interface Product {
             }[];
         }[];
     };
+    modifiers?: Modifier[];
 }
 
 interface CartItem {
@@ -44,6 +50,7 @@ interface CartItem {
     subItems?: any[];
     extraPrice?: number;
     uniqueId?: string;
+    note?: string;
 }
 
 export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => void }) {
@@ -69,6 +76,56 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     const [selectedSetMenuProduct, setSelectedSetMenuProduct] = useState<Product | null>(null);
     const [isSetMenuModalOpen, setIsSetMenuModalOpen] = useState(false);
+
+    const [departments, setDepartments] = useState<any[]>([]);
+    const [extraPopupOpen, setExtraPopupOpen] = useState(false);
+    const [extraPopupProducts, setExtraPopupProducts] = useState<Product[]>([]);
+    const [extraPopupParentProduct, setExtraPopupParentProduct] = useState<Product | null>(null);
+    const [pendingExtraCartItem, setPendingExtraCartItem] = useState<CartItem | null>(null);
+
+    const [noteModalItem, setNoteModalItem] = useState<CartItem | null>(null);
+    const [tempNote, setTempNote] = useState('');
+
+    const handleSaveNote = () => {
+        if (!noteModalItem) return;
+        setCart(prev => prev.map(item => {
+            const isMatch = item.uniqueId 
+                ? item.uniqueId === noteModalItem.uniqueId
+                : (item.product.id === noteModalItem.product.id && !item.uniqueId);
+            return isMatch ? { ...item, note: tempNote } : item;
+        }));
+        setNoteModalItem(null);
+    };
+
+    const handleExtraSelect = (extraProduct: Product) => {
+        if (!pendingExtraCartItem) return;
+        
+        const extraItem = {
+            productId: extraProduct.id,
+            product: extraProduct,
+            quantity: 1,
+            unitPrice: extraProduct.price,
+            isExtra: true
+        };
+
+        setCart(prev => prev.map(item => {
+            const isMatch = item.uniqueId 
+                ? item.uniqueId === pendingExtraCartItem.uniqueId
+                : (item.product.id === pendingExtraCartItem.product.id && !item.uniqueId);
+
+            if (isMatch) {
+                const subItems = [...(item.subItems || []), extraItem];
+                return { ...item, subItems };
+            }
+            return item;
+        }));
+    };
+
+    const handleExtraClose = () => {
+        setExtraPopupOpen(false);
+        setExtraPopupParentProduct(null);
+        setPendingExtraCartItem(null);
+    };
 
     const handleSetMenuConfirm = (subItems: any[], extraPrice: number) => {
         if (!selectedSetMenuProduct) return;
@@ -100,10 +157,14 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
         try {
             const token = Cookies.get('token');
             const headers = { Authorization: `Bearer ${token}` };
-            const res = await axios.get(`${API_URL}/products/quicksale`, { headers });
+            const [productsRes, departmentsRes] = await Promise.all([
+                axios.get(`${API_URL}/products/quicksale`, { headers }),
+                axios.get(`${API_URL}/departments`, { headers })
+            ]);
 
-            const allProducts = res.data;
+            const allProducts = productsRes.data;
             setProducts(allProducts);
+            setDepartments(departmentsRes.data);
 
             const cats: string[] = ['all', ...Array.from(new Set(allProducts.map((p: any) => p.category).filter(Boolean))) as string[]];
             setCategories(cats);
@@ -130,11 +191,34 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
         });
     }, [products, selectedCategory, searchQuery]);
 
-    const addToCart = (product: Product) => {
+    const addToCart = (product: Product, skipExtraCheck: boolean = false) => {
         if (product.isSet && product.setMenu?.setType !== 'FIX') {
             setSelectedSetMenuProduct(product);
             setIsSetMenuModalOpen(true);
             return;
+        }
+
+        // --- Ekstra Ürün Popup Mantığı ---
+        if (!skipExtraCheck) {
+            const dept = departments.find(d => d.name === product.category);
+            if (dept && dept.extraDepartmentId) {
+                const extraCategory = departments.find(d => d.id === dept.extraDepartmentId)?.name;
+                const extraProds = products.filter(p => p.category === extraCategory);
+                
+                if (extraProds.length > 0) {
+                    if (dept.autoOpenExtraPopup) {
+                        // Önce ürünü sepete ekle, sonra popup aç
+                        const uniqueId = Date.now().toString() + Math.random().toString(36).substring(7);
+                        const newItem = { product, quantity: 1, uniqueId };
+                        setCart(prev => [...prev, newItem]);
+                        setPendingExtraCartItem(newItem);
+                        setExtraPopupProducts(extraProds);
+                        setExtraPopupParentProduct(product);
+                        setExtraPopupOpen(true);
+                        return;
+                    }
+                }
+            }
         }
 
         setCart(prev => {
@@ -172,7 +256,11 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     };
 
     const totalAmount = useMemo(() => {
-        return cart.reduce((sum, item) => sum + ((item.product.price + (item.extraPrice || 0)) * item.quantity), 0);
+        return cart.reduce((sum, item) => {
+            const base = (item.product.price + (item.extraPrice || 0)) * item.quantity;
+            const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
+            return sum + base + extras;
+        }, 0);
     }, [cart]);
 
     const handleCompleteSale = async (paymentMethod: string, shouldPrint: boolean = true) => {
@@ -199,7 +287,8 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                     quantity: item.quantity,
                     unitPrice: item.product.price + (item.extraPrice || 0),
                     total: (item.product.price + (item.extraPrice || 0)) * item.quantity,
-                    subItems: item.subItems
+                    subItems: item.subItems,
+                    note: item.note
                 }))
             };
 
@@ -215,7 +304,8 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                     quantity: item.quantity,
                     price: item.product.price + (item.extraPrice || 0),
                     total: (item.product.price + (item.extraPrice || 0)) * item.quantity,
-                    subItems: item.subItems
+                    subItems: item.subItems,
+                    note: item.note
                 })),
                 totalAmount: totalAmount,
                 paymentMethod: paymentMethod,
@@ -431,40 +521,87 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                     <button onClick={() => setCart([])} className="text-[10px] font-black uppercase text-rose-500 hover:text-rose-400 transition">{t('clearCart') || 'Temizle'}</button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-4 space-y-2.5 custom-scrollbar">
                     {cart.map((item, idx) => {
                         const uniqueKey = item.uniqueId || `cart-${item.product.id}-${idx}`;
                         return (
-                            <div key={uniqueKey} className="flex flex-col gap-1">
-                                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between group">
-                                    <div className="flex-1">
-                                        <div className="text-xs font-black text-slate-800 dark:text-white uppercase line-clamp-1">
+                            <div key={uniqueKey} className="group relative bg-slate-50/50 dark:bg-slate-900/40 rounded-[20px] p-3.5 border border-slate-200/50 dark:border-slate-700/50 shadow-sm transition-all hover:shadow-md hover:border-orange-500/30 overflow-hidden">
+                                {/* Header: Product Info and Actions */}
+                                <div className="flex justify-between items-start gap-3">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-[13px] font-black text-slate-800 dark:text-white uppercase leading-tight truncate tracking-tight mb-0.5">
                                             {item.product.name}
                                             {item.extraPrice ? <span className="text-indigo-500 ml-1">(+₺{item.extraPrice})</span> : null}
                                         </div>
-                                        <div className="text-[10px] font-bold text-slate-500 mt-1">
-                                            {(item.product.price + (item.extraPrice || 0)).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺ x {item.quantity}
+                                        <div className="text-[10px] font-bold text-slate-500 flex items-center gap-1.5 uppercase tracking-widest opacity-70">
+                                            {(item.product.price + (item.extraPrice || 0)).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺ 
+                                            <span className="text-[8px] opacity-40">●</span>
+                                            {item.quantity} ADET
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center gap-2">
-                                        <div className="flex items-center bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-1">
-                                            <button onClick={() => updateQuantity(item, -1)} className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-orange-500"><i className="fat fa-minus"></i></button>
-                                            <span className="w-8 text-center text-xs font-black text-slate-800 dark:text-white">{item.quantity}</span>
-                                            <button onClick={() => updateQuantity(item, 1)} className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-orange-500"><i className="fat fa-plus"></i></button>
+                                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                        <div className="flex items-center bg-white dark:bg-slate-800 rounded-xl border border-slate-200/80 dark:border-slate-700 p-0.5 shadow-sm">
+                                            <button onClick={() => updateQuantity(item, -1)} className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-orange-500 transition-colors"><i className="fat fa-minus text-[10px]"></i></button>
+                                            <span className="w-7 text-center text-[11px] font-black text-slate-800 dark:text-white">{item.quantity}</span>
+                                            <button onClick={() => updateQuantity(item, 1)} className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-orange-500 transition-colors"><i className="fat fa-plus text-[10px]"></i></button>
                                         </div>
-                                        <button onClick={() => removeFromCart(item)} className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"><i className="fat fa-trash"></i></button>
+                                        <div className="flex items-center gap-1.5">
+                                            <button
+                                                onClick={() => {
+                                                    setNoteModalItem(item);
+                                                    setTempNote(item.note || '');
+                                                }}
+                                                className="w-7 h-7 flex items-center justify-center text-amber-500 hover:text-white hover:bg-amber-500 bg-amber-50 dark:bg-amber-500/10 rounded-lg transition-all border border-amber-200/50 dark:border-amber-500/20 shadow-sm"
+                                                title="Not / Özellik Düzenle"
+                                            >
+                                                <i className="fat fa-pen-to-square text-[10px]"></i>
+                                            </button>
+                                            {(() => {
+                                                const dept = departments.find(d => d.name === item.product.category);
+                                                if (!dept?.extraDepartmentId || dept?.autoOpenExtraPopup) return null;
+                                                const extraProds = products.filter(p => p.category === departments.find(d => d.id === dept.extraDepartmentId)?.name);
+                                                if (extraProds.length === 0) return null;
+                                                return (
+                                                    <button
+                                                        onClick={() => {
+                                                            setPendingExtraCartItem(item);
+                                                            setExtraPopupProducts(extraProds);
+                                                            setExtraPopupParentProduct(item.product);
+                                                            setExtraPopupOpen(true);
+                                                        }}
+                                                        className="w-7 h-7 flex items-center justify-center text-indigo-500 hover:text-white hover:bg-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 rounded-lg transition-all border border-indigo-200/50 dark:border-indigo-500/20 shadow-sm"
+                                                        title="Ekstra Ürün Ekle"
+                                                    >
+                                                        <i className="fat fa-plus-circle text-[10px]"></i>
+                                                    </button>
+                                                );
+                                            })()}
+                                            <button onClick={() => removeFromCart(item)} className="w-7 h-7 flex items-center justify-center text-rose-500 hover:text-white hover:bg-rose-500 bg-rose-50 dark:bg-rose-500/10 rounded-lg transition-all border border-rose-200/50 dark:border-rose-500/20 shadow-sm"><i className="fat fa-trash-can text-[10px]"></i></button>
+                                        </div>
                                     </div>
                                 </div>
-                                {item.subItems && item.subItems.length > 0 && (
-                                    <div className="ml-6 flex flex-col gap-1 mb-2">
-                                        {item.subItems.map((sub: any, sIdx: number) => (
-                                            <div key={sIdx} className="text-[10px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-2">
-                                                <i className="fat fa-caret-right"></i>
-                                                <span>{sub.product?.name || `Ürün #${sub.productId}`}</span>
-                                                {sub.unitPrice > 0 && <span className="text-indigo-400">(+₺{sub.unitPrice})</span>}
+
+                                {/* Body: Notes and SubItems */}
+                                {(item.note || (item.subItems && item.subItems.length > 0)) && (
+                                    <div className="mt-2.5 pt-2.5 border-t border-slate-200/40 dark:border-slate-700/40 space-y-1.5">
+                                        {item.note && (
+                                            <div className="flex items-start gap-2 bg-amber-500/5 dark:bg-amber-500/10 p-2 rounded-xl border border-amber-500/10 dark:border-amber-500/20">
+                                                <i className="fat fa-sticky-note text-amber-500 text-[9px] mt-0.5 shrink-0"></i>
+                                                <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 italic leading-snug">* {item.note}</span>
                                             </div>
-                                        ))}
+                                        )}
+                                        {item.subItems && item.subItems.length > 0 && (
+                                            <div className="grid grid-cols-1 gap-1 pl-1">
+                                                {item.subItems.map((sub: any, sIdx: number) => (
+                                                    <div key={sIdx} className={`text-[10px] font-black flex items-center gap-2 px-2 py-1.5 rounded-lg border transition-all ${sub.isExtra ? 'bg-indigo-500/5 dark:bg-indigo-500/10 border-indigo-500/10 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400' : 'bg-slate-100/50 dark:bg-slate-800/50 border-slate-200/30 dark:border-slate-700/30 text-slate-500 dark:text-slate-400'}`}>
+                                                        <i className={`fat ${sub.isExtra ? 'fa-square-plus' : 'fa-caret-right'} text-[8px] opacity-70`}></i>
+                                                        <span className="truncate flex-1 tracking-tight">{sub.product?.name || sub.name || `Ürün #${sub.productId}`}</span>
+                                                        {sub.unitPrice > 0 && <span className="font-black text-slate-800 dark:text-indigo-300">₺{sub.unitPrice}</span>}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -524,6 +661,179 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
             </div>
 
 
+            {/* Ekstra Ürün Popup Modal */}
+            {/* Note & Modifier Selection Modal (TakeOrderView stili) */}
+            {noteModalItem && (
+                <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-slate-800 rounded-[32px] w-full max-w-lg shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50">
+                        {/* Header */}
+                        <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-700 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-2xl font-black text-slate-800 dark:text-white leading-tight uppercase tracking-tight">Özellik Ekle</h3>
+                                    <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1 rounded-lg inline-block mt-2">
+                                        {noteModalItem?.product?.name}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => setNoteModalItem(null)}
+                                    className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/20 transition-colors flex items-center justify-center border border-emerald-500/20"
+                                >
+                                    <i className="fat fa-xmark text-xl"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-8">
+                            <div className="mb-6 space-y-4">
+                                <div>
+                                    {(!noteModalItem?.product?.modifiers || noteModalItem.product.modifiers.length === 0) ? (
+                                        <div className="text-xs text-slate-400 font-bold italic py-2">Bu ürün için tanımlı hızlı özellik bulunmamaktadır.</div>
+                                    ) : (
+                                        <div className="space-y-4 max-h-[30vh] overflow-y-auto pr-2 custom-scrollbar">
+                                            {Object.entries(
+                                                (noteModalItem?.product?.modifiers || []).reduce((acc: any, mod: Modifier) => {
+                                                    const group = mod.groupName || 'Diğer Özellikler';
+                                                    if (!acc[group]) acc[group] = [];
+                                                    acc[group].push(mod);
+                                                    return acc;
+                                                }, {} as Record<string, Modifier[]>)
+                                            ).map(([groupName, mods]) => (
+                                                <div key={groupName} className="bg-slate-50/50 dark:bg-slate-900/50 p-3 rounded-2xl border border-slate-100 dark:border-slate-800">
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block flex items-center gap-2">
+                                                        <i className="fat fa-layer-group text-slate-300 dark:text-slate-600"></i> {groupName}
+                                                    </label>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {(mods as Modifier[]).map((mod: Modifier) => (
+                                                            <button
+                                                                key={mod.id}
+                                                                onClick={() => {
+                                                                    const currentNotes = tempNote.split(',').map(n => n.trim()).filter(n => n);
+                                                                    if (currentNotes.includes(mod.name)) {
+                                                                        setTempNote(currentNotes.filter(n => n !== mod.name).join(', '));
+                                                                    } else {
+                                                                        setTempNote([...currentNotes, mod.name].join(', '));
+                                                                    }
+                                                                }}
+                                                                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all border ${tempNote.split(',').map(n => n.trim()).includes(mod.name) ? 'bg-amber-500/10 text-amber-600 border-amber-300 dark:border-amber-500/50' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-amber-200 dark:hover:border-amber-500/30'}`}
+                                                            >
+                                                                {mod.name}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 block px-1">Özel Not</label>
+                                    <textarea
+                                        value={tempNote}
+                                        onChange={(e) => setTempNote(e.target.value)}
+                                        placeholder="Ekstra isteklerinizi yazın..."
+                                        className="w-full bg-slate-50 dark:bg-slate-100 border border-slate-200 rounded-2xl p-4 text-sm font-medium focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all resize-none h-24 text-slate-800"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Footer Buttons */}
+                            <div className="flex gap-3 mt-4">
+                                <button
+                                    onClick={() => setTempNote('')}
+                                    className="w-1/3 py-4 rounded-2xl border border-slate-200 dark:border-slate-700 font-black text-xs uppercase tracking-widest text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700 transition active:scale-95"
+                                >
+                                    Temizle
+                                </button>
+                                <button
+                                    onClick={handleSaveNote}
+                                    className="w-2/3 py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/30 hover:shadow-teal-500/40 transition hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-2"
+                                >
+                                    <i className="fat fa-check"></i> Kaydet ve Kapat
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {extraPopupOpen && extraPopupParentProduct && (
+                <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-4 bg-slate-900/70 backdrop-blur-lg">
+                    <div className="bg-white dark:bg-slate-800 rounded-[32px] w-full max-w-md shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 animate-in slide-in-from-bottom-4 duration-300">
+                        {/* Header */}
+                        <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-700 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-2xl bg-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/30">
+                                        <i className="fat fa-plus-circle text-white text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-base font-black text-slate-800 dark:text-white uppercase tracking-tight">{extraPopupParentProduct.name}</h3>
+                                        <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest">Ekstra Ürün Seç</p>
+                                    </div>
+                                </div>
+                                <button onClick={handleExtraClose} className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/60 dark:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-white border border-slate-200 dark:border-slate-600 transition-all text-sm font-bold">&times;</button>
+                            </div>
+                        </div>
+
+                        {/* Mevcut Ekstralar */}
+                        <div className="px-6 pt-4">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Seçili Ekstralar</p>
+                            <div className="flex flex-wrap gap-2 mb-1 min-h-[40px]">
+                                {(cart.find(c => (c.uniqueId && pendingExtraCartItem?.uniqueId) ? c.uniqueId === pendingExtraCartItem.uniqueId : (c.product.id === pendingExtraCartItem?.product.id && !c.uniqueId))?.subItems || []).filter((s: any) => s.isExtra).map((sub: any, i: number) => (
+                                    <span key={i} className="inline-flex items-center gap-1 px-3 py-1 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-full text-xs font-bold text-amber-700 dark:text-amber-400">
+                                        <i className="fat fa-plus text-[10px]"></i>
+                                        {sub.product?.name || `Ürün #${sub.productId}`}
+                                        <span className="opacity-60 ml-0.5">₺{sub.unitPrice}</span>
+                                    </span>
+                                ))}
+                                {(!pendingExtraCartItem?.subItems || pendingExtraCartItem.subItems.filter((s: any) => s.isExtra).length === 0) && (
+                                    <span className="text-[11px] text-slate-400 italic">Henüz ekstra seçilmedi...</span>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Ürün Grid */}
+                        <div className="p-6">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Eklenebilecek Ekstralar</p>
+                            <div className="grid grid-cols-2 gap-3 max-h-[280px] overflow-y-auto custom-scrollbar pr-1">
+                                {extraPopupProducts.map(ep => {
+                                    const currentCartItem = cart.find(c => (c.uniqueId && pendingExtraCartItem?.uniqueId) ? c.uniqueId === pendingExtraCartItem.uniqueId : (c.product.id === pendingExtraCartItem?.product.id && !c.uniqueId));
+                                    const alreadyAdded = currentCartItem?.subItems?.some((s: any) => s.productId === ep.id && s.isExtra);
+                                    return (
+                                        <button
+                                            key={ep.id}
+                                            onClick={() => handleExtraSelect(ep)}
+                                            className={`p-4 rounded-2xl border-2 text-left transition-all active:scale-95 ${alreadyAdded
+                                                ? 'border-amber-400 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/50'
+                                                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-amber-300 dark:hover:border-amber-500/40 hover:bg-amber-50/50 dark:hover:bg-amber-500/5'
+                                            }`}
+                                        >
+                                            <div className="flex items-start justify-between gap-2">
+                                                <span className="font-bold text-sm text-slate-800 dark:text-white leading-tight">{ep.name}</span>
+                                                {alreadyAdded && <i className="fat fa-check-circle text-amber-500 shrink-0"></i>}
+                                            </div>
+                                            <span className="inline-flex items-center mt-2 gap-1 text-[11px] font-black text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-500/20 px-2 py-0.5 rounded-full">
+                                                <i className="fat fa-plus text-[9px]"></i>₺{ep.price}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                        {/* Footer */}
+                        <div className="px-6 pb-6">
+                            <button
+                                onClick={handleExtraClose}
+                                className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-sm uppercase tracking-widest shadow-lg shadow-amber-500/30 hover:scale-[1.01] active:scale-95 transition-all"
+                            >
+                                Tamamla
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {selectedSetMenuProduct && (
                 <SetMenuSelectionModal
                     isOpen={isSetMenuModalOpen}

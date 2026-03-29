@@ -241,27 +241,55 @@ export default function ShiftManager({ user, apiUrl, onShiftOpen, onShiftClose }
         setError('');
 
         try {
-            const res = await fetch(`${apiUrl}/reports/z-reports`, {
+            // Yeni iş günü yönetim sistemi üzerinden gün sonu al
+            // Bu endpoint: 6 saat kuralı, ileri tarih koruması, vardiya kontrolü ve Z raporu oluşturmayı içerir
+            const endOfDayRes = await fetch(`${apiUrl}/business-day/end-of-day`, {
                 method: 'POST',
                 headers: { ...headers, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    cashRegisterId: myCashRegister.id,
-                    businessDate: currentBusinessDate
-                })
+                body: JSON.stringify({ note: 'ShiftManager üzerinden gün sonu' })
             });
 
-            if (res.ok) {
-                const report = await res.json();
-                setZReportData(report);
+            if (endOfDayRes.ok) {
+                const endOfDayData = await endOfDayRes.json();
+
+                // Z raporu bilgisini çek (varsa)
+                if (endOfDayData.zReportId) {
+                    try {
+                        const zRes = await fetch(`${apiUrl}/reports/z-reports?cashRegisterId=${myCashRegister.id}&businessDate=${currentBusinessDate}`, {
+                            headers
+                        });
+                        if (zRes.ok) {
+                            const report = await zRes.json();
+                            setZReportData(report);
+                        }
+                    } catch {
+                        // Z rapor detayı alınamazsa da gün sonu başarılı
+                    }
+                }
+
                 setShowOpenModal(false);
                 setShowZReportModal(true);
+
+                // Z rapor verisi yoksa basit başarı bilgisi göster
+                if (!zReportData) {
+                    setZReportData({
+                        id: endOfDayData.zReportId || 0,
+                        businessDate: currentBusinessDate,
+                        totalOpeningCash: 0,
+                        totalClosingCash: 0,
+                        totalExpectedCash: 0,
+                        totalCashDifference: 0,
+                        totalIncome: 0,
+                        newBusinessDate: endOfDayData.newBusinessDate,
+                    });
+                }
             } else {
-                const errData = await res.json();
-                setError(errData.message || 'Z-Raporu alınamadı.');
+                const errData = await endOfDayRes.json();
+                setError(errData.message || 'Gün sonu alınamadı.');
             }
         } catch (err) {
             console.error(err);
-            setError('Z-Raporu alınırken bir hata oluştu.');
+            setError('Gün sonu işlemi sırasında bir hata oluştu.');
         } finally {
             setSubmitting(false);
         }

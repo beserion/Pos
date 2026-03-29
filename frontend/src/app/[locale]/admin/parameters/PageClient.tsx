@@ -15,6 +15,7 @@ interface Param {
     type: ParamType;
     value: any;
     options?: string[];      // select için
+    optionLabels?: Record<string, string>; // select için Türkçe etiketler
     unit?: string;           // number için (örn. "dk", "₺", "%")
     compact?: boolean;       // text alanı dar/inline kalacaksa true
 }
@@ -43,6 +44,11 @@ const defaultModules: Module[] = [
             { key: 'max_discount_rate', label: 'Maksimum İndirim (%)', type: 'number', value: 20, unit: '%' },
             { key: 'receipt_footer', label: 'Fiş Alt Yazısı', type: 'text', value: 'Teşekkür ederiz! Tekrar bekleriz.' },
             { key: 'screen_timeout', label: 'Ekran Zaman Aşımı', description: 'Belirlenen süre hareketsizlik sonrası şifre ekranına döner. 0 = kapalı', type: 'number', value: 180, unit: 'sn' },
+            // ── İş Günü Yönetimi ──
+            { key: 'shift_system_enabled', label: 'Vardiyalı Kasiyer Sistemi', description: 'Vardiya açma/kapama zorunluluğu. Kapatılırsa vardiya uyarıları devre dışı kalır.', type: 'boolean', value: true },
+            { key: 'shift_closure_mode', label: 'Gün Sonu Vardiya Kontrol Modu', description: 'Gün sonu öncesi açık vardiya kontrolü', type: 'select', value: 'warn_only', options: ['warn_only', 'authorized_approval', 'mandatory_close'], optionLabels: { 'warn_only': 'Sadece Uyarı Ver', 'authorized_approval': 'Yetkili Onayıyla Devam', 'mandatory_close': 'Zorunlu Vardiya Kapatma' } },
+            { key: 'z_report_print_mode', label: 'Z Raporu Yazdırma Modu', description: 'Gün sonu sonrası Z raporu otomatik yazdırılsın mı?', type: 'select', value: 'auto_print', options: ['auto_print', 'manual_print', 'disabled'], optionLabels: { 'auto_print': 'Otomatik Yazdır', 'manual_print': 'Manuel Yazdır', 'disabled': 'Yazdırma Kapalı' } },
+            { key: 'end_of_day_min_hours', label: 'Gün Sonu Min. Saat Aralığı', description: 'İki gün sonu arasında minimum geçmesi gereken saat', type: 'number', value: 6, unit: 'saat' },
         ]
     },
     {
@@ -158,6 +164,7 @@ export function PageClient() {
     const router = useRouter();
     const locale = useLocale();
     const [activeModule, setActiveModule] = useState<string>('pos');
+    const [searchQuery, setSearchQuery] = useState('');
     const [modules, setModules] = useState<Module[]>(defaultModules);
     const [saved, setSaved] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -310,13 +317,26 @@ export function PageClient() {
             case 'select':
                 return (
                     <select value={param.value} onChange={e => updateParam(mod.id, param.key, e.target.value)} className={`${baseClass} w-52`}>
-                        {param.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        {param.options?.map(opt => <option key={opt} value={opt}>{param.optionLabels?.[opt] || opt}</option>)}
                     </select>
                 );
             default:
                 return null;
         }
     };
+
+    // ─── Arama Filtreleme Mantığı ──────────────────────────────
+    const filteredResults = searchQuery.trim() !== '' 
+        ? modules.flatMap(mod => 
+            mod.params
+                .filter(p => 
+                    p.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    p.key.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    (p.description?.toLowerCase().includes(searchQuery.toLowerCase()))
+                )
+                .map(p => ({ ...p, moduleTitle: mod.title, moduleIcon: mod.icon, moduleColor: mod.color, moduleId: mod.id }))
+          )
+        : [];
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans transition-colors duration-300">
@@ -387,16 +407,43 @@ export function PageClient() {
             <div className="max-w-7xl mx-auto px-6 py-8 relative z-10 flex gap-6">
                 {/* Sol sidebar – Modüller */}
                 <aside className="w-64 shrink-0">
-                    <div className="bg-white dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/50 shadow-sm overflow-hidden">
-                        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700/50">
-                            <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400">Modüller</p>
+                    <div className="bg-white dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/50 shadow-sm overflow-hidden flex flex-col h-[calc(100vh-140px)]">
+                        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700/50 space-y-3">
+                            <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400">Arama</p>
+                            <div className="relative group">
+                                <i className={`fat fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs transition-colors duration-200 ${searchQuery ? 'text-indigo-500' : 'text-slate-400'}`}></i>
+                                <input 
+                                    type="text" 
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="Parametre ara..."
+                                    className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all placeholder:text-slate-400 dark:text-white"
+                                />
+                                {searchQuery && (
+                                    <button 
+                                        onClick={() => setSearchQuery('')}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
+                                    >
+                                        <i className="fat fa-times-circle"></i>
+                                    </button>
+                                )}
+                            </div>
                         </div>
-                        <nav className="p-2 flex flex-col gap-1">
+                        <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-700/50 flex items-center justify-between">
+                            <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400">Modüller</p>
+                            {searchQuery && (
+                                <span className="text-[10px] font-bold text-indigo-500 animate-pulse">Arama Modu</span>
+                            )}
+                        </div>
+                        <nav className="p-2 flex flex-col gap-1 overflow-y-auto custom-scrollbar flex-1">
                             {modules.map(mod => (
                                 <button
                                     key={mod.id}
+                                    disabled={!!searchQuery}
                                     onClick={() => setActiveModule(mod.id)}
-                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-200 group ${activeModule === mod.id ? `bg-gradient-to-r ${mod.bgGradient} border ${mod.borderColor}` : 'hover:bg-slate-100 dark:hover:bg-slate-700/50 border border-transparent'}`}
+                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-200 group 
+                                        ${searchQuery ? 'opacity-50 grayscale pointer-events-none' : ''}
+                                        ${activeModule === mod.id && !searchQuery ? `bg-gradient-to-r ${mod.bgGradient} border ${mod.borderColor}` : 'hover:bg-slate-100 dark:hover:bg-slate-700/50 border border-transparent'}`}
                                 >
                                     <div className={`w-10 h-10 flex items-center justify-center rounded-lg ${activeModule === mod.id ? 'bg-white dark:bg-slate-900 shadow' : 'bg-slate-100 dark:bg-slate-700'} transition`}>
                                         <i className={`fat ${mod.icon} ${mod.color} text-lg`}></i>
@@ -414,58 +461,123 @@ export function PageClient() {
 
                 {/* Sağ içerik – Parametreler */}
                 <main className="flex-1">
-                    {/* Modül başlığı */}
-                    <div className={`bg-gradient-to-r ${currentModule.bgGradient} border ${currentModule.borderColor} rounded-2xl p-5 mb-5 flex items-center gap-4`}>
-                        <div className="w-14 h-14 flex items-center justify-center bg-white dark:bg-slate-900 rounded-xl shadow">
-                            <i className={`fat ${currentModule.icon} ${currentModule.color} text-2xl`}></i>
-                        </div>
-                        <div>
-                            <h2 className="text-xl font-black text-slate-800 dark:text-white">{currentModule.title}</h2>
-                            <p className="text-sm text-slate-500 dark:text-slate-400">{currentModule.subtitle}</p>
-                        </div>
-                        <span className="ml-auto text-xs font-bold text-slate-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-full">
-                            {currentModule.params.length} parametre
-                        </span>
-                    </div>
-
-                    {/* Parametre listesi */}
-                    <div className="relative bg-white dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/50 shadow-sm overflow-hidden divide-y divide-slate-100 dark:divide-slate-700/50">
-                        {loading && (
-                            <div className="absolute inset-0 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl">
-                                <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400">
-                                    <i className="fat fa-spinner-third animate-spin text-xl text-violet-500"></i>
-                                    <span className="text-sm font-bold">Yükleniyor...</span>
+                    {searchQuery.trim() === '' ? (
+                        <>
+                            {/* Modül başlığı */}
+                            <div className={`bg-gradient-to-r ${currentModule.bgGradient} border ${currentModule.borderColor} rounded-2xl p-5 mb-5 flex items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-300`}>
+                                <div className="w-14 h-14 flex items-center justify-center bg-white dark:bg-slate-900 rounded-xl shadow">
+                                    <i className={`fat ${currentModule.icon} ${currentModule.color} text-2xl`}></i>
                                 </div>
+                                <div>
+                                    <h2 className="text-xl font-black text-slate-800 dark:text-white">{currentModule.title}</h2>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">{currentModule.subtitle}</p>
+                                </div>
+                                <span className="ml-auto text-xs font-bold text-slate-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-full">
+                                    {currentModule.params.length} parametre
+                                </span>
                             </div>
-                        )}
-                        {currentModule.params.map((param, idx) => (
-                            param.type === 'text' && !param.compact ? (
-                                /* Text alanları tam genişlik – dikey düzen */
-                                <div key={param.key} className="flex flex-col p-5 gap-2 hover:bg-slate-50 dark:hover:bg-slate-700/20 transition">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm font-bold text-slate-800 dark:text-white">{param.label}</span>
-                                        <code className="text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-500 px-1.5 py-0.5 rounded font-mono">{param.key}</code>
-                                    </div>
-                                    {param.description && <p className="text-xs text-slate-400">{param.description}</p>}
-                                    {renderInput(currentModule, param)}
-                                </div>
-                            ) : (
-                                /* Diğer tipler – yatay düzen */
-                                <div key={param.key} className="flex items-center justify-between p-5 gap-6 hover:bg-slate-50 dark:hover:bg-slate-700/20 transition group">
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm font-bold text-slate-800 dark:text-white">{param.label}</span>
-                                            <code className="text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-500 px-1.5 py-0.5 rounded font-mono">{param.key}</code>
+
+                            {/* Parametre listesi */}
+                            <div className="relative bg-white dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/50 shadow-sm overflow-hidden divide-y divide-slate-100 dark:divide-slate-700/50">
+                                {loading && (
+                                    <div className="absolute inset-0 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm z-10 flex items-center justify-center rounded-2xl">
+                                        <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400">
+                                            <i className="fat fa-spinner-third animate-spin text-xl text-violet-500"></i>
+                                            <span className="text-sm font-bold">Yükleniyor...</span>
                                         </div>
-                                        {param.description && <p className="text-xs text-slate-400 mt-0.5">{param.description}</p>}
                                     </div>
-                                    <div className="shrink-0">
-                                        {renderInput(currentModule, param)}
+                                )}
+                                {currentModule.params.map((param) => (
+                                    param.type === 'text' && !param.compact ? (
+                                        /* Text alanları tam genişlik – dikey düzen */
+                                        <div key={param.key} className="flex flex-col p-5 gap-2 hover:bg-slate-50 dark:hover:bg-slate-700/20 transition">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-bold text-slate-800 dark:text-white">{param.label}</span>
+                                                <code className="text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-500 px-1.5 py-0.5 rounded font-mono">{param.key}</code>
+                                            </div>
+                                            {param.description && <p className="text-xs text-slate-400">{param.description}</p>}
+                                            {renderInput(currentModule, param)}
+                                        </div>
+                                    ) : (
+                                        /* Diğer tipler – yatay düzen */
+                                        <div key={param.key} className="flex items-center justify-between p-5 gap-6 hover:bg-slate-50 dark:hover:bg-slate-700/20 transition group">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm font-bold text-slate-800 dark:text-white">{param.label}</span>
+                                                    <code className="text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-500 px-1.5 py-0.5 rounded font-mono">{param.key}</code>
+                                                </div>
+                                                {param.description && <p className="text-xs text-slate-400 mt-0.5">{param.description}</p>}
+                                            </div>
+                                            <div className="shrink-0">
+                                                {renderInput(currentModule, param)}
+                                            </div>
+                                        </div>
+                                    )
+                                ))}
+                            </div>
+                        </>
+                    ) : (
+                        <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+                            {/* Arama Başlığı */}
+                            <div className="bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/50 rounded-2xl p-5 mb-5 flex items-center justify-between shadow-sm">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 flex items-center justify-center bg-indigo-50 dark:bg-indigo-500/10 rounded-xl">
+                                        <i className="fat fa-magnifying-glass text-indigo-500 text-xl"></i>
+                                    </div>
+                                    <div>
+                                        <h2 className="text-lg font-bold text-slate-800 dark:text-white">Arama Sonuçları</h2>
+                                        <p className="text-xs text-slate-400">"{searchQuery}" için bulunan parametreler</p>
                                     </div>
                                 </div>
-                            )
-                        ))}
-                    </div>
+                                <span className="text-xs font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 px-4 py-1.5 rounded-full">
+                                    {filteredResults.length} sonuç bulundu
+                                </span>
+                            </div>
+
+                            {/* Arama Sonuçları Listesi */}
+                            <div className="bg-white dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/50 shadow-sm overflow-hidden divide-y divide-slate-100 dark:divide-slate-700/50 min-h-[400px]">
+                                {filteredResults.length > 0 ? (
+                                    filteredResults.map((param) => {
+                                        const mod = modules.find(m => m.id === param.moduleId)!;
+                                        return (
+                                            <div key={`${param.moduleId}-${param.key}`} className="p-5 hover:bg-slate-50 dark:hover:bg-slate-700/20 transition group">
+                                                <div className="flex items-center justify-between gap-6 mb-3">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="text-sm font-bold text-slate-800 dark:text-white">{param.label}</span>
+                                                            <code className="text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-500 px-1.5 py-0.5 rounded font-mono">{param.key}</code>
+                                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${param.moduleColor.replace('text-', 'bg-').replace('text-', 'border-')}/20 ${param.moduleColor} bg-opacity-10 ml-2`}>
+                                                                <i className={`fat ${param.moduleIcon} mr-1`}></i>
+                                                                {param.moduleTitle}
+                                                            </span>
+                                                        </div>
+                                                        {param.description && <p className="text-xs text-slate-400">{param.description}</p>}
+                                                    </div>
+                                                    <div className="shrink-0">
+                                                        {renderInput(mod, param)}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+                                        <div className="w-20 h-20 bg-slate-50 dark:bg-slate-700/50 rounded-full flex items-center justify-center mb-4 text-slate-300 dark:text-slate-600">
+                                            <i className="fat fa-search text-4xl"></i>
+                                        </div>
+                                        <h3 className="text-lg font-bold text-slate-700 dark:text-white">Sonuç Bulunamadı</h3>
+                                        <p className="text-sm text-slate-400 mt-2 max-w-xs">Aradığınız kriterlere uygun herhangi bir parametre mevcut değil. Lütfen başka bir anahtar kelime deneyin.</p>
+                                        <button 
+                                            onClick={() => setSearchQuery('')}
+                                            className="mt-6 text-indigo-500 font-bold text-sm hover:underline"
+                                        >
+                                            Aramayı Temizle
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Alt bilgi */}
                     <div className="mt-4 flex items-center gap-2 text-xs text-slate-400 px-1">
