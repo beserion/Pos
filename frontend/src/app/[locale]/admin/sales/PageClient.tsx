@@ -252,7 +252,7 @@ export function PageClient() {
                                         <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Birim: ₺${item.unitPrice}</div>
                                         <div class="text-sm font-black text-orange-600 dark:text-orange-400">₺${Number(item.unitPrice) * Number(item.quantity)}</div>
                                     </div>
-                                    ${item.note ? `<div class="mt-2 text-[10px] text-amber-600 dark:text-amber-400 font-medium bg-amber-50 dark:bg-amber-500/10 p-2 rounded-xl border border-amber-100 dark:border-amber-500/20 italic">Not: ${item.note}</div>` : ''}
+                                    ${item.note ? `<div class="mt-2 text-[10px] text-amber-600 dark:text-amber-400 font-medium bg-amber-50 dark:bg-amber-500/10 p-2 rounded-xl border border-amber-100 dark:border-amber-500/20 italic">* ${item.note}</div>` : ''}
                                 </div>
                             `).join('')}
                         </div>

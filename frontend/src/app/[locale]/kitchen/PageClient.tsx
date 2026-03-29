@@ -19,6 +19,7 @@ interface OrderItem {
     isMarshed: boolean;
     isReady: boolean;
     saleType?: string;
+    parentItemId?: number;
 }
 
 interface OrderTicket {
@@ -390,50 +391,74 @@ export function PageClient() {
                                 </div>
 
                                 <div className="p-3 flex-1 bg-white dark:bg-slate-800/40">
-                                    <ul className="space-y-2">
-                                        {ticket.items.map((item, idx) => {
-                                            const isItemUpdating = updatingItems.includes(item.id);
-                                            return (
-                                                <li
-                                                    key={idx}
-                                                    onClick={() => params.kitchen_item_selection_enabled !== false && !isItemUpdating && (!params.mars_enabled || !item.isWaiting || item.isMarshed) ? toggleItemReady(item.id) : null}
-                                                    className={`flex gap-2 text-base p-2 rounded-lg -mx-1 ${params.kitchen_item_selection_enabled !== false ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:border-transparent dark:hover:border-slate-600/50' : 'cursor-default border-transparent'} transition-all border ${isItemUpdating ? 'opacity-50 pointer-events-none' : ''} ${params.mars_enabled && item.isWaiting && !item.isMarshed ? 'opacity-40 grayscale scale-[0.98] cursor-not-allowed shadow-inner' : ''} ${item.isReady ? 'bg-rose-50 dark:bg-rose-950/20' : ''}`}
-                                                >
-                                                    <span className={`font-black text-lg ${item.isReady ? 'text-rose-600' : (params.mars_enabled && item.isWaiting && !item.isMarshed ? 'text-slate-400' : (params.mars_enabled && item.isWaiting && item.isMarshed ? 'text-rose-500 animate-pulse' : 'text-indigo-500 dark:text-indigo-400'))}`}>{item.quantity}x</span>
-                                                    <div className="flex-1">
-                                                        <div className="flex items-center justify-between">
-                                                            <span className={`font-bold text-lg ${item.isReady ? 'text-rose-600 line-through decoration-rose-400/50' : (params.mars_enabled && item.isWaiting && !item.isMarshed ? 'text-slate-400' : 'text-slate-800 dark:text-white')}`}>
-                                                                {item.product?.name}
-                                                                {item.saleType && item.saleType !== 'STANDARD' && (
-                                                                    <span className={`ml-2 text-[10px] font-black uppercase px-2 py-0.5 rounded-full align-middle border ${
-                                                                        item.saleType === 'HALF'
-                                                                            ? 'bg-orange-100 text-orange-700 border-orange-300 dark:bg-orange-500/20 dark:text-orange-400 dark:border-orange-500/40'
-                                                                            : 'bg-indigo-100 text-indigo-700 border-indigo-300 dark:bg-indigo-500/20 dark:text-indigo-400 dark:border-indigo-500/40'
-                                                                    }`}>
-                                                                        {item.saleType === 'HALF' ? 'YARIM' : 'DUBLE'}
+                                    <ul className="space-y-1">
+                                        {(() => {
+                                            const parentItems = ticket.items.filter(i => !i.parentItemId);
+                                            const subItems = ticket.items.filter(i => i.parentItemId);
+                                            
+                                            return parentItems.map((item, idx) => {
+                                                const isItemUpdating = updatingItems.includes(item.id);
+                                                const relatedSubItems = subItems.filter(si => si.parentItemId === item.id);
+                                                
+                                                return (
+                                                    <React.Fragment key={item.id}>
+                                                        <li
+                                                            onClick={() => params.kitchen_item_selection_enabled !== false && !isItemUpdating && (!params.mars_enabled || !item.isWaiting || item.isMarshed) ? toggleItemReady(item.id) : null}
+                                                            className={`flex gap-2 text-base p-2 rounded-lg -mx-1 ${params.kitchen_item_selection_enabled !== false ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:border-transparent dark:hover:border-slate-600/50' : 'cursor-default border-transparent'} transition-all border ${isItemUpdating ? 'opacity-50 pointer-events-none' : ''} ${params.mars_enabled && item.isWaiting && !item.isMarshed ? 'opacity-40 grayscale scale-[0.98] cursor-not-allowed shadow-inner' : ''} ${item.isReady ? 'bg-rose-50 dark:bg-rose-950/20' : ''}`}
+                                                        >
+                                                            <span className={`font-black text-lg ${item.isReady ? 'text-rose-600' : (params.mars_enabled && item.isWaiting && !item.isMarshed ? 'text-slate-400' : (params.mars_enabled && item.isWaiting && item.isMarshed ? 'text-rose-500 animate-pulse' : 'text-indigo-500 dark:text-indigo-400'))}`}>{item.quantity}x</span>
+                                                            <div className="flex-1">
+                                                                <div className="flex items-center justify-between">
+                                                                    <span className={`font-bold text-lg ${item.isReady ? 'text-rose-600 line-through decoration-rose-400/50' : (params.mars_enabled && item.isWaiting && !item.isMarshed ? 'text-slate-400' : 'text-slate-800 dark:text-white')}`}>
+                                                                        {item.product?.name}
+                                                                        {item.saleType && item.saleType !== 'STANDARD' && (
+                                                                            <span className={`ml-2 text-[10px] font-black uppercase px-2 py-0.5 rounded-full align-middle border ${
+                                                                                item.saleType === 'HALF'
+                                                                                    ? 'bg-orange-100 text-orange-700 border-orange-300 dark:bg-orange-500/20 dark:text-orange-400 dark:border-orange-500/40'
+                                                                                    : 'bg-indigo-100 text-indigo-700 border-indigo-300 dark:bg-indigo-500/20 dark:text-indigo-400 dark:border-indigo-500/40'
+                                                                            }`}>
+                                                                                {item.saleType === 'HALF' ? 'YARIM' : 'DUBLE'}
+                                                                            </span>
+                                                                        )}
                                                                     </span>
+                                                                    <div className="flex items-center gap-1">
+                                                                        {isItemUpdating && <i className="fat fa-spinner animate-spin text-slate-400 text-sm"></i>}
+                                                                        {item.isReady && !isItemUpdating && <i className="fat fa-check-double text-rose-500 text-sm"></i>}
+                                                                        {params.mars_enabled && item.isWaiting && !item.isMarshed && (
+                                                                            <span className="text-[9px] font-black uppercase text-slate-400 border border-slate-300 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                                                                <i className="fat fa-clock"></i> BEKLEMEDE
+                                                                            </span>
+                                                                        )}
+                                                                        {params.mars_enabled && item.isWaiting && item.isMarshed && !item.isReady && (
+                                                                            <span className="text-[10px] font-black uppercase text-rose-500 bg-rose-500/10 border border-rose-500/50 px-1.5 py-0.5 rounded flex items-center gap-1 shadow-[0_0_10px_rgba(244,63,94,0.2)] animate-pulse">
+                                                                                <i className="fat fa-fire-flame-curved"></i> MARŞ!
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                                {/* Render SubItems (Extras) FIRST */}
+                                                                {relatedSubItems.length > 0 && (
+                                                                    <div className="mt-1 space-y-1 pl-1">
+                                                                        {relatedSubItems.map((sub, sIdx) => (
+                                                                            <div key={sub.id || sIdx} className="flex items-center gap-2 py-0.5">
+                                                                                <i className="fat fa-plus text-sky-500 dark:text-sky-400 text-[10px] font-black"></i>
+                                                                                <span className="text-sm font-bold text-slate-500 dark:text-slate-400 italic">
+                                                                                    {sub.quantity}x {sub.product?.name}
+                                                                                </span>
+                                                                                {sub.isReady && <i className="fat fa-check text-[10px] text-emerald-500 opacity-60"></i>}
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
                                                                 )}
-                                                            </span>
-                                                            <div className="flex items-center gap-1">
-                                                                {isItemUpdating && <i className="fat fa-spinner animate-spin text-slate-400 text-sm"></i>}
-                                                                {item.isReady && !isItemUpdating && <i className="fat fa-check-double text-rose-500 text-sm"></i>}
-                                                                {params.mars_enabled && item.isWaiting && !item.isMarshed && (
-                                                                    <span className="text-[9px] font-black uppercase text-slate-400 border border-slate-300 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                                                        <i className="fat fa-clock"></i> BEKLEMEDE
-                                                                    </span>
-                                                                )}
-                                                                {params.mars_enabled && item.isWaiting && item.isMarshed && !item.isReady && (
-                                                                    <span className="text-[10px] font-black uppercase text-rose-500 bg-rose-500/10 border border-rose-500/50 px-1.5 py-0.5 rounded flex items-center gap-1 shadow-[0_0_10px_rgba(244,63,94,0.2)] animate-pulse">
-                                                                        <i className="fat fa-fire-flame-curved"></i> MARŞ!
-                                                                    </span>
-                                                                )}
+                                                                
+                                                                {/* Render Note (Property) SECOND */}
+                                                                {item.note && <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium block mt-1.5 bg-amber-100 dark:bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-300 dark:border-amber-500/20">* {item.note}</span>}
                                                             </div>
-                                                        </div>
-                                                        {item.note && <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium block mt-0.5 bg-amber-100 dark:bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-300 dark:border-amber-500/20">Not: {item.note}</span>}
-                                                    </div>
-                                                </li>
-                                            )
-                                        })}
+                                                        </li>
+                                                    </React.Fragment>
+                                                );
+                                            });
+                                        })()}
                                     </ul>
                                 </div>
 
@@ -459,7 +484,7 @@ export function PageClient() {
                                             <button
                                                 onClick={() => {
                                                     const hasWaiting = params.mars_enabled && ticket.items.some(i => i.isWaiting && !i.isMarshed);
-                                                    const allActiveReady = params.kitchen_item_selection_enabled === false || ticket.items.filter(i => !params.mars_enabled || !i.isWaiting || i.isMarshed).every(i => i.isReady);
+                                                    const allActiveReady = params.kitchen_item_selection_enabled === false || ticket.items.filter(i => !i.parentItemId && (!params.mars_enabled || !i.isWaiting || i.isMarshed)).every(i => i.isReady);
 
                                                     if (hasWaiting) {
                                                         showSwal({
@@ -478,7 +503,7 @@ export function PageClient() {
                                                     }
                                                 }}
                                                 disabled={updatingTickets.includes(ticket.id)}
-                                                className={`py-2.5 font-bold rounded-lg transition shadow-sm flex items-center justify-center gap-2 ${(params.kitchen_item_selection_enabled === false || ticket.items.every(i => i.isReady)) && !updatingTickets.includes(ticket.id) ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'bg-slate-300 dark:bg-slate-700 text-slate-500 cursor-not-allowed opacity-70'}`}
+                                                className={`py-2.5 font-bold rounded-lg transition shadow-sm flex items-center justify-center gap-2 ${(params.kitchen_item_selection_enabled === false || ticket.items.filter(i => !i.parentItemId).every(i => i.isReady)) && !updatingTickets.includes(ticket.id) ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'bg-slate-300 dark:bg-slate-700 text-slate-500 cursor-not-allowed opacity-70'}`}
                                             >
                                                 {updatingTickets.includes(ticket.id) ? <i className="fat fa-spinner animate-spin"></i> : <i className="fat fa-check-double"></i>} Siparişi Kapat
                                             </button>

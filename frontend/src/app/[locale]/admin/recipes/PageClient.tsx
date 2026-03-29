@@ -103,7 +103,7 @@ export function PageClient() {
         try {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
             const [recipeRes, summaryRes] = await Promise.all([
-                axios.get(`${API_URL}/recipes/product/${product.id}`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: null })),
+                axios.get(`${API_URL}/recipes/by-product/${product.id}`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: null })),
                 axios.get(`${API_URL}/recipes/cost/${product.id}`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: null }))
             ]);
 
@@ -136,7 +136,7 @@ export function PageClient() {
         setCurrentRecipe({
             ...currentRecipe,
             lines: [
-                ...currentRecipe.lines,
+                ...(currentRecipe.lines || []),
                 { stockCardId: 0, quantity: 1, unit: 'adet', isRequired: true }
             ]
         });
@@ -144,14 +144,14 @@ export function PageClient() {
 
     const handleRemoveLine = (index: number) => {
         if (!currentRecipe) return;
-        const newLines = [...currentRecipe.lines];
+        const newLines = [...(currentRecipe.lines || [])];
         newLines.splice(index, 1);
         setCurrentRecipe({ ...currentRecipe, lines: newLines });
     };
 
     const handleLineChange = (index: number, field: keyof RecipeLine, value: any) => {
         if (!currentRecipe) return;
-        const newLines = [...currentRecipe.lines];
+        const newLines = [...(currentRecipe.lines || [])];
         const line = { ...newLines[index], [field]: value };
         
         // Auto-fill unit based on stock card selection
@@ -170,7 +170,7 @@ export function PageClient() {
         if (!currentRecipe || !user?.token) return;
 
         // Validation
-        const invalidLines = currentRecipe.lines.filter(l => l.stockCardId === 0 || l.quantity <= 0);
+        const invalidLines = (currentRecipe.lines || []).filter(l => l.stockCardId === 0 || l.quantity <= 0);
         if (invalidLines.length > 0) {
             showSwal({ title: 'Hata', text: 'Lütfen tüm reçete satırları için geçerli bir stok kartı ve miktar giriniz.', icon: 'warning' });
             return;
@@ -401,7 +401,7 @@ export function PageClient() {
                                             </button>
                                         </div>
 
-                                        {currentRecipe.lines.length === 0 ? (
+                                        {(currentRecipe.lines?.length || 0) === 0 ? (
                                             <div className="text-center p-12 bg-slate-50 dark:bg-slate-900/30 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700">
                                                 <i className="fat fa-scroll text-4xl text-slate-300 mb-3"></i>
                                                 <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Reçete henüz boş. İçerik eklemeye başlayın.</p>
@@ -419,7 +419,7 @@ export function PageClient() {
                                                         </tr>
                                                     </thead>
                                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                                        {currentRecipe.lines.map((line, idx) => (
+                                                        {(currentRecipe.lines || []).map((line, idx) => (
                                                             <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                                                                 <td className="px-6 py-3">
                                                                     <div className="relative">
@@ -476,7 +476,7 @@ export function PageClient() {
                                     </div>
 
                                     {/* Cost Summary Section */}
-                                    {recipeSummary && currentRecipe.lines.length > 0 && currentRecipe.id > 0 && (
+                                    {recipeSummary && (currentRecipe.lines?.length || 0) > 0 && currentRecipe.id > 0 && (
                                         <div className="bg-gradient-to-br from-slate-50 to-orange-50 dark:from-slate-900/50 dark:to-orange-900/10 p-6 rounded-[32px] border border-orange-100 dark:border-orange-500/20">
                                             <h4 className="text-sm font-black text-orange-600 dark:text-orange-400 uppercase tracking-widest mb-6 flex items-center gap-2">
                                                 <i className="fat fa-chart-pie"></i> Reçete Maliyet Özeti

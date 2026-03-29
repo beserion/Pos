@@ -53,7 +53,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const [allZones, setAllZones] = useState<Zone[]>([]);
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
     const [selectedZone, setSelectedZone] = useState<number | 'ALL'>('ALL');
-    const [cart, setCart] = useState<{ product: Product; quantity: number; itemId?: number; subCheckId?: number; subItems?: any[] }[]>([]);
+    const [cart, setCart] = useState<{ product: Product; quantity: number; itemId?: number; subCheckId?: number; subItems?: any[]; saleType?: string; saleTypeMultiplier?: number; }[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string>('Tümü');
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [isSplitPaymentOpen, setIsSplitPaymentOpen] = useState(false);
@@ -369,7 +369,11 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             return;
         }
 
-        const selectedTotalAmount = itemsToPay.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+        const selectedTotalAmount = itemsToPay.reduce((sum, item) => {
+            const base = (item.product.price * (item.saleTypeMultiplier || 1)) * item.quantity;
+            const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
+            return sum + base + extras;
+        }, 0);
         const vatAmount = selectedTotalAmount * 0.1;
 
         // Apply general adjustments to the current selected payment.
@@ -396,12 +400,17 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 mergeSaleIds: activeOrderIds,
                 cashRegisterId: activeCashRegister?.id || null,
                 shiftId: activeShift?.id || null,
-                items: itemsToPay.map(item => ({
-                    productId: item.product.id,
-                    quantity: item.quantity,
-                    unitPrice: item.product.price,
-                    total: Number((item.quantity * item.product.price * 1.1).toFixed(2))
-                }))
+                items: itemsToPay.map(item => {
+                    const base = (item.product.price * (item.saleTypeMultiplier || 1)) * item.quantity;
+                    const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
+                    return {
+                        productId: item.product.id,
+                        quantity: item.quantity,
+                        unitPrice: item.product.price * (item.saleTypeMultiplier || 1),
+                        total: Number(((base + extras) * 1.1).toFixed(2)),
+                        subItems: item.subItems
+                    };
+                })
             };
 
             const saleRes = await fetch(`${API_URL}/sales`, { // PosView now creates a Sale directly
@@ -449,7 +458,11 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
 
 
-    const subTotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+    const subTotal = cart.reduce((sum, item) => {
+        const base = (item.product.price * (item.saleTypeMultiplier || 1)) * item.quantity;
+        const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
+        return sum + base + extras;
+    }, 0);
     const vatAmount = subTotal * 0.1;
     const totalBeforeAdjustments = subTotal + vatAmount;
     const grandTotal = Number((totalBeforeAdjustments + serviceFee - discount).toFixed(2));
@@ -721,7 +734,12 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                             )}
                                             <span className="text-sm text-indigo-500 font-bold ml-1">x{item.quantity}</span>
                                         </span>
-                                        <span className="font-bold text-slate-800 dark:text-slate-100">₺{(item.quantity * item.product.price * (item.saleTypeMultiplier || 1)).toFixed(2)}</span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-100 uppercase text-xs">
+                                            ₺{(
+                                                ((item.product.price * (item.saleTypeMultiplier || 1)) * item.quantity) +
+                                                (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0)
+                                            ).toFixed(2)}
+                                        </span>
                                     </div>
                                 </div>
                                 {item.subItems && item.subItems.length > 0 && (
@@ -857,7 +875,11 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
             {/* Payment Modal */}
             {isCheckoutOpen && !isSplitPaymentOpen && (() => {
-                const selectedTotalAmount = cart.filter(i => selectedPosItems.includes(i.product.id)).reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+                const selectedTotalAmount = cart.filter(i => selectedPosItems.includes(i.itemId || i.product.id)).reduce((sum, item) => {
+                    const base = (item.product.price * (item.saleTypeMultiplier || 1)) * item.quantity;
+                    const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
+                    return sum + base + extras;
+                }, 0);
                 const appliedDiscount = discount || 0;
                 const appliedServiceFee = serviceFee || 0;
                 const selectedGrandTotal = Number((selectedTotalAmount * 1.1 + appliedServiceFee - appliedDiscount).toFixed(2));
@@ -897,7 +919,12 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                                         </div>
                                                         <span className="font-bold text-slate-700 dark:text-slate-200">{item.product.name} <span className="text-sm font-extrabold text-indigo-500 bg-indigo-100 dark:bg-indigo-500/20 dark:text-indigo-300 px-2 py-0.5 rounded-full ml-1">x{item.quantity}</span></span>
                                                     </div>
-                                                    <span className="font-bold text-slate-800 dark:text-slate-100">₺{(item.product.price * item.quantity * 1.1).toFixed(2)}</span>
+                                                    <span className="font-bold text-slate-800 dark:text-slate-100 text-xs">
+                                                        ₺{(
+                                                            (((item.product.price * (item.saleTypeMultiplier || 1)) * item.quantity) +
+                                                            (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0)) * 1.1
+                                                        ).toFixed(2)}
+                                                    </span>
                                                 </div>
                                                 {/* Display sub-items if present */}
                                                 {(item as any).subItems && (item as any).subItems.length > 0 && (
@@ -985,7 +1012,11 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             {/* Split Payment Modal */}
             {
                 isSplitPaymentOpen && (() => {
-                    const selectedTotalAmount = cart.filter(i => selectedPosItems.includes(i.product.id)).reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+                    const selectedTotalAmount = cart.filter(i => selectedPosItems.includes(i.itemId || i.product.id)).reduce((sum, item) => {
+                        const base = (item.product.price * (item.saleTypeMultiplier || 1)) * item.quantity;
+                        const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
+                        return sum + base + extras;
+                    }, 0);
                     const appliedDiscount = discount || 0;
                     const appliedServiceFee = serviceFee || 0;
                     const selectedGrandTotal = Number((selectedTotalAmount * 1.1 + appliedServiceFee - appliedDiscount).toFixed(2));
