@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../AuthContext';
 import { useRouter } from 'next/navigation';
 import { showSwal, toastSwal } from '../utils/swal';
@@ -9,6 +9,7 @@ import { useTheme } from 'next-themes';
 import { useParameters } from '../utils/useParameters';
 import TransferModal from './TransferModal';
 import SetMenuSelectionModal from './SetMenuSelectionModal';
+import { io, Socket } from 'socket.io-client';
 
 
 interface Modifier {
@@ -152,6 +153,15 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             fetchData();
         }
     }, [user, loading]);
+
+    // ── WebSocket: Garson veya başka kaynaktan gelen anlık güncellemeler ──
+    useEffect(() => {
+        const socket: Socket = io(API_URL, { transports: ['websocket'] });
+        socket.on('salesUpdate', () => { fetchData(); });
+        socket.on('newOrder',    () => { fetchData(); });
+        socket.on('orderUpdated',() => { fetchData(); });
+        return () => { socket.disconnect(); };
+    }, [API_URL, fetchData]);
 
     const formatTime = (dateStr?: string) => {
         if (!dateStr) return '';

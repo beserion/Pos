@@ -411,10 +411,13 @@ export class SalesService implements OnModuleInit {
           const table = await manager.findOne(Table, { where: { id: data.tableId, isDeleted: false } });
           if (table) {
             const waiter = await manager.findOne(User, { where: { id: data.waiterId || (data as any).userId } });
+            // items henüz savedSale.totalAmount'a yansımamış olabilir; o yüzden doğrudan items üzerinden hesapla
+            const itemsTotal = (savedSale.items || []).reduce((sum, i: any) => sum + Number(i.total || 0), 0);
+            const effectiveTotal = itemsTotal > 0 ? itemsTotal : Number(savedSale.totalAmount || 0);
             await manager.update(Table, data.tableId, {
               status: savedSale.status === 'COMPLETED' ? 'BOŞ' : 'DOLU',
               waiterName: savedSale.status === 'COMPLETED' ? '' : (waiter ? `${waiter.firstName} ${waiter.lastName}` : (table.waiterName || 'Sistem')),
-              currentTotal: savedSale.status === 'COMPLETED' ? 0 : (Number(table.currentTotal || 0) + Number(savedSale.totalAmount)),
+              currentTotal: savedSale.status === 'COMPLETED' ? 0 : (Number(table.currentTotal || 0) + effectiveTotal),
               orderStartTime: table.status === 'BOŞ' ? new Date() : (savedSale.status === 'COMPLETED' ? null as any : table.orderStartTime),
             });
           }
