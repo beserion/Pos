@@ -8,6 +8,7 @@ PROMPTS/*
 coverage/
 frontend/update-ip.js
 # Production
+posnetx-waiter
 build/
 dist/
 .next/
