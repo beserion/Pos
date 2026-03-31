@@ -17,6 +17,7 @@ import type { Modifier } from '../modifiers/modifier.entity';
 import type { ProductType } from '../product-types/product-type.entity';
 import type { OutputProfile } from '../output-profiles/output-profile.entity';
 import { SetMenu } from './set-menu.entity';
+import { StockCard } from '../stock-cards/stock-card.entity';
 import { OneToOne } from 'typeorm';
 
 @Entity('products')
@@ -30,11 +31,20 @@ export class Product {
   @Column({ unique: true })
   sku: string;
 
-  @Column({ nullable: true, unique: true })
+  @Column({ nullable: true })
+  posName: string;
+
+  @Column({ nullable: true })
+  kitchenName: string;
+
+  @Column({ nullable: true })
   barcode: string;
 
-  @Column('decimal', { precision: 10, scale: 2 , default: 0 })
+  @Column('decimal', { precision: 10, scale: 2, default: 0 })
   price: number;
+
+  @Column('decimal', { precision: 10, scale: 2, default: 0 })
+  vatRate: number;
 
   @Column({ nullable: true })
   category: string;
@@ -42,8 +52,48 @@ export class Product {
   @Column({ default: true })
   isActive: boolean;
 
+  @Column({ default: false })
+  openPriceEnabled: boolean;
+
+  @Column({ default: true })
+  discountAllowed: boolean;
+
+  @Column({ default: true })
+  compAllowed: boolean;
+
   @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
   imageUrl: string;
+
+  @Column({ default: true })
+  posVisible: boolean;
+
+  @Column({ default: true })
+  takeawayVisible: boolean;
+
+  @Column({ default: true })
+  deliveryVisible: boolean;
+
+  @Column({ default: true })
+  qrVisible: boolean;
+
+  @Column({ default: true })
+  kioskVisible: boolean;
+
+  @Column({
+    type: 'nvarchar',
+    length: 50,
+    default: 'none',
+  })
+  inventoryLinkType: string; // none, direct_stock, recipe
+
+  @Column({ nullable: true })
+  linkedStockItemId: number;
+
+  @Column('decimal', { precision: 12, scale: 4, default: 0 })
+  directStockQty: number;
+
+  @Column({ nullable: true })
+  directStockUnit: string;
 
   @Column({ nullable: true })
   printerId: number;
@@ -91,8 +141,9 @@ export class Product {
   })
   printer: Printer;
 
-  @OneToMany('Stock', 'product')
-  stocks: Stock[];
+  @ManyToOne('StockCard', { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'linkedStockItemId' })
+  linkedStockCard: StockCard;
 
   @OneToMany('Recipe', 'product')
   recipes: Recipe[];

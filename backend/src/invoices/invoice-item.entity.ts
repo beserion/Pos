@@ -6,7 +6,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Invoice } from './invoice.entity';
-import { Product } from '../products/product.entity';
+import { StockCard } from '../stock-cards/stock-card.entity';
 
 @Entity('invoice_items')
 export class InvoiceItem {
@@ -20,15 +20,15 @@ export class InvoiceItem {
   @Column({ default: 0 })
   invoiceId: number;
 
-  @ManyToOne(() => Product, { nullable: true, onDelete: 'SET NULL' })
-  @JoinColumn({ name: 'productId' })
-  product: Product;
+  @ManyToOne(() => StockCard, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'stockCardId' })
+  stockCard: StockCard;
 
   @Column({ nullable: true , default: 0 })
-  productId: number;
+  stockCardId: number;
 
   @Column({ nullable: true })
-  productName: string; // Snapshot of name at time of invoice
+  stockCardName: string; // Snapshot of name at time of invoice
 
   @Column('decimal', { precision: 10, scale: 2, default: 1 })
   quantity: number;

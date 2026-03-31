@@ -26,6 +26,11 @@ interface Product {
     printerId?: number;
     modifiers?: Modifier[];
     isSet?: boolean;
+    productTypeId?: number;
+    linkedStockCard?: {
+        stockGroup?: string;
+        category?: string;
+    };
     setMenu?: {
         setType: string;
         groups: {
@@ -41,6 +46,7 @@ interface Product {
         }[];
     };
 }
+interface ProductType { id: number; name: string; }
 interface OrderItem { product: Product; quantity: number; note?: string; isWaiting?: boolean; subItems?: any[]; extraPrice?: number; uniqueId?: string; saleType?: 'STANDARD' | 'HALF' | 'DOUBLE'; saleTypeMultiplier?: number; }
 interface ExistingOrder {
     id: number;
@@ -69,9 +75,13 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [cart, setCart] = useState<OrderItem[]>([]);
     const [activeSaleType, setActiveSaleType] = useState<'STANDARD' | 'HALF' | 'DOUBLE'>('STANDARD');
     const [existingOrders, setExistingOrders] = useState<ExistingOrder[]>([]);
-    const [selectedCategory, setSelectedCategory] = useState<string>('Tümü');
     const [searchQuery, setSearchQuery] = useState('');
     const [dataLoading, setDataLoading] = useState(true);
+
+    const [productTypes, setProductTypes] = useState<ProductType[]>([]);
+    const [selectedProductTypeId, setSelectedProductTypeId] = useState<number | 'all'>('all');
+    const [selectedGroupName, setSelectedGroupName] = useState<string>('Tümü');
+    const [selectedCategoryName, setSelectedCategoryName] = useState<string>('Tümü');
 
     // --- Ekstra Popup State ---
     const [extraPopupOpen, setExtraPopupOpen] = useState(false);
@@ -112,16 +122,18 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         try {
             const token = Cookies.get('token') || localStorage.getItem('token');
             if (!token) return;
-            const [productsRes, tablesRes, zonesRes, depsRes] = await Promise.all([
+            const [productsRes, tablesRes, zonesRes, depsRes, typesRes] = await Promise.all([
                 fetch(`${API_URL}/products`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
                 fetch(`${API_URL}/tables`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
                 fetch(`${API_URL}/zones`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-                fetch(`${API_URL}/departments`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => [])
+                fetch(`${API_URL}/departments`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => []),
+                fetch(`${API_URL}/product-types`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => [])
             ]);
             setProducts(Array.isArray(productsRes) ? productsRes : []);
             setTables(Array.isArray(tablesRes) ? tablesRes : []);
             setZones(Array.isArray(zonesRes) ? zonesRes : []);
             setDepartments(Array.isArray(depsRes) ? depsRes : []);
+            setProductTypes(Array.isArray(typesRes) ? typesRes : []);
             if (Array.isArray(zonesRes) && zonesRes.length > 0) setSelectedZone(zonesRes[0].id);
         } catch (error) {
             console.error('Error fetching POS data:', error);
@@ -147,7 +159,28 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
     };
 
-    const categories = ['Tümü', ...Array.from(new Set(products.map(p => p.category)))];
+    const productTypeOptions = [{ id: 'all', name: 'Tümü' }, ...productTypes];
+
+    const availableGroups = ['Tümü', ...Array.from(new Set(
+        products
+            .filter(p => selectedProductTypeId === 'all' || p.productTypeId === selectedProductTypeId)
+            .map(p => p.linkedStockCard?.stockGroup || 'Diğer')
+    ))];
+
+    const availableCategories = ['Tümü', ...Array.from(new Set(
+        products
+            .filter(p => (selectedProductTypeId === 'all' || p.productTypeId === selectedProductTypeId) &&
+                (selectedGroupName === 'Tümü' || (p.linkedStockCard?.stockGroup || 'Diğer') === selectedGroupName))
+            .map(p => p.linkedStockCard?.category || 'Diğer')
+    ))];
+
+    const filteredProducts = products.filter(p => {
+        const matchesType = selectedProductTypeId === 'all' || p.productTypeId === selectedProductTypeId;
+        const matchesGroup = selectedGroupName === 'Tümü' || (p.linkedStockCard?.stockGroup || 'Diğer') === selectedGroupName;
+        const matchesCategory = selectedCategoryName === 'Tümü' || (p.linkedStockCard?.category || 'Diğer') === selectedCategoryName;
+        const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesType && matchesGroup && matchesCategory && matchesSearch;
+    });
 
     const handleTableClick = async (table: Table) => {
         setSelectedTable(table);
@@ -444,11 +477,6 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         }
     };
 
-    const filteredProducts = products.filter(p => {
-        const matchesCategory = selectedCategory === 'Tümü' || p.category === selectedCategory;
-        const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
-        return matchesCategory && matchesSearch;
-    });
     const cartTotal = cart.reduce((sum, item) => {
         const base = ((item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1)) * item.quantity;
         const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
@@ -768,19 +796,56 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                 ) : (
                     <div className="h-full flex flex-col">
 
-                        <div className="flex flex-col md:flex-row items-center gap-4 mb-4">
-                            <div className="flex-1 flex gap-2 overflow-x-auto pb-0 scrollbar-none">
-                                {categories.map(c => (
-                                    <button
-                                        key={c}
-                                        onClick={() => setSelectedCategory(c)}
-                                        className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-all shadow-sm border ${selectedCategory === c ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'}`}
-                                    >
-                                        {c}
-                                    </button>
-                                ))}
+                        <div className="flex flex-col md:flex-row items-start gap-4 mb-4">
+                            <div className="flex-1 flex flex-col gap-3">
+                                {/* Seviye 1: Ürün Cinsleri */}
+                                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                                    {productTypeOptions.map(t => (
+                                        <button
+                                            key={t.id}
+                                            onClick={() => {
+                                                setSelectedProductTypeId(t.id as any);
+                                                setSelectedGroupName('Tümü');
+                                                setSelectedCategoryName('Tümü');
+                                            }}
+                                            className={`px-5 py-2 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-sm border-2 ${selectedProductTypeId === t.id ? 'bg-indigo-600 text-white border-indigo-500 shadow-indigo-500/20' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-100 dark:border-slate-700 hover:border-indigo-400'}`}
+                                        >
+                                            {t.name}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Seviye 2: Ürün Grupları */}
+                                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                                    {availableGroups.map(g => (
+                                        <button
+                                            key={g}
+                                            onClick={() => {
+                                                setSelectedGroupName(g);
+                                                setSelectedCategoryName('Tümü');
+                                            }}
+                                            className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all shadow-sm border ${selectedGroupName === g ? 'bg-amber-500 text-white border-amber-400 shadow-amber-500/20' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-100 dark:border-slate-700 hover:border-amber-400'}`}
+                                        >
+                                            {g}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Seviye 3: Kategoriler */}
+                                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                                    {availableCategories.map(c => (
+                                        <button
+                                            key={c}
+                                            onClick={() => setSelectedCategoryName(c)}
+                                            className={`px-4 py-1.5 rounded-full text-[10px] font-extrabold uppercase transition-all shadow-sm border ${selectedCategoryName === c ? 'bg-emerald-500 text-white border-emerald-400 shadow-emerald-500/20' : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-100 dark:border-slate-700 hover:border-emerald-400'}`}
+                                        >
+                                            {c}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                            <div className="shrink-0 flex gap-1 p-1 bg-white/50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+
+                            <div className="shrink-0 flex gap-1 p-1 bg-white/50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm mt-1">
                                 <button
                                     onClick={() => setActiveSaleType('HALF')}
                                     className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${activeSaleType === 'HALF' ? 'bg-orange-500 text-white shadow-md shadow-orange-500/30' : 'bg-transparent text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
@@ -802,7 +867,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                             </div>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-180px)]">
+                        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-280px)]">
                             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
                                 {filteredProducts.map(p => (
                                     <button
@@ -822,7 +887,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                                 />
                                             ) : (
                                                 <span className="text-3xl mb-1 opacity-50 transition-opacity">
-                                                    {p.category === 'Kahveler' ? '☕' : p.category === 'Tatlılar' ? '🍰' : '🍹'}
+                                                    {(p.linkedStockCard?.category || p.category) === 'Kahveler' ? '☕' : (p.linkedStockCard?.category || p.category) === 'Tatlılar' ? '🍰' : '🍹'}
                                                 </span>
                                             )}
                                             <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/30 to-transparent"></div>

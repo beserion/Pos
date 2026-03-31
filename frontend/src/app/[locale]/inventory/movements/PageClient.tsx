@@ -79,7 +79,7 @@ export function PageClient() {
         try {
             setLoading(true);
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
-            
+
             let query = `?limit=${limit}`;
             if (filterStockCard) query += `&stockCardId=${filterStockCard}`;
             if (filterType) query += `&movementType=${filterType}`;
@@ -87,7 +87,7 @@ export function PageClient() {
             const res = await axios.get(`${API_URL}/stock-movements${query}`, {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
-            
+
             setMovements(res.data.data || []);
         } catch (error) {
             console.error('Error fetching movements', error);
@@ -108,10 +108,10 @@ export function PageClient() {
 
         try {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
-            
+
             // Get selected card to find unit
             const card = stockCards.find(c => c.id === manualForm.stockCardId);
-            
+
             const payload = {
                 ...manualForm,
                 quantity: parseFloat(manualForm.quantity),
@@ -149,7 +149,7 @@ export function PageClient() {
 
         try {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
-            
+
             const payload = {
                 ...transferForm,
                 quantity: parseFloat(transferForm.quantity)
@@ -227,7 +227,7 @@ export function PageClient() {
                             </h5>
                         </div>
                     </div>
-                    
+
                     <div className="flex gap-3">
                         <button onClick={() => setIsTransferModalOpen(true)} className="px-5 py-3 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-blue-600 dark:text-blue-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-200 dark:hover:border-blue-500/30 transition-all flex items-center gap-2 active:scale-95">
                             <i className="fat fa-truck-moving text-base"></i> Transfer
@@ -235,7 +235,7 @@ export function PageClient() {
                         <button onClick={() => setIsManualModalOpen(true)} className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white border border-blue-600 font-black text-xs uppercase tracking-widest rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center gap-2 active:scale-95">
                             <i className="fat fa-plus text-base"></i> Yeni Hareket
                         </button>
-                        <button onClick={() => router.push(`/${locale}/admin`)} className="px-6 py-3 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-2">
+                        <button onClick={() => router.push(`/${locale}/inventory/`)} className="px-6 py-3 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-2">
                             <i className="fat fa-reply"></i> Pano'ya Dön
                         </button>
                     </div>
@@ -247,7 +247,7 @@ export function PageClient() {
                         <i className="fat fa-filter text-slate-400 ml-2"></i>
                         <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Filtreler</span>
                     </div>
-                    
+
                     <div className="relative min-w-[200px] flex-1 md:flex-none">
                         <select value={filterStockCard} onChange={(e) => setFilterStockCard(e.target.value)} className="w-full pl-4 pr-10 py-2.5 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-300 font-bold text-sm focus:border-blue-500 outline-none appearance-none">
                             <option value="">Tüm Stok Kartları</option>
@@ -267,7 +267,7 @@ export function PageClient() {
                         </select>
                         <i className="fat fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] pointer-events-none"></i>
                     </div>
-                    
+
                     <div className="relative min-w-[120px]">
                         <select value={limit} onChange={(e) => setLimit(parseInt(e.target.value))} className="w-full pl-4 pr-10 py-2.5 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-300 font-bold text-sm focus:border-blue-500 outline-none appearance-none">
                             <option value="50">Son 50</option>
@@ -301,7 +301,7 @@ export function PageClient() {
                                     {movements.map(mov => {
                                         const styles = getTypeStyle(mov.movementType);
                                         const isPositive = mov.quantity > 0;
-                                        
+
                                         return (
                                             <tr key={mov.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                                                 <td className="px-6 py-3">

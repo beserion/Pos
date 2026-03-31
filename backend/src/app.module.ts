@@ -91,6 +91,10 @@ import { RecipeLine } from './recipes/recipe-line.entity';
 import { StockMovement } from './stock-movements/stock-movement.entity';
 import { InventorySession } from './inventory/inventory-session.entity';
 import { InventorySessionLine } from './inventory/inventory-session-line.entity';
+import { ProductTransaction } from './products/product-transaction.entity';
+import { StockGroup } from './stock-groups/stock-group.entity';
+import { StockGroupsModule } from './stock-groups/stock-groups.module';
+
 
 import { ScheduleModule } from '@nestjs/schedule';
 
@@ -166,6 +170,8 @@ import { ScheduleModule } from '@nestjs/schedule';
             StockMovement,
             InventorySession,
             InventorySessionLine,
+            ProductTransaction,
+            StockGroup,
           ],
           synchronize: true, // Auto-sync enabled by user permission
           logging: true,
@@ -228,6 +234,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     StockCardsModule,
     StockMovementsModule,
     InventoryModule,
+    StockGroupsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

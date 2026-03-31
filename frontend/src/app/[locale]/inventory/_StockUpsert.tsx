@@ -3,7 +3,7 @@ import { useTranslations } from 'next-intl';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
-interface Product {
+interface StockCard {
     id: number;
     name: string;
     sku: string;
@@ -19,24 +19,24 @@ interface StockUpsertProps {
 export default function StockUpsert({ formData, setFormData, onSave, onClose }: StockUpsertProps) {
     const t = useTranslations('Admin');
     const tc = useTranslations('Common');
-    const [products, setProducts] = useState<Product[]>([]);
+    const [stockCards, setStockCards] = useState<StockCard[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const fetchProducts = async () => {
+        const fetchStockCards = async () => {
             try {
                 const token = Cookies.get('token');
-                const res = await axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/products', {
+                const res = await axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/stock-cards?limit=1000', {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                setProducts(res.data);
+                setStockCards(res.data.data || []);
             } catch (error) {
-                console.error('Error fetching products:', error);
+                console.error('Error fetching stock cards:', error);
             } finally {
                 setLoading(false);
             }
         };
-        fetchProducts();
+        fetchStockCards();
     }, []);
 
     return (
@@ -44,21 +44,21 @@ export default function StockUpsert({ formData, setFormData, onSave, onClose }: 
             <form onSubmit={onSave} className="flex flex-col h-full w-full">
                 <div className="flex-1 overflow-y-auto p-8">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Product Selection */}
+                        {/* Stock Card Selection */}
                         <div className="col-span-2">
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Ürün</label>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Stok Kartı</label>
                             <div className="relative">
                                 <i className="fat fa-tag absolute left-4 top-4 text-emerald-500/50"></i>
                                 <select 
                                     required 
                                     disabled={formData.id !== 0}
-                                    value={formData.productId || ''} 
-                                    onChange={(e) => setFormData({ ...formData, productId: parseInt(e.target.value) })} 
+                                    value={formData.stockCardId || ''} 
+                                    onChange={(e) => setFormData({ ...formData, stockCardId: parseInt(e.target.value) })} 
                                     className="w-full pl-12 pr-10 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-emerald-500/10 outline-none transition-shadow appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
-                                    <option value="">Ürün Seçiniz...</option>
-                                    {products.map((p) => (
-                                        <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+                                    <option value="">Stok Kartı Seçiniz...</option>
+                                    {stockCards.map((sc) => (
+                                        <option key={sc.id} value={sc.id}>{sc.name} ({sc.sku || sc.id})</option>
                                     ))}
                                 </select>
                                 <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>

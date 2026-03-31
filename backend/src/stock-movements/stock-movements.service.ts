@@ -19,15 +19,24 @@ export class StockMovementsService {
 
   // ─── Core Movement Creation ──────────────────────────
 
+  // ─── Core Movement Creation ──────────────────────────
+
   async createMovement(data: {
     stockCardId: number;
     movementType: string;
-    quantity: number;
+    quantity: number; // Net miktar
+    qtyIn?: number;
+    qtyOut?: number;
     unit?: string;
     unitCost?: number;
     warehouseId?: number;
-    referenceType?: string;
-    referenceId?: number;
+    businessDate?: Date;
+    documentType?: string;
+    documentNo?: string;
+    sourceType?: string;
+    sourceId?: number;
+    approveUserId?: number;
+    reasonCode?: string;
     description?: string;
     userId?: number;
   }, manager?: any): Promise<StockMovement> {
@@ -36,6 +45,8 @@ export class StockMovementsService {
     const card = await this.stockCardsService.findOne(data.stockCardId);
     const unitCost = data.unitCost ?? Number(card.costPerBaseUnit);
     const totalCost = data.quantity * unitCost;
+
+    const qtyBefore = Number(card.currentStock);
 
     // Update the stock card's currentStock
     const newStockLevel = await this.stockCardsService.adjustStock(
@@ -47,14 +58,22 @@ export class StockMovementsService {
     const movement = repo.create({
       stockCardId: data.stockCardId,
       movementType: data.movementType,
+      businessDate: data.businessDate || new Date(),
+      qtyIn: data.qtyIn ?? (data.quantity > 0 ? data.quantity : 0),
+      qtyOut: data.qtyOut ?? (data.quantity < 0 ? Math.abs(data.quantity) : 0),
       quantity: data.quantity,
       unit: data.unit || card.baseUnit,
       unitCost,
       totalCost,
+      qtyBefore,
       stockAfter: newStockLevel,
       warehouseId: data.warehouseId || card.warehouseId,
-      referenceType: data.referenceType,
-      referenceId: data.referenceId,
+      documentType: data.documentType,
+      documentNo: data.documentNo,
+      sourceType: data.sourceType,
+      sourceId: data.sourceId,
+      approveUserId: data.approveUserId,
+      reasonCode: data.reasonCode,
       description: data.description,
       userId: data.userId,
     });
@@ -62,18 +81,44 @@ export class StockMovementsService {
     return repo.save(movement);
   }
 
-  // ─── Recipe-based Consumption ────────────────────────
+  // ─── Sales Consumption ───────────────────────────────
+
+  /**
+   * Consume stock for a product that is linked directly to a stock card.
+   * Creates direct_sale_consumption movement.
+   */
+  async createDirectSaleConsumption(
+    stockCardId: number,
+    quantity: number,
+    unit: string,
+    sourceType: string = 'SALE',
+    sourceId?: number,
+    userId?: number,
+    manager?: any,
+  ): Promise<StockMovement> {
+    return this.createMovement({
+      stockCardId,
+      movementType: 'direct_sale_consumption',
+      quantity: -quantity,
+      qtyOut: quantity,
+      unit,
+      sourceType,
+      sourceId,
+      description: `Direkt ürün satışı (Stock Link)`,
+      userId,
+    }, manager);
+  }
 
   /**
    * Consume stock based on a product's recipe when a sale is completed.
-   * Creates RECIPE_CONSUME movements for each recipe line.
+   * Creates recipe_consumption movements for each recipe line.
    */
   async createRecipeConsumption(
     productId: number,
     saleQuantity: number,
     saleTypeMultiplier: number = 1,
-    referenceType: string = 'SALE',
-    referenceId?: number,
+    sourceType: string = 'SALE',
+    sourceId?: number,
     userId?: number,
     manager?: any,
   ): Promise<StockMovement[]> {
@@ -89,12 +134,13 @@ export class StockMovementsService {
 
       const movement = await this.createMovement({
         stockCardId: line.stockCardId,
-        movementType: 'RECIPE_CONSUME',
-        quantity: -consumeQty, // Negative = stock out
+        movementType: 'recipe_consumption',
+        quantity: -consumeQty, 
+        qtyOut: consumeQty,
         unit: line.unit,
-        referenceType,
-        referenceId,
-        description: `Satış tüketimi: ${recipe.product?.name || `Ürün #${productId}`}`,
+        sourceType,
+        sourceId,
+        description: `Reçete tüketimi: ${recipe.product?.name || `Ürün #${productId}`}`,
         userId,
       }, manager);
 
@@ -105,50 +151,70 @@ export class StockMovementsService {
   }
 
   /**
-   * Reverse recipe consumption (for cancellations/refunds).
-   * Creates RECIPE_REVERSE movements.
+   * Reverse consumption (for cancellations/refunds).
    */
   async createReverseConsumption(
     productId: number,
     saleQuantity: number,
     saleTypeMultiplier: number = 1,
-    referenceType: string = 'SALE',
-    referenceId?: number,
+    sourceType: string = 'SALE',
+    sourceId?: number,
     userId?: number,
     manager?: any,
   ): Promise<StockMovement[]> {
-    // Check parameter
     const restoreParam = await this.parametersService.getValue(
       'inventory',
       'stock_restore_on_cancel',
     );
     if (restoreParam === 'false') return [];
 
-    const recipe = await this.recipesService.findActiveByProduct(productId);
-    if (!recipe || !recipe.lines || recipe.lines.length === 0) {
-      return [];
-    }
+    const product = await manager.query(`SELECT inventoryLinkType, linkedStockItemId, directStockQty, directStockUnit FROM products WHERE id = ${productId}`);
+    if (!product || product.length === 0) return [];
 
-    const movements: StockMovement[] = [];
-    for (const line of recipe.lines) {
-      const restoreQty = Number(line.quantity) * saleQuantity * saleTypeMultiplier;
-      if (restoreQty <= 0) continue;
+    const linkType = product[0].inventoryLinkType;
 
+    if (linkType === 'direct_stock') {
+      const restoreQty = Number(product[0].directStockQty) * saleQuantity;
       const movement = await this.createMovement({
-        stockCardId: line.stockCardId,
-        movementType: 'RECIPE_REVERSE',
-        quantity: restoreQty, // Positive = stock in
-        unit: line.unit,
-        referenceType,
-        referenceId,
-        description: `İptal/İade geri yükleme: ${recipe.product?.name || `Ürün #${productId}`}`,
+        stockCardId: product[0].linkedStockItemId,
+        movementType: 'return_in', // Or manual_adjustment based on context
+        quantity: restoreQty,
+        qtyIn: restoreQty,
+        unit: product[0].directStockUnit,
+        sourceType,
+        sourceId,
+        description: `Satış iptal iadesi (Direkt Stok)`,
         userId,
       }, manager);
-
-      movements.push(movement);
+      return [movement];
     }
 
-    return movements;
+    if (linkType === 'recipe') {
+      const recipe = await this.recipesService.findActiveByProduct(productId);
+      if (!recipe || !recipe.lines || recipe.lines.length === 0) return [];
+
+      const movements: StockMovement[] = [];
+      for (const line of recipe.lines) {
+        const restoreQty = Number(line.quantity) * saleQuantity * saleTypeMultiplier;
+        if (restoreQty <= 0) continue;
+
+        const movement = await this.createMovement({
+          stockCardId: line.stockCardId,
+          movementType: 'return_in',
+          quantity: restoreQty,
+          qtyIn: restoreQty,
+          unit: line.unit,
+          sourceType,
+          sourceId,
+          description: `Satış iptal iadesi (Reçete): ${recipe.product?.name || `Ürün #${productId}`}`,
+          userId,
+        }, manager);
+        movements.push(movement);
+      }
+      return movements;
+    }
+
+    return [];
   }
 
   // ─── Manual & Transfer ───────────────────────────────
@@ -169,7 +235,7 @@ export class StockMovementsService {
     return this.createMovement({
       ...data,
       quantity: qty,
-      referenceType: 'MANUAL',
+      sourceType: 'MANUAL',
     });
   }
 
@@ -188,7 +254,7 @@ export class StockMovementsService {
       movementType: 'TRANSFER_OUT',
       quantity: -qty,
       warehouseId: data.fromWarehouseId,
-      referenceType: 'TRANSFER',
+      sourceType: 'TRANSFER',
       description: data.description || 'Depolar arası transfer',
       userId: data.userId,
     });
@@ -198,8 +264,8 @@ export class StockMovementsService {
       movementType: 'TRANSFER_IN',
       quantity: qty,
       warehouseId: data.toWarehouseId,
-      referenceType: 'TRANSFER',
-      referenceId: out.id,
+      sourceType: 'TRANSFER',
+      sourceId: out.id,
       description: data.description || 'Depolar arası transfer',
       userId: data.userId,
     });
@@ -251,9 +317,9 @@ export class StockMovementsService {
     return { data, total, lastPage: Math.ceil(total / limit) };
   }
 
-  async findByReference(referenceType: string, referenceId: number): Promise<StockMovement[]> {
+  async findByReference(sourceType: string, sourceId: number): Promise<StockMovement[]> {
     return this.movementRepository.find({
-      where: { referenceType, referenceId },
+      where: { sourceType, sourceId },
       relations: ['stockCard', 'warehouse'],
       order: { createdAt: 'DESC' },
     });

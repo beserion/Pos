@@ -28,6 +28,12 @@ export class ProductsController {
   async findAllQuickSale() {
     return this.productsService.findAllQuickSale();
   }
+  
+  @Get('transactions')
+  @Permissions('VIEW_SALES')
+  async findAllTransactions() {
+    return this.productsService.findAllTransactions();
+  }
 
   @Get(':id')
   @Permissions('VIEW_PRODUCTS', 'VIEW_INVOICES', 'VIEW_SALES')

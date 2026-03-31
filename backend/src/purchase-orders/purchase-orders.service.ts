@@ -31,7 +31,7 @@ export class PurchaseOrdersService {
     const query = this.poRepository.createQueryBuilder('po')
       .leftJoinAndSelect('po.supplier', 'supplier')
       .leftJoinAndSelect('po.items', 'items')
-      .leftJoinAndSelect('items.product', 'product');
+      .leftJoinAndSelect('items.stockCard', 'stockCard');
 
     if (search) {
       query.andWhere('(supplier.name LIKE :search OR po.note LIKE :search OR po.invoiceNumber LIKE :search)', { search: `%${search}%` });
@@ -64,7 +64,7 @@ export class PurchaseOrdersService {
   async findOne(id: number): Promise<PurchaseOrder> {
     const po = await this.poRepository.findOne({
       where: { id },
-      relations: ['supplier', 'items', 'items.product'],
+      relations: ['supplier', 'items', 'items.stockCard'],
     });
     if (!po) {
       throw new NotFoundException(`Purchase Order with ID ${id} not found`);
@@ -101,7 +101,7 @@ export class PurchaseOrdersService {
     // Group by no supplier for now — single PO with all low-stock items
     const items: Partial<PurchaseOrderItem>[] = lowStockProducts.map(
       (item) => ({
-        productId: item.productId,
+        stockCardId: item.stockCardId,
         quantity: item.minStockLevel - item.currentStock,
         unitPrice: item.costPrice,
         unit: item.unit,
@@ -129,7 +129,7 @@ export class PurchaseOrdersService {
     if (po.status === 'RECEIVED') throw new BadRequestException('This purchase order is already received');
     if (po.status === 'CANCELLED') throw new BadRequestException('Cannot receive a cancelled purchase order');
     for (const item of po.items) {
-      await this.stocksService.addStock(item.productId, Number(item.quantity));
+        await this.stocksService.addStock(item.stockCardId, Number(item.quantity));
     }
     po.status = 'RECEIVED';
     return await this.poRepository.save(po);
@@ -154,7 +154,7 @@ export class PurchaseOrdersService {
     // Update stock if not already received
     if (po.status !== 'RECEIVED') {
       for (const item of po.items) {
-        await this.stocksService.addStock(item.productId, Number(item.quantity));
+        await this.stocksService.addStock(item.stockCardId, Number(item.quantity));
       }
     }
 

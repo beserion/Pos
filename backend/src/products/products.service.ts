@@ -5,6 +5,8 @@ import { Product } from './product.entity';
 import { Recipe } from '../recipes/recipe.entity';
 import { Modifier } from '../modifiers/modifier.entity';
 
+import { ProductTransaction } from './product-transaction.entity';
+
 @Injectable()
 export class ProductsService {
     constructor(
@@ -14,6 +16,8 @@ export class ProductsService {
         private recipeRepository: Repository<Recipe>,
         @InjectRepository(Modifier)
         private modifierRepository: Repository<Modifier>,
+        @InjectRepository(ProductTransaction)
+        private transactionRepository: Repository<ProductTransaction>,
     ) { }
 
     async countProducts(): Promise<number> {
@@ -22,7 +26,7 @@ export class ProductsService {
 
     async findAll(): Promise<Product[]> {
         const products = await this.productRepository.find({
-            relations: ['recipes', 'printer', 'productType', 'outputProfile', 'setMenu', 'setMenu.groups', 'setMenu.groups.items'],
+            relations: ['recipes', 'printer', 'productType', 'outputProfile', 'setMenu', 'setMenu.groups', 'setMenu.groups.items', 'linkedStockCard', 'linkedStockCard.stockGroupRelation'],
         });
 
         if (products.length > 0) {
@@ -87,6 +91,18 @@ export class ProductsService {
     ): Promise<Product> {
         const { recipes, modifiers, ...data } = productData;
 
+        // 12.md Validasyonları: Ürün Cinsi Zorunluluğu
+        if (!data.productTypeId) {
+            throw new Error('Ürün Cinsi (sales_cins) seçilmesi zorunludur.');
+        }
+
+        // 12.md Validasyonları: Stok Bağı Kontrolü
+        if (data.inventoryLinkType === 'direct_stock') {
+            if (!data.linkedStockItemId || !data.directStockQty) {
+                throw new Error('Direkt stok bağı için stok kartı ve miktar bilgisi zorunludur.');
+            }
+        }
+
         let fetchedModifiers: Modifier[] = [];
         if (modifiers && modifiers.length > 0) {
             const modifierIds = modifiers.map(m => typeof m === 'object' ? m.id : m);
@@ -95,7 +111,8 @@ export class ProductsService {
 
         const newProduct = this.productRepository.create({
             ...data,
-            modifiers: fetchedModifiers
+            modifiers: fetchedModifiers,
+            isActive: data.isActive !== undefined ? data.isActive : true // Varsayılan aktif
         });
         const savedProduct = await this.productRepository.save(newProduct);
 
@@ -118,6 +135,21 @@ export class ProductsService {
     ): Promise<Product> {
         const product = await this.findOne(id);
         const { id: _, recipes, modifiers, ...data } = updateData as any;
+
+        // 12.md Validasyonları: Ürün Cinsi Zorunluluğu
+        if (data.productTypeId !== undefined && !data.productTypeId) {
+            throw new Error('Ürün Cinsi (sales_cins) seçilmesi zorunludur.');
+        }
+
+        // 12.md Validasyonları: Stok Bağı Kontrolü
+        const finalLinkType = data.inventoryLinkType || product.inventoryLinkType;
+        if (finalLinkType === 'direct_stock') {
+            const finalStockId = data.linkedStockItemId || product.linkedStockItemId;
+            const finalQty = data.directStockQty !== undefined ? data.directStockQty : product.directStockQty;
+            if (!finalStockId || !finalQty) {
+                throw new Error('Direkt stok bağı için stok kartı ve miktar bilgisi zorunludur.');
+            }
+        }
 
         if (modifiers !== undefined) {
             let fetchedModifiers: Modifier[] = [];
@@ -144,9 +176,7 @@ export class ProductsService {
         }
 
         if (recipes !== undefined) {
-            // Delete existing recipes for this product
             await this.recipeRepository.delete({ productId: id });
-
             if (recipes.length > 0) {
                 const recipesToSave = recipes.map((recipe: any) => ({
                     ingredientId: recipe.ingredientId,
@@ -164,5 +194,38 @@ export class ProductsService {
     async remove(id: number): Promise<void> {
         await this.findOne(id);
         await this.productRepository.delete(id);
+    }
+
+    async findAllTransactions(): Promise<ProductTransaction[]> {
+        return await this.transactionRepository.find({
+            order: { businessDate: 'DESC', id: 'DESC' },
+            take: 5000 // Limit for performance
+        });
+    }
+
+    async recordTransaction(data: Partial<ProductTransaction>): Promise<ProductTransaction> {
+        const transaction = this.transactionRepository.create({
+            ...data,
+            businessDate: data.businessDate || new Date(),
+        });
+        return await this.transactionRepository.save(transaction);
+    }
+
+    async onModuleInit() {
+        await this.migrateInventoryLinks();
+    }
+
+    async migrateInventoryLinks() {
+        try {
+            await this.productRepository.query(`
+                UPDATE products 
+                SET inventoryLinkType = 'recipe' 
+                WHERE (inventoryLinkType = 'none' OR inventoryLinkType IS NULL)
+                  AND id IN (SELECT productId FROM recipes)
+            `);
+            console.log('Inventory link migration completed.');
+        } catch (e) {
+            console.error('Inventory link migration failed', e);
+        }
     }
 }
