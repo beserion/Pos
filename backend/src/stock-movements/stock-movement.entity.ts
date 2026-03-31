@@ -21,14 +21,23 @@ export class StockMovement {
   @JoinColumn({ name: 'stockCardId' })
   stockCard: StockCard;
 
+  @Column({ type: 'date', nullable: true })
+  businessDate: Date;
+
   @Column()
   movementType: string;
-  // PURCHASE, RECIPE_CONSUME, RECIPE_REVERSE, MANUAL_IN, MANUAL_OUT,
-  // WASTAGE, STAFF_CONSUME, COMPLIMENTARY, TRANSFER_IN, TRANSFER_OUT,
-  // COUNT_SURPLUS, COUNT_DEFICIT, PRODUCTION, PRODUCTION_CONSUME
+  // opening_balance, purchase, goods_receipt, count_adjustment, 
+  // recipe_consumption, direct_sale_consumption, waste, spoilage, 
+  // transfer_out, transfer_in, return_in, return_out, manual_adjustment
+
+  @Column('decimal', { precision: 12, scale: 4, default: 0 })
+  qtyIn: number;
+
+  @Column('decimal', { precision: 12, scale: 4, default: 0 })
+  qtyOut: number;
 
   @Column('decimal', { precision: 12, scale: 4 })
-  quantity: number;
+  quantity: number; // Net miktar (in - out)
 
   @Column({ default: 'adet' })
   unit: string;
@@ -40,7 +49,10 @@ export class StockMovement {
   totalCost: number;
 
   @Column('decimal', { precision: 12, scale: 4, default: 0 })
-  stockAfter: number;
+  qtyBefore: number;
+
+  @Column('decimal', { precision: 12, scale: 4, default: 0 })
+  stockAfter: number; // qty_after
 
   @Column({ nullable: true })
   warehouseId: number;
@@ -50,16 +62,28 @@ export class StockMovement {
   warehouse: Warehouse;
 
   @Column({ nullable: true })
-  referenceType: string;
+  documentType: string;
 
   @Column({ nullable: true })
-  referenceId: number;
+  documentNo: string;
 
-  @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
-  description: string;
+  @Column({ nullable: true })
+  sourceType: string;
+
+  @Column({ nullable: true })
+  sourceId: number;
 
   @Column({ nullable: true })
   userId: number;
+
+  @Column({ nullable: true })
+  approveUserId: number;
+
+  @Column({ nullable: true })
+  reasonCode: string;
+
+  @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
+  description: string; // note
 
   @CreateDateColumn()
   createdAt: Date;

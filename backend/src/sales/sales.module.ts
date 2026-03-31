@@ -16,6 +16,7 @@ import { User } from '../users/user.entity';
 import { KitchenGateway } from '../orders/kitchen.gateway';
 import { AlertsModule } from '../alerts/alerts.module';
 import { StockMovementsModule } from '../stock-movements/stock-movements.module';
+import { ProductsModule } from '../products/products.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { StockMovementsModule } from '../stock-movements/stock-movements.module'
     PrintersModule,
     AlertsModule,
     StockMovementsModule,
+    ProductsModule,
   ],
   providers: [SalesService, KitchenGateway],
   controllers: [SalesController],

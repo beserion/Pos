@@ -7,7 +7,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { Product } from '../products/product.entity';
+import { StockCard } from '../stock-cards/stock-card.entity';
 
 @Entity('stocks')
 export class Stock {
@@ -20,11 +20,11 @@ export class Stock {
   @Column('decimal', { precision: 10, scale: 2, default: 0 })
   quantity: number;
 
-  @ManyToOne(() => Product, (product) => product.stocks, {
+  @ManyToOne(() => StockCard, (stockCard) => stockCard.stocks, {
     onDelete: 'CASCADE',
   })
-  @JoinColumn({ name: 'productId' })
-  product: Product;
+  @JoinColumn({ name: 'stockCardId' })
+  stockCard: StockCard;
 
   @Column({ nullable: true })
   lotNumber: string;

@@ -16,6 +16,7 @@ import { PrintersService } from '../printers/printers.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AlertsService } from '../alerts/alerts.service';
 import { StockMovementsService } from '../stock-movements/stock-movements.service';
+import { ProductsService } from '../products/products.service';
 
 @Injectable()
 export class SalesService implements OnModuleInit {
@@ -36,6 +37,7 @@ export class SalesService implements OnModuleInit {
     private printersService: PrintersService,
     private alertsService: AlertsService,
     private stockMovementsService: StockMovementsService,
+    private productsService: ProductsService,
   ) { }
 
   async onModuleInit() {
@@ -409,10 +411,13 @@ export class SalesService implements OnModuleInit {
           const table = await manager.findOne(Table, { where: { id: data.tableId, isDeleted: false } });
           if (table) {
             const waiter = await manager.findOne(User, { where: { id: data.waiterId || (data as any).userId } });
+            // items henüz savedSale.totalAmount'a yansımamış olabilir; o yüzden doğrudan items üzerinden hesapla
+            const itemsTotal = (savedSale.items || []).reduce((sum, i: any) => sum + Number(i.total || 0), 0);
+            const effectiveTotal = itemsTotal > 0 ? itemsTotal : Number(savedSale.totalAmount || 0);
             await manager.update(Table, data.tableId, {
               status: savedSale.status === 'COMPLETED' ? 'BOŞ' : 'DOLU',
               waiterName: savedSale.status === 'COMPLETED' ? '' : (waiter ? `${waiter.firstName} ${waiter.lastName}` : (table.waiterName || 'Sistem')),
-              currentTotal: savedSale.status === 'COMPLETED' ? 0 : (Number(table.currentTotal || 0) + Number(savedSale.totalAmount)),
+              currentTotal: savedSale.status === 'COMPLETED' ? 0 : (Number(table.currentTotal || 0) + effectiveTotal),
               orderStartTime: table.status === 'BOŞ' ? new Date() : (savedSale.status === 'COMPLETED' ? null as any : table.orderStartTime),
             });
           }
@@ -926,6 +931,21 @@ export class SalesService implements OnModuleInit {
       this.logger.warn('StockMovement cancel reverse error (non-fatal):', err?.message);
     }
 
+    // 12.md: Ürün İşlem Geçmişi Kaydı (İptal)
+    try {
+        await this.productsService.recordTransaction({
+            productId: item.productId,
+            productName: `[IPTAL] ${item.productId}`, // Item table sometimes doesn't have name
+            qty: -Number(item.quantity),
+            price: Number(item.total),
+            type: 'void',
+            status: 'completed',
+            orderId: item.sale?.id,
+            userId: userId,
+            businessDate: item.sale?.createdAt || new Date(),
+        });
+    } catch {}
+
     this.kitchenGateway.notifySaleUpdate(item.sale as any);
     return updated;
   }
@@ -1040,74 +1060,81 @@ export class SalesService implements OnModuleInit {
     const items = sale.items;
     if (!items || items.length === 0) return;
 
-    const productIds = Array.from(new Set(items.map(i => i.productId).filter(Boolean)));
-    if (productIds.length === 0) return;
-
-    // ── Legacy stock deduction (old recipe system) ──
-    const allRecipes = await manager.getRepository(Recipe).find({
-      where: { productId: In(productIds) },
-      relations: ['ingredient']
-    });
-
-    const recipeMap = new Map<number, Recipe[]>();
-    allRecipes.forEach((r: Recipe) => {
-      const list = recipeMap.get(r.productId) || [];
-      list.push(r);
-      recipeMap.set(r.productId, list);
-    });
-
-    const deductions = new Map<number, number>();
-    const itemCostMap = new Map<number, number>();
-
     for (const item of items) {
-      const productId = item.productId;
-      if (!productId) continue;
+      if (!item.productId) continue;
 
-      const recipeMultiplier = await this.getRecipeMultiplier(item.saleType, manager);
+      // Ürün bilgilerini ve stok bağı tipini taze çek (entity'de henüz güncellenmiş olmayabilir)
+      const productResults = await manager.query(`
+        SELECT inventoryLinkType, linkedStockItemId, directStockQty, directStockUnit, name, costPrice
+        FROM products WHERE id = ${item.productId}
+      `);
+      
+      if (!productResults || productResults.length === 0) continue;
+      const product = productResults[0];
+      const linkType = product.inventoryLinkType || 'none';
 
-      const recipes = recipeMap.get(productId) || [];
-      let totalCost = 0;
-
-      if (recipes.length > 0) {
-        for (const recipe of recipes) {
-          const qty = Number(recipe.quantity) * Number(item.quantity) * recipeMultiplier;
-          deductions.set(recipe.ingredientId, (deductions.get(recipe.ingredientId) || 0) + qty);
-          const ingredientCost = Number(recipe.ingredient?.costPrice || recipe.ingredient?.price || 0);
-          totalCost += ingredientCost * Number(recipe.quantity);
+      try {
+        if (linkType === 'none' || linkType === 'NONE') {
+          // Hiçbir şey yapma
+          continue;
+        } 
+        
+        else if (linkType === 'direct_stock') {
+          if (product.linkedStockItemId && product.directStockQty) {
+            const totalQty = Number(product.directStockQty) * Number(item.quantity);
+            await this.stockMovementsService.createDirectSaleConsumption(
+              product.linkedStockItemId,
+              totalQty,
+              product.directStockUnit || 'adet',
+              'SALE',
+              sale.id,
+              sale.userId || sale.waiterId,
+              manager
+            );
+          }
+        } 
+        
+        else if (linkType === 'recipe') {
+          const recipeMultiplier = await this.getRecipeMultiplier(item.saleType, manager);
+          await this.stockMovementsService.createRecipeConsumption(
+            item.productId,
+            Number(item.quantity),
+            recipeMultiplier,
+            'SALE',
+            sale.id,
+            sale.userId || sale.waiterId,
+            manager,
+          );
         }
-      } else {
-        deductions.set(productId, (deductions.get(productId) || 0) + (Number(item.quantity) * recipeMultiplier));
-        const rawProduct = await manager.query(`SELECT costPrice FROM products WHERE id = ${productId}`);
-        totalCost = Number(rawProduct[0]?.costPrice || 0);
+
+        // 12.md: Ürün İşlem Geçmişi Kaydı
+        await this.productsService.recordTransaction({
+            productId: item.productId,
+            productName: product.name,
+            qty: Number(item.quantity),
+            price: Number(item.unitPrice || 0),
+            type: 'sale',
+            status: 'completed',
+            orderId: sale.id,
+            userId: sale.userId || sale.waiterId,
+            businessDate: sale.createdAt || new Date(),
+        });
+
+        // Maliyet güncelleme (SaleItem üzerine)
+        // Not: Reçete için zaten StockMovementsService içinde maliyet hesaplanıyor olabilir 
+        // ancak SaleItem.costPrice alanı raporlar için önemli.
+        if (linkType === 'direct_stock') {
+           const card = await manager.query(`SELECT costPerBaseUnit FROM stock_cards WHERE id = ${product.linkedStockItemId}`);
+           const cost = Number(card[0]?.costPerBaseUnit || 0) * Number(product.directStockQty);
+           await manager.getRepository(SaleItem).update(item.id, { costPrice: cost });
+        } else if (linkType === 'recipe') {
+           const costData = await this.recipesService.calculateCost(item.productId);
+           await manager.getRepository(SaleItem).update(item.id, { costPrice: costData.totalCost });
+        }
+
+      } catch (err) {
+        this.logger.error(`Stock deduction failed for Item #${item.id} (Product #${item.productId}): ${err.message}`);
       }
-      itemCostMap.set(item.id, totalCost);
-    }
-
-    for (const [id, qty] of deductions.entries()) {
-      await this.stocksService.deductStock(id, qty, undefined, manager);
-    }
-
-    for (const [itemId, cost] of itemCostMap.entries()) {
-      await manager.getRepository(SaleItem).update(itemId, { costPrice: cost });
-    }
-
-    // ── New: Recipe-based StockMovement creation ──
-    try {
-      for (const item of items) {
-        if (!item.productId) continue;
-        const recipeMultiplier = await this.getRecipeMultiplier(item.saleType, manager);
-        await this.stockMovementsService.createRecipeConsumption(
-          item.productId,
-          Number(item.quantity),
-          recipeMultiplier,
-          'SALE',
-          sale.id,
-          sale.userId || sale.waiterId,
-          manager,
-        );
-      }
-    } catch (err) {
-      this.logger.warn('StockMovement recipe consumption error (non-fatal):', err?.message);
     }
   }
 

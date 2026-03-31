@@ -6,7 +6,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { Product } from '../products/product.entity';
+import { StockCard } from '../stock-cards/stock-card.entity';
 import { User } from '../users/user.entity';
 
 @Entity('wastages')
@@ -14,12 +14,12 @@ export class Wastage {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => Product, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'productId' })
-  product: Product;
+  @ManyToOne(() => StockCard, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'stockCardId' })
+  stockCard: StockCard;
 
   @Column({ default: 0 })
-  productId: number;
+  stockCardId: number;
 
   @Column('decimal', { precision: 10, scale: 3 , default: 0 })
   quantity: number;

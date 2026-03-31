@@ -225,8 +225,8 @@ export class InventoryService {
         unit: line.unit,
         unitCost: Number(line.unitCost),
         warehouseId: session.warehouseId || undefined,
-        referenceType: 'INVENTORY_SESSION',
-        referenceId: sessionId,
+        sourceType: 'INVENTORY_SESSION',
+        sourceId: sessionId,
         description: `Sayım ${diff > 0 ? 'fazlası' : 'eksiği'}: ${line.stockCard?.name || `Stok #${line.stockCardId}`}`,
         userId,
       });
