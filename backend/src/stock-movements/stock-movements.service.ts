@@ -332,4 +332,31 @@ export class StockMovementsService {
       .getRawMany();
     return result.map((r) => r.movementType);
   }
+
+  /**
+   * Delete movements by source and REVERSE their impact on stock card currentStock.
+   */
+  async deleteMovementsBySource(
+    sourceType: string,
+    sourceId: number,
+    manager?: any,
+  ): Promise<void> {
+    const repo = manager
+      ? manager.getRepository(StockMovement)
+      : this.movementRepository;
+
+    const movements = await repo.find({ where: { sourceType, sourceId } });
+
+    for (const m of movements) {
+      // Reverse stock adjustment: delta was 'm.quantity', so delta to reverse is '-m.quantity'
+      await this.stockCardsService.adjustStock(
+        m.stockCardId,
+        -Number(m.quantity),
+        manager,
+      );
+    }
+
+    // Delete the movements
+    await repo.remove(movements);
+  }
 }

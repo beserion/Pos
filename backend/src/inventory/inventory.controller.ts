@@ -103,4 +103,9 @@ export class InventoryController {
   cancelSession(@Param('id', ParseIntPipe) id: number) {
     return this.service.cancelSession(id);
   }
+
+  @Post(':id/reopen')
+  reopenSession(@Param('id', ParseIntPipe) id: number) {
+    return this.service.reopenSession(id);
+  }
 }

@@ -121,10 +121,49 @@ export function PageClient() {
         }
     };
 
+    const handleReopenSession = async (e: React.MouseEvent, sessionId: number) => {
+        e.stopPropagation(); // Prevents row click navigation
+        
+        const result = await showSwal({
+            title: 'Sayımı Geri Al / Düzenle',
+            text: 'Onaylanmış bu sayımı tekrar düzenleme moduna almak istediğinize emin misiniz? Bu işlemle oluşan stok hareketleri silinecek ve stoklar sayım öncesi durumuna dönecektir.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Evet, Geri Al ve Düzenle',
+            cancelButtonText: 'Vazgeç',
+            confirmButtonColor: '#4f46e5'
+        });
+
+        if (result.isConfirmed) {
+            try {
+                setLoading(true);
+                const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+                await axios.post(`${API_URL}/inventory-sessions/${sessionId}/reopen`, {}, {
+                    headers: { Authorization: `Bearer ${user.token}` }
+                });
+
+                toastSwal({ title: 'Başarılı', text: 'Sayım tekrar düzenleme moduna alındı.', icon: 'success' });
+                // Redirect to the edit/detail page
+                router.push(`/${locale}/inventory/count/${sessionId}`);
+            } catch (error: any) {
+                console.error('Error reopening session', error);
+                showSwal({ title: tc('error'), text: error?.response?.data?.message || 'İşlem başarısız.', icon: 'error' });
+                fetchData();
+            } finally {
+                setLoading(false);
+            }
+        }
+    };
+
     // KPIs
     const totalSessions = sessions.length;
     const completedSessions = sessions.filter(s => s.status === 'COMPLETED').length;
     const activeSessions = sessions.filter(s => s.status === 'DRAFT' || s.status === 'IN_PROGRESS').length;
+
+    // Determine the latest completed session ID to show the revert button only for that one
+    const latestCompletedId = sessions
+        .filter(s => s.status === 'COMPLETED')
+        .reduce((max, s) => s.id > max ? s.id : max, 0);
 
     return (
         <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">
@@ -249,8 +288,17 @@ export function PageClient() {
                                                 </span>
                                             </td>
                                             <td className="px-8 py-4 text-right">
-                                                <div className="opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
-                                                    <div className="w-10 h-10 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 hover:text-white hover:bg-indigo-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center ml-auto">
+                                                <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
+                                                    {session.status === 'COMPLETED' && session.id === latestCompletedId && (
+                                                        <button
+                                                            onClick={(e) => handleReopenSession(e, session.id)}
+                                                            className="w-10 h-10 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-600 hover:text-white rounded-xl shadow-sm border border-amber-100 dark:border-amber-500/20 transition-all flex items-center justify-center"
+                                                            title="Sayımı Geri Al ve Düzenle"
+                                                        >
+                                                            <i className="fat fa-pen-to-square text-lg"></i>
+                                                        </button>
+                                                    )}
+                                                    <div className="w-10 h-10 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 hover:text-white hover:bg-indigo-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center">
                                                         <i className="fat fa-arrow-right text-lg"></i>
                                                     </div>
                                                 </div>

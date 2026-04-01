@@ -395,4 +395,39 @@ export class InventoryService {
       (a, b) => Math.abs(b.totalDifferenceCost) - Math.abs(a.totalDifferenceCost),
     );
   }
+
+  async reopenSession(sessionId: number): Promise<InventorySession> {
+    const session = await this.getSession(sessionId);
+
+    if (session.status !== 'COMPLETED') {
+      throw new BadRequestException('Sadece onaylanmış (Onaylandı) fişler geri alınabilir.');
+    }
+
+    // Check if it's the last completed session (highest ID among completed)
+    const lastSession = await this.sessionRepository.findOne({
+      where: { status: 'COMPLETED' },
+      order: { id: 'DESC' },
+    });
+
+    if (lastSession && lastSession.id !== sessionId) {
+      throw new BadRequestException(
+        `Sadece en son onaylanan sayım fişi (#${lastSession.id}) geri alınabilir. Bu fişten sonra daha yeni bir sayım onaylanmış.`,
+      );
+    }
+
+    // Delete stock movements and reverse stock adjustment
+    await this.stockMovementsService.deleteMovementsBySource(
+      'INVENTORY_SESSION',
+      sessionId,
+    );
+
+    // Update session status back to IN_PROGRESS (editable)
+    session.status = 'IN_PROGRESS';
+    session.approvedByUserId = null as any;
+    session.approvedAt = null as any;
+
+    await this.sessionRepository.save(session);
+
+    return this.getSession(sessionId);
+  }
 }

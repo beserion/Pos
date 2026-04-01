@@ -399,7 +399,7 @@ export function PageClient({ sessionId }: PageClientProps) {
                         <th style="padding:5px 6px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:0.07em;font-weight:900;color:#94a3b8;">Kod / Grup</th>
                         <th style="padding:5px 6px;text-align:right;font-size:8px;text-transform:uppercase;letter-spacing:0.07em;font-weight:900;">Teorik</th>
                         <th style="padding:5px 6px;text-align:right;font-size:8px;text-transform:uppercase;letter-spacing:0.07em;font-weight:900;color:#a5b4fc;">Fiili</th>
-                        <th style="padding:5px 6px;text-align:right;font-size:8px;text-transform:uppercase;letter-spacing:0.07em;font-weight:900;">Fark (Adet)</th>
+                        <th style="padding:5px 6px;text-align:right;font-size:8px;text-transform:uppercase;letter-spacing:0.07em;font-weight:900;">Fark (Birim)</th>
                         <th style="padding:5px 6px;text-align:right;font-size:8px;text-transform:uppercase;letter-spacing:0.07em;font-weight:900;">Fark (₺)</th>
                     </tr>
                 </thead>
@@ -433,20 +433,20 @@ export function PageClient({ sessionId }: PageClientProps) {
             const rowBg = idx % 2 === 0 ? '#ffffff' : '#fafafa';
             return `
             <tr style="background:${rowBg};border-bottom:1px solid #e8ecf0;">
-                <td style="padding:4px 6px;font-size:9px;font-weight:700;color:#64748b;white-space:nowrap;vertical-align:top;">${line.stockCard?.code || '-'}</td>
-                <td style="padding:4px 6px;font-size:9px;font-weight:700;color:#1e293b;vertical-align:top;">${line.stockCard?.name || '-'}</td>
-                <td style="padding:4px 6px;font-size:9px;color:#64748b;text-align:center;white-space:nowrap;vertical-align:top;">${line.unit || '-'}</td>
-                <td style="padding:4px 6px;font-size:9px;color:#94a3b8;text-align:center;vertical-align:top;"></td>
-                ${showTheo ? `<td style="padding:4px 6px;font-size:9px;font-weight:700;color:#475569;text-align:center;white-space:nowrap;vertical-align:top;">${parseFloat(line.theoreticalQty || 0).toFixed(2)}</td>` : ''}
-                <td style="padding:4px 6px;vertical-align:top;"><div style="border-bottom:1px solid #000;height:18px;"></div></td>
-                <td style="padding:4px 6px;vertical-align:top;"><div style="border-bottom:1px solid #ccc;height:45px;"></div></td>
+                <td style="padding:2px 4px;font-size:9px;font-weight:700;color:#64748b;white-space:nowrap;vertical-align:top;">${line.stockCard?.code || '-'}</td>
+                <td style="padding:2px 4px;font-size:9px;font-weight:700;color:#1e293b;vertical-align:top;">${line.stockCard?.name || '-'}</td>
+                <td style="padding:2px 4px;font-size:9px;color:#64748b;text-align:center;white-space:nowrap;vertical-align:top;">${line.unit || '-'}</td>
+                <td style="padding:2px 4px;font-size:9px;color:#94a3b8;text-align:center;vertical-align:top;"></td>
+                ${showTheo ? `<td style="padding:2px 4px;font-size:9px;font-weight:700;color:#475569;text-align:center;white-space:nowrap;vertical-align:top;">${parseFloat(line.theoreticalQty || 0).toFixed(2)}</td>` : ''}
+                <td style="padding:2px 4px;vertical-align:top;"><div style="border-bottom:1px solid #000;height:14px;"></div></td>
+                <td style="padding:2px 4px;vertical-align:top;"><div style="border-bottom:1px solid #ccc;height:20px;"></div></td>
             </tr>`;
         }).join('');
 
         const printContent = `
         <html><head>
             <meta charset="UTF-8"/>
-            <title>SAYİM FORMU - Fiş #${session?.id}</title>
+            <title>SAYIM FORMU - Fiş #${session?.id}</title>
             <style>
                 * { box-sizing:border-box; margin:0; padding:0; font-family: Arial, Helvetica, sans-serif; }
                 body { background:white; color:#1e293b; padding:14px; font-size:9px; }
@@ -467,7 +467,7 @@ export function PageClient({ sessionId }: PageClientProps) {
                 <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-bottom:8px;">
                     <div>
                         <div style="font-size:7px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.1em;">POSNETX › ENVANTER YÖNETİMİ</div>
-                        <h1 style="font-size:15px;font-weight:900;color:#1e293b;text-transform:uppercase;letter-spacing:0.04em;margin-top:2px;">SAYİM FORMU</h1>
+                        <h1 style="font-size:15px;font-weight:900;color:#1e293b;text-transform:uppercase;letter-spacing:0.04em;margin-top:2px;">SAYIM FORMU</h1>
                         <div style="margin-top:3px;"><span style="background:#1e293b;color:white;font-size:8px;font-weight:900;padding:2px 8px;border-radius:3px;">${countTypeLabel}</span></div>
                     </div>
                     <div style="text-align:right;">
@@ -512,10 +512,10 @@ export function PageClient({ sessionId }: PageClientProps) {
                         <th style="width:70px;">Stok Kodu</th>
                         <th>Stok Adı</th>
                         <th style="width:36px;text-align:center;">Birim</th>
-                        <th style="width:80px;text-align:center;">Lokasyon / Raf</th>
+                        <th style="width:60px;text-align:center;">Lokasyon</th>
                         ${showTheo ? '<th style="width:54px;text-align:center;">Teorik</th>' : ''}
-                        <th style="width:80px;text-align:center;background:#2d3a52;">Sayılan Miktar</th>
-                        <th style="width:250px;text-align:center;">Not</th>
+                        <th style="width:85px;text-align:center;background:#2d3a52;">Sayılan Miktar</th>
+                        <th style="width:400px;text-align:center;">Not</th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
@@ -578,7 +578,7 @@ export function PageClient({ sessionId }: PageClientProps) {
                             <button onClick={() => router.push(`/${locale}/inventory/count`)} className="mt-6 px-6 py-2 bg-slate-200 dark:bg-slate-700 rounded-xl font-bold text-xs uppercase tracking-widest">Geri Dön</button>
                         </div>
                     ) : (
-                        <>  
+                        <>
                             {/* Header */}
                             <div className="px-[50px] py-6 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-b border-white dark:border-slate-700 shadow-sm shrink-0 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-50">
                                 <div className="flex items-center gap-4">
@@ -719,12 +719,12 @@ export function PageClient({ sessionId }: PageClientProps) {
                                         <table className="w-full text-left border-collapse">
                                             <thead className="sticky top-0 z-20 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.1)]">
                                                 <tr>
-                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-12">#</th>
-                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Stok Adı & Kod</th>
-                                                    {!isBlindCount && <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Teorik Miktar</th>}
-                                                    <th className="px-6 py-4 text-[10px] font-black text-indigo-500 uppercase tracking-widest text-center w-64 bg-indigo-50/50 dark:bg-indigo-500/5">Sayılan FİİLİ Miktar</th>
-                                                    {!isBlindCount && <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Fark</th>}
-                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-[450px]">DURUM & AÇIKLAMA</th>
+                                                    <th className="px-6 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest w-12">#</th>
+                                                    <th className="px-6 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Stok Adı & Kod</th>
+                                                    {!isBlindCount && <th className="px-6 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Teorik Miktar</th>}
+                                                    <th className="px-6 py-2 text-[10px] font-black text-indigo-500 uppercase tracking-widest text-center w-64 bg-indigo-50/50 dark:bg-indigo-500/5">Sayılan FİİLİ Miktar</th>
+                                                    {!isBlindCount && <th className="px-6 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Fark</th>}
+                                                    <th className="px-6 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-[650px]">DURUM & AÇIKLAMA</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
@@ -740,13 +740,13 @@ export function PageClient({ sessionId }: PageClientProps) {
                                                     }
                                                     return (
                                                         <tr key={line.id} className={`transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/30 ${line.isCounted ? '' : 'opacity-80'}`}>
-                                                            <td className="px-6 py-3">
+                                                            <td className="px-6 py-1.5">
                                                                 <span className="text-[10px] font-black text-slate-300 dark:text-slate-600">{idx + 1}</span>
                                                             </td>
-                                                            <td className="px-6 py-3">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500">
-                                                                        <i className={`fat ${line.stockCard?.category === 'Alkol' ? 'fa-wine-bottle text-red-400' : 'fa-box'}`}></i>
+                                                            <td className="px-6 py-1.5">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 shrink-0">
+                                                                        <i className={`fat ${line.stockCard?.category === 'Alkol' ? 'fa-wine-bottle text-red-400' : 'fa-box'} text-sm`}></i>
                                                                     </div>
                                                                     <div>
                                                                         <p className="font-bold text-sm text-slate-800 dark:text-white leading-tight">{line.stockCard?.name}</p>
@@ -755,13 +755,13 @@ export function PageClient({ sessionId }: PageClientProps) {
                                                                 </div>
                                                             </td>
                                                             {!isBlindCount && (
-                                                                <td className="px-6 py-3 text-right">
-                                                                    <span className="text-lg font-black text-slate-400 tracking-tight">
+                                                                <td className="px-6 py-1.5 text-right">
+                                                                    <span className="text-base font-black text-slate-400 tracking-tight">
                                                                         {parseFloat(line.theoreticalQty).toFixed(2)} <span className="text-xs">{line.unit}</span>
                                                                     </span>
                                                                 </td>
                                                             )}
-                                                            <td className="px-6 py-3 bg-indigo-50/30 dark:bg-indigo-900/10 relative">
+                                                            <td className="px-6 py-1.5 bg-indigo-50/30 dark:bg-indigo-900/10 relative">
                                                                 <div className="flex items-stretch gap-0 w-full max-w-[220px] mx-auto group">
                                                                     <input
                                                                         type="number"
@@ -771,28 +771,28 @@ export function PageClient({ sessionId }: PageClientProps) {
                                                                         onFocus={(e) => { vibrate(); e.target.select(); }}
                                                                         disabled={isReadOnly}
                                                                         placeholder="Miktarı Girin.."
-                                                                        className={`w-full text-center px-1 py-2.5 rounded-l-xl border-y border-l shadow-inner outline-none transition-all text-sm ${inputColorClass}`}
+                                                                        className={`w-full text-center px-1 py-1.5 rounded-l-lg border-y border-l shadow-inner outline-none transition-all text-sm ${inputColorClass}`}
                                                                         style={{ MozAppearance: 'textfield' }}
                                                                     />
-                                                                    <span className={`px-3 py-2.5 border-y font-bold text-xs uppercase tracking-widest flex items-center border-l-0 ${line.isCounted ? (isNegative && !isBlindCount ? 'bg-red-100 border-red-300 text-red-600 dark:bg-red-900/40 dark:border-red-500/30' : (isPositive && !isBlindCount ? 'bg-emerald-100 border-emerald-300 text-emerald-600 dark:bg-emerald-900/40 dark:border-emerald-500/30' : 'bg-indigo-100 border-indigo-200 text-indigo-600 dark:bg-indigo-900/40 dark:border-indigo-500/30')) : 'bg-slate-100 border-slate-200 text-slate-500 dark:bg-slate-800 dark:border-slate-600'}`}>
+                                                                    <span className={`px-2 py-1.5 border-y font-bold text-[10px] uppercase tracking-widest flex items-center border-l-0 ${line.isCounted ? (isNegative && !isBlindCount ? 'bg-red-100 border-red-300 text-red-600 dark:bg-red-900/40 dark:border-red-500/30' : (isPositive && !isBlindCount ? 'bg-emerald-100 border-emerald-300 text-emerald-600 dark:bg-emerald-900/40 dark:border-emerald-500/30' : 'bg-indigo-100 border-indigo-200 text-indigo-600 dark:bg-indigo-900/40 dark:border-indigo-500/30')) : 'bg-slate-100 border-slate-200 text-slate-500 dark:bg-slate-800 dark:border-slate-600'}`}>
                                                                         {line.unit}
                                                                     </span>
                                                                     {!isReadOnly && line.stockCard?.purchaseUnit && line.stockCard?.conversionRate > 1 && (
-                                                                        <button onClick={() => openHelperModal(line)} title="Bar Sayım Yardımcısı (Şişe + Kalan Türünden)" className={`px-3 py-2.5 rounded-r-xl border-y border-r font-black flex items-center transition-all hover:bg-orange-500 hover:text-white hover:border-orange-600 ${line.isCounted ? (isNegative && !isBlindCount ? 'bg-red-50 border-red-300 text-red-400 dark:bg-red-900/20 dark:border-red-500/30' : (isPositive && !isBlindCount ? 'bg-emerald-50 border-emerald-300 text-emerald-400 dark:bg-emerald-900/20 dark:border-emerald-500/30' : 'bg-indigo-50 border-indigo-200 text-indigo-400 dark:bg-indigo-900/20 dark:border-indigo-500/30')) : 'bg-white border-slate-200 text-slate-400 dark:bg-slate-900 dark:border-slate-600'}`}>
-                                                                            <i className="fat fa-calculator"></i>
+                                                                        <button onClick={() => openHelperModal(line)} title="Bar Sayım Yardımcısı (Şişe + Kalan Türünden)" className={`px-2 py-1.5 rounded-r-lg border-y border-r font-black flex items-center transition-all hover:bg-orange-500 hover:text-white hover:border-orange-600 ${line.isCounted ? (isNegative && !isBlindCount ? 'bg-red-50 border-red-300 text-red-400 dark:bg-red-900/20 dark:border-red-500/30' : (isPositive && !isBlindCount ? 'bg-emerald-50 border-emerald-300 text-emerald-400 dark:bg-emerald-900/20 dark:border-emerald-500/30' : 'bg-indigo-50 border-indigo-200 text-indigo-400 dark:bg-indigo-900/20 dark:border-indigo-500/30')) : 'bg-white border-slate-200 text-slate-400 dark:bg-slate-900 dark:border-slate-600'}`}>
+                                                                            <i className="fat fa-calculator text-[10px]"></i>
                                                                         </button>
                                                                     )}
                                                                 </div>
                                                             </td>
                                                             {!isBlindCount && (
-                                                                <td className="px-6 py-3 text-right">
+                                                                <td className="px-6 py-1.5 text-right">
                                                                     {line.isCounted ? (
                                                                         <div className="flex flex-col items-end">
-                                                                            <span className={`text-base font-black tracking-tight ${isNegative ? 'text-red-500' : isPositive ? 'text-emerald-500' : 'text-slate-400'}`}>
-                                                                                {isPositive ? '+' : ''}{diffQty.toFixed(2)} <span className="text-xs ml-1">{line.unit}</span>
+                                                                            <span className={`text-sm font-black tracking-tight ${isNegative ? 'text-red-500' : isPositive ? 'text-emerald-500' : 'text-slate-400'}`}>
+                                                                                {isPositive ? '+' : ''}{diffQty.toFixed(2)} <span className="text-xs ml-0.5">{line.unit}</span>
                                                                             </span>
                                                                             {diffQty !== 0 && (
-                                                                                <span className={`text-[9px] font-bold uppercase tracking-widest ${isNegative ? 'text-red-400/70' : 'text-emerald-400/70'}`}>
+                                                                                <span className={`text-[8px] font-bold uppercase tracking-widest ${isNegative ? 'text-red-400/70' : 'text-emerald-400/70'}`}>
                                                                                     ({(parseFloat(line.differenceCost) || 0).toFixed(2)} ₺)
                                                                                 </span>
                                                                             )}
@@ -802,21 +802,21 @@ export function PageClient({ sessionId }: PageClientProps) {
                                                                     )}
                                                                 </td>
                                                             )}
-                                                            <td className="px-6 py-3 text-center">
+                                                            <td className="px-6 py-1.5 text-center">
                                                                 <div className="flex items-center justify-center gap-3">
-                                                                    <label className="relative inline-flex items-center cursor-pointer">
+                                                                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
                                                                         <input type="checkbox" disabled={isReadOnly} checked={line.isCounted} onChange={(e) => handleLineChange(line.id, 'isCounted', e.target.checked)} className="sr-only peer" />
-                                                                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-indigo-500"></div>
+                                                                        <div className="w-8 h-4.5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all dark:border-slate-600 peer-checked:bg-indigo-500"></div>
                                                                     </label>
-                                                                    <div className="relative group/note flex-1 min-w-[300px]">
-                                                                        <i className={`fat fa-comment-dots absolute left-3 top-1/2 -translate-y-1/2 text-[10px] transition-colors ${line.description ? 'text-amber-500' : 'text-slate-300 group-hover/note:text-slate-400'}`}></i>
+                                                                    <div className="relative group/note flex-1 min-w-[400px]">
+                                                                        <i className={`fat fa-comment-dots absolute left-3 top-1/2 -translate-y-1/2 text-[9px] transition-colors ${line.description ? 'text-amber-500' : 'text-slate-300 group-hover/note:text-slate-400'}`}></i>
                                                                         <input
                                                                             type="text"
                                                                             disabled={isReadOnly}
                                                                             value={line.description || ''}
                                                                             onChange={(e) => handleLineChange(line.id, 'description', e.target.value)}
                                                                             placeholder="Not ekleyin..."
-                                                                            className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm font-bold outline-none transition-all ${line.description ? 'bg-amber-50 border-amber-200 text-amber-900 dark:bg-amber-500/5 dark:border-amber-500/20 dark:text-amber-400' : 'bg-slate-50 border-slate-100 text-slate-400 focus:bg-white focus:border-indigo-300 dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-500 dark:focus:border-indigo-500/50'}`}
+                                                                            className={`w-full pl-8 pr-3 py-1.5 rounded-lg border text-xs font-bold outline-none transition-all ${line.description ? 'bg-amber-50 border-amber-200 text-amber-900 dark:bg-amber-500/5 dark:border-amber-500/20 dark:text-amber-400' : 'bg-slate-50 border-slate-100 text-slate-400 focus:bg-white focus:border-indigo-300 dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-500 dark:focus:border-indigo-500/50'}`}
                                                                         />
                                                                     </div>
                                                                 </div>

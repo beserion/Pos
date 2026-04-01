@@ -105,9 +105,10 @@ export function PageClient() {
                 });
                 toastSwal({ title: tc('success'), text: t('deleteSuccess'), icon: 'success' });
                 fetchData();
-            } catch (error) {
+            } catch (error: any) {
                 console.error('Error deleting warehouse', error);
-                showSwal({ title: tc('error'), text: tc('error'), icon: 'error' });
+                const errorMsg = error?.response?.data?.message || tc('error');
+                showSwal({ title: tc('error'), text: errorMsg, icon: 'error' });
             }
         }
     };

@@ -76,6 +76,10 @@ export function PageClient() {
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+    const [isMovementsModalOpen, setIsMovementsModalOpen] = useState(false);
+    const [selectedStockCardForMovements, setSelectedStockCardForMovements] = useState<StockCard | null>(null);
+    const [movements, setMovements] = useState<any[]>([]);
+    const [movementsLoading, setMovementsLoading] = useState(false);
     const [groupFormData, setGroupFormData] = useState<Partial<StockGroup>>({ name: '', description: '' });
     const [activeTab, setActiveTab] = useState<'general' | 'stock' | 'extra'>('general');
     const [formData, setFormData] = useState<StockCard>({
@@ -138,6 +142,130 @@ export function PageClient() {
             showSwal({ title: tc('error'), text: tc('loadingError'), icon: 'error' });
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchMovements = async (stockCard: StockCard) => {
+        if (!user?.token) return;
+        setSelectedStockCardForMovements(stockCard);
+        setMovementsLoading(true);
+        setIsMovementsModalOpen(true);
+        try {
+            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+            const res = await axios.get(`${API_URL}/stock-movements?stockCardId=${stockCard.id}&limit=100`, {
+                headers: { Authorization: `Bearer ${user.token}` }
+            });
+            setMovements(res.data.data || []);
+        } catch (error) {
+            console.error('Error fetching movements', error);
+            showSwal({ title: tc('error'), text: 'Hareketler yüklenemedi.', icon: 'error' });
+        } finally {
+            setMovementsLoading(false);
+        }
+    };
+
+    const translateMovementType = (type: string) => {
+        const types: Record<string, string> = {
+            'COUNT_SURPLUS': 'Sayım Fazlası',
+            'COUNT_DEFICIT': 'Sayım Eksiği',
+            'RECIPE_CONSUME': 'Reçete Tüketimi',
+            'recipe_consumption': 'Reçete Tüketimi',
+            'direct_sale_consumption': 'Satış Tüketimi',
+            'MANUAL_IN': 'Manuel Giriş',
+            'MANUAL_OUT': 'Manuel Çıkış',
+            'TRANSFER_IN': 'Transfer (Giriş)',
+            'TRANSFER_OUT': 'Transfer (Çıkış)',
+            'WASTAGE': 'Zayiat / Fire',
+            'STAFF_CONSUME': 'Personel Tüketimi',
+            'COMPLIMENTARY': 'İkram',
+            'PURCHASE': 'Alım / Giriş',
+            'SALE': 'Satış',
+            'RETURN_IN': 'İade Girişi',
+            'return_in': 'İade Girişi'
+        };
+        return types[type] || type;
+    };
+
+    const handlePrintMovements = () => {
+        if (!selectedStockCardForMovements || movements.length === 0) return;
+
+        const rows = movements.map((m, idx) => {
+            const rowBg = idx % 2 === 0 ? '#ffffff' : '#fafafa';
+            const isPositive = m.quantity > 0;
+            const color = isPositive ? '#059669' : (m.quantity < 0 ? '#dc2626' : '#475569');
+            const typeLabel = translateMovementType(m.movementType);
+
+            return `
+            <tr style="background:${rowBg};border-bottom:0.5px solid #e2e8f0;">
+                <td style="padding:3px 6px;text-align:center;font-size:7.5px;white-space:nowrap;">${new Date(m.createdAt).toLocaleDateString('tr-TR')} <span style="font-size:7px;color:#94a3b8;margin-left:4px;">${new Date(m.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</span></td>
+                <td style="padding:3px 6px;text-align:center;font-weight:900;font-size:7.5px;color:#1e293b;">${typeLabel}</td>
+                <td style="padding:3px 6px;text-align:right;font-weight:900;font-size:8.5px;color:${color}">${isPositive ? '+' : ''}${Number(m.quantity).toLocaleString('tr-TR', { maximumFractionDigits: 2 })} <span style="font-size:6px;color:#94a3b8;margin-left:2px;font-weight:700;">${selectedStockCardForMovements.baseUnit}</span></td>
+                <td style="padding:3px 6px;text-align:right;font-weight:900;font-size:8.5px;color:#1e293b;">${Number(m.stockAfter).toLocaleString('tr-TR', { maximumFractionDigits: 2 })} <span style="font-size:6px;color:#94a3b8;margin-left:2px;font-weight:700;">${selectedStockCardForMovements.baseUnit}</span></td>
+                <td style="padding:3px 6px;text-align:center;font-size:7.5px;font-weight:700;">${m.warehouse?.name || '-'}</td>
+                <td style="padding:3px 6px;font-size:7.5px;color:#64748b;line-height:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px;">${m.description || '-'}</td>
+            </tr>`;
+        }).join('');
+
+        const printContent = `
+        <html><head>
+            <meta charset="UTF-8"/>
+            <title>Stok Hareket Raporu - ${selectedStockCardForMovements.name}</title>
+            <style>
+                * { box-sizing:border-box; margin:0; padding:0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+                body { padding:10px; color:#1e293b; background: white; width: 100%; }
+                @media print { body { padding:0; } @page { margin:5mm 8mm; size:A4 portrait; } }
+                .report-header { border:1px solid #1e293b; border-radius:4px; padding:8px 12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; }
+                table { width:100%; border-collapse:collapse; margin-top:5px; table-layout: fixed; }
+                th { background:#1e293b; color:white; padding:4px 6px; text-transform:uppercase; font-size:7px; font-weight:900; letter-spacing:0.05em; text-align:center; }
+                .footer { margin-top:15px; padding-top:5px; border-top:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; font-size:6.5px; color:#94a3b8; font-weight:700; }
+            </style>
+        </head><body>
+            <div class="report-header">
+                <div>
+                    <div style="font-size:6px;font-weight:900;color:#94a3b8;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:2px;">POSNETX › ENVANTER YÖNETİMİ</div>
+                    <h1 style="font-size:13px;font-weight:900;color:#1e293b;text-transform:uppercase;letter-spacing:0.01em;">STOK HAREKET RAPORU</h1>
+                    <div style="margin-top:3px;display:flex;gap:10px;align-items:center;">
+                        <span style="font-size:9px;font-weight:900;color:#4f46e5;">${selectedStockCardForMovements.name}</span>
+                        <span style="font-size:7px;font-weight:700;color:#64748b;background:#f1f5f9;padding:1px 4px;border-radius:3px;border:1px solid #e2e8f0;">${selectedStockCardForMovements.code}</span>
+                    </div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:8px;font-weight:900;color:#1e293b;">Tarih: ${new Date().toLocaleDateString('tr-TR')} ${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</div>
+                    <div style="font-size:7px;font-weight:700;color:#64748b;margin-top:1px;">Toplam Hareket: ${movements.length} kalem</div>
+                </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:80px;">Tarih / Saat</th>
+                        <th style="width:90px;">İşlem Tipi</th>
+                        <th style="width:60px;text-align:right;">Miktar</th>
+                        <th style="width:60px;text-align:right;">Sonuç Stok</th>
+                        <th style="width:90px;">Depo</th>
+                        <th>Açıklama / Not Detayı</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+
+            <div class="footer">
+                <div>${selectedStockCardForMovements.name} — Tüm Hareket Kayıtları</div>
+                <div>POSNetX Bulut ERP Sistemi &nbsp;|&nbsp; Yazdırma: ${new Date().toLocaleString('tr-TR')}</div>
+            </div>
+        </body></html>`;
+
+        const printWin = window.open('', '_blank', 'width=1000,height=800');
+        if (printWin) {
+            printWin.document.write(printContent);
+            printWin.document.close();
+            printWin.onload = () => {
+                printWin.focus();
+                setTimeout(() => {
+                    printWin.print();
+                    printWin.close();
+                }, 250);
+            };
         }
     };
 
@@ -615,10 +743,13 @@ export function PageClient() {
                                                 </td>
                                                 <td className="px-8 py-4 text-right">
                                                     <div className="flex gap-2 justify-end transition-all">
-                                                        <button onClick={() => openModal(card)} className="w-9 h-9 bg-white dark:bg-slate-800 text-blue-600 hover:text-white hover:bg-blue-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center shadow-blue-500/5 hover:shadow-lg hover:shadow-blue-500/20 active:scale-95">
+                                                        <button onClick={() => fetchMovements(card)} className="w-9 h-9 bg-white dark:bg-slate-800 text-indigo-500 hover:text-white hover:bg-indigo-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center shadow-indigo-500/5 hover:shadow-lg hover:shadow-indigo-500/20 active:scale-95" title="Stok Hareketleri">
+                                                            <i className="fat fa-history text-sm"></i>
+                                                        </button>
+                                                        <button onClick={() => openModal(card)} className="w-9 h-9 bg-white dark:bg-slate-800 text-blue-600 hover:text-white hover:bg-blue-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center shadow-blue-500/5 hover:shadow-lg hover:shadow-blue-500/20 active:scale-95" title="Düzenle">
                                                             <i className="fat fa-pen-field text-sm"></i>
                                                         </button>
-                                                        <button onClick={() => handleDelete(card.id)} className="w-9 h-9 bg-white dark:bg-slate-800 text-red-600 hover:text-white hover:bg-red-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center shadow-red-500/5 hover:shadow-lg hover:shadow-red-500/20 active:scale-95">
+                                                        <button onClick={() => handleDelete(card.id)} className="w-9 h-9 bg-white dark:bg-slate-800 text-red-600 hover:text-white hover:bg-red-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center shadow-red-500/5 hover:shadow-lg hover:shadow-red-500/20 active:scale-95" title="Sil">
                                                             <i className="fat fa-trash-can text-sm"></i>
                                                         </button>
                                                     </div>
@@ -940,6 +1071,129 @@ export function PageClient() {
                                     </div>
                                 )}
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Movements Modal */}
+            {isMovementsModalOpen && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-2xl animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-7xl shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col h-[850px] max-h-[92vh]">
+                        {/* Header */}
+                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20 shrink-0">
+                            <div className="flex items-center gap-4">
+                                <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-500 shadow-inner">
+                                    <i className="fat fa-history text-2xl"></i>
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-black text-slate-800 dark:text-white tracking-tighter uppercase mb-0 flex items-center gap-2">
+                                        STOK HAREKETLERİ: <span className="text-indigo-600 dark:text-indigo-400">{selectedStockCardForMovements?.name}</span>
+                                    </h2>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1 mb-0 flex items-center gap-2">
+                                        <i className="fat fa-barcode"></i> {selectedStockCardForMovements?.code} | Stok Geçmişi İzleme
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={handlePrintMovements}
+                                    title="Raporu Yazdır"
+                                    className="px-6 py-3 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-black text-[10px] uppercase tracking-widest rounded-2xl shadow-sm hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95"
+                                >
+                                    <i className="fat fa-print text-base"></i> Yazdır
+                                </button>
+                                <button onClick={() => setIsMovementsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white transition-all shadow-sm active:scale-90">&times;</button>
+                            </div>
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 overflow-auto p-8">
+                            {movementsLoading ? (
+                                <div className="h-full flex flex-col items-center justify-center py-20">
+                                    <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
+                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Hareketler yükleniyor...</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="overflow-hidden rounded-[24px] border border-slate-100 dark:border-slate-700">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead className="bg-slate-50 dark:bg-slate-900/50 sticky top-0 z-10 border-b border-slate-100 dark:border-slate-700">
+                                                <tr>
+                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Tarih / Saat</th>
+                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">İşlem Tipi</th>
+                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Değişim</th>
+                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Sonuç Stok</th>
+                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Depo</th>
+                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Açıklama</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                                                {movements.map((m, idx) => {
+                                                    const isPositive = m.quantity > 0;
+                                                    const isZero = m.quantity === 0;
+
+                                                    return (
+                                                        <tr key={idx} className="hover:bg-indigo-500/5 transition-all">
+                                                            <td className="px-6 py-3 text-center">
+                                                                <div className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                                                    {new Date(m.createdAt).toLocaleDateString('tr-TR')}
+                                                                </div>
+                                                                <div className="text-[9px] font-black text-slate-400 uppercase">
+                                                                    {new Date(m.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-3 text-center">
+                                                                <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded inline-block ${m.movementType.includes('IN') || m.movementType.includes('SURPLUS') || m.movementType.includes('PURCHASE') ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400' :
+                                                                        m.movementType.includes('OUT') || m.movementType.includes('DEFICIT') || m.movementType.includes('CONSUME') || m.movementType.includes('WASTAGE') ? 'bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-500/10 dark:text-rose-400' :
+                                                                            'bg-slate-50 text-slate-600 border border-slate-200 dark:bg-slate-800'
+                                                                    }`}>
+                                                                    {translateMovementType(m.movementType)}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-6 py-3 text-center">
+                                                                <span className={`text-sm font-black italic ${isPositive ? 'text-emerald-600' : isZero ? 'text-slate-400' : 'text-rose-600'}`}>
+                                                                    {isPositive ? '+' : ''}{Number(m.quantity).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
+                                                                </span>
+                                                                <span className="text-[10px] font-bold text-slate-400 ml-1 uppercase">{selectedStockCardForMovements?.baseUnit}</span>
+                                                            </td>
+                                                            <td className="px-6 py-3 text-center font-black text-slate-800 dark:text-slate-200">
+                                                                {Number(m.stockAfter).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
+                                                                <span className="text-[10px] font-bold text-slate-400 ml-1 uppercase">{selectedStockCardForMovements?.baseUnit}</span>
+                                                            </td>
+                                                            <td className="px-6 py-3 text-center">
+                                                                <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-900/50 px-2 py-0.5 rounded">
+                                                                    {m.warehouse?.name || '-'}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-6 py-3">
+                                                                <p className="text-[10px] font-bold text-slate-500 leading-tight m-0 truncate max-w-[200px]" title={m.description}>
+                                                                    {m.description || '-'}
+                                                                </p>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                                {movements.length === 0 && (
+                                                    <tr>
+                                                        <td colSpan={6} className="p-20 text-center">
+                                                            <div className="flex flex-col items-center opacity-40">
+                                                                <i className="fat fa-history text-5xl mb-4 text-slate-300"></i>
+                                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Ürün hareket geçmişi bulunamadı</p>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-6 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20 shrink-0 flex justify-end">
+                            <button onClick={() => setIsMovementsModalOpen(false)} className="px-8 py-3 rounded-2xl font-black text-xs text-indigo-600 bg-indigo-50 border border-indigo-200 hover:bg-indigo-600 hover:text-white transition-all uppercase tracking-widest active:scale-95 shadow-sm shadow-indigo-500/10">KAPAT</button>
                         </div>
                     </div>
                 </div>
