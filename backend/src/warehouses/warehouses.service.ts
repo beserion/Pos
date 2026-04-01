@@ -26,7 +26,9 @@ export class WarehousesService {
   }
 
   async create(warehouseData: Partial<Warehouse>): Promise<Warehouse> {
-    const newWarehouse = this.warehouseRepository.create(warehouseData);
+    const data = { ...warehouseData };
+    delete (data as any).id;
+    const newWarehouse = this.warehouseRepository.create(data);
     return await this.warehouseRepository.save(newWarehouse);
   }
 

@@ -20,7 +20,7 @@ export class InventorySession {
   sessionDate: Date;
 
   @Column({ nullable: true })
-  warehouseId: number;
+  warehouseId: number | null;
 
   @ManyToOne('Warehouse', { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'warehouseId' })

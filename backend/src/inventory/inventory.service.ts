@@ -93,23 +93,23 @@ export class InventoryService {
     }
 
     // Optionally filter by warehouse
-    if (data.warehouseId) {
+    if (data.warehouseId !== undefined && data.warehouseId !== null && Number(data.warehouseId) > 0) {
       stockCards = stockCards.filter(
-        (c) => !c.warehouseId || c.warehouseId === data.warehouseId,
+        (c) => c.warehouseId === Number(data.warehouseId),
       );
     }
 
     // Create session
     const session = this.sessionRepository.create({
       sessionDate: new Date(data.sessionDate),
-      warehouseId: data.warehouseId,
+      warehouseId: (data.warehouseId !== undefined && data.warehouseId !== null) ? Number(data.warehouseId) : null,
       countType: data.countType || 'FULL',
       scope: data.scope,
       status: 'DRAFT',
       isBlindCount: data.isBlindCount || false,
       note: data.note,
       createdByUserId: data.createdByUserId,
-    });
+    }) as InventorySession;
 
     const savedSession = await this.sessionRepository.save(session);
 

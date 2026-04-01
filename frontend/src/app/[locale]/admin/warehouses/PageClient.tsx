@@ -71,13 +71,16 @@ export function PageClient() {
             };
 
             if (formData.id === 0) {
-                await axios.post((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/warehouses', payload, config);
+                const postPayload = { ...payload };
+                delete (postPayload as any).id;
+                await axios.post((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/warehouses', postPayload, config);
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             } else {
                 await axios.put(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/warehouses/${formData.id}`, payload, config);
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             }
             setIsModalOpen(false);
+            setFormData({ id: 0, name: '', address: '', latitude: 40.7663, longitude: 29.9175, locationId: 0, isActive: true });
             fetchData();
         } catch (error: any) {
             console.error('Error saving warehouse', error);
