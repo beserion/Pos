@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import { fetchAllParameters } from '@/app/[locale]/utils/useParameters';
 
 interface PageClientProps {
     sessionId: number;
@@ -16,27 +17,48 @@ export function PageClient({ sessionId }: PageClientProps) {
     const locale = useLocale();
     const router = useRouter();
     const { user } = useAuth();
-    
+
     const [session, setSession] = useState<any>(null);
     const [lines, setLines] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    
+
     // Filters & Search
     const [searchQuery, setSearchQuery] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
     const [filterStatus, setFilterStatus] = useState('ALL'); // ALL, COUNTED, UNCOUNTED, HAS_DIFF
     const [categories, setCategories] = useState<string[]>([]);
-    
+
     // Auto-save timer
     const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
     const [pendingChanges, setPendingChanges] = useState<{ [id: number]: any }>({});
-    
+
     // Bar helper modal
     const [helperModalOpen, setHelperModalOpen] = useState(false);
     const [activeLineForHelper, setActiveLineForHelper] = useState<any>(null);
     const [helperClosedQty, setHelperClosedQty] = useState(0);
     const [helperOpenQty, setHelperOpenQty] = useState(0);
+
+    // Print report
+    const [printDropdownOpen, setPrintDropdownOpen] = useState(false);
+
+    // Print form modal
+    const [formModalOpen, setFormModalOpen] = useState(false);
+    const [formConfig, setFormConfig] = useState({
+        businessName: '',
+        branchName: '',
+        counterPerson: '',
+        showTheoretical: !session?.isBlindCount,
+    });
+
+    // Parametrelerden şirket adını otomatik çek
+    useEffect(() => {
+        fetchAllParameters(user?.token).then(params => {
+            if (params.company_name) {
+                setFormConfig(c => ({ ...c, businessName: c.businessName || params.company_name }));
+            }
+        });
+    }, [user?.token]);
 
     useEffect(() => {
         if (user?.token) {
@@ -53,17 +75,17 @@ export function PageClient({ sessionId }: PageClientProps) {
             const res = await axios.get(`${API_URL}/inventory-sessions/${sessionId}`, {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
-            
+
             setSession(res.data);
             setLines(res.data.lines || []);
-            
+
             // Extract categories
             const cats = new Set<string>();
             res.data.lines?.forEach((l: any) => {
                 if (l.stockCard?.category) cats.add(l.stockCard.category);
             });
             setCategories(Array.from(cats));
-            
+
         } catch (error: any) {
             console.error('Error fetching session', error);
             showSwal({ title: tc('error'), text: error?.response?.data?.message || 'Sayım fişi bulunamadı.', icon: 'error' });
@@ -72,12 +94,12 @@ export function PageClient({ sessionId }: PageClientProps) {
             setLoading(false);
         }
     };
-    
+
     const triggerAutoSave = () => {
         if (autoSaveTimerRef.current) {
             clearTimeout(autoSaveTimerRef.current);
         }
-        
+
         autoSaveTimerRef.current = setTimeout(async () => {
             await saveDraft(true); // true = silent background map
         }, 3000);
@@ -85,11 +107,11 @@ export function PageClient({ sessionId }: PageClientProps) {
 
     const handleLineChange = (lineId: number, field: string, value: any) => {
         if (session?.status !== 'DRAFT' && session?.status !== 'IN_PROGRESS') return;
-        
+
         const updatedLines = lines.map(line => {
             if (line.id === lineId) {
                 const updated = { ...line, [field]: value };
-                
+
                 // If they changing countedQty, automatically mark as counted
                 if (field === 'countedQty' && value !== null && value !== '') {
                     updated.isCounted = true;
@@ -98,7 +120,7 @@ export function PageClient({ sessionId }: PageClientProps) {
                     updated.differenceQty = parsedVal - parseFloat(updated.theoreticalQty || 0);
                     updated.differenceCost = updated.differenceQty * parseFloat(updated.unitCost || 0);
                 }
-                
+
                 // Mark for pending save
                 setPendingChanges(prev => ({
                     ...prev,
@@ -108,32 +130,32 @@ export function PageClient({ sessionId }: PageClientProps) {
                         isCounted: field === 'isCounted' ? value : (field === 'countedQty' ? true : line.isCounted)
                     }
                 }));
-                
+
                 return updated;
             }
             return line;
         });
-        
+
         setLines(updatedLines);
         triggerAutoSave();
     };
 
     const saveDraft = async (silent = false) => {
         if (!user?.token || Object.keys(pendingChanges).length === 0) return;
-        
+
         try {
             if (!silent) setSaving(true);
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
-            
-            const promises = Object.entries(pendingChanges).map(([lineId, data]) => 
+
+            const promises = Object.entries(pendingChanges).map(([lineId, data]) =>
                 axios.patch(`${API_URL}/inventory-sessions/lines/${lineId}`, data, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 })
             );
-            
+
             await Promise.all(promises);
             setPendingChanges({}); // Clear pending changes
-            
+
             if (!silent) {
                 toastSwal({ title: 'Kaydedildi', text: 'Taslak başarıyla güncellendi.', icon: 'success' });
                 // Re-fetch to get accurate calculations from backend
@@ -149,15 +171,15 @@ export function PageClient({ sessionId }: PageClientProps) {
 
     const handleApprove = async () => {
         if (!user?.token || !session) return;
-        
+
         // Check if there are uncounted lines
         const uncountedCount = lines.filter(l => !l.isCounted).length;
-        
+
         // Force save any pending changes first
         if (Object.keys(pendingChanges).length > 0) {
             await saveDraft(false);
         }
-        
+
         const result = await showSwal({
             title: 'Sayımı Onayla',
             html: `
@@ -178,7 +200,7 @@ export function PageClient({ sessionId }: PageClientProps) {
                 await axios.post(`${API_URL}/inventory-sessions/${session.id}/approve`, {}, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
-                
+
                 await showSwal({ title: 'Başarılı', text: 'Sayım onaylandı ve stok hareketleri oluşturuldu.', icon: 'success' });
                 fetchSession();
             } catch (error: any) {
@@ -192,7 +214,7 @@ export function PageClient({ sessionId }: PageClientProps) {
 
     const handleCancelSession = async () => {
         if (!user?.token || !session) return;
-        
+
         const result = await showSwal({
             title: 'Sayımı İptal Et',
             text: 'Bu sayım fişini iptal etmek istediğinize emin misiniz? Yapılan tüm girişler silinmez ancak fiş devre dışı kalır.',
@@ -210,7 +232,7 @@ export function PageClient({ sessionId }: PageClientProps) {
                 await axios.post(`${API_URL}/inventory-sessions/${session.id}/cancel`, {}, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
-                
+
                 toastSwal({ title: 'İptal Edildi', text: 'Sayım iptal edildi.', icon: 'success' });
                 fetchSession();
             } catch (error: any) {
@@ -229,7 +251,7 @@ export function PageClient({ sessionId }: PageClientProps) {
         // Try to guess empty values
         const currentQty = parseFloat(line.countedQty) || 0;
         const convRate = parseFloat(line.stockCard?.conversionRate) || 1;
-        
+
         if (currentQty > 0 && convRate > 1 && line.stockCard?.purchaseUnit && line.stockCard?.baseUnit) {
             const closed = Math.floor(currentQty / convRate);
             const open = currentQty % convRate;
@@ -244,10 +266,10 @@ export function PageClient({ sessionId }: PageClientProps) {
 
     const applyHelperCalculation = () => {
         if (!activeLineForHelper) return;
-        
+
         const convRate = parseFloat(activeLineForHelper.stockCard?.conversionRate) || 1;
         const totalBaseQty = (helperClosedQty * convRate) + helperOpenQty;
-        
+
         handleLineChange(activeLineForHelper.id, 'countedQty', parseFloat(totalBaseQty.toFixed(2)));
         setHelperModalOpen(false);
     };
@@ -265,22 +287,22 @@ export function PageClient({ sessionId }: PageClientProps) {
     // Filtered Lines
     const filteredLines = lines.filter(line => {
         let match = true;
-        
+
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
             match = match && (line.stockCard?.name?.toLowerCase().includes(q) || line.stockCard?.code?.toLowerCase().includes(q));
         }
-        
+
         if (filterCategory) {
             match = match && line.stockCard?.category === filterCategory;
         }
-        
+
         if (filterStatus !== 'ALL') {
             if (filterStatus === 'COUNTED') match = match && line.isCounted;
             if (filterStatus === 'UNCOUNTED') match = match && !line.isCounted;
             if (filterStatus === 'HAS_DIFF') match = match && line.isCounted && parseFloat(line.differenceQty) !== 0;
         }
-        
+
         return match;
     });
 
@@ -288,6 +310,253 @@ export function PageClient({ sessionId }: PageClientProps) {
     const kpiTotalLines = lines.length;
     const kpiCountedLines = lines.filter(l => l.isCounted).length;
     const kpiDiffCost = lines.reduce((sum, l) => sum + (parseFloat(l.differenceCost) || 0), 0);
+
+    // Print report handler
+    const handlePrintReport = (type: 'full' | 'deficits' | 'surpluses' | 'analysis') => {
+        setPrintDropdownOpen(false);
+
+        const reportTitles: Record<string, string> = {
+            full: 'TAM SAYIM RAPORU',
+            deficits: 'EKSİKLER RAPORU',
+            surpluses: 'FAZLALAR RAPORU',
+            analysis: 'SAYIM FARK ANALİZ RAPORU',
+        };
+
+        let reportLines = [...lines];
+        if (type === 'deficits') reportLines = lines.filter(l => l.isCounted && parseFloat(l.differenceQty) < 0);
+        if (type === 'surpluses') reportLines = lines.filter(l => l.isCounted && parseFloat(l.differenceQty) > 0);
+        if (type === 'analysis') reportLines = lines.filter(l => l.isCounted && parseFloat(l.differenceQty) !== 0);
+
+        const totalDeficit = lines.filter(l => l.isCounted && parseFloat(l.differenceCost) < 0).reduce((s, l) => s + parseFloat(l.differenceCost), 0);
+        const totalSurplus = lines.filter(l => l.isCounted && parseFloat(l.differenceCost) > 0).reduce((s, l) => s + parseFloat(l.differenceCost), 0);
+        const netDiff = totalDeficit + totalSurplus;
+
+        const rows = reportLines.map((line, idx) => {
+            const diffQty = parseFloat(line.differenceQty) || 0;
+            const diffCost = parseFloat(line.differenceCost) || 0;
+            const diffColor = diffQty < 0 ? '#ef4444' : diffQty > 0 ? '#10b981' : '#94a3b8';
+            const rowBg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+            return `
+            <tr style="background:${rowBg};border-bottom:1px solid #f1f5f9;">
+                <td style="padding:3px 6px;color:#94a3b8;font-size:9px;white-space:nowrap;">${idx + 1}</td>
+                <td style="padding:3px 6px;">
+                    <span style="font-weight:700;font-size:10px;color:#1e293b;">${line.stockCard?.name || '-'}</span>
+                </td>
+                <td style="padding:3px 6px;">
+                    <span style="font-size:8px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;">${line.stockCard?.code || ''}${line.stockCard?.category ? ` • ${line.stockCard.category}` : ''}</span>
+                </td>
+                <td style="padding:3px 6px;text-align:right;font-weight:700;font-size:10px;color:#64748b;white-space:nowrap;">${parseFloat(line.theoreticalQty || 0).toFixed(2)} ${line.unit}</td>
+                <td style="padding:3px 6px;text-align:right;font-weight:700;font-size:10px;color:#4f46e5;white-space:nowrap;">${line.isCounted ? `${parseFloat(line.countedQty || 0).toFixed(2)} ${line.unit}` : '—'}</td>
+                <td style="padding:3px 6px;text-align:right;font-weight:800;font-size:10px;color:${diffColor};white-space:nowrap;">${line.isCounted ? `${diffQty >= 0 ? '+' : ''}${diffQty.toFixed(2)} ${line.unit}` : '—'}</td>
+                <td style="padding:3px 6px;text-align:right;font-weight:700;font-size:10px;color:${diffColor};white-space:nowrap;">${line.isCounted && diffCost !== 0 ? `${diffCost >= 0 ? '+' : ''}${diffCost.toFixed(2)} ₺` : '—'}</td>
+            </tr>`;
+        }).join('');
+
+        const analysisSummary = type === 'analysis' ? `
+        <div style="margin-top:16px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;">
+            <div style="background:#f8fafc;padding:6px 10px;border-bottom:1px solid #e2e8f0;font-size:8px;font-weight:900;color:#64748b;text-transform:uppercase;letter-spacing:0.1em;">ÖZET ANALİZ</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);">
+                <div style="padding:8px 10px;border-right:1px solid #e2e8f0;">
+                    <div style="font-size:8px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px;">Toplam Eksik</div>
+                    <div style="font-size:14px;font-weight:900;color:#ef4444;">${totalDeficit.toFixed(2)} ₺</div>
+                </div>
+                <div style="padding:8px 10px;border-right:1px solid #e2e8f0;">
+                    <div style="font-size:8px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px;">Toplam Fazla</div>
+                    <div style="font-size:14px;font-weight:900;color:#10b981;">+${totalSurplus.toFixed(2)} ₺</div>
+                </div>
+                <div style="padding:8px 10px;">
+                    <div style="font-size:8px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px;">Net Fark</div>
+                    <div style="font-size:14px;font-weight:900;color:${netDiff < 0 ? '#ef4444' : netDiff > 0 ? '#10b981' : '#64748b'}">${netDiff >= 0 ? '+' : ''}${netDiff.toFixed(2)} ₺</div>
+                </div>
+            </div>
+        </div>` : '';
+
+        const printContent = `
+        <html><head>
+            <meta charset="UTF-8"/>
+            <title>${reportTitles[type]}</title>
+            <style>
+                * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; }
+                body { background: white; color: #1e293b; padding: 16px; font-size: 10px; }
+                @media print { body { padding: 10px; } @page { margin: 8mm; size: A4; } }
+            </style>
+        </head><body>
+            <div style="border-bottom:2px solid #4f46e5;padding-bottom:10px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-end;">
+                <div>
+                    <div style="font-size:7px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:3px;">POSNETX › ENVANTER SAYIM</div>
+                    <h1 style="font-size:14px;font-weight:900;color:#1e293b;text-transform:uppercase;letter-spacing:0.04em;">${reportTitles[type]}</h1>
+                </div>
+                <div style="text-align:right;font-size:8px;font-weight:700;color:#64748b;line-height:1.6;">
+                    <div>Fiş No: <strong style="color:#4f46e5;">#${session?.id}</strong> &nbsp;|&nbsp; Tarih: ${session?.sessionDate ? new Date(session.sessionDate).toLocaleDateString('tr-TR') : '-'} &nbsp;|&nbsp; Depo: ${session?.warehouse?.name || 'Tüm Depolar'}</div>
+                    <div>Yazdırma: ${new Date().toLocaleString('tr-TR')} &nbsp;|&nbsp; Toplam: ${reportLines.length} kalem</div>
+                </div>
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:10px;">
+                <thead>
+                    <tr style="background:#1e293b;color:white;">
+                        <th style="padding:5px 6px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:0.07em;font-weight:900;width:28px;">#</th>
+                        <th style="padding:5px 6px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:0.07em;font-weight:900;">Stok Adı</th>
+                        <th style="padding:5px 6px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:0.07em;font-weight:900;color:#94a3b8;">Kod / Grup</th>
+                        <th style="padding:5px 6px;text-align:right;font-size:8px;text-transform:uppercase;letter-spacing:0.07em;font-weight:900;">Teorik</th>
+                        <th style="padding:5px 6px;text-align:right;font-size:8px;text-transform:uppercase;letter-spacing:0.07em;font-weight:900;color:#a5b4fc;">Fiili</th>
+                        <th style="padding:5px 6px;text-align:right;font-size:8px;text-transform:uppercase;letter-spacing:0.07em;font-weight:900;">Fark (Adet)</th>
+                        <th style="padding:5px 6px;text-align:right;font-size:8px;text-transform:uppercase;letter-spacing:0.07em;font-weight:900;">Fark (₺)</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+            ${analysisSummary}
+            <div style="margin-top:12px;padding-top:6px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;font-size:7px;color:#94a3b8;font-weight:700;">
+                <div>${reportTitles[type]} — ${new Date().toLocaleDateString('tr-TR')}</div>
+                <div>POSNetX Envanter Yönetim Sistemi</div>
+            </div>
+        </body></html>`;
+
+        const printWin = window.open('', '_blank', 'width=1000,height=700');
+        if (printWin) {
+            printWin.document.write(printContent);
+            printWin.document.close();
+            printWin.onload = () => {
+                printWin.focus();
+                printWin.print();
+            };
+        }
+    };
+
+    const handlePrintForm = () => {
+        setFormModalOpen(false);
+        const showTheo = formConfig.showTheoretical && !isBlindCount;
+
+        const countTypeLabel = session?.countType === 'PARTIAL' ? 'KİSMİ SAYIM' : session?.countType === 'LOCATION' ? 'LOKASYON BAZLI SAYIM' : 'TAM SAYIM';
+
+        const rows = lines.map((line, idx) => {
+            const rowBg = idx % 2 === 0 ? '#ffffff' : '#fafafa';
+            return `
+            <tr style="background:${rowBg};border-bottom:1px solid #e8ecf0;">
+                <td style="padding:4px 6px;font-size:9px;font-weight:700;color:#64748b;white-space:nowrap;vertical-align:top;">${line.stockCard?.code || '-'}</td>
+                <td style="padding:4px 6px;font-size:9px;font-weight:700;color:#1e293b;vertical-align:top;">${line.stockCard?.name || '-'}</td>
+                <td style="padding:4px 6px;font-size:9px;color:#64748b;text-align:center;white-space:nowrap;vertical-align:top;">${line.unit || '-'}</td>
+                <td style="padding:4px 6px;font-size:9px;color:#94a3b8;text-align:center;vertical-align:top;"></td>
+                ${showTheo ? `<td style="padding:4px 6px;font-size:9px;font-weight:700;color:#475569;text-align:center;white-space:nowrap;vertical-align:top;">${parseFloat(line.theoreticalQty || 0).toFixed(2)}</td>` : ''}
+                <td style="padding:4px 6px;vertical-align:top;"><div style="border-bottom:1px solid #000;height:18px;"></div></td>
+                <td style="padding:4px 6px;vertical-align:top;"><div style="border-bottom:1px solid #ccc;height:45px;"></div></td>
+            </tr>`;
+        }).join('');
+
+        const printContent = `
+        <html><head>
+            <meta charset="UTF-8"/>
+            <title>SAYİM FORMU - Fiş #${session?.id}</title>
+            <style>
+                * { box-sizing:border-box; margin:0; padding:0; font-family: Arial, Helvetica, sans-serif; }
+                body { background:white; color:#1e293b; padding:14px; font-size:9px; }
+                @media print { body { padding:8px; } @page { margin:6mm; size:A4 portrait; } }
+                .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 24px; }
+                .info-item { display:flex; gap:4px; align-items:baseline; }
+                .info-label { font-size:7px; font-weight:900; color:#94a3b8; text-transform:uppercase; letter-spacing:0.08em; white-space:nowrap; }
+                .info-value { font-size:9px; font-weight:700; color:#1e293b; border-bottom:1px solid #e2e8f0; flex:1; min-width:60px; }
+                table { width:100%; border-collapse:collapse; }
+                thead th { background:#1e293b; color:white; padding:5px 6px; text-align:left; font-size:7.5px; font-weight:900; text-transform:uppercase; letter-spacing:0.07em; }
+                tfoot td { background:#f8fafc; padding:6px 8px; font-size:8px; font-weight:700; border-top:2px solid #1e293b; }
+                .sign-box { border:1px solid #cbd5e1; border-radius:4px; padding:8px 12px; }
+                .sign-line { border-bottom:1px dashed #94a3b8; height:28px; margin-top:4px; }
+            </style>
+        </head><body>
+            <!-- HEADER -->
+            <div style="border:2px solid #1e293b;border-radius:6px;padding:10px 14px;margin-bottom:10px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-bottom:8px;">
+                    <div>
+                        <div style="font-size:7px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.1em;">POSNETX › ENVANTER YÖNETİMİ</div>
+                        <h1 style="font-size:15px;font-weight:900;color:#1e293b;text-transform:uppercase;letter-spacing:0.04em;margin-top:2px;">SAYİM FORMU</h1>
+                        <div style="margin-top:3px;"><span style="background:#1e293b;color:white;font-size:8px;font-weight:900;padding:2px 8px;border-radius:3px;">${countTypeLabel}</span></div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:11px;font-weight:900;color:#4f46e5;">Fiş No: #${session?.id}</div>
+                        <div style="font-size:9px;font-weight:700;color:#64748b;">Sayım Tarihi: ${session?.sessionDate ? new Date(session.sessionDate).toLocaleDateString('tr-TR') : '-'}</div>
+                        <div style="font-size:9px;font-weight:700;color:#64748b;">Yazdırma: ${new Date().toLocaleString('tr-TR')}</div>
+                        <div style="font-size:9px;font-weight:700;color:#64748b;">Toplam Kalem: ${lines.length}</div>
+                    </div>
+                </div>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">İşletme Adı</span>
+                        <span class="info-value">${formConfig.businessName || ''}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Depo / Lokasyon</span>
+                        <span class="info-value">${session?.warehouse?.name || 'Tüm Depolar'}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Şube Adı</span>
+                        <span class="info-value">${formConfig.branchName || ''}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Sayımı Hazırlayan</span>
+                        <span class="info-value">${user?.name || user?.email || '-'}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Sayımı Yapan Kişi</span>
+                        <span class="info-value">${formConfig.counterPerson || ''}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Sayım Nüshası</span>
+                        <span class="info-value"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TABLO -->
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:70px;">Stok Kodu</th>
+                        <th>Stok Adı</th>
+                        <th style="width:36px;text-align:center;">Birim</th>
+                        <th style="width:80px;text-align:center;">Lokasyon / Raf</th>
+                        ${showTheo ? '<th style="width:54px;text-align:center;">Teorik</th>' : ''}
+                        <th style="width:80px;text-align:center;background:#2d3a52;">Sayılan Miktar</th>
+                        <th style="width:250px;text-align:center;">Not</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="${showTheo ? 7 : 6}" style="padding:4px 8px;">
+                            Toplam ${lines.length} kalem &nbsp;&mdash;&nbsp; ${countTypeLabel}
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+
+            <!-- İMZA ALANLARI -->
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;">
+                <div class="sign-box">
+                    <div style="font-size:7.5px;font-weight:900;color:#64748b;text-transform:uppercase;">Sayımı Yapan</div>
+                    <div class="sign-line"></div>
+                    <div style="font-size:8px;color:#94a3b8;margin-top:2px;">İmza / İsim</div>
+                </div>
+                <div class="sign-box">
+                    <div style="font-size:7.5px;font-weight:900;color:#64748b;text-transform:uppercase;">Kontrol Eden</div>
+                    <div class="sign-line"></div>
+                    <div style="font-size:8px;color:#94a3b8;margin-top:2px;">İmza / İsim</div>
+                </div>
+                <div class="sign-box">
+                    <div style="font-size:7.5px;font-weight:900;color:#64748b;text-transform:uppercase;">Yönetici Onayı</div>
+                    <div class="sign-line"></div>
+                    <div style="font-size:8px;color:#94a3b8;margin-top:2px;">İmza / İsim</div>
+                </div>
+            </div>
+
+            <div style="margin-top:10px;text-align:center;font-size:7px;color:#cbd5e1;">POSNetX Envanter Yönetim Sistemi &mdash; ${new Date().toLocaleString('tr-TR')}</div>
+        </body></html>`;
+
+        const printWin = window.open('', '_blank', 'width=900,height=700');
+        if (printWin) {
+            printWin.document.write(printContent);
+            printWin.document.close();
+            printWin.onload = () => { printWin.focus(); printWin.print(); };
+        }
+    };
 
     return (
         <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">
@@ -309,13 +578,10 @@ export function PageClient({ sessionId }: PageClientProps) {
                             <button onClick={() => router.push(`/${locale}/inventory/count`)} className="mt-6 px-6 py-2 bg-slate-200 dark:bg-slate-700 rounded-xl font-bold text-xs uppercase tracking-widest">Geri Dön</button>
                         </div>
                     ) : (
-                        <>
+                        <>  
                             {/* Header */}
-                            <div className="px-[50px] py-6 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-b border-white dark:border-slate-700 shadow-sm shrink-0 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div className="px-[50px] py-6 bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-b border-white dark:border-slate-700 shadow-sm shrink-0 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-50">
                                 <div className="flex items-center gap-4">
-                                    <button onClick={() => router.push(`/${locale}/inventory/count`)} className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-500 hover:text-slate-800 dark:hover:text-white transition-all shadow-sm">
-                                        <i className="fat fa-arrow-left"></i>
-                                    </button>
                                     <div>
                                         <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase m-0 leading-none">
                                             SAYIM FİŞİ <span className="text-indigo-600 dark:text-indigo-400 opacity-80">#{session?.id}</span>
@@ -325,7 +591,7 @@ export function PageClient({ sessionId }: PageClientProps) {
                                                 <i className="fat fa-calendar mr-1"></i> {session?.sessionDate ? new Date(session.sessionDate).toLocaleDateString('tr-TR') : '-'}
                                             </span>
                                             <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded uppercase tracking-widest border border-slate-200 dark:border-slate-700">
-                                                <i className="fat fa-building mr-1"></i> {session?.warehouse?.name || 'Tüm Depolar'}
+                                                <i className="fat fa-building mr-1"></i> {session?.warehouse?.name || (session?.warehouseId ? `Depo #${session.warehouseId}` : 'Tüm Depolar')}
                                             </span>
                                             <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded border ${session?.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' : session?.status === 'CANCELLED' ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20' : 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20'}`}>
                                                 {session?.status === 'COMPLETED' ? 'ONAYLANDI' : session?.status === 'CANCELLED' ? 'İPTAL EDİLDİ' : 'AÇIK (DEVAM EDİYOR)'}
@@ -338,7 +604,7 @@ export function PageClient({ sessionId }: PageClientProps) {
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+                                <div className="flex gap-2 w-full md:w-auto pb-2 md:pb-0 items-center flex-wrap">
                                     {!isReadOnly && (
                                         <>
                                             <button onClick={handleCancelSession} disabled={saving} className="px-5 py-2.5 bg-red-50 text-red-600 border border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20 rounded-xl font-bold text-xs uppercase tracking-widest whitespace-nowrap shadow-sm hover:bg-red-100 transition-all flex items-center gap-2 disabled:opacity-50">
@@ -354,6 +620,43 @@ export function PageClient({ sessionId }: PageClientProps) {
                                             </button>
                                         </>
                                     )}
+                                    {/* Print Dropdown */}
+                                    <div className="relative">
+                                        <button onClick={() => setPrintDropdownOpen(p => !p)} className="px-5 py-2.5 bg-white dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:text-indigo-600 hover:border-indigo-300 dark:hover:text-indigo-400 rounded-xl font-black text-xs uppercase tracking-widest whitespace-nowrap shadow-sm transition-all flex items-center gap-2">
+                                            <i className="fat fa-print"></i> Rapor Yazdır
+                                            <i className={`fat fa-chevron-down text-[9px] transition-transform duration-200 ${printDropdownOpen ? 'rotate-180' : ''}`}></i>
+                                        </button>
+                                        {printDropdownOpen && (
+                                            <>
+                                                {/* Backdrop to close */}
+                                                <div className="fixed inset-0 z-40" onClick={() => setPrintDropdownOpen(false)}></div>
+                                                <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 z-50 overflow-hidden">
+                                                    <div className="p-1.5">
+                                                        <button onClick={() => handlePrintReport('full')} className="w-full text-left px-4 py-2.5 rounded-xl text-xs font-black text-slate-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 hover:text-indigo-700 dark:hover:text-indigo-400 transition-colors flex items-center gap-3 uppercase tracking-widest">
+                                                            <i className="fat fa-list-check text-indigo-400 w-4"></i> Tam Sayım Raporu
+                                                        </button>
+                                                        <button onClick={() => handlePrintReport('deficits')} className="w-full text-left px-4 py-2.5 rounded-xl text-xs font-black text-slate-700 dark:text-slate-300 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-700 dark:hover:text-red-400 transition-colors flex items-center gap-3 uppercase tracking-widest">
+                                                            <i className="fat fa-arrow-trend-down text-red-400 w-4"></i> Eksikler Raporu
+                                                        </button>
+                                                        <button onClick={() => handlePrintReport('surpluses')} className="w-full text-left px-4 py-2.5 rounded-xl text-xs font-black text-slate-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors flex items-center gap-3 uppercase tracking-widest">
+                                                            <i className="fat fa-arrow-trend-up text-emerald-400 w-4"></i> Fazlalar Raporu
+                                                        </button>
+                                                        <div className="my-1 border-t border-slate-100 dark:border-slate-700"></div>
+                                                        <button onClick={() => handlePrintReport('analysis')} className="w-full text-left px-4 py-2.5 rounded-xl text-xs font-black text-slate-700 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-400 transition-colors flex items-center gap-3 uppercase tracking-widest">
+                                                            <i className="fat fa-chart-bar text-amber-400 w-4"></i> Fark Analiz Raporu
+                                                        </button>
+                                                        <div className="my-1 border-t border-slate-100 dark:border-slate-700"></div>
+                                                        <button onClick={() => { setPrintDropdownOpen(false); setFormConfig(c => ({ ...c, showTheoretical: !isBlindCount })); setFormModalOpen(true); }} className="w-full text-left px-4 py-2.5 rounded-xl text-xs font-black text-slate-700 dark:text-slate-300 hover:bg-teal-50 dark:hover:bg-teal-500/10 hover:text-teal-700 dark:hover:text-teal-400 transition-colors flex items-center gap-3 uppercase tracking-widest">
+                                                            <i className="fat fa-clipboard-list text-teal-400 w-4"></i> Sayım Formu Yazdır
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                    <button onClick={() => router.push(`/${locale}/inventory/count`)} className="px-5 py-2.5 bg-white dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-500 hover:text-slate-800 dark:hover:text-white rounded-xl font-black text-xs uppercase tracking-widest whitespace-nowrap shadow-sm transition-all flex items-center gap-2">
+                                        <i className="fat fa-arrow-left"></i> Geri
+                                    </button>
                                 </div>
                             </div>
 
@@ -372,8 +675,8 @@ export function PageClient({ sessionId }: PageClientProps) {
                                     <div className="flex items-center gap-3">
                                         <div className="relative w-64">
                                             <i className="fat fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
-                                            <input 
-                                                type="text" 
+                                            <input
+                                                type="text"
                                                 value={searchQuery}
                                                 onChange={(e) => setSearchQuery(e.target.value)}
                                                 placeholder="Stok adı veya kodu ile ara..."
@@ -381,7 +684,7 @@ export function PageClient({ sessionId }: PageClientProps) {
                                             />
                                         </div>
                                         <div className="relative">
-                                            <select 
+                                            <select
                                                 value={filterCategory}
                                                 onChange={(e) => setFilterCategory(e.target.value)}
                                                 className="pl-4 pr-10 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-300 font-bold text-sm focus:ring-2 focus:ring-indigo-500/30 outline-none transition-all shadow-sm appearance-none cursor-pointer"
@@ -421,7 +724,7 @@ export function PageClient({ sessionId }: PageClientProps) {
                                                     {!isBlindCount && <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Teorik Miktar</th>}
                                                     <th className="px-6 py-4 text-[10px] font-black text-indigo-500 uppercase tracking-widest text-center w-64 bg-indigo-50/50 dark:bg-indigo-500/5">Sayılan FİİLİ Miktar</th>
                                                     {!isBlindCount && <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Fark</th>}
-                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Durum</th>
+                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-[450px]">DURUM & AÇIKLAMA</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
@@ -429,7 +732,7 @@ export function PageClient({ sessionId }: PageClientProps) {
                                                     const diffQty = parseFloat(line.differenceQty) || 0;
                                                     const isNegative = diffQty < 0;
                                                     const isPositive = diffQty > 0;
-                                                    let inputColorClass = "bg-white border-slate-200 focus:border-indigo-500 dark:bg-slate-900 dark:border-slate-600 font-black text-slate-800 dark:text-white";
+                                                    let inputColorClass = "bg-white border-slate-200 focus:border-indigo-500 dark:bg-slate-900 dark:border-slate-600 font-bold text-slate-800 dark:text-white";
                                                     if (line.isCounted) {
                                                         if (isNegative && !isBlindCount) inputColorClass = "bg-red-50 border-red-300 focus:border-red-500 text-red-700 dark:bg-red-900/20 dark:border-red-500/30 dark:text-red-400";
                                                         else if (isPositive && !isBlindCount) inputColorClass = "bg-emerald-50 border-emerald-300 focus:border-emerald-500 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-500/30 dark:text-emerald-400";
@@ -459,16 +762,16 @@ export function PageClient({ sessionId }: PageClientProps) {
                                                                 </td>
                                                             )}
                                                             <td className="px-6 py-3 bg-indigo-50/30 dark:bg-indigo-900/10 relative">
-                                                                <div className="flex items-stretch gap-0 w-full max-w-[200px] mx-auto group">
-                                                                    <input 
-                                                                        type="number" 
+                                                                <div className="flex items-stretch gap-0 w-full max-w-[220px] mx-auto group">
+                                                                    <input
+                                                                        type="number"
                                                                         step="any"
                                                                         value={line.countedQty === null ? '' : line.countedQty}
                                                                         onChange={(e) => handleLineChange(line.id, 'countedQty', e.target.value)}
                                                                         onFocus={(e) => { vibrate(); e.target.select(); }}
                                                                         disabled={isReadOnly}
-                                                                        placeholder="Miktar Girin"
-                                                                        className={`w-full text-center px-2 py-2.5 rounded-l-xl border-y border-l shadow-inner outline-none transition-all ${inputColorClass}`}
+                                                                        placeholder="Miktarı Girin.."
+                                                                        className={`w-full text-center px-1 py-2.5 rounded-l-xl border-y border-l shadow-inner outline-none transition-all text-sm ${inputColorClass}`}
                                                                         style={{ MozAppearance: 'textfield' }}
                                                                     />
                                                                     <span className={`px-3 py-2.5 border-y font-bold text-xs uppercase tracking-widest flex items-center border-l-0 ${line.isCounted ? (isNegative && !isBlindCount ? 'bg-red-100 border-red-300 text-red-600 dark:bg-red-900/40 dark:border-red-500/30' : (isPositive && !isBlindCount ? 'bg-emerald-100 border-emerald-300 text-emerald-600 dark:bg-emerald-900/40 dark:border-emerald-500/30' : 'bg-indigo-100 border-indigo-200 text-indigo-600 dark:bg-indigo-900/40 dark:border-indigo-500/30')) : 'bg-slate-100 border-slate-200 text-slate-500 dark:bg-slate-800 dark:border-slate-600'}`}>
@@ -486,7 +789,7 @@ export function PageClient({ sessionId }: PageClientProps) {
                                                                     {line.isCounted ? (
                                                                         <div className="flex flex-col items-end">
                                                                             <span className={`text-base font-black tracking-tight ${isNegative ? 'text-red-500' : isPositive ? 'text-emerald-500' : 'text-slate-400'}`}>
-                                                                                {isPositive ? '+' : ''}{diffQty.toFixed(2)}
+                                                                                {isPositive ? '+' : ''}{diffQty.toFixed(2)} <span className="text-xs ml-1">{line.unit}</span>
                                                                             </span>
                                                                             {diffQty !== 0 && (
                                                                                 <span className={`text-[9px] font-bold uppercase tracking-widest ${isNegative ? 'text-red-400/70' : 'text-emerald-400/70'}`}>
@@ -505,9 +808,17 @@ export function PageClient({ sessionId }: PageClientProps) {
                                                                         <input type="checkbox" disabled={isReadOnly} checked={line.isCounted} onChange={(e) => handleLineChange(line.id, 'isCounted', e.target.checked)} className="sr-only peer" />
                                                                         <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-indigo-500"></div>
                                                                     </label>
-                                                                    <button disabled={isReadOnly} onClick={() => { const note = window.prompt('Satır Açıklaması:', line.description || ''); if (note !== null) handleLineChange(line.id, 'description', note); }} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${line.description ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30' : 'bg-transparent text-slate-300 hover:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
-                                                                        <i className="fat fa-comment-dots text-sm"></i>
-                                                                    </button>
+                                                                    <div className="relative group/note flex-1 min-w-[300px]">
+                                                                        <i className={`fat fa-comment-dots absolute left-3 top-1/2 -translate-y-1/2 text-[10px] transition-colors ${line.description ? 'text-amber-500' : 'text-slate-300 group-hover/note:text-slate-400'}`}></i>
+                                                                        <input
+                                                                            type="text"
+                                                                            disabled={isReadOnly}
+                                                                            value={line.description || ''}
+                                                                            onChange={(e) => handleLineChange(line.id, 'description', e.target.value)}
+                                                                            placeholder="Not ekleyin..."
+                                                                            className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm font-bold outline-none transition-all ${line.description ? 'bg-amber-50 border-amber-200 text-amber-900 dark:bg-amber-500/5 dark:border-amber-500/20 dark:text-amber-400' : 'bg-slate-50 border-slate-100 text-slate-400 focus:bg-white focus:border-indigo-300 dark:bg-slate-900/50 dark:border-slate-700 dark:text-slate-500 dark:focus:border-indigo-500/50'}`}
+                                                                        />
+                                                                    </div>
                                                                 </div>
                                                             </td>
                                                         </tr>
@@ -520,6 +831,77 @@ export function PageClient({ sessionId }: PageClientProps) {
                             </div>
                         </>
                     )}
+                </div>
+            )}
+
+            {/* Form Ayarları Modalı */}
+            {formModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xl animate-in fade-in zoom-in duration-300">
+                    <div className="bg-white dark:bg-slate-800 rounded-[32px] w-full max-w-md shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col">
+                        <div className="p-6 border-b border-teal-100 dark:border-teal-900/30 bg-teal-50/50 dark:bg-teal-900/10 flex justify-between items-center">
+                            <div>
+                                <h2 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase mb-0">
+                                    <i className="fat fa-clipboard-list text-teal-500"></i> SAYIM FORMU AYARLARI
+                                </h2>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Yazdırılacak formu özelleştirin</p>
+                            </div>
+                            <button onClick={() => setFormModalOpen(false)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 transition-all shadow-sm">&times;</button>
+                        </div>
+                        <div className="p-6 space-y-4 overflow-auto max-h-[60vh]">
+                            {/* Otomatik gelen — salt okunur */}
+                            <div className="p-4 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-3">
+
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">İşletme Adı</span>
+                                    <span className="text-sm font-black text-slate-700 dark:text-slate-200">{formConfig.businessName || <span className="text-slate-400 italic font-normal text-xs">Parametrelerden girilmedi</span>}</span>
+                                </div>
+                                <div className="border-t border-slate-200 dark:border-slate-700"></div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Depo / Lokasyon</span>
+                                    <span className="text-sm font-black text-slate-700 dark:text-slate-200">{session?.warehouse?.name || 'Tüm Depolar'}</span>
+                                </div>
+                                <div className="border-t border-slate-200 dark:border-slate-700"></div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sayım Tarihi</span>
+                                    <span className="text-sm font-black text-slate-700 dark:text-slate-200">{session?.sessionDate ? new Date(session.sessionDate).toLocaleDateString('tr-TR') : '-'}</span>
+                                </div>
+                                <div className="border-t border-slate-200 dark:border-slate-700"></div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hazırlayan</span>
+                                    <span className="text-sm font-black text-slate-700 dark:text-slate-200">{user?.name || user?.email || '-'}</span>
+                                </div>
+                            </div>
+                            {/* Düzenlenebilir alanlar */}
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 px-1">Şube Adı <span className="text-teal-500">(Opsiyonel)</span></label>
+                                <input type="text" value={formConfig.branchName} onChange={(e) => setFormConfig(c => ({ ...c, branchName: e.target.value }))} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-bold text-slate-800 dark:text-white focus:border-teal-500 focus:ring-2 focus:ring-teal-500/10 outline-none" placeholder="Örn: Merkez Şube" />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 px-1">Sayımı Yapan Kişi <span className="text-teal-500">(Opsiyonel)</span></label>
+                                <input type="text" value={formConfig.counterPerson} onChange={(e) => setFormConfig(c => ({ ...c, counterPerson: e.target.value }))} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-bold text-slate-800 dark:text-white focus:border-teal-500 focus:ring-2 focus:ring-teal-500/10 outline-none" placeholder="Boş bırakılırsa formda boş kalır" />
+                            </div>
+                            {!isBlindCount && (
+                                <label className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700 rounded-2xl cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-900/10 transition-colors">
+                                    <input type="checkbox" checked={formConfig.showTheoretical} onChange={(e) => setFormConfig(c => ({ ...c, showTheoretical: e.target.checked }))} className="w-4 h-4 accent-teal-500 cursor-pointer" />
+                                    <div>
+                                        <div className="text-sm font-black text-slate-700 dark:text-slate-300">Teorik Miktarları Göster</div>
+                                        <div className="text-[10px] text-slate-400 font-bold">Formda teorik miktar kolonu görünsün</div>
+                                    </div>
+                                </label>
+                            )}
+                            {isBlindCount && (
+                                <div className="p-3 bg-purple-50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-500/20 rounded-2xl">
+                                    <p className="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-widest"><i className="fat fa-eye-slash mr-1"></i> Kör Sayım: Teorik miktarlar formı yazdırılırken gizlenir.</p>
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-6 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20 flex gap-3">
+                            <button onClick={() => setFormModalOpen(false)} className="flex-1 py-3 rounded-2xl font-black text-sm text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-all dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300">İPTAL</button>
+                            <button onClick={handlePrintForm} className="flex-1 py-3 rounded-2xl font-black text-sm text-white bg-gradient-to-r from-teal-500 to-emerald-500 shadow-md hover:from-teal-600 transition-all active:scale-95 flex items-center justify-center gap-2">
+                                <i className="fat fa-print"></i> FORMU YAZDIR
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 

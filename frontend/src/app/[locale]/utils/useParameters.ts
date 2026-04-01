@@ -8,6 +8,7 @@ export interface AppParameters {
   default_payment_method: string;
   service_fee_rate: number;
   tax_rate: number;
+  available_tax_rates: string;
   allow_discount: boolean;
   max_discount_rate: number;
   receipt_footer: string;
@@ -68,6 +69,7 @@ export const DEFAULT_PARAMS: AppParameters = {
   default_payment_method: 'KASA',
   service_fee_rate: 10,
   tax_rate: 8,
+  available_tax_rates: '20,0,1,10',
   allow_discount: true,
   max_discount_rate: 20,
   receipt_footer: 'Teşekkür ederiz! Tekrar bekleriz.',

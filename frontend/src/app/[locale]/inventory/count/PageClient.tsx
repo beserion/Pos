@@ -29,7 +29,7 @@ export function PageClient() {
     const locale = useLocale();
     const router = useRouter();
     const { user } = useAuth();
-    
+
     const [sessions, setSessions] = useState<InventorySession[]>([]);
     const [warehouses, setWarehouses] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -37,7 +37,7 @@ export function PageClient() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [formData, setFormData] = useState({
         sessionDate: new Date().toISOString().split('T')[0],
-        warehouseId: 0,
+        warehouseId: -1,
         countType: 'FULL',
         isBlindCount: false,
         note: ''
@@ -59,7 +59,7 @@ export function PageClient() {
                 axios.get(`${API_URL}/inventory-sessions?limit=100`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/warehouses`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: [] }))
             ]);
-            
+
             setSessions(sessionsRes.data.data || []);
             setWarehouses(whRes.data || []);
         } catch (error) {
@@ -73,21 +73,26 @@ export function PageClient() {
     const handleCreateSession = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user?.token) return;
-        
+
+        if (formData.warehouseId === -1) {
+            showSwal({ title: 'Hata', text: 'Lütfen bir depo seçin (ya da "Tüm Depolar" seçeneğini belirleyin).', icon: 'warning' });
+            return;
+        }
+
         try {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
-            const payload = { 
-                ...formData, 
-                warehouseId: formData.warehouseId > 0 ? formData.warehouseId : null 
+            const payload = {
+                ...formData,
+                warehouseId: Number(formData.warehouseId)
             };
-            
+
             const res = await axios.post(`${API_URL}/inventory-sessions`, payload, {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
-            
+
             toastSwal({ title: tc('success'), text: 'Sayım fişi başarıyla oluşturuldu.', icon: 'success' });
             setIsModalOpen(false);
-            
+
             // Redirect to the session detail page
             router.push(`/${locale}/inventory/count/${res.data.id}`);
         } catch (error: any) {
@@ -142,8 +147,8 @@ export function PageClient() {
                         <button onClick={() => setIsModalOpen(true)} className="px-6 py-3 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
                             <i className="fat fa-plus-circle text-lg"></i> Yeni Sayım Başlat
                         </button>
-                        <button onClick={() => router.push(`/${locale}/admin`)} className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center gap-2">
-                            <i className="fat fa-reply"></i> Pano'ya Dön
+                        <button onClick={() => router.push(`/${locale}/inventory`)} className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center gap-2">
+                            <i className="fat fa-reply"></i> Geri
                         </button>
                     </div>
                 </div>
@@ -200,7 +205,7 @@ export function PageClient() {
                                 </thead>
                                 <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
                                     {sessions.map(session => (
-                                        <tr key={session.id} 
+                                        <tr key={session.id}
                                             onClick={() => router.push(`/${locale}/inventory/count/${session.id}`)}
                                             className="hover:bg-indigo-500/5 dark:hover:bg-indigo-500/10 transition-all group cursor-pointer"
                                         >
@@ -221,7 +226,7 @@ export function PageClient() {
                                                 <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-700 mb-1">
                                                     <i className="fat fa-building text-slate-400 text-[10px]"></i>
                                                     <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                                                        {session.warehouse?.name || 'Tüm Depolar (Genel)'}
+                                                        {session.warehouse?.name || (session.warehouseId ? `Depo #${session.warehouseId}` : 'Tüm Depolar')}
                                                     </span>
                                                 </div>
                                             </td>
@@ -287,7 +292,7 @@ export function PageClient() {
 
                         <div className="flex-1 overflow-auto p-8">
                             <form id="sessionForm" onSubmit={handleCreateSession} className="space-y-6">
-                                
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Sayım Tarihi</label>
@@ -299,10 +304,16 @@ export function PageClient() {
                                     <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Sayılacak Depo / Konum</label>
                                         <div className="relative">
-                                            <i className="fat fa-building absolute left-4 top-3.5 text-indigo-500/50"></i>
-                                            <select value={formData.warehouseId} onChange={(e) => setFormData({ ...formData, warehouseId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                <option value={0}>Tüm Depolar (Genel)</option>
-                                                {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                                            <i className="fat fa-building absolute left-4 top-4 text-indigo-500/50 pointer-events-none"></i>
+                                            <select
+                                                value={formData.warehouseId}
+                                                onChange={(e) => setFormData(prev => ({ ...prev, warehouseId: Number(e.target.value) }))}
+                                                className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow appearance-none cursor-pointer"
+                                            >
+                                                <option value={-1} disabled>Lütfen Sayılacak Depoyu Seçin</option>
+                                                {warehouses.map(w => (
+                                                    <option key={w.id} value={w.id}>{w.name}</option>
+                                                ))}
                                             </select>
                                             <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
                                         </div>
@@ -312,7 +323,7 @@ export function PageClient() {
                                 <div>
                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Sayım Tipi</label>
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div 
+                                        <div
                                             onClick={() => setFormData({ ...formData, countType: 'FULL' })}
                                             className={`cursor-pointer p-4 rounded-2xl border-2 transition-all flex flex-col items-center justify-center text-center ${formData.countType === 'FULL' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10' : 'border-slate-200 dark:border-slate-700 hover:border-indigo-300'}`}
                                         >
@@ -320,7 +331,7 @@ export function PageClient() {
                                             <h6 className={`text-sm font-black mb-1 ${formData.countType === 'FULL' ? 'text-indigo-900 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-300'}`}>Tam Sayım</h6>
                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest m-0 leading-tight">Tüm stok kartları listeye eklenir</p>
                                         </div>
-                                        <div 
+                                        <div
                                             onClick={() => setFormData({ ...formData, countType: 'PARTIAL' })}
                                             className={`cursor-pointer p-4 rounded-2xl border-2 transition-all flex flex-col items-center justify-center text-center ${formData.countType === 'PARTIAL' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10' : 'border-slate-200 dark:border-slate-700 hover:border-indigo-300'}`}
                                         >
@@ -351,17 +362,17 @@ export function PageClient() {
 
                                 <div>
                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Sayım Açıklaması (Opsiyonel)</label>
-                                    <textarea 
-                                        value={formData.note || ''} 
-                                        onChange={(e) => setFormData({ ...formData, note: e.target.value })} 
+                                    <textarea
+                                        value={formData.note || ''}
+                                        onChange={(e) => setFormData({ ...formData, note: e.target.value })}
                                         rows={2}
-                                        className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow resize-none" 
+                                        className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow resize-none"
                                         placeholder="Gerekirse not ekleyin..."
                                     ></textarea>
                                 </div>
                             </form>
                         </div>
-                        
+
                         {/* Footer */}
                         <div className="p-6 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20 shrink-0 flex gap-3 justify-end items-center">
                             <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 py-3.5 rounded-2xl font-black text-sm text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 transition-all">

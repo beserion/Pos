@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import { useParameters } from '@/app/[locale]/utils/useParameters';
 
 interface StockCard {
     id: number;
@@ -58,12 +59,16 @@ export function PageClient() {
     const locale = useLocale();
     const router = useRouter();
     const { user } = useAuth();
+    const { params } = useParameters();
+    const availableTaxRates = params.available_tax_rates ? params.available_tax_rates.split(',').map(r => r.trim()).filter(r => r) : ['20', '0', '1', '10'];
 
     const [stockCards, setStockCards] = useState<StockCard[]>([]);
     const [filteredCards, setFilteredCards] = useState<StockCard[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [categories, setCategories] = useState<string[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string>('');
+    const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
+    const [kpiFilter, setKpiFilter] = useState<'all' | 'active' | 'lowStock' | 'zeroStock'>('all');
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
     const [outputProfiles, setOutputProfiles] = useState<OutputProfile[]>([]);
     const [stockGroups, setStockGroups] = useState<StockGroup[]>([]);
@@ -93,7 +98,7 @@ export function PageClient() {
         warehouseId: null,
         stockNature: 'traded_good',
         primaryVendor: '',
-        purchaseVat: 0,
+        purchaseVat: 20,
         lastPurchasePrice: 0,
         averageCost: 0,
         sku: '',
@@ -136,19 +141,88 @@ export function PageClient() {
         }
     };
 
+    const handleSort = (key: string) => {
+        let direction: 'asc' | 'desc' = 'asc';
+        if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+            direction = 'desc';
+        }
+        setSortConfig({ key, direction });
+    };
+
     useEffect(() => {
         const lowerQuery = searchQuery.toLowerCase();
-        const filtered = stockCards.filter(c =>
-            (selectedCategory === '' || c.category === selectedCategory) &&
-            (
-                c.name.toLowerCase().includes(lowerQuery) ||
-                c.code.toLowerCase().includes(lowerQuery) ||
-                (c.barcode && c.barcode.toLowerCase().includes(lowerQuery)) ||
-                (c.category && c.category.toLowerCase().includes(lowerQuery))
-            )
-        );
+        let filtered = stockCards.filter(c => {
+            const matchSearchAndCategory = (selectedCategory === '' || c.category === selectedCategory) &&
+                (
+                    c.name.toLowerCase().includes(lowerQuery) ||
+                    c.code.toLowerCase().includes(lowerQuery) ||
+                    (c.barcode && c.barcode.toLowerCase().includes(lowerQuery)) ||
+                    (c.category && c.category.toLowerCase().includes(lowerQuery))
+                );
+
+            if (!matchSearchAndCategory) return false;
+
+            if (kpiFilter === 'active' && !c.isActive) return false;
+
+            if (kpiFilter === 'lowStock') {
+                const isLowStock = c.isActive && c.currentStock <= c.minStockLevel && c.minStockLevel > 0;
+                if (!isLowStock) return false;
+            }
+
+            if (kpiFilter === 'zeroStock') {
+                const isZeroStock = c.isActive && c.currentStock <= 0;
+                if (!isZeroStock) return false;
+            }
+
+            return true;
+        });
+
+        if (sortConfig !== null) {
+            filtered = [...filtered].sort((a, b) => {
+                let aValue: any = '';
+                let bValue: any = '';
+
+                switch (sortConfig.key) {
+                    case 'code':
+                        aValue = a.code;
+                        bValue = b.code;
+                        break;
+                    case 'group':
+                        aValue = a.stockGroupRelation?.name || a.category || '';
+                        bValue = b.stockGroupRelation?.name || b.category || '';
+                        break;
+                    case 'name':
+                        aValue = a.name;
+                        bValue = b.name;
+                        break;
+                    case 'unit':
+                        aValue = a.baseUnit;
+                        bValue = b.baseUnit;
+                        break;
+                    case 'stock':
+                        aValue = a.currentStock;
+                        bValue = b.currentStock;
+                        break;
+                    case 'cost':
+                        aValue = a.costPerBaseUnit;
+                        bValue = b.costPerBaseUnit;
+                        break;
+                }
+
+                if (typeof aValue === 'string' && typeof bValue === 'string') {
+                    return sortConfig.direction === 'asc'
+                        ? aValue.localeCompare(bValue, 'tr')
+                        : bValue.localeCompare(aValue, 'tr');
+                }
+
+                if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+
         setFilteredCards(filtered);
-    }, [searchQuery, selectedCategory, stockCards]);
+    }, [searchQuery, selectedCategory, stockCards, sortConfig, kpiFilter]);
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -290,7 +364,7 @@ export function PageClient() {
                 warehouseId: null,
                 stockNature: 'traded_good',
                 primaryVendor: '',
-                purchaseVat: 0,
+                purchaseVat: 20,
                 lastPurchasePrice: 0,
                 averageCost: 0,
                 sku: '',
@@ -357,6 +431,18 @@ export function PageClient() {
                             </select>
                             <i className="fat fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
                         </div>
+                        <button
+                            onClick={() => router.push(`/${locale}/inventory/count`)}
+                            className="px-6 py-3 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-blue-600 dark:text-blue-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95"
+                        >
+                            <i className="fat fa-list-check text-lg"></i> Sayım Ekranı
+                        </button>
+                        <button
+                            onClick={() => router.push(`/${locale}/inventory/movements`)}
+                            className="px-6 py-3 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 text-orange-600 dark:text-orange-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-orange-100 dark:hover:bg-orange-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95"
+                        >
+                            <i className="fat fa-exchange text-lg"></i> Stok Hareketleri
+                        </button>
                         <button onClick={() => setIsGroupModalOpen(true)} className="px-6 py-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-600 dark:text-amber-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
                             <i className="fat fa-folder-tree text-lg"></i>Gruplar
                         </button>
@@ -371,42 +457,42 @@ export function PageClient() {
 
                 {/* KPI Bar */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-4">
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[42px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-slate-300 dark:hover:border-slate-500/40">
+                    <button onClick={() => setKpiFilter('all')} className={`text-left bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[42px] border flex items-center justify-between transition-all outline-none ${kpiFilter === 'all' ? 'border-slate-400 dark:border-slate-500 shadow-md transform scale-[1.02]' : 'border-white dark:border-slate-700/50 hover:border-slate-300 dark:hover:border-slate-600 opacity-70 hover:opacity-100'}`}>
                         <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Toplam Kart</p>
-                            <h3 className="text-3xl font-black text-slate-800 dark:text-white">{totalCards}</h3>
+                            <p className={`text-[10px] font-black uppercase tracking-widest mb-1 transition-colors ${kpiFilter === 'all' ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400'}`}>Toplam Kart</p>
+                            <h3 className={`text-3xl font-black transition-colors ${kpiFilter === 'all' ? 'text-slate-800 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}>{totalCards}</h3>
                         </div>
-                        <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500">
+                        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-colors ${kpiFilter === 'all' ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
                             <i className="fat fa-boxes-stacked text-3xl"></i>
                         </div>
-                    </div>
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[42px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-teal-300 dark:hover:border-teal-500/40">
+                    </button>
+                    <button onClick={() => setKpiFilter(prev => prev === 'active' ? 'all' : 'active')} className={`text-left bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[42px] border flex items-center justify-between transition-all outline-none ${kpiFilter === 'active' ? 'border-teal-400 dark:border-teal-500 shadow-md shadow-teal-500/10 transform scale-[1.02]' : 'border-white dark:border-slate-700/50 hover:border-teal-300 dark:hover:border-teal-500/50 opacity-70 hover:opacity-100'}`}>
                         <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center mb-1">Aktif Kartlar</p>
-                            <h3 className="text-3xl font-black text-slate-800 dark:text-white">{activeCards}</h3>
+                            <p className={`text-[10px] font-black uppercase tracking-widest mb-1 transition-colors ${kpiFilter === 'active' ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400'}`}>Aktif Kartlar</p>
+                            <h3 className={`text-3xl font-black transition-colors ${kpiFilter === 'active' ? 'text-teal-600 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>{activeCards}</h3>
                         </div>
-                        <div className="w-16 h-16 rounded-2xl bg-teal-50 dark:bg-teal-500/10 flex items-center justify-center text-teal-600 dark:text-teal-400">
+                        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-colors ${kpiFilter === 'active' ? 'bg-teal-100 dark:bg-teal-500/20 text-teal-600 dark:text-teal-400' : 'bg-teal-50/50 dark:bg-teal-900/10 text-teal-500/60 dark:text-teal-500/50'}`}>
                             <i className="fat fa-check-circle text-3xl"></i>
                         </div>
-                    </div>
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[42px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-amber-300 dark:hover:border-amber-500/40">
+                    </button>
+                    <button onClick={() => setKpiFilter(prev => prev === 'lowStock' ? 'all' : 'lowStock')} className={`text-left bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[42px] border flex items-center justify-between transition-all outline-none ${kpiFilter === 'lowStock' ? 'border-amber-400 dark:border-amber-500 shadow-md shadow-amber-500/10 transform scale-[1.02]' : 'border-white dark:border-slate-700/50 hover:border-amber-300 dark:hover:border-amber-500/50 opacity-70 hover:opacity-100'}`}>
                         <div>
-                            <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">Kritik Stok</p>
-                            <h3 className="text-3xl font-black text-slate-800 dark:text-white">{lowStockCards}</h3>
+                            <p className={`text-[10px] font-black uppercase tracking-widest mb-1 transition-colors ${kpiFilter === 'lowStock' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'}`}>Kritik Stok</p>
+                            <h3 className={`text-3xl font-black transition-colors ${kpiFilter === 'lowStock' ? 'text-amber-500 dark:text-amber-400' : 'text-slate-600 dark:text-slate-400'}`}>{lowStockCards}</h3>
                         </div>
-                        <div className="w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center text-amber-500">
+                        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-colors ${kpiFilter === 'lowStock' ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-500 dark:text-amber-400' : 'bg-amber-50/50 dark:bg-amber-900/10 text-amber-500/60 dark:text-amber-500/50'}`}>
                             <i className="fat fa-triangle-exclamation text-3xl"></i>
                         </div>
-                    </div>
-                    <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[42px] border border-white dark:border-slate-700 flex items-center justify-between transition-all hover:border-red-300 dark:hover:border-red-500/40">
+                    </button>
+                    <button onClick={() => setKpiFilter(prev => prev === 'zeroStock' ? 'all' : 'zeroStock')} className={`text-left bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl p-6 rounded-[42px] border flex items-center justify-between transition-all outline-none ${kpiFilter === 'zeroStock' ? 'border-rose-400 dark:border-rose-500 shadow-md shadow-rose-500/10 transform scale-[1.02]' : 'border-white dark:border-slate-700/50 hover:border-rose-300 dark:hover:border-rose-500/50 opacity-70 hover:opacity-100'}`}>
                         <div>
-                            <p className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-1">Tükenen</p>
-                            <h3 className="text-3xl font-black text-slate-800 dark:text-white">{zeroStockCards}</h3>
+                            <p className={`text-[10px] font-black uppercase tracking-widest mb-1 transition-colors ${kpiFilter === 'zeroStock' ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`}>Tükenen</p>
+                            <h3 className={`text-3xl font-black transition-colors ${kpiFilter === 'zeroStock' ? 'text-rose-500 dark:text-rose-400' : 'text-slate-600 dark:text-slate-400'}`}>{zeroStockCards}</h3>
                         </div>
-                        <div className="w-16 h-16 rounded-2xl bg-red-50 dark:bg-red-500/10 flex items-center justify-center text-red-500">
-                            <i className="fat fa-ban text-3xl"></i>
+                        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-colors ${kpiFilter === 'zeroStock' ? 'bg-rose-100 dark:bg-rose-500/20 text-rose-500 dark:text-rose-400' : 'bg-rose-50/50 dark:bg-rose-900/10 text-rose-500/60 dark:text-rose-500/50'}`}>
+                            <i className="fat fa-boxes-packing text-3xl"></i>
                         </div>
-                    </div>
+                    </button>
                 </div>
 
                 {loading ? (
@@ -420,13 +506,33 @@ export function PageClient() {
                             <table className="w-full text-left border-collapse">
                                 <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-700/50 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.1)]">
                                     <tr>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center rounded-tl-[40px]">KOD / BARKOD</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">STOK GRUPLARI</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">STOK ADI</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">BİRİMLER (TEMEL / ALIŞ)</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">GÜNCEL STOK</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">BİRİM MALİYET</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right rounded-tr-[40px]">İŞLEMLER</th>
+                                        <th onClick={() => handleSort('code')} className="cursor-pointer group px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center rounded-tl-[40px] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0">
+                                            KOD / BARKOD
+                                            <i className={`fat ${sortConfig?.key === 'code' ? (sortConfig.direction === 'asc' ? 'fa-sort-up text-teal-500' : 'fa-sort-down text-teal-500') : 'fa-sort opacity-0 group-hover:opacity-40'} ml-2 transition-all`}></i>
+                                        </th>
+                                        <th onClick={() => handleSort('group')} className="cursor-pointer group px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                                            STOK GRUPLARI
+                                            <i className={`fat ${sortConfig?.key === 'group' ? (sortConfig.direction === 'asc' ? 'fa-sort-up text-teal-500' : 'fa-sort-down text-teal-500') : 'fa-sort opacity-0 group-hover:opacity-40'} ml-2 transition-all`}></i>
+                                        </th>
+                                        <th onClick={() => handleSort('name')} className="cursor-pointer group px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                                            STOK ADI
+                                            <i className={`fat ${sortConfig?.key === 'name' ? (sortConfig.direction === 'asc' ? 'fa-sort-up text-teal-500' : 'fa-sort-down text-teal-500') : 'fa-sort opacity-0 group-hover:opacity-40'} ml-2 transition-all`}></i>
+                                        </th>
+                                        <th onClick={() => handleSort('unit')} className="cursor-pointer group px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors outline-none selection:bg-transparent">
+                                            BİRİMLER (TEMEL / ALIŞ)
+                                            <i className={`fat ${sortConfig?.key === 'unit' ? (sortConfig.direction === 'asc' ? 'fa-sort-up text-teal-500' : 'fa-sort-down text-teal-500') : 'fa-sort opacity-0 group-hover:opacity-40'} ml-2 transition-all`}></i>
+                                        </th>
+                                        <th onClick={() => handleSort('stock')} className="cursor-pointer group px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors outline-none selection:bg-transparent">
+                                            GÜNCEL STOK
+                                            <i className={`fat ${sortConfig?.key === 'stock' ? (sortConfig.direction === 'asc' ? 'fa-sort-up text-teal-500' : 'fa-sort-down text-teal-500') : 'fa-sort opacity-0 group-hover:opacity-40'} ml-2 transition-all`}></i>
+                                        </th>
+                                        <th onClick={() => handleSort('cost')} className="cursor-pointer group px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors outline-none selection:bg-transparent">
+                                            BİRİM MALİYET
+                                            <i className={`fat ${sortConfig?.key === 'cost' ? (sortConfig.direction === 'asc' ? 'fa-sort-up text-teal-500' : 'fa-sort-down text-teal-500') : 'fa-sort opacity-0 group-hover:opacity-40'} ml-2 transition-all`}></i>
+                                        </th>
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right rounded-tr-[40px] pointer-events-none">
+                                            İŞLEMLER
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
@@ -540,7 +646,7 @@ export function PageClient() {
             {/* Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xl animate-in fade-in zoom-in duration-300">
-                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-4xl shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col h-[750px] max-h-[90vh]">
+                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-4xl shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col h-[830px] max-h-[90vh]">
                         {/* Modal Header */}
                         <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20 shrink-0 h-[100px]">
                             <div>
@@ -548,7 +654,7 @@ export function PageClient() {
                                     <i className={`fat ${formData.id === 0 ? 'fa-plus-circle' : 'fa-pen-to-square'} text-teal-600`}></i>
                                     {formData.id === 0 ? 'YENİ STOK KARTI' : 'STOK KARTINI DÜZENLE'}
                                 </h2>
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-0">Envanter tanımlama detayları</p>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-0">Stok kartı tanımlama detayları</p>
                             </div>
                             <button onClick={() => setIsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white shadow-sm transition-all">&times;</button>
                         </div>
@@ -575,7 +681,7 @@ export function PageClient() {
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Stok Adı</label>
                                                 <div className="relative">
                                                     <i className="fat fa-box absolute left-4 top-4 text-teal-500/50"></i>
-                                                    <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: Bacardi 70cl" />
+                                                    <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: Su 0.5 lt" />
                                                 </div>
                                             </div>
                                             <div>
@@ -638,20 +744,38 @@ export function PageClient() {
                                         </div>
 
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">KDV Oranı (%)</label>
+                                                <div className="relative">
+                                                    <select
+                                                        value={formData.purchaseVat !== undefined ? formData.purchaseVat : 0}
+                                                        onChange={(e) => setFormData({ ...formData, purchaseVat: parseFloat(e.target.value) || 0 })}
+                                                        className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold appearance-none cursor-pointer focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow"
+                                                    >
+                                                        {availableTaxRates.map(rate => (
+                                                            <option key={rate} value={rate}>% {rate}</option>
+                                                        ))}
+                                                    </select>
+                                                    <i className="fat fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                                                </div>
+                                            </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Alt Grup</label>
-                                                <input type="text" value={formData.stockSubgroup || ''} onChange={(e) => setFormData({ ...formData, stockSubgroup: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: Single Malt" />
+                                                <input type="text" value={formData.stockSubgroup || ''} onChange={(e) => setFormData({ ...formData, stockSubgroup: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="..." />
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Marka</label>
-                                                <input type="text" value={formData.brand || ''} onChange={(e) => setFormData({ ...formData, brand: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: Glenfiddich" />
+                                                <input type="text" value={formData.brand || ''} onChange={(e) => setFormData({ ...formData, brand: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="..." />
                                             </div>
                                         </div>
 
                                         <div className="flex items-center gap-4 p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl">
                                             <input type="checkbox" checked={formData.isActive} onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })} className="w-5 h-5 accent-emerald-500" id="activeCheck" />
                                             <label htmlFor="activeCheck" className="text-xs font-black text-emerald-600 uppercase tracking-widest cursor-pointer">Stok Kartı Aktif / Kullanımda</label>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Kısa Not / Açıklama</label>
+                                            <textarea value={formData.note || ''} onChange={(e) => setFormData({ ...formData, note: e.target.value })} rows={3} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold resize-none"></textarea>
                                         </div>
                                     </div>
                                 )}
@@ -719,10 +843,7 @@ export function PageClient() {
                                 {activeTab === 'extra' && (
                                     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                            <div>
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">KDV Oranı (%)</label>
-                                                <input type="number" value={formData.purchaseVat} onChange={(e) => setFormData({ ...formData, purchaseVat: parseFloat(e.target.value) || 0 })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold" />
-                                            </div>
+
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Son Alış Fiyatı (Net)</label>
                                                 <input type="number" step="0.0001" value={formData.lastPurchasePrice} onChange={(e) => setFormData({ ...formData, lastPurchasePrice: parseFloat(e.target.value) || 0 })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold" />
@@ -747,10 +868,7 @@ export function PageClient() {
                                             </div>
                                         </div>
 
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Kısa Not / Açıklama</label>
-                                            <textarea value={formData.note || ''} onChange={(e) => setFormData({ ...formData, note: e.target.value })} rows={3} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold resize-none"></textarea>
-                                        </div>
+
                                     </div>
                                 )}
                             </form>

@@ -39,7 +39,8 @@ const defaultModules: Module[] = [
         params: [
             { key: 'default_payment_method', label: 'Varsayılan Ödeme Yöntemi', type: 'select', value: 'KASA', options: ['KASA', 'KREDI_KARTI', 'HAVALE'] },
             { key: 'service_fee_rate', label: 'Servis Ücreti (%)', description: 'Toplam tutara eklenen servis bedeli', type: 'number', value: 10, unit: '%' },
-            { key: 'tax_rate', label: 'KDV Oranı (%)', type: 'number', value: 8, unit: '%' },
+            { key: 'tax_rate', label: 'Varsayılan KDV Oranı (%)', type: 'number', value: 8, unit: '%' },
+            { key: 'available_tax_rates', label: 'Geçerli KDV Oranları', description: 'Virgülle ayırarak giriniz (Örn: 0,1,10,20)', type: 'text', value: '0,1,10,20' },
             { key: 'allow_discount', label: 'İndirime İzin Ver', type: 'boolean', value: true },
             { key: 'max_discount_rate', label: 'Maksimum İndirim (%)', type: 'number', value: 20, unit: '%' },
             { key: 'receipt_footer', label: 'Fiş Alt Yazısı', type: 'text', value: 'Teşekkür ederiz! Tekrar bekleriz.' },
@@ -326,16 +327,16 @@ export function PageClient() {
     };
 
     // ─── Arama Filtreleme Mantığı ──────────────────────────────
-    const filteredResults = searchQuery.trim() !== '' 
-        ? modules.flatMap(mod => 
+    const filteredResults = searchQuery.trim() !== ''
+        ? modules.flatMap(mod =>
             mod.params
-                .filter(p => 
+                .filter(p =>
                     p.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
                     p.key.toLowerCase().includes(searchQuery.toLowerCase()) ||
                     (p.description?.toLowerCase().includes(searchQuery.toLowerCase()))
                 )
                 .map(p => ({ ...p, moduleTitle: mod.title, moduleIcon: mod.icon, moduleColor: mod.color, moduleId: mod.id }))
-          )
+        )
         : [];
 
     return (
@@ -412,15 +413,15 @@ export function PageClient() {
                             <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400">Arama</p>
                             <div className="relative group">
                                 <i className={`fat fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs transition-colors duration-200 ${searchQuery ? 'text-indigo-500' : 'text-slate-400'}`}></i>
-                                <input 
-                                    type="text" 
+                                <input
+                                    type="text"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     placeholder="Parametre ara..."
                                     className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all placeholder:text-slate-400 dark:text-white"
                                 />
                                 {searchQuery && (
-                                    <button 
+                                    <button
                                         onClick={() => setSearchQuery('')}
                                         className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
                                     >
@@ -567,7 +568,7 @@ export function PageClient() {
                                         </div>
                                         <h3 className="text-lg font-bold text-slate-700 dark:text-white">Sonuç Bulunamadı</h3>
                                         <p className="text-sm text-slate-400 mt-2 max-w-xs">Aradığınız kriterlere uygun herhangi bir parametre mevcut değil. Lütfen başka bir anahtar kelime deneyin.</p>
-                                        <button 
+                                        <button
                                             onClick={() => setSearchQuery('')}
                                             className="mt-6 text-indigo-500 font-bold text-sm hover:underline"
                                         >
