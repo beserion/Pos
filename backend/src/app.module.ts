@@ -95,6 +95,8 @@ import { ProductTransaction } from './products/product-transaction.entity';
 import { StockGroup } from './stock-groups/stock-group.entity';
 import { StockGroupsModule } from './stock-groups/stock-groups.module';
 import { ProductVariation } from './products/product-variation.entity';
+import { Firm } from './firms/firm.entity';
+import { FirmsModule } from './firms/firms.module';
 
 import { ScheduleModule } from '@nestjs/schedule';
 
@@ -173,6 +175,7 @@ import { ScheduleModule } from '@nestjs/schedule';
             ProductTransaction,
             StockGroup,
             ProductVariation,
+            Firm,
           ],
           synchronize: true, // Auto-sync enabled by user permission
           logging: true,
@@ -236,6 +239,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     StockMovementsModule,
     InventoryModule,
     StockGroupsModule,
+    FirmsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { useAuth } from '../AuthContext';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import { useLocale } from 'next-intl';
 import { toastSwal, showSwal } from '../utils/swal';
 import { io } from 'socket.io-client';
@@ -33,7 +34,7 @@ interface OrderTicket {
 }
 
 export function PageClient() {
-    const { user, loading } = useAuth();
+    const { user, loading, hasFeature } = useAuth();
     const router = useRouter();
     const locale = useLocale();
     const { theme, toggleTheme, setTheme } = useThemeTransition();
@@ -74,8 +75,10 @@ export function PageClient() {
     };
 
     useEffect(() => {
-        fetchKitchenOrders();
-    }, [activeFilter]);
+        if (user && hasFeature('kds_system')) {
+            fetchKitchenOrders();
+        }
+    }, [activeFilter, hasFeature, user]);
 
     // ─── Bitenler sekmesinden otomatik aktif sekmeye dönme (Hareketsizlik zamanlayıcısı) ───
     useEffect(() => {
@@ -154,13 +157,13 @@ export function PageClient() {
 
     // ─── Otomatik Veri Çekme ve Yenileme ────────────────────────────
     useEffect(() => {
-        if (user) {
+        if (user && hasFeature('kds_system')) {
             fetchKitchenOrders();
             const intervalMs = (params.auto_refresh_interval || 10) * 1000;
             const interval = setInterval(fetchKitchenOrders, intervalMs);
             return () => clearInterval(interval);
         }
-    }, [user, activeFilter, params.auto_refresh_interval]);
+    }, [user, activeFilter, params.auto_refresh_interval, hasFeature]);
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 30000);
@@ -234,6 +237,14 @@ export function PageClient() {
         if (diffInMinutes < 1) return 'Şimdi';
         return `${diffInMinutes} dk önce`;
     };
+
+    if (user && !hasFeature('kds_system')) {
+        return (
+            <div className="h-screen bg-slate-50 dark:bg-slate-900 flex flex-col">
+                <PremiumModuleLocked moduleName="Mutfak Ekranı (KDS)" featureKey="kds_system" />
+            </div>
+        );
+    }
 
     // ── Görsel KDS devre dışıysa yazıcı bilgisi ekranı göster ──────────
     if (!paramsLoading && params.kitchen_display_enabled === false) {

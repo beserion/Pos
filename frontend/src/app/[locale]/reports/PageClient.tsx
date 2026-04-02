@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../AuthContext';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import { useTheme } from 'next-themes';
 import { useLocale } from 'next-intl';
 import axios from 'axios';
@@ -72,12 +73,14 @@ const REPORTS = [
 ];
 
 export function PageClient() {
-  const { user, loading } = useAuth();
+  const { user, loading, hasFeature } = useAuth();
   const router = useRouter();
   const locale = useLocale();
   const { theme } = useTheme();
   const [isMounted, setIsMounted] = useState(false);
   const [dashboardData, setDashboardData] = useState<any>(null);
+  
+
   const [dataLoading, setDataLoading] = useState(true);
   const [activeView, setActiveView] = useState<'hub' | string>('hub');
 
@@ -96,8 +99,8 @@ export function PageClient() {
   useEffect(() => {
     setIsMounted(true);
     if (!loading && !user) router.push(`/${locale}/login`);
-    else if (user) fetchDashboardData();
-  }, [user, loading, router]);
+    else if (user && hasFeature('finance_system')) fetchDashboardData();
+  }, [user, loading, router, hasFeature]);
 
   if (!isMounted || loading) return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
@@ -131,6 +134,14 @@ export function PageClient() {
     labels: dashboardData?.topProductsData?.labels || [],
     datasets: [{ label: 'Satış Adedi', data: dashboardData?.topProductsData?.data || [], backgroundColor: ['rgba(99,102,241,0.7)', 'rgba(16,185,129,0.7)', 'rgba(245,158,11,0.7)', 'rgba(244,63,94,0.7)', 'rgba(14,165,233,0.7)', 'rgba(139,92,246,0.7)', 'rgba(249,115,22,0.7)', 'rgba(20,184,166,0.7)', 'rgba(236,72,153,0.7)', 'rgba(100,116,139,0.7)'], borderRadius: 12, borderWidth: 0 }],
   };
+
+  if (user && !hasFeature('finance_system')) {
+    return (
+      <div className="h-screen bg-[#f8fafc] dark:bg-[#0f172a] flex flex-col">
+          <PremiumModuleLocked moduleName="Raporlar & Analiz Sistemi" featureKey="finance_system" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f8fafc] dark:bg-[#0f172a] font-sans transition-colors duration-300">

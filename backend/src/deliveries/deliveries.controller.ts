@@ -11,9 +11,12 @@ import {
 import { DeliveriesService } from './deliveries.service';
 import { Delivery } from './delivery.entity';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RequireFeature } from '../auth/feature.decorator';
+import { FeatureGuard } from '../auth/feature.guard';
 
 @Controller('deliveries')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, FeatureGuard)
+@RequireFeature('delivery_system')
 export class DeliveriesController {
   constructor(private readonly deliveriesService: DeliveriesService) {}
 

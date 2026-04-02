@@ -6,6 +6,7 @@ import axios from 'axios';
 import Cookies from 'js-cookie';
 import { useLocale, useTranslations } from 'next-intl';
 import { showSwal, toastSwal } from '../../utils/swal';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 
 interface Product {
     id: number;
@@ -54,8 +55,9 @@ interface LowStockItem {
 }
 
 export function PageClient() {
-    const { user, loading, hasPermission } = useAuth();
+    const { user, loading, hasPermission, hasFeature } = useAuth();
     const router = useRouter();
+    
     const locale = useLocale();
     const t = useTranslations('Admin');
     const API_URL = (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
@@ -157,10 +159,20 @@ export function PageClient() {
             router.push(`/${locale}/login`);
         } else if (!loading && user && !hasPermission('ORDERS:VIEW')) {
             router.push(`/${locale}/dashboard`);
-        } else if (user) {
+        } else if (user && hasFeature('finance_system')) {
             fetchData(1);
         }
-    }, [user, loading, router, fetchData, locale, hasPermission]);
+    }, [user, loading, router, fetchData, locale, hasPermission, hasFeature]);
+
+    if (loading || !user) return null;
+
+    if (user && !hasFeature('finance_system')) {
+        return (
+            <div className="h-screen bg-slate-50 dark:bg-slate-900 flex flex-col pt-20">
+                <PremiumModuleLocked moduleName="Satın Alma & Sipariş Yönetimi" featureKey="finance_system" />
+            </div>
+        );
+    }
 
     const handleOpenUpsert = (order: PurchaseOrder | null = null) => {
         if (order) {

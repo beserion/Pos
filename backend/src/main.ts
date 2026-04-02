@@ -64,6 +64,8 @@ async function bootstrap() {
         'https://apitest.posnetx.com',
         'https://test.posnetx.com',
         'https://localhost:5173',
+        'wss://test.posnetx.com',
+        'wss://apitest.posnetx.com',
       ];
       if (allowedOrigins.indexOf(origin) !== -1) {
         callback(null, true);

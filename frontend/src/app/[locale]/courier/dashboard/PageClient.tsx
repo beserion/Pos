@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 
 interface Delivery {
@@ -14,7 +15,7 @@ interface Delivery {
 }
 
 export function PageClient() {
-    const { user } = useAuth();
+    const { user, hasFeature } = useAuth();
     const [deliveries, setDeliveries] = useState<Delivery[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -79,6 +80,14 @@ export function PageClient() {
             showSwal({ title: 'Hata', text: 'Durum güncellenemedi.', icon: 'error' });
         }
     };
+
+    if (user && !hasFeature('delivery_system')) {
+        return (
+            <div className="h-screen bg-slate-900 flex flex-col items-center justify-center">
+                <PremiumModuleLocked moduleName="Kurye Takip Sistemi" featureKey="delivery_system" />
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-slate-900 font-sans text-white p-4">

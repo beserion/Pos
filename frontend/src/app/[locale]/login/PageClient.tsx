@@ -30,18 +30,21 @@ export function PageClient() {
 
     const { setUser } = useAuth();
     const router = useRouter();
-    const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')));
+
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
 
     // ─── Giriş ───────────────────────────────────────────────────────
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
         setError('');
+        console.log(`[Login] Attempting login to: ${API_URL}/auth/login`);
         try {
             const res = await axios.post(`${API_URL}/auth/login`, {
                 identifier: identifier.trim(),
                 password,
             });
+            console.log(`[Login] Success:`, res.data);
             const { access_token, user } = res.data;
             const roleName: string = user?.role?.name?.toUpperCase() || '';
 
@@ -59,8 +62,8 @@ export function PageClient() {
                 router.push(`/${locale}/dashboard`);
             }
         } catch (err: any) {
-            console.error('Login error:', err);
-            setError('Giriş başarısız. Lütfen bilgilerinizi kontrol edin.');
+            console.error('Login error details:', err.response?.data || err.message || err);
+            setError(`Giriş başarısız: ${err.response?.data?.message || err.message}`);
             setIsLoading(false);
         }
     };

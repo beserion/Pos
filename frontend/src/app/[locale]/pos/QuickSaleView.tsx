@@ -26,7 +26,15 @@ interface Product {
     isQuickSale: boolean;
     sku: string;
     barcode?: string;
+    productTypeId?: number;
+    stockGroup?: string;
+    stockGroupId?: number;
     isSet?: boolean;
+    linkedStockCard?: {
+        id: number;
+        stockGroup: string;
+        category: string;
+    };
     setMenu?: {
         setType: string;
         bundleEntitlementLimit?: number;
@@ -202,25 +210,25 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
             ? products 
             : products.filter(p => (p as any).productTypeId === selectedProductTypeId);
         
-        const groups = Array.from(new Set(filteredByCins.map(p => (p as any).stockCard?.stockGroup || 'Diğer').filter(Boolean)));
+        const groups = Array.from(new Set(filteredByCins.map(p => p.stockGroup || p.linkedStockCard?.stockGroup || 'Diğer').filter(Boolean)));
         return ['Tümü', ...groups.sort()];
     }, [products, selectedProductTypeId]);
 
     const availableCategories = useMemo(() => {
         const filteredByGroup = products.filter(p => {
             const matchesCins = selectedProductTypeId === 'all' || (p as any).productTypeId === selectedProductTypeId;
-            const matchesGroup = selectedGroupName === 'Tümü' || ((p as any).stockCard?.stockGroup || 'Diğer') === selectedGroupName;
+            const matchesGroup = selectedGroupName === 'Tümü' || (p.stockGroup || p.linkedStockCard?.stockGroup || 'Diğer') === selectedGroupName;
             return matchesCins && matchesGroup;
         });
-        const cats = Array.from(new Set(filteredByGroup.map(p => (p as any).stockCard?.category || p.category || 'Diğer').filter(Boolean)));
+        const cats = Array.from(new Set(filteredByGroup.map(p => p.category || p.linkedStockCard?.category || 'Genel').filter(Boolean)));
         return ['Tümü', ...cats.sort()];
     }, [products, selectedProductTypeId, selectedGroupName]);
 
     const filteredProducts = useMemo(() => {
         return products.filter(p => {
             const matchesCins = selectedProductTypeId === 'all' || (p as any).productTypeId === selectedProductTypeId;
-            const matchesGroup = selectedGroupName === 'Tümü' || ((p as any).stockCard?.stockGroup || 'Diğer') === selectedGroupName;
-            const matchesCategory = selectedCategoryName === 'Tümü' || ((p as any).stockCard?.category || p.category || 'Diğer') === selectedCategoryName;
+            const matchesGroup = selectedGroupName === 'Tümü' || (p.stockGroup || p.linkedStockCard?.stockGroup || 'Diğer') === selectedGroupName;
+            const matchesCategory = selectedCategoryName === 'Tümü' || (p.category || p.linkedStockCard?.category || 'Genel') === selectedCategoryName;
             const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.sku?.includes(searchQuery);
             return matchesCins && matchesGroup && matchesCategory && matchesSearch;
         });

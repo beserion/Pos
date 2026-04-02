@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import { useParameters } from '@/app/[locale]/utils/useParameters';
 
 interface StockCard {
@@ -58,7 +59,7 @@ export function PageClient() {
     const tc = useTranslations('Common');
     const locale = useLocale();
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, hasFeature } = useAuth();
     const { params } = useParameters();
     const availableTaxRates = params.available_tax_rates ? params.available_tax_rates.split(',').map(r => r.trim()).filter(r => r) : ['20', '0', '1', '10'];
 
@@ -518,6 +519,14 @@ export function PageClient() {
         { value: 'kg', label: 'Kilogram (kg)' },
         { value: 'porsiyon', label: 'Porsiyon' }
     ];
+
+    if (user && !hasFeature('inventory_system')) {
+        return (
+            <div className="h-screen bg-slate-50 dark:bg-slate-900 flex flex-col">
+                <PremiumModuleLocked moduleName="Envanter Yönetim Sistemi" featureKey="inventory_system" />
+            </div>
+        );
+    }
 
     return (
         <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">

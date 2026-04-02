@@ -100,6 +100,9 @@ interface Product {
     modifiers?: Modifier[];
     isSet?: boolean;
     productTypeId?: number;
+    stockGroup?: string;
+    stockGroupId?: number;
+    sku?: string;
     linkedStockCard?: {
         stockGroup?: string;
         category?: string;
@@ -280,20 +283,20 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const availableGroups = ['Tümü', ...Array.from(new Set(
         products
             .filter(p => selectedProductTypeId === 'all' || p.productTypeId === selectedProductTypeId)
-            .map(p => p.linkedStockCard?.stockGroup || 'Diğer')
+            .map(p => p.stockGroup || p.linkedStockCard?.stockGroup || 'Diğer')
     ))];
 
     const availableCategories = ['Tümü', ...Array.from(new Set(
         products
             .filter(p => (selectedProductTypeId === 'all' || p.productTypeId === selectedProductTypeId) &&
-                (selectedGroupName === 'Tümü' || (p.linkedStockCard?.stockGroup || 'Diğer') === selectedGroupName))
-            .map(p => p.linkedStockCard?.category || 'Diğer')
+                (selectedGroupName === 'Tümü' || (p.stockGroup || p.linkedStockCard?.stockGroup || 'Diğer') === selectedGroupName))
+            .map(p => p.category || p.linkedStockCard?.category || 'Genel')
     ))];
 
     const filteredProducts = products.filter(p => {
         const matchesType = selectedProductTypeId === 'all' || p.productTypeId === selectedProductTypeId;
-        const matchesGroup = selectedGroupName === 'Tümü' || (p.linkedStockCard?.stockGroup || 'Diğer') === selectedGroupName;
-        const matchesCategory = selectedCategoryName === 'Tümü' || (p.linkedStockCard?.category || 'Diğer') === selectedCategoryName;
+        const matchesGroup = selectedGroupName === 'Tümü' || (p.stockGroup || p.linkedStockCard?.stockGroup || 'Diğer') === selectedGroupName;
+        const matchesCategory = selectedCategoryName === 'Tümü' || (p.category || p.linkedStockCard?.category || 'Genel') === selectedCategoryName;
         const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
         return matchesType && matchesGroup && matchesCategory && matchesSearch;
     });

@@ -11,12 +11,17 @@ import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { UsersService } from '../users/users.service';
 import { Public } from './public.decorator';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
+import { Firm } from '../firms/firm.entity';
+import { User } from '../users/user.entity';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private authService: AuthService,
     private usersService: UsersService,
+    @InjectDataSource() private dataSource: DataSource,
   ) { }
 
   @Get('me')
@@ -76,4 +81,33 @@ export class AuthController {
   async register(@Body() body: any) {
     return this.authService.register(body);
   }
+
+  @Public()
+  @Get('setup-test-license')
+  async setupTestLicense() {
+    let firmRepository = this.dataSource.getRepository(Firm);
+    let userRepository = this.dataSource.getRepository(User);
+
+    let firm = await firmRepository.findOne({ where: { name: 'Demo Lisans Firması' } });
+    if (!firm) {
+      firm = firmRepository.create({
+        name: 'Demo Lisans Firması',
+        isActive: true,
+        activeFeatures: ['waiter_app', 'delivery_system', 'kds'], 
+      });
+      await firmRepository.save(firm);
+    } else {
+      firm.activeFeatures = ['waiter_app', 'delivery_system', 'kds'];
+      await firmRepository.save(firm);
+    }
+
+    const users = await userRepository.find();
+    for (const u of users) {
+      u.firm = firm;
+      await userRepository.save(u);
+    }
+
+    return { success: true, message: `Demo firma oluşturuldu ve ${users.length} kullanıcıya atandı.` };
+  }
 }
+

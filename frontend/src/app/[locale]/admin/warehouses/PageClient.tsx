@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import WarehouseUpsert from './_WarehouseUpsert';
 
 interface Location {
@@ -27,7 +28,8 @@ export function PageClient() {
     const tAdmin = useTranslations('Admin');
     const tc = useTranslations('Common');
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, hasFeature } = useAuth();
+    
     const locale = useLocale();
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
     const [locations, setLocations] = useState<Location[]>([]);
@@ -37,10 +39,10 @@ export function PageClient() {
     const [formData, setFormData] = useState({ id: 0, name: '', address: '', latitude: 0, longitude: 0, locationId: 0, isActive: true });
 
     useEffect(() => {
-        if (user?.token) {
+        if (user?.token && hasFeature('inventory_system')) {
             fetchData();
         }
-    }, [user]);
+    }, [user, hasFeature]);
 
     const fetchData = async () => {
         if (!user?.token) return;
@@ -129,6 +131,14 @@ export function PageClient() {
         }
         setIsModalOpen(true);
     };
+
+    if (user && !hasFeature('inventory_system')) {
+        return (
+            <div className="h-screen bg-slate-50 dark:bg-slate-900 flex flex-col pt-20">
+                <PremiumModuleLocked moduleName="Depo Yönetim Sistemi" featureKey="inventory_system" />
+            </div>
+        );
+    }
 
     return (
         <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">

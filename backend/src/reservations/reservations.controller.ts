@@ -11,9 +11,12 @@ import {
 import { ReservationsService } from './reservations.service';
 import { Reservation } from './reservation.entity';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RequireFeature } from '../auth/feature.decorator';
+import { FeatureGuard } from '../auth/feature.guard';
 
 @Controller('reservations')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, FeatureGuard)
+@RequireFeature('reservation_system')
 export class ReservationsController {
   constructor(private readonly reservationsService: ReservationsService) {}
 

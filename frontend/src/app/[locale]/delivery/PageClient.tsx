@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../AuthContext';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import axios from 'axios';
 import { showSwal, toastSwal } from '../utils/swal';
 import { useLocale } from 'next-intl';
@@ -16,7 +17,7 @@ interface Employee {
 }
 
 export function PageClient() {
-    const { user, loading: authLoading } = useAuth();
+    const { user, loading: authLoading, hasFeature } = useAuth();
     const router = useRouter();
     const locale = useLocale();
 
@@ -74,10 +75,10 @@ export function PageClient() {
 
     useEffect(() => {
         if (!authLoading && !user) router.push(`/${locale}/login`);
-        if (user?.token) {
+        if (user?.token && hasFeature('delivery_system')) {
             fetchData();
         }
-    }, [user, authLoading, router]);
+    }, [user, authLoading, router, hasFeature]);
 
     // İstatistik (KPI) Verileri
     const stats = {
@@ -158,6 +159,14 @@ export function PageClient() {
     };
 
     if (authLoading || !user) return null;
+
+    if (user && !hasFeature('delivery_system')) {
+        return (
+            <div className="h-screen bg-slate-50 dark:bg-slate-900 flex flex-col">
+                <PremiumModuleLocked moduleName="Paket Servis Sistemi" featureKey="delivery_system" />
+            </div>
+        );
+    }
 
     const StatusBadge = ({ status }: { status: string }) => {
         switch (status) {

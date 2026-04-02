@@ -14,6 +14,7 @@ interface AuthContextType {
     loginPinOnly: (pin: string) => Promise<any>;
     logout: () => void;
     hasPermission: (permission: string) => boolean;
+    hasFeature: (feature: string) => boolean;
     loading: boolean;
     setUser: (user: any) => void;
     alertsBell: React.ReactNode;
@@ -39,14 +40,15 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
         />
     ) : null;
 
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+
     useEffect(() => {
         const fetchProfile = async () => {
             const token = Cookies.get('token') || localStorage.getItem('token');
             if (token) {
                 try {
                     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-                    const apiBase = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
-                    const res = await axios.get(`${apiBase}/auth/me`);
+                    const res = await axios.get(`${API_URL}/auth/me`);
                     setUser({ ...res.data, token });
                     if (!localStorage.getItem('token')) {
                         localStorage.setItem('token', token);
@@ -84,11 +86,16 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
         return allUserPerms.includes(permission) || allUserPerms.includes('ALL');
     };
 
+    const hasFeature = (feature: string) => {
+        if (!user || !user.firm) return true; // If no firm setup, allow all (or return true based on default behavior)
+        const activeFeatures: string[] = user.firm.activeFeatures || [];
+        return activeFeatures.includes(feature) || activeFeatures.includes('ALL');
+    };
+
     const login = async (email: string, pass: string) => {
         try {
-            const apiBase = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
-            console.log(`Attempting login to ${apiBase}/auth/login`);
-            const response = await axios.post(`${apiBase}/auth/login`, { email: email.trim(), password: pass });
+            console.log(`[AuthContext] Attempting login to: ${API_URL}/auth/login`);
+            const response = await axios.post(`${API_URL}/auth/login`, { email: email.trim(), password: pass });
             if (response.data.access_token) {
                 const token = response.data.access_token;
                 Cookies.set('token', token, { expires: 1 });
@@ -147,7 +154,7 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, loginPin, loginPinOnly, logout, hasPermission, loading, setUser, alertsBell }}>
+        <AuthContext.Provider value={{ user, login, loginPin, loginPinOnly, logout, hasPermission, hasFeature, loading, setUser, alertsBell }}>
             {children}
             <AlertCriticalPopup notification={criticalPopup} onDismiss={dismissPopup} />
         </AuthContext.Provider>
