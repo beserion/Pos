@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import dynamic from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
 
@@ -39,7 +40,15 @@ export function PageClient() {
     const tc = useTranslations('Common');
     const locale = useLocale();
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, hasFeature } = useAuth();
+
+    if (user && !hasFeature('delivery_system')) {
+        return (
+            <div className="h-screen bg-slate-50 dark:bg-slate-900 flex flex-col pt-20">
+                <PremiumModuleLocked moduleName="Teslimat & Kurye Sistemi" featureKey="delivery_system" />
+            </div>
+        );
+    }
     const [deliveries, setDeliveries] = useState<Delivery[]>([]);
     const [couriers, setCouriers] = useState<Employee[]>([]);
     const [loading, setLoading] = useState(true);

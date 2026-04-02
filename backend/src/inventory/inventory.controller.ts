@@ -11,9 +11,12 @@ import {
 } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RequireFeature } from '../auth/feature.decorator';
+import { FeatureGuard } from '../auth/feature.guard';
 
 @Controller('inventory-sessions')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, FeatureGuard)
+@RequireFeature('inventory_system')
 export class InventoryController {
   constructor(private readonly service: InventoryService) {}
 

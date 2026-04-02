@@ -17,12 +17,10 @@ export class FeatureGuard implements CanActivate {
     }
 
     const { user } = context.switchToHttp().getRequest();
-    // activeFeatures are embedded in the JWT token payload inside AuthService.login
-    if (!user || !user.activeFeatures) {
-      throw new ForbiddenException(`Access denied. License missing for feature: ${requiredFeature}`);
-    }
+    // Features are now freshly fetched from DB in JwtStrategy.validate
+    const activeFeatures = user?.firm?.activeFeatures || user?.activeFeatures || [];
 
-    if (!user.activeFeatures.includes(requiredFeature)) {
+    if (!activeFeatures.includes(requiredFeature)) {
       throw new ForbiddenException(`Access denied. Your license does not cover the feature: ${requiredFeature}`);
     }
 

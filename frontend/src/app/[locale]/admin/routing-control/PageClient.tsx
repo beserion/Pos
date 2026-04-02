@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal } from '@/app/[locale]/utils/swal';
 import { useLocale } from 'next-intl';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 
 interface RoutingEntry {
     productId: number;
@@ -27,14 +28,21 @@ const SOURCE_LABELS: Record<string, { label: string; color: string; icon: string
 export function PageClient() {
     const locale = useLocale();
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, hasFeature } = useAuth();
+    
     const [items, setItems] = useState<RoutingEntry[]>([]);
     const [filtered, setFiltered] = useState<RoutingEntry[]>([]);
     const [search, setSearch] = useState('');
     const [filterSource, setFilterSource] = useState('');
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => { if (user?.token) fetchData(); else if (user === null) setLoading(false); }, [user]);
+    useEffect(() => { 
+        if (user?.token && hasFeature('kds_system')) {
+            fetchData(); 
+        } else if (user === null) {
+            setLoading(false); 
+        }
+    }, [user, hasFeature]);
 
     const fetchData = async () => {
         if (!user?.token) return;
@@ -64,6 +72,14 @@ export function PageClient() {
         byCard: items.filter(i => i.effectiveSource === 'STOCK_CARD').length,
         unresolved: items.filter(i => i.effectiveSource === 'DEFAULT').length,
     };
+
+    if (user && !hasFeature('kds_system')) {
+        return (
+            <div className="h-screen bg-slate-50 dark:bg-slate-900 flex flex-col pt-20">
+                <PremiumModuleLocked moduleName="Akıllı Mutfak Yönlendirme Kontrolü" featureKey="kds_system" />
+            </div>
+        );
+    }
 
     return (
         <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">

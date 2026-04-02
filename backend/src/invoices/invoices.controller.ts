@@ -14,9 +14,12 @@ import { InvoicesService } from './invoices.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Public } from '../auth/public.decorator';
 import { Permissions } from '../auth/permissions.decorator';
+import { RequireFeature } from '../auth/feature.decorator';
+import { FeatureGuard } from '../auth/feature.guard';
 
 @Controller('invoices')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, FeatureGuard)
+@RequireFeature('finance_system')
 export class InvoicesController {
   constructor(private readonly invoicesService: InvoicesService) {}
 

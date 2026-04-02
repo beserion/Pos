@@ -27,7 +27,7 @@ export function PageClient() {
         { key: 'LOCATIONS', title: tAdmin('locations'), subtitle: tAdmin('locationsDesc'), path: `/${locale}/admin/locations`, icon: 'fa-location-dot', color: 'text-blue-500' },
         { key: 'ZONES', title: tAdmin('zones'), subtitle: tAdmin('zonesDesc'), path: `/${locale}/admin/zones`, icon: 'fa-map-location-dot', color: 'text-indigo-500' },
         { key: 'TABLES', title: tAdmin('tables'), subtitle: tAdmin('tablesDesc'), path: `/${locale}/admin/tables`, icon: 'fa-chair-office', color: 'text-purple-500' },
-        { key: 'WAREHOUSES', title: tAdmin('warehouses'), subtitle: tAdmin('warehousesDesc'), path: `/${locale}/admin/warehouses`, icon: 'fa-warehouse-full', color: 'text-amber-500' },
+        { key: 'WAREHOUSES', title: tAdmin('warehouses'), subtitle: tAdmin('warehousesDesc'), path: `/${locale}/admin/warehouses`, icon: 'fa-warehouse-full', color: 'text-amber-500', featureKey: 'inventory_system' },
         { key: 'SALES', title: 'POS Kasa Yönetimi', subtitle: 'Kasa terminallerini ve yazıcılarını yönet', path: `/${locale}/admin/cash-registers`, icon: 'fa-cash-register', color: 'text-emerald-500' },
         { key: 'PRODUCTS', title: tAdmin('products'), subtitle: tAdmin('productsDesc'), path: `/${locale}/admin/products`, icon: 'fa-mug-hot', color: 'text-teal-500' },
         { key: 'PRODUCTS', title: tAdmin('setMenus'), subtitle: tAdmin('setMenusDesc'), path: `/${locale}/admin/products/set-menus`, icon: 'fa-layer-group', color: 'text-indigo-500' },
@@ -38,11 +38,12 @@ export function PageClient() {
         { key: 'PRINTERS', title: 'Yönlendirme Kontrolü', subtitle: 'Ürün bazlı yönlendirme kurallarını incele', path: `/${locale}/admin/routing-control`, icon: 'fa-clipboard-list-check', color: 'text-lime-500' },
         { key: 'PRINTERS', title: tAdmin('printers'), subtitle: tAdmin('printersDesc'), path: `/${locale}/admin/printers`, icon: 'fa-print', color: 'text-sky-500' },
         { key: 'SALES', title: tAdmin('salesManagement'), subtitle: tAdmin('salesManagementDesc'), path: `/${locale}/admin/sales`, icon: 'fa-basket-shopping', color: 'text-orange-500' },
-        { key: 'ORDERS', title: tAdmin('purchaseOrders'), subtitle: tAdmin('purchaseOrdersDesc'), path: `/${locale}/admin/orders`, icon: 'fa-cart-shopping', color: 'text-amber-500' },
+        { key: 'ORDERS', title: tAdmin('purchaseOrders'), subtitle: tAdmin('purchaseOrdersDesc'), path: `/${locale}/admin/orders`, icon: 'fa-cart-shopping', color: 'text-amber-500', featureKey: 'finance_system' },
         { key: 'COURIERS', title: tAdmin('couriers'), subtitle: tAdmin('couriersDesc'), path: `/${locale}/admin/couriers`, icon: 'fa-user-helmet-safety', color: 'text-orange-500', featureKey: 'delivery_system' },
         { key: 'DELIVERY', title: tAdmin('deliveries'), subtitle: tAdmin('deliveriesDesc'), path: `/${locale}/admin/deliveries`, icon: 'fa-truck-fast', color: 'text-indigo-500', featureKey: 'delivery_system' },
         { key: 'WAITER', title: tAdmin('tablet'), subtitle: tAdmin('tabletDesc'), path: `/${locale}/waiter`, icon: 'fa-tablet-screen-button', color: 'text-rose-500', featureKey: 'waiter_app' },
         { key: 'SYSTEM', title: 'Parametreler', subtitle: 'Modül bazlı sistem ayarları', path: `/${locale}/admin/parameters`, icon: 'fa-sliders', color: 'text-violet-500' },
+        { key: 'SYSTEM', title: 'Lisans Yönetimi', subtitle: 'Modül ve premium özellik yetkilerini yönet', path: `/${locale}/admin/license`, icon: 'fa-shield-keyhole', color: 'text-indigo-600' },
         { key: 'ALERTS', title: tDashboard('alerts'), subtitle: tDashboard('alertsDesc'), path: `/${locale}/admin/alerts`, icon: 'fa-bell-on', color: 'text-rose-500' },
     ];
 

@@ -1,9 +1,12 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { OrderRoutingService, RoutingControlEntry } from './order-routing.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RequireFeature } from '../auth/feature.decorator';
+import { FeatureGuard } from '../auth/feature.guard';
 
 @Controller('order-routing')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, FeatureGuard)
+@RequireFeature('kds_system')
 export class OrderRoutingController {
   constructor(private readonly service: OrderRoutingService) {}
 

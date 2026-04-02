@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
 import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 
 const API = (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
@@ -85,7 +86,7 @@ const VAT_RATES = [0, 1, 10, 20];
 export function PageClient() {
     const router = useRouter();
     const locale = useLocale();
-    const { user: currentUser } = useAuth();
+    const { user: currentUser, hasFeature } = useAuth();
 
     const getConfig = () => ({ headers: { Authorization: `Bearer ${currentUser?.token}` } });
 
@@ -393,6 +394,14 @@ export function PageClient() {
     const totalPages = Math.ceil(totalItems / itemsPerPage);
 
     // ─── RENDER ──────────────────────────────────────────────────────────────────
+    if (currentUser && !hasFeature('finance_system')) {
+        return (
+            <div className="h-screen bg-slate-50 dark:bg-slate-900 flex flex-col">
+                <PremiumModuleLocked moduleName="Finans / Fatura Yönetimi" featureKey="finance_system" />
+            </div>
+        );
+    }
+
     if (view === 'form') return (
         <div className="h-screen bg-slate-50 dark:bg-slate-900 font-sans transition-colors duration-300 flex flex-col overflow-hidden">
             <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-indigo-500/5 blur-[120px] pointer-events-none"></div>
