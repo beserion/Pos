@@ -19,6 +19,7 @@ import type { OutputProfile } from '../output-profiles/output-profile.entity';
 import { SetMenu } from './set-menu.entity';
 import { StockCard } from '../stock-cards/stock-card.entity';
 import { OneToOne } from 'typeorm';
+import type { ProductVariation } from './product-variation.entity';
 
 @Entity('products')
 export class Product {
@@ -51,6 +52,9 @@ export class Product {
 
   @Column({ default: true })
   isActive: boolean;
+
+  @Column({ default: 0 })
+  orderIndex: number;
 
   @Column({ default: false })
   openPriceEnabled: boolean;
@@ -147,6 +151,9 @@ export class Product {
 
   @OneToMany('Recipe', 'product')
   recipes: Recipe[];
+
+  @OneToMany('ProductVariation', 'product', { cascade: true })
+  variations: ProductVariation[];
 
   @ManyToMany('Modifier', { cascade: true })
   @JoinTable({

@@ -26,7 +26,8 @@ export class ProductsService {
 
     async findAll(): Promise<Product[]> {
         const products = await this.productRepository.find({
-            relations: ['recipes', 'printer', 'productType', 'outputProfile', 'setMenu', 'setMenu.groups', 'setMenu.groups.items', 'linkedStockCard', 'linkedStockCard.stockGroupRelation'],
+            relations: ['recipes', 'variations', 'printer', 'productType', 'outputProfile', 'setMenu', 'setMenu.groups', 'setMenu.groups.items', 'linkedStockCard', 'linkedStockCard.stockGroupRelation'],
+            order: { orderIndex: 'ASC', id: 'ASC' }
         });
 
         if (products.length > 0) {
@@ -55,8 +56,11 @@ export class ProductsService {
         // Exclude products where isIngredient = true (handle NULL as non-ingredient)
         return await this.productRepository
             .createQueryBuilder('p')
-            .select(['p.id', 'p.name', 'p.price', 'p.category', 'p.imageUrl', 'p.isQuickSale', 'p.sku', 'p.productTypeId', 'p.printerId'])
+            .leftJoinAndSelect('p.variations', 'v')
+            .select(['p.id', 'p.name', 'p.price', 'p.category', 'p.imageUrl', 'p.isQuickSale', 'p.sku', 'p.productTypeId', 'p.printerId', 'p.orderIndex', 'v.id', 'v.variationName', 'v.fixedPrice', 'v.priceFactor', 'v.inventoryLinkType', 'v.isActive'])
             .where('p.isIngredient IS NULL OR p.isIngredient = :val', { val: false })
+            .orderBy('p.orderIndex', 'ASC')
+            .addOrderBy('p.id', 'ASC')
             .getMany();
     }
 
@@ -194,6 +198,13 @@ export class ProductsService {
     async remove(id: number): Promise<void> {
         await this.findOne(id);
         await this.productRepository.delete(id);
+    }
+
+    async reorderProducts(items: { id: number, orderIndex: number }[]): Promise<void> {
+        if (!items || items.length === 0) return;
+        for (const item of items) {
+             await this.productRepository.update(item.id, { orderIndex: item.orderIndex });
+        }
     }
 
     async findAllTransactions(): Promise<ProductTransaction[]> {

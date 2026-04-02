@@ -135,19 +135,18 @@ export function PageClient() {
 
     // ─── Render ───────────────────────────────────────────────────────
     return (
-        <div className="min-h-screen flex items-center justify-center bg-cover bg-center relative"
-            style={{ backgroundImage: "url('/bg.jpg')" }}>
-            <div className="absolute inset-0 bg-slate-950/60 z-0 pointer-events-none" />
+        <div className="min-h-screen flex items-center justify-center bg-cover bg-center bg-no-repeat relative overflow-hidden"
+            style={{ backgroundImage: "url('/bg-login.png')" }}>
+            <div className="absolute inset-0 bg-slate-950/40 z-0 pointer-events-none" />
 
             {/* ── Giriş Ekranı ── */}
             {screen === 'login' && (
-                <div className="relative z-10 w-full max-w-md p-8 sm:p-10 bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
-                    <div className="text-center mb-8">
-                        <img src="/PosNetX3.png" alt="PosNetX Logo" className="w-96 h-auto mx-auto mb-2 drop-shadow-lg" />
-                        <p className="text-slate-300 mt-2 text-sm">{tLogin('subtitle')}</p>
+                <div className="relative z-10 w-full max-w-[480px] px-6 sm:px-10 py-8 flex flex-col justify-center items-center">
+                    <div className="text-center mb-4 w-full">
+                        <img src="/PosNetX3.png" alt="PosNetX Logo" className="w-64 sm:w-80 md:w-96 h-auto mx-auto mb-4 drop-shadow-2xl" />
                     </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-6">
+                    <form onSubmit={handleSubmit} className="space-y-6 w-full max-w-[400px]">
                         <div>
                             <label className="block text-sm font-medium text-slate-300 mb-1">E-posta veya Telefon</label>
                             <div className="relative">
@@ -174,7 +173,7 @@ export function PageClient() {
                             <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/50 text-red-200 text-sm text-center">{error}</div>
                         )}
                         <button type="submit" disabled={isLoading}
-                            className="w-full py-3.5 px-4 rounded-xl text-white font-bold bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 transform transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg disabled:opacity-70 disabled:cursor-not-allowed">
+                            className="w-full py-3.5 px-4 rounded-xl text-white font-bold bg-gradient-to-r from-yellow-600 to-yellow-900 hover:from-yellow-700 hover:to-yellow-800 transform transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg disabled:opacity-70 disabled:cursor-not-allowed">
                             {isLoading ? `${tLogin('login')}...` : tLogin('login')}
                         </button>
                         <div className="text-center mt-4 text-xs text-slate-400">
@@ -186,7 +185,7 @@ export function PageClient() {
 
             {/* ── PIN Oluşturma Ekranı ── */}
             {screen === 'create-pin' && (
-                <div className="relative z-10 w-full max-w-sm p-8 bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
+                <div className="relative z-10 w-full max-w-sm p-8 bg-white/10 border border-white/20 rounded-3xl shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
                     <div className="text-center mb-6">
                         <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-500 mb-3 shadow-lg">
                             <i className="fat fa-key text-white text-2xl" />

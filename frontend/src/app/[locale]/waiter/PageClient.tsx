@@ -7,10 +7,10 @@ import { useAuth } from '../AuthContext';
 import { showSwal, toastSwal } from '../utils/swal';
 import { io } from 'socket.io-client';
 import { useTranslations, useLocale } from 'next-intl';
-import { useTheme } from 'next-themes';
+import { useThemeTransition } from '@/hooks/useThemeTransition';
 
-interface Product { id: number; name: string; price: number; category: string; imageUrl?: string; printerId?: number; }
-interface OrderItem { product: Product; quantity: number; }
+interface Product { id: number; name: string; price: number; category: string; imageUrl?: string; printerId?: number; variations?: any[]; }
+interface OrderItem { product: Product; quantity: number; variationId?: number; variationName?: string; extraPrice?: number; }
 interface SaleItem { id: number; productName: string; quantity: number; unitPrice: number; total: number; status: string; }
 interface TableSale { id: number; totalAmount: number; status: string; items: SaleItem[]; }
 interface Table {
@@ -29,7 +29,7 @@ export function PageClient() {
     const router = useRouter();
     const locale = useLocale();
     const t = useTranslations('Common');
-    const { theme, setTheme } = useTheme();
+    const { theme, toggleTheme, setTheme } = useThemeTransition();
     const [mounted, setMounted] = useState(false);
 
     const [activeTab, setActiveTab] = useState<'tables' | 'menu'>('tables');
@@ -40,6 +40,9 @@ export function PageClient() {
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
     const [cart, setCart] = useState<OrderItem[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string>('Tümü');
+
+    const [isVariationModalOpen, setIsVariationModalOpen] = useState(false);
+    const [selectedProductForVariation, setSelectedProductForVariation] = useState<Product | null>(null);
 
     const [pinCode, setPinCode] = useState('');
     const [isPinRequired, setIsPinRequired] = useState(true);
@@ -137,23 +140,44 @@ export function PageClient() {
         setCart([]);
     };
 
-    const addToCart = (product: Product) => {
+    const addToCart = (product: Product, forceVariationId?: number) => {
         if (isReadOnly) return;
-        setCart(prev => {
-            const existing = prev.find(item => item.product.id === product.id);
-            if (existing) {
-                return prev.map(item => item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
+
+        if (!forceVariationId && product.variations && product.variations.filter(v => v.isActive !== false).length > 0) {
+            setSelectedProductForVariation(product);
+            setIsVariationModalOpen(true);
+            return;
+        }
+
+        let extraPriceFromVariation = 0;
+        let vName: string | undefined;
+        let vId: number | undefined;
+        if (forceVariationId && product.variations) {
+            const varItem = product.variations.find(v => v.id === forceVariationId);
+            if (varItem) {
+                vId = varItem.id;
+                vName = varItem.variationName;
+                if (varItem.fixedPrice !== null && varItem.fixedPrice !== undefined) {
+                    extraPriceFromVariation = varItem.fixedPrice - product.price;
+                }
             }
-            return [...prev, { product, quantity: 1 }];
+        }
+
+        setCart(prev => {
+            const existing = prev.find(item => item.product.id === product.id && item.variationId === vId);
+            if (existing) {
+                return prev.map(item => (item.product.id === product.id && item.variationId === vId) ? { ...item, quantity: item.quantity + 1 } : item);
+            }
+            return [...prev, { product, quantity: 1, variationId: vId, variationName: vName, extraPrice: extraPriceFromVariation }];
         });
     };
 
-    const removeFromCart = (product: Product) => {
+    const removeFromCart = (itemToRemove: OrderItem) => {
         if (isReadOnly) return;
         setCart(prev => {
-            const existing = prev.find(item => item.product.id === product.id);
-            if (existing && existing.quantity === 1) return prev.filter(i => i.product.id !== product.id);
-            return prev.map(item => item.product.id === product.id ? { ...item, quantity: item.quantity - 1 } : item);
+            const existing = prev.find(item => item.product.id === itemToRemove.product.id && item.variationId === itemToRemove.variationId);
+            if (existing && existing.quantity === 1) return prev.filter(i => !(i.product.id === itemToRemove.product.id && i.variationId === itemToRemove.variationId));
+            return prev.map(item => (item.product.id === itemToRemove.product.id && item.variationId === itemToRemove.variationId) ? { ...item, quantity: item.quantity - 1 } : item);
         });
     };
 
@@ -165,13 +189,15 @@ export function PageClient() {
             const orderPayload = {
                 tableId: selectedTable.id,
                 waiterId: user?.id,
-                totalAmount: cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0),
+                totalAmount: cart.reduce((sum, item) => sum + ((item.product.price + (item.extraPrice || 0)) * item.quantity), 0),
                 status: 'NEW',
                 items: cart.map(item => ({
                     productId: item.product.id,
                     quantity: item.quantity,
-                    unitPrice: item.product.price,
-                    total: item.quantity * item.product.price
+                    unitPrice: item.product.price + (item.extraPrice || 0),
+                    total: item.quantity * (item.product.price + (item.extraPrice || 0)),
+                    variationId: item.variationId,
+                    variationName: item.variationName
                 }))
             };
 
@@ -187,7 +213,7 @@ export function PageClient() {
                     receiptNumber: `SİP-${orderRes.data?.id || '00'}`,
                     date: new Date(),
                     items: kitchenItems.map(item => ({
-                        name: item.product.name,
+                        name: item.product.name + (item.variationName ? ` (${item.variationName})` : ''),
                         quantity: item.quantity,
                         printerId: item.product.printerId,
                         productId: item.product.id
@@ -223,7 +249,7 @@ export function PageClient() {
     };
 
     const filteredProducts = selectedCategory === 'Tümü' ? products : products.filter(p => p.category === selectedCategory);
-    const cartTotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+    const cartTotal = cart.reduce((sum, item) => sum + ((item.product.price + (item.extraPrice || 0)) * item.quantity), 0);
 
     return (
         <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex flex-col font-sans pb-20 overflow-y-auto">
@@ -240,7 +266,7 @@ export function PageClient() {
 
                     {mounted && (
                         <button
-                            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                            onClick={toggleTheme}
                             className="w-10 h-10 flex items-center justify-center rounded-xl bg-indigo-500/30 hover:bg-indigo-500/50 border border-white/10 transition-all text-xl"
                             title={theme === 'dark' ? 'Açık Tema' : 'Koyu Tema'}
                         >
@@ -379,13 +405,16 @@ export function PageClient() {
                     <div className="max-h-48 overflow-y-auto mb-4 space-y-2 pr-2">
                         {cart.map((item, idx) => (
                             <div key={idx} className="flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 p-2 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                                <span className="font-medium text-slate-800 dark:text-slate-200 text-sm w-1/3 truncate">{item.product.name}</span>
+                                <span className="font-medium text-slate-800 dark:text-slate-200 text-sm w-1/3 truncate">
+                                    {item.product.name}
+                                    {item.variationName && <span className="text-xs text-indigo-500 font-bold block tracking-wider">{item.variationName}</span>}
+                                </span>
                                 <div className="flex items-center gap-2">
-                                    <button onClick={() => removeFromCart(item.product)} className="w-8 h-8 rounded bg-white dark:bg-slate-700 shadow flex items-center justify-center text-red-500 font-bold">-</button>
+                                    <button onClick={() => removeFromCart(item)} className="w-8 h-8 rounded bg-white dark:bg-slate-700 shadow flex items-center justify-center text-red-500 font-bold">-</button>
                                     <span className="w-5 text-center font-bold text-slate-800 dark:text-slate-200">{item.quantity}</span>
-                                    <button onClick={() => addToCart(item.product)} className="w-8 h-8 rounded bg-white dark:bg-slate-700 shadow flex items-center justify-center text-indigo-500 font-bold">+</button>
+                                    <button onClick={() => addToCart(item.product, item.variationId)} className="w-8 h-8 rounded bg-white dark:bg-slate-700 shadow flex items-center justify-center text-indigo-500 font-bold">+</button>
                                 </div>
-                                <span className="font-bold text-slate-800 dark:text-slate-200 w-16 text-right text-sm">₺{item.quantity * item.product.price}</span>
+                                <span className="font-bold text-slate-800 dark:text-slate-200 w-16 text-right text-sm">₺{((item.product.price + (item.extraPrice || 0)) * item.quantity).toFixed(2)}</span>
                             </div>
                         ))}
                     </div>
@@ -404,6 +433,46 @@ export function PageClient() {
                                 'Sipariş Ver'
                             )}
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {isVariationModalOpen && selectedProductForVariation && (
+                <div className="fixed inset-0 z-[140] flex items-end sm:items-center justify-center p-4 bg-slate-900/70 backdrop-blur-lg">
+                    <div className="bg-white dark:bg-slate-800 rounded-[32px] w-full max-w-md shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 animate-in slide-in-from-bottom-4 duration-300">
+                        <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-700 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-2xl bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                                        <i className="fat fa-ruler text-white text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-base font-black text-slate-800 dark:text-white uppercase tracking-tight">{selectedProductForVariation.name}</h3>
+                                        <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Boyut / Porsiyon Seç</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setIsVariationModalOpen(false)} className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/60 dark:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-white border border-slate-200 dark:border-slate-600 transition-all text-sm font-bold">&times;</button>
+                            </div>
+                        </div>
+                        <div className="p-6">
+                            <div className="grid grid-cols-2 gap-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                                {selectedProductForVariation.variations?.filter(v => v.isActive !== false).map((v: any) => (
+                                    <button
+                                        key={v.id}
+                                        onClick={() => {
+                                            setIsVariationModalOpen(false);
+                                            addToCart(selectedProductForVariation, v.id);
+                                        }}
+                                        className="p-4 flex flex-col justify-between rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-indigo-400 dark:hover:border-indigo-500/50 hover:bg-indigo-50/50 dark:hover:bg-indigo-500/5 active:scale-95 transition-all"
+                                    >
+                                        <span className="font-bold text-sm text-slate-800 dark:text-white leading-tight mb-2">{v.variationName}</span>
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-500/20 px-2 py-0.5 rounded-full mt-auto self-start">
+                                            {v.fixedPrice !== null && v.fixedPrice !== undefined ? `₺${v.fixedPrice}` : `₺${selectedProductForVariation.price} (Baz)`}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

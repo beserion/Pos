@@ -926,6 +926,8 @@ export class SalesService implements OnModuleInit {
         'SALE',
         item.sale?.id,
         userId,
+        undefined,
+        item.variationId || undefined,
       );
     } catch (err) {
       this.logger.warn('StockMovement cancel reverse error (non-fatal):', err?.message);
@@ -935,6 +937,8 @@ export class SalesService implements OnModuleInit {
     try {
         await this.productsService.recordTransaction({
             productId: item.productId,
+            variationId: item.variationId || undefined,
+            variationName: item.variationName || undefined,
             productName: `[IPTAL] ${item.productId}`, // Item table sometimes doesn't have name
             qty: -Number(item.quantity),
             price: Number(item.total),
@@ -1036,6 +1040,8 @@ export class SalesService implements OnModuleInit {
             'SALE',
             saleId,
             userId,
+            undefined,
+            item.variationId || undefined,
           );
         }
       }
@@ -1071,45 +1077,109 @@ export class SalesService implements OnModuleInit {
       
       if (!productResults || productResults.length === 0) continue;
       const product = productResults[0];
-      const linkType = product.inventoryLinkType || 'none';
+
+      // --- YENİ: Varyant bilgisi çek ---
+      let variation = null;
+      if (item.variationId) {
+        const variations = await manager.query(`
+          SELECT inventoryLinkType, linkedStockItemId, directStockQty, 
+                 directStockUnit, recipeHeaderId
+          FROM product_variations WHERE id = ${item.variationId}
+        `);
+        variation = variations?.[0] || null;
+      }
+
+      // Karar ağacı: varyant özel yoksa ürün fallback
+      const linkType = (variation?.inventoryLinkType) || product.inventoryLinkType || 'none';
 
       try {
         if (linkType === 'none' || linkType === 'NONE') {
           // Hiçbir şey yapma
+          // 12.md: Yalnızca Audit kaydı düş
+          await this.productsService.recordTransaction({
+              productId: item.productId,
+              variationId: item.variationId || undefined,
+              variationName: item.variationName || undefined,
+              productName: product.name,
+              qty: Number(item.quantity),
+              price: Number(item.unitPrice || 0),
+              type: 'sale',
+              status: 'completed',
+              orderId: sale.id,
+              userId: sale.userId || sale.waiterId,
+              businessDate: sale.createdAt || new Date(),
+          });
           continue;
         } 
         
         else if (linkType === 'direct_stock') {
-          if (product.linkedStockItemId && product.directStockQty) {
-            const totalQty = Number(product.directStockQty) * Number(item.quantity);
+          const stockItemId = variation?.linkedStockItemId || product.linkedStockItemId;
+          const stockQty = variation?.directStockQty || product.directStockQty;
+          const stockUnit = variation?.directStockUnit || product.directStockUnit;
+
+          if (stockItemId && stockQty) {
+            // Direkt stokta tekil sayıdır, saleTypeMultiplier fiyatı etkiler stok tüketimini DEĞİL.
+            const totalQty = Number(stockQty) * Number(item.quantity);
             await this.stockMovementsService.createDirectSaleConsumption(
-              product.linkedStockItemId,
+              stockItemId,
               totalQty,
-              product.directStockUnit || 'adet',
+              stockUnit || 'adet',
               'SALE',
               sale.id,
               sale.userId || sale.waiterId,
               manager
             );
+
+            const card = await manager.query(`SELECT costPerBaseUnit FROM stock_cards WHERE id = ${stockItemId}`);
+            const cost = Number(card[0]?.costPerBaseUnit || 0) * totalQty;
+            await manager.getRepository(SaleItem).update(item.id, { costPrice: cost });
           }
         } 
         
         else if (linkType === 'recipe') {
           const recipeMultiplier = await this.getRecipeMultiplier(item.saleType, manager);
-          await this.stockMovementsService.createRecipeConsumption(
-            item.productId,
-            Number(item.quantity),
-            recipeMultiplier,
-            'SALE',
-            sale.id,
-            sale.userId || sale.waiterId,
-            manager,
-          );
+          
+          let recipeHeaderFallback = false;
+          if (variation?.recipeHeaderId) {
+            const headerCheck = await manager.query(`SELECT id FROM recipe_headers WHERE id = ${variation.recipeHeaderId} AND isActive = 1`);
+            if (headerCheck && headerCheck.length > 0) {
+              await this.stockMovementsService.createRecipeConsumptionByHeaderId(
+                headerCheck[0].id,
+                Number(item.quantity),
+                recipeMultiplier,
+                'SALE',
+                sale.id,
+                sale.userId || sale.waiterId,
+                manager,
+              );
+            } else {
+              recipeHeaderFallback = true;
+            }
+          } else {
+            recipeHeaderFallback = true;
+          }
+
+          if (recipeHeaderFallback) {
+             await this.stockMovementsService.createRecipeConsumption(
+               item.productId,
+               Number(item.quantity),
+               recipeMultiplier,
+               'SALE',
+               sale.id,
+               sale.userId || sale.waiterId,
+               manager,
+             );
+          }
+
+          const costData = await this.recipesService.calculateCost(item.productId);
+          await manager.getRepository(SaleItem).update(item.id, { costPrice: costData.totalCost });
         }
 
         // 12.md: Ürün İşlem Geçmişi Kaydı
         await this.productsService.recordTransaction({
             productId: item.productId,
+            variationId: item.variationId || undefined,
+            variationName: item.variationName || undefined,
             productName: product.name,
             qty: Number(item.quantity),
             price: Number(item.unitPrice || 0),
@@ -1119,18 +1189,6 @@ export class SalesService implements OnModuleInit {
             userId: sale.userId || sale.waiterId,
             businessDate: sale.createdAt || new Date(),
         });
-
-        // Maliyet güncelleme (SaleItem üzerine)
-        // Not: Reçete için zaten StockMovementsService içinde maliyet hesaplanıyor olabilir 
-        // ancak SaleItem.costPrice alanı raporlar için önemli.
-        if (linkType === 'direct_stock') {
-           const card = await manager.query(`SELECT costPerBaseUnit FROM stock_cards WHERE id = ${product.linkedStockItemId}`);
-           const cost = Number(card[0]?.costPerBaseUnit || 0) * Number(product.directStockQty);
-           await manager.getRepository(SaleItem).update(item.id, { costPrice: cost });
-        } else if (linkType === 'recipe') {
-           const costData = await this.recipesService.calculateCost(item.productId);
-           await manager.getRepository(SaleItem).update(item.id, { costPrice: costData.totalCost });
-        }
 
       } catch (err) {
         this.logger.error(`Stock deduction failed for Item #${item.id} (Product #${item.productId}): ${err.message}`);

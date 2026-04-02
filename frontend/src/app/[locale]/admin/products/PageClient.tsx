@@ -28,6 +28,7 @@ interface Product {
     outputProfile?: any;
     recipes?: { ingredientId: number; ingredientName?: string; quantity: number; unit: string }[];
     modifiers?: Modifier[];
+    variations?: any[];
 }
 
 interface Modifier {
@@ -55,10 +56,12 @@ export function PageClient() {
     const [outputProfiles, setOutputProfiles] = useState<any[]>([]);
     const [departments, setDepartments] = useState<any[]>([]);
     const [allModifiers, setAllModifiers] = useState<Modifier[]>([]);
+    const [stockCards, setStockCards] = useState<any[]>([]);
+    const [recipeHeaders, setRecipeHeaders] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState<'genel' | 'gorsel' | 'recete' | 'ozellik' | 'yonlendirme'>('genel');
+    const [activeTab, setActiveTab] = useState<'genel' | 'gorsel' | 'recete' | 'ozellik' | 'yonlendirme' | 'varyant'>('genel');
     const [formData, setFormData] = useState<Product>({
         id: 0,
         name: '',
@@ -77,7 +80,8 @@ export function PageClient() {
         productTypeId: null,
         outputProfileId: null,
         recipes: [],
-        modifiers: []
+        modifiers: [],
+        variations: []
     });
 
     const [ingredientProduct, setIngredientProduct] = useState({ ingredientId: 0, quantity: 0, unit: 'adet' });
@@ -94,13 +98,15 @@ export function PageClient() {
         if (!user?.token) return;
         try {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
-            const [prodRes, printRes, modRes, typesRes, profilesRes, depRes] = await Promise.all([
+            const [prodRes, printRes, modRes, typesRes, profilesRes, depRes, stocksRes, recipesRes] = await Promise.all([
                 axios.get(`${API_URL}/products`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/printers`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/modifiers`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/product-types`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/output-profiles`, { headers: { Authorization: `Bearer ${user.token}` } }),
-                axios.get(`${API_URL}/departments`, { headers: { Authorization: `Bearer ${user.token}` } })
+                axios.get(`${API_URL}/departments`, { headers: { Authorization: `Bearer ${user.token}` } }),
+                axios.get(`${API_URL}/stock-cards`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: [] })),
+                axios.get(`${API_URL}/recipes`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: [] }))
             ]);
             setProducts(prodRes.data);
             setFilteredProducts(prodRes.data);
@@ -109,6 +115,8 @@ export function PageClient() {
             setProductTypes(typesRes.data);
             setOutputProfiles(profilesRes.data);
             setDepartments(depRes.data);
+            setStockCards(Array.isArray(stocksRes.data) ? stocksRes.data : (stocksRes.data?.data || []));
+            setRecipeHeaders(Array.isArray(recipesRes.data) ? recipesRes.data : (recipesRes.data?.data || []));
         } catch (error) {
             console.error('Error fetching data', error);
             showSwal({ title: tc('error'), text: tc('loadingError'), icon: 'error' });
@@ -214,7 +222,7 @@ export function PageClient() {
 
     const openModal = (prod?: Product) => {
         if (prod) {
-            setFormData({ ...prod, recipes: prod.recipes || [], modifiers: prod.modifiers || [] });
+            setFormData({ ...prod, recipes: prod.recipes || [], modifiers: prod.modifiers || [], variations: prod.variations || [] });
         } else {
             setFormData({
                 id: 0,
@@ -234,7 +242,8 @@ export function PageClient() {
                 productTypeId: null,
                 outputProfileId: null,
                 recipes: [],
-                modifiers: []
+                modifiers: [],
+                variations: []
             });
         }
         setIngredientProduct({ ingredientId: 0, quantity: 0, unit: 'adet' });
@@ -510,12 +519,13 @@ export function PageClient() {
                         <div className="flex-1 overflow-hidden w-full text-start flex flex-col">
                             <form onSubmit={handleSave} id="productForm" className="flex flex-col h-full">
                                 {/* Tabs */}
-                                <div className="flex bg-slate-100 dark:bg-slate-900/50 p-1 mx-8 mt-8 rounded-2xl shrink-0">
-                                    <button type="button" onClick={() => setActiveTab('genel')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'genel' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabGeneral')}</button>
-                                    <button type="button" onClick={() => setActiveTab('yonlendirme')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'yonlendirme' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Yönlendirme</button>
-                                    <button type="button" onClick={() => setActiveTab('gorsel')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'gorsel' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabImage')}</button>
-                                    <button type="button" onClick={() => setActiveTab('recete')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'recete' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabRecipe')}</button>
-                                    <button type="button" onClick={() => setActiveTab('ozellik')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'ozellik' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Özellikler</button>
+                                <div className="flex bg-slate-100 dark:bg-slate-900/50 p-1 mx-8 mt-8 rounded-2xl shrink-0 overflow-x-auto">
+                                    <button type="button" onClick={() => setActiveTab('genel')} className={`flex-[1_0_auto] px-3 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'genel' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabGeneral')}</button>
+                                    <button type="button" onClick={() => setActiveTab('yonlendirme')} className={`flex-[1_0_auto] px-3 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'yonlendirme' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Yönlendirme</button>
+                                    <button type="button" onClick={() => setActiveTab('gorsel')} className={`flex-[1_0_auto] px-3 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'gorsel' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabImage')}</button>
+                                    <button type="button" onClick={() => setActiveTab('recete')} className={`flex-[1_0_auto] px-3 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'recete' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabRecipe')}</button>
+                                    <button type="button" onClick={() => setActiveTab('ozellik')} className={`flex-[1_0_auto] px-3 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'ozellik' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Özellikler</button>
+                                    <button type="button" onClick={() => setActiveTab('varyant')} className={`flex-[1_0_auto] px-3 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'varyant' ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>VARYANTLAR</button>
                                 </div>
 
                                 <div className="p-8 pb-4 flex-1 overflow-y-auto">
@@ -880,6 +890,116 @@ export function PageClient() {
                                                         </div>
                                                     )}
                                                 </div>
+                                            </div>
+                                        )}
+
+                                        {activeTab === 'varyant' && (
+                                            <div className="space-y-6">
+                                                <div className="flex justify-between items-center bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-3xl border border-indigo-100 dark:border-indigo-800/50">
+                                                    <div>
+                                                        <h4 className="text-sm font-black text-indigo-700 dark:text-indigo-400 uppercase tracking-widest mb-1">ÜRÜN VARYANTLARI</h4>
+                                                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-0 font-medium">Bu ürüne farklı boyut veya porsiyon seçenekleri (Örn: Kokteyl Duble, 35cl Şişe, L Büyük Boy) tanımlayın.</p>
+                                                    </div>
+                                                    <button type="button" onClick={() => setFormData(p => ({ ...p, variations: [...(p.variations || []), { variationName: '', priceFactor: 1, fixedPrice: null, inventoryLinkType: 'none', isActive: true }] }))} className="px-5 py-2.5 bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-all shadow-sm shadow-indigo-500/30 flex items-center gap-2">
+                                                        <i className="fat fa-plus"></i> Varyant Ekle
+                                                    </button>
+                                                </div>
+
+                                                {formData.variations && formData.variations.length > 0 ? (
+                                                    <div className="space-y-4">
+                                                        {formData.variations.map((v: any, idx: number) => (
+                                                            <div key={idx} className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm relative group overflow-visible">
+                                                                <button type="button" onClick={() => setFormData(p => ({ ...p, variations: p.variations!.filter((_, i) => i !== idx) }))} className="absolute -top-3 -right-3 w-8 h-8 bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:scale-110 hover:bg-red-500 hover:text-white shadow-sm as-btn">
+                                                                    <i className="fat fa-xmark text-sm"></i>
+                                                                </button>
+                                                                
+                                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                                                                    <div>
+                                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">VARYANT ADI *</label>
+                                                                        <div className="relative">
+                                                                            <i className="fat fa-tag absolute left-4 top-1/2 -translate-y-1/2 text-indigo-500/50"></i>
+                                                                            <input type="text" required value={v.variationName} onChange={e => { const nv = [...formData.variations!]; nv[idx].variationName = e.target.value; setFormData({...formData, variations: nv}); }} className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-2 focus:ring-indigo-500/30 outline-none" placeholder="Örn: 35cl Kadeh" />
+                                                                        </div>
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">ÖZEL FİYAT (₺)</label>
+                                                                        <div className="relative">
+                                                                            <i className="fat fa-money-bill absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500/50"></i>
+                                                                            <input type="number" step="0.01" value={v.fixedPrice ?? ''} onChange={e => { const nv = [...formData.variations!]; nv[idx].fixedPrice = e.target.value ? parseFloat(e.target.value) : null; setFormData({...formData, variations: nv}); }} className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-2 focus:ring-emerald-500/30 outline-none" placeholder="Ürün fiyatını ezmek için" />
+                                                                        </div>
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">BARKOD</label>
+                                                                        <div className="relative">
+                                                                            <i className="fat fa-barcode absolute left-4 top-1/2 -translate-y-1/2 text-slate-500/50"></i>
+                                                                            <input type="text" value={v.barcode || ''} onChange={e => { const nv = [...formData.variations!]; nv[idx].barcode = e.target.value; setFormData({...formData, variations: nv}); }} className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-2 focus:ring-slate-500/30 outline-none" placeholder="Barkod ile satmak için" />
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="mt-5 p-4 bg-slate-50 dark:bg-slate-900/30 rounded-2xl border border-slate-100 dark:border-slate-700/50">
+                                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-end">
+                                                                        <div>
+                                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">STOK TAKİP KURALI</label>
+                                                                            <div className="relative">
+                                                                                <select value={v.inventoryLinkType || 'none'} onChange={e => { const nv = [...formData.variations!]; nv[idx].inventoryLinkType = e.target.value; setFormData({...formData, variations: nv}); }} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-2 focus:ring-slate-500/30 outline-none appearance-none">
+                                                                                    <option value="none">Stok Düşümü Yok</option>
+                                                                                    <option value="direct_stock">Tekil Stok Kartı Çık (Şişe vs)</option>
+                                                                                    <option value="recipe">Özel Reçete Düş (Kadeh, L Porsiyon)</option>
+                                                                                </select>
+                                                                                <i className="fat fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        {v.inventoryLinkType === 'direct_stock' && (
+                                                                            <>
+                                                                                <div>
+                                                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">BAĞLI STOK KARTI</label>
+                                                                                    <div className="relative">
+                                                                                        <select value={v.linkedStockItemId || ''} onChange={e => { const nv = [...formData.variations!]; nv[idx].linkedStockItemId = e.target.value ? parseInt(e.target.value) : null; setFormData({...formData, variations: nv}); }} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-xs focus:ring-2 focus:ring-slate-500/30 outline-none appearance-none truncate">
+                                                                                            <option value="">Stok Seçin</option>
+                                                                                            {(Array.isArray(stockCards) ? stockCards : []).map((sc: any) => (
+                                                                                                <option key={sc.id} value={sc.id}>{sc.name} ({sc.unit})</option>
+                                                                                            ))}
+                                                                                        </select>
+                                                                                        <i className="fat fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div>
+                                                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">DÜŞÜLECEK MİKTAR ({v.linkedStockItemId ? stockCards.find((sc:any)=>sc.id===v.linkedStockItemId)?.unit : 'Birimi'})</label>
+                                                                                    <div className="flex relative">
+                                                                                        <input type="number" step="0.001" required={v.inventoryLinkType === 'direct_stock'} value={v.directStockQty ?? ''} onChange={e => { const nv = [...formData.variations!]; nv[idx].directStockQty = e.target.value ? parseFloat(e.target.value) : null; setFormData({...formData, variations: nv}); }} className="w-full pl-4 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-2 focus:ring-slate-500/30 outline-none" placeholder="Örn: 1 veya 0.04" />
+                                                                                    </div>
+                                                                                </div>
+                                                                            </>
+                                                                        )}
+
+                                                                        {v.inventoryLinkType === 'recipe' && (
+                                                                            <div className="md:col-span-2">
+                                                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">VARYANT YAN REÇETESİ (BAŞLIK)</label>
+                                                                                <div className="relative flex items-center">
+                                                                                    <select value={v.recipeHeaderId || ''} onChange={e => { const nv = [...formData.variations!]; nv[idx].recipeHeaderId = e.target.value ? parseInt(e.target.value) : null; setFormData({...formData, variations: nv}); }} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-2 focus:ring-slate-500/30 outline-none appearance-none">
+                                                                                        <option value="">Reçete Başlığı Seçin (Örn: L Boy Özel Reçete)</option>
+                                                                                        {(Array.isArray(recipeHeaders) ? recipeHeaders : []).map((rh: any) => (
+                                                                                            <option key={rh.id} value={rh.id}>{rh.name || `Başlıksız Reçete #${rh.id} (${rh.product?.name})`}</option>
+                                                                                        ))}
+                                                                                    </select>
+                                                                                    <i className="fat fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-center py-10 opacity-30 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-3xl">
+                                                        <i className="fat fa-boxes-stacked text-5xl mb-3 text-slate-400"></i>
+                                                        <p className="font-black text-sm tracking-widest uppercase mb-1">KAYITLI VARYANT YOK.</p>
+                                                        <p className="text-xs font-bold uppercase tracking-widest">Barkodlu ürünler veya porsiyonlu servisler ekleyin.</p>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>

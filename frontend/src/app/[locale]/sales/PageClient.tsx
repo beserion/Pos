@@ -4,7 +4,7 @@ import { useAuth } from '../AuthContext';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { showSwal, toastSwal } from '../utils/swal';
-import { useTheme } from 'next-themes';
+import { useThemeTransition } from '@/hooks/useThemeTransition';
 
 interface Sale {
     id: number;
@@ -26,7 +26,7 @@ export function PageClient() {
     const router = useRouter();
     const locale = useLocale();
     const tc = useTranslations('Common');
-    const { theme, setTheme } = useTheme();
+    const { theme } = useThemeTransition();
 
     const [sales, setSales] = useState<Sale[]>([]);
     const [dataLoading, setDataLoading] = useState(true);

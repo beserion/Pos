@@ -55,4 +55,11 @@ export class ProductTransaction {
 
   @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
   note: string;
+
+  // --- Varyant (Yeni) ---
+  @Column({ nullable: true })
+  variationId: number;
+
+  @Column({ type: 'nvarchar', length: 200, nullable: true })
+  variationName: string;
 }

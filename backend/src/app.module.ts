@@ -94,7 +94,7 @@ import { InventorySessionLine } from './inventory/inventory-session-line.entity'
 import { ProductTransaction } from './products/product-transaction.entity';
 import { StockGroup } from './stock-groups/stock-group.entity';
 import { StockGroupsModule } from './stock-groups/stock-groups.module';
-
+import { ProductVariation } from './products/product-variation.entity';
 
 import { ScheduleModule } from '@nestjs/schedule';
 
@@ -172,6 +172,7 @@ import { ScheduleModule } from '@nestjs/schedule';
             InventorySessionLine,
             ProductTransaction,
             StockGroup,
+            ProductVariation,
           ],
           synchronize: true, // Auto-sync enabled by user permission
           logging: true,

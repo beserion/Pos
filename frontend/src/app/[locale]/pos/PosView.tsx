@@ -4,7 +4,7 @@ import { useAuth } from '../AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { showSwal, toastSwal } from '../utils/swal';
 import { useLocale, useTranslations } from 'next-intl';
-import { useTheme } from 'next-themes';
+import { useThemeTransition } from '@/hooks/useThemeTransition';
 import ShiftManager from '@/components/shifts/ShiftManager';
 import TransferModal from './TransferModal';
 
@@ -41,7 +41,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const locale = useLocale();
     const t = useTranslations('Admin');
     const tc = useTranslations('Common');
-    const { theme, setTheme } = useTheme();
+    const { theme, toggleTheme, setTheme } = useThemeTransition();
     const searchParams = useSearchParams();
     const restoreSaleId = searchParams.get('restoreSaleId');
     const targetTableId = searchParams.get('tableId');
@@ -564,7 +564,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
                         {mounted && (
                             <button
-                                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                                onClick={toggleTheme}
                                 className="w-10 h-10 flex items-center justify-center rounded-2xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 transition-all text-xl"
                                 title={theme === 'dark' ? 'Açık Tema' : 'Koyu Tema'}
                             >

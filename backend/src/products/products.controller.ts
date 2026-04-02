@@ -47,6 +47,12 @@ export class ProductsController {
     return this.productsService.create(productData);
   }
 
+  @Put('reorder')
+  @Permissions('EDIT_PRODUCTS', 'VIEW_PRODUCTS', 'VIEW_SALES')
+  reorder(@Body() reorderData: { items: { id: number, orderIndex: number }[] }) {
+    return this.productsService.reorderProducts(reorderData.items);
+  }
+
   @Put(':id')
   @Permissions('EDIT_PRODUCTS')
   update(@Param('id') id: string, @Body() updateData: Partial<Product>) {

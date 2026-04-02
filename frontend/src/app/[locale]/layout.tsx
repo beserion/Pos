@@ -4,6 +4,7 @@ export const dynamicParams = false;
 import { notFound } from 'next/navigation';
 import { AuthProvider } from './AuthContext';
 import { ThemeProvider as NextThemeProvider } from 'next-themes';
+import Watermark from '@/components/Watermark';
 import '../globals.css';
 
 const locales = ['tr', 'en', 'de', 'fr', 'it', 'ar', 'ru', 'el'];
@@ -28,8 +29,6 @@ export default async function RootLayout({
     notFound();
   }
 
-  // Providing all messages to the client
-  // side is the easiest way to get started
   const messages = await getMessages({ locale });
 
   const isRTL = locale === 'ar';
@@ -44,6 +43,7 @@ export default async function RootLayout({
         className="antialiased text-slate-900 dark:text-slate-100 bg-slate-50 dark:bg-slate-900 transition-colors duration-300 overflow-x-hidden" 
         suppressHydrationWarning
       >
+        <Watermark />
         <NextIntlClientProvider locale={locale} messages={messages}>
           <NextThemeProvider attribute="class" defaultTheme="light" enableSystem>
             <AuthProvider locale={locale}>{children}</AuthProvider>

@@ -151,6 +151,46 @@ export class StockMovementsService {
   }
 
   /**
+   * Consume stock based on a specific recipe header (e.g. for a product variation).
+   */
+  async createRecipeConsumptionByHeaderId(
+    recipeHeaderId: number,
+    saleQuantity: number,
+    saleTypeMultiplier: number = 1,
+    sourceType: string = 'SALE',
+    sourceId?: number,
+    userId?: number,
+    manager?: any,
+  ): Promise<StockMovement[]> {
+    const header = await this.recipesService.findOne(recipeHeaderId);
+    if (!header || !header.lines || header.lines.length === 0) {
+      return [];
+    }
+
+    const movements: StockMovement[] = [];
+    for (const line of header.lines) {
+      const consumeQty = Number(line.quantity) * saleQuantity * saleTypeMultiplier;
+      if (consumeQty <= 0) continue;
+
+      const movement = await this.createMovement({
+        stockCardId: line.stockCardId,
+        movementType: 'recipe_consumption',
+        quantity: -consumeQty,
+        qtyOut: consumeQty,
+        unit: line.unit,
+        sourceType,
+        sourceId,
+        description: `Reçete tüketimi (Varyant): ${header.name || `RecipeHeader #${recipeHeaderId}`}`,
+        userId,
+      }, manager);
+
+      movements.push(movement);
+    }
+
+    return movements;
+  }
+
+  /**
    * Reverse consumption (for cancellations/refunds).
    */
   async createReverseConsumption(
@@ -161,6 +201,7 @@ export class StockMovementsService {
     sourceId?: number,
     userId?: number,
     manager?: any,
+    variationId?: number,
   ): Promise<StockMovement[]> {
     const restoreParam = await this.parametersService.getValue(
       'inventory',
@@ -171,26 +212,46 @@ export class StockMovementsService {
     const product = await manager.query(`SELECT inventoryLinkType, linkedStockItemId, directStockQty, directStockUnit FROM products WHERE id = ${productId}`);
     if (!product || product.length === 0) return [];
 
-    const linkType = product[0].inventoryLinkType;
+    let variation = null;
+    if (variationId) {
+      const variations = await manager.query(`SELECT inventoryLinkType, linkedStockItemId, directStockQty, directStockUnit, recipeHeaderId FROM product_variations WHERE id = ${variationId}`);
+      variation = variations?.[0] || null;
+    }
+
+    const linkType = variation?.inventoryLinkType || product[0].inventoryLinkType;
 
     if (linkType === 'direct_stock') {
-      const restoreQty = Number(product[0].directStockQty) * saleQuantity;
-      const movement = await this.createMovement({
-        stockCardId: product[0].linkedStockItemId,
-        movementType: 'return_in', // Or manual_adjustment based on context
-        quantity: restoreQty,
-        qtyIn: restoreQty,
-        unit: product[0].directStockUnit,
-        sourceType,
-        sourceId,
-        description: `Satış iptal iadesi (Direkt Stok)`,
-        userId,
-      }, manager);
-      return [movement];
+      const stockItemId = variation?.linkedStockItemId || product[0].linkedStockItemId;
+      const stockQty = variation?.directStockQty || product[0].directStockQty;
+      const stockUnit = variation?.directStockUnit || product[0].directStockUnit;
+
+      if (stockItemId && stockQty) {
+        const restoreQty = Number(stockQty) * saleQuantity;
+        const movement = await this.createMovement({
+          stockCardId: stockItemId,
+          movementType: 'return_in', 
+          quantity: restoreQty,
+          qtyIn: restoreQty,
+          unit: stockUnit,
+          sourceType,
+          sourceId,
+          description: `Satış iptal iadesi (Direkt Stok)`,
+          userId,
+        }, manager);
+        return [movement];
+      }
     }
 
     if (linkType === 'recipe') {
-      const recipe = await this.recipesService.findActiveByProduct(productId);
+      let recipeHeader = null;
+      if (variation?.recipeHeaderId) {
+        const headerCheck = await manager.query(`SELECT id FROM recipe_headers WHERE id = ${variation.recipeHeaderId} AND isActive = 1`);
+        if (headerCheck && headerCheck.length > 0) {
+           recipeHeader = await this.recipesService.findOne(headerCheck[0].id);
+        }
+      }
+
+      const recipe = recipeHeader || await this.recipesService.findActiveByProduct(productId);
       if (!recipe || !recipe.lines || recipe.lines.length === 0) return [];
 
       const movements: StockMovement[] = [];

@@ -7,7 +7,7 @@ import { useAuth } from '../AuthContext';
 import { useLocale, useTranslations } from 'next-intl';
 import { showSwal, toastSwal } from '../utils/swal';
 import { printReceipt } from '../utils/print';
-import { useTheme } from 'next-themes';
+import { useThemeTransition } from '@/hooks/useThemeTransition';
 import ShiftManager from '@/components/shifts/ShiftManager';
 import SetMenuSelectionModal from './SetMenuSelectionModal';
 
@@ -42,6 +42,7 @@ interface Product {
         }[];
     };
     modifiers?: Modifier[];
+    variations?: any[];
 }
 
 interface CartItem {
@@ -51,6 +52,8 @@ interface CartItem {
     extraPrice?: number;
     uniqueId?: string;
     note?: string;
+    variationId?: number;
+    variationName?: string;
 }
 
 export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => void }) {
@@ -59,12 +62,14 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     const t = useTranslations('Admin');
     const tc = useTranslations('Common');
     const { user, loading: authLoading } = useAuth();
-    const { theme, setTheme } = useTheme();
+    const { theme, toggleTheme, setTheme } = useThemeTransition();
     const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')));
 
     const [products, setProducts] = useState<Product[]>([]);
-    const [categories, setCategories] = useState<string[]>([]);
-    const [selectedCategory, setSelectedCategory] = useState<string>('all');
+    const [productTypeOptions, setProductTypeOptions] = useState<{ id: string | number; name: string }[]>([]);
+    const [selectedProductTypeId, setSelectedProductTypeId] = useState<number | 'all'>('all');
+    const [selectedGroupName, setSelectedGroupName] = useState<string>('Tümü');
+    const [selectedCategoryName, setSelectedCategoryName] = useState<string>('Tümü');
     const [searchQuery, setSearchQuery] = useState('');
     const [cart, setCart] = useState<CartItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -82,6 +87,11 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [extraPopupProducts, setExtraPopupProducts] = useState<Product[]>([]);
     const [extraPopupParentProduct, setExtraPopupParentProduct] = useState<Product | null>(null);
     const [pendingExtraCartItem, setPendingExtraCartItem] = useState<CartItem | null>(null);
+
+    // --- Variation Modal State ---
+    const [isVariationModalOpen, setIsVariationModalOpen] = useState(false);
+    const [selectedProductForVariation, setSelectedProductForVariation] = useState<Product | null>(null);
+    const [pendingAddToCartArgs, setPendingAddToCartArgs] = useState<{ skipExtraCheck?: boolean }>({});
 
     const [noteModalItem, setNoteModalItem] = useState<CartItem | null>(null);
     const [tempNote, setTempNote] = useState('');
@@ -157,17 +167,18 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
         try {
             const token = Cookies.get('token');
             const headers = { Authorization: `Bearer ${token}` };
-            const [productsRes, departmentsRes] = await Promise.all([
+            const [productsRes, departmentsRes, typesRes] = await Promise.all([
                 axios.get(`${API_URL}/products/quicksale`, { headers }),
-                axios.get(`${API_URL}/departments`, { headers })
+                axios.get(`${API_URL}/departments`, { headers }),
+                axios.get(`${API_URL}/product-types`, { headers })
             ]);
 
             const allProducts = productsRes.data;
             setProducts(allProducts);
             setDepartments(departmentsRes.data);
-
-            const cats: string[] = ['all', ...Array.from(new Set(allProducts.map((p: any) => p.category).filter(Boolean))) as string[]];
-            setCategories(cats);
+            
+            const types = typesRes.data || [];
+            setProductTypeOptions([{ id: 'all', name: tc('all') }, ...types]);
         } catch (error) {
             console.error('Error fetching products:', error);
         } finally {
@@ -183,15 +194,44 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     }, [user, authLoading, locale]);
 
 
+    // --- Drill-Down Mantığı (TakeOrderView ile Senkron) ---
+    const availableGroups = useMemo(() => {
+        const filteredByCins = selectedProductTypeId === 'all' 
+            ? products 
+            : products.filter(p => (p as any).productTypeId === selectedProductTypeId);
+        
+        const groups = Array.from(new Set(filteredByCins.map(p => (p as any).stockCard?.stockGroup || 'Diğer').filter(Boolean)));
+        return ['Tümü', ...groups.sort()];
+    }, [products, selectedProductTypeId]);
+
+    const availableCategories = useMemo(() => {
+        const filteredByGroup = products.filter(p => {
+            const matchesCins = selectedProductTypeId === 'all' || (p as any).productTypeId === selectedProductTypeId;
+            const matchesGroup = selectedGroupName === 'Tümü' || ((p as any).stockCard?.stockGroup || 'Diğer') === selectedGroupName;
+            return matchesCins && matchesGroup;
+        });
+        const cats = Array.from(new Set(filteredByGroup.map(p => (p as any).stockCard?.category || p.category || 'Diğer').filter(Boolean)));
+        return ['Tümü', ...cats.sort()];
+    }, [products, selectedProductTypeId, selectedGroupName]);
+
     const filteredProducts = useMemo(() => {
         return products.filter(p => {
-            const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
+            const matchesCins = selectedProductTypeId === 'all' || (p as any).productTypeId === selectedProductTypeId;
+            const matchesGroup = selectedGroupName === 'Tümü' || ((p as any).stockCard?.stockGroup || 'Diğer') === selectedGroupName;
+            const matchesCategory = selectedCategoryName === 'Tümü' || ((p as any).stockCard?.category || p.category || 'Diğer') === selectedCategoryName;
             const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.sku?.includes(searchQuery);
-            return matchesCategory && matchesSearch;
+            return matchesCins && matchesGroup && matchesCategory && matchesSearch;
         });
-    }, [products, selectedCategory, searchQuery]);
+    }, [products, selectedProductTypeId, selectedGroupName, selectedCategoryName, searchQuery]);
 
-    const addToCart = (product: Product, skipExtraCheck: boolean = false) => {
+    const addToCart = (product: Product, skipExtraCheck: boolean = false, forceVariationId?: number) => {
+        if (!forceVariationId && product.variations && product.variations.filter(v => v.isActive !== false).length > 0) {
+            setSelectedProductForVariation(product);
+            setPendingAddToCartArgs({ skipExtraCheck });
+            setIsVariationModalOpen(true);
+            return;
+        }
+
         if (product.isSet && product.setMenu?.setType !== 'FIX') {
             setSelectedSetMenuProduct(product);
             setIsSetMenuModalOpen(true);
@@ -208,8 +248,21 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 if (extraProds.length > 0) {
                     if (dept.autoOpenExtraPopup) {
                         // Önce ürünü sepete ekle, sonra popup aç
+                        let extraPriceFromVariation = 0;
+                        let vName: string | undefined;
+                        let vId: number | undefined;
+                        if (forceVariationId && product.variations) {
+                            const varItem = product.variations.find(v => v.id === forceVariationId);
+                            if (varItem) {
+                                vId = varItem.id;
+                                vName = varItem.variationName;
+                                if (varItem.fixedPrice !== null && varItem.fixedPrice !== undefined) {
+                                    extraPriceFromVariation = varItem.fixedPrice - product.price;
+                                }
+                            }
+                        }
                         const uniqueId = Date.now().toString() + Math.random().toString(36).substring(7);
-                        const newItem = { product, quantity: 1, uniqueId };
+                        const newItem: CartItem = { product, quantity: 1, uniqueId, variationId: vId, variationName: vName, extraPrice: extraPriceFromVariation };
                         setCart(prev => [...prev, newItem]);
                         setPendingExtraCartItem(newItem);
                         setExtraPopupProducts(extraProds);
@@ -221,14 +274,28 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
             }
         }
 
+        let extraPriceFromVariation = 0;
+        let vName: string | undefined;
+        let vId: number | undefined;
+        if (forceVariationId && product.variations) {
+            const varItem = product.variations.find(v => v.id === forceVariationId);
+            if (varItem) {
+                vId = varItem.id;
+                vName = varItem.variationName;
+                if (varItem.fixedPrice !== null && varItem.fixedPrice !== undefined) {
+                    extraPriceFromVariation = varItem.fixedPrice - product.price;
+                }
+            }
+        }
+
         setCart(prev => {
-            const existing = prev.find(item => item.product.id === product.id && !item.uniqueId);
+            const existing = prev.find(item => item.product.id === product.id && item.variationId === vId && !item.uniqueId);
             if (existing) {
                 return prev.map(item =>
-                    (item.product.id === product.id && !item.uniqueId) ? { ...item, quantity: item.quantity + 1 } : item
+                    (item.product.id === product.id && item.variationId === vId && !item.uniqueId) ? { ...item, quantity: item.quantity + 1 } : item
                 );
             }
-            return [...prev, { product, quantity: 1 }];
+            return [...prev, { product, quantity: 1, variationId: vId, variationName: vName, extraPrice: extraPriceFromVariation }];
         });
     };
 
@@ -237,7 +304,8 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
             if (itemToRemove.uniqueId) {
                 return prev.filter(i => i.uniqueId !== itemToRemove.uniqueId);
             }
-            return prev.filter(item => item.product.id !== itemToRemove.product.id || item.uniqueId);
+            const isMatch = (item: CartItem) => item.product.id === itemToRemove.product.id && item.variationId === itemToRemove.variationId && !item.uniqueId;
+            return prev.filter(item => !isMatch(item));
         });
     };
 
@@ -245,7 +313,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
         setCart(prev => prev.map(item => {
             const isMatch = itemToUpdate.uniqueId
                 ? item.uniqueId === itemToUpdate.uniqueId
-                : item.product.id === itemToUpdate.product.id && !item.uniqueId;
+                : item.product.id === itemToUpdate.product.id && item.variationId === itemToUpdate.variationId && !item.uniqueId;
 
             if (isMatch) {
                 const newQty = Math.max(1, item.quantity + delta);
@@ -288,7 +356,9 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                     unitPrice: item.product.price + (item.extraPrice || 0),
                     total: (item.product.price + (item.extraPrice || 0)) * item.quantity,
                     subItems: item.subItems,
-                    note: item.note
+                    note: item.note,
+                    variationId: item.variationId,
+                    variationName: item.variationName
                 }))
             };
 
@@ -300,7 +370,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 cashierName: activeShift?.user?.firstName || user?.firstName || user?.name || 'Kasiyer',
                 date: new Date(),
                 items: cart.map(item => ({
-                    name: item.product.name,
+                    name: item.product.name + (item.variationName ? ` (${item.variationName})` : ''),
                     quantity: item.quantity,
                     price: item.product.price + (item.extraPrice || 0),
                     total: (item.product.price + (item.extraPrice || 0)) * item.quantity,
@@ -446,7 +516,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                         </button>
 
                         <button
-                            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                            onClick={toggleTheme}
                             className="w-12 h-12 flex items-center justify-center rounded-2xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 transition-all text-xl"
                             title={theme === 'dark' ? 'Açık Tema' : 'Koyu Tema'}
                         >
@@ -455,62 +525,145 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                     </div>
                 </div>
 
-                {/* Categories */}
-                <div className="flex items-center gap-4 mb-6">
-                    <div className="flex-1 flex gap-2 overflow-x-auto pb-2 scrollbar-hide w-full">
-                        {categories.map(cat => (
+                {/* Categories -> Product Types (Cins) Tabları */}
+                <div className="flex items-center gap-4 mb-3">
+                    <div className="flex-1 flex gap-2 overflow-x-auto pb-1 scrollbar-hide w-full">
+                        {productTypeOptions.map(t => (
                             <button
-                                key={cat}
-                                onClick={() => setSelectedCategory(cat)}
-                                className={`px-6 h-12 rounded-xl text-xs font-bold uppercase tracking-widest transition-all whitespace-nowrap flex items-center justify-center ${selectedCategory === cat ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm'}`}
+                                key={t.id}
+                                onClick={() => {
+                                    setSelectedProductTypeId(t.id as any);
+                                    setSelectedGroupName('Tümü');
+                                    setSelectedCategoryName('Tümü');
+                                }}
+                                className={`px-5 h-10 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap flex items-center justify-center ${selectedProductTypeId === t.id ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm'}`}
                             >
-                                {cat === 'all' ? tc('all') : cat}
+                                {t.name}
                             </button>
                         ))}
                     </div>
                 </div>
 
-                {/* Product Grid */}
-                <div className="flex-1 overflow-y-auto grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 auto-rows-max custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-200px)]">
-                    {filteredProducts.map(product => (
-                        <button
-                            key={product.id}
-                            onClick={() => addToCart(product)}
-                            className="group relative bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-2xl overflow-hidden shadow-md dark:shadow-black/20 hover:border-orange-500/50 hover:shadow-orange-500/20 transition-all duration-300 flex flex-col justify-end p-2"
-                            style={{ height: '160px', minHeight: '160px', maxHeight: '160px' }}
-                        >
-                            {/* Background Image or Icon */}
-                            <div className="absolute inset-0 z-0 bg-slate-800 flex items-center justify-center">
-                                {product.imageUrl ? (
-                                    <img
-                                        src={product.imageUrl.startsWith('http') || product.imageUrl.startsWith('data:') || product.imageUrl.startsWith('/')
-                                            ? product.imageUrl
-                                            : `/uploads/products/${product.imageUrl}`
+                {/* Drill-Down Navigasyon (Breadcrumb) */}
+                <div className="flex items-center gap-2 mb-4">
+                    <div className="flex-1 flex items-center gap-1.5 overflow-x-auto scrollbar-none min-h-[32px]">
+                        {selectedGroupName !== 'Tümü' ? (
+                            <>
+                                <button 
+                                    onClick={() => {
+                                        if (selectedCategoryName !== 'Tümü') {
+                                            setSelectedCategoryName('Tümü');
+                                        } else {
+                                            setSelectedGroupName('Tümü');
                                         }
-                                        alt={product.name}
-                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                                    />
-                                ) : (
-                                    <i className="fat fa-box-open text-[40px] text-slate-300 dark:text-slate-700 group-hover:text-orange-500/50 transition-colors duration-500"></i>
-                                )}
-                            </div>
-
-                            {/* Gradient Overlay for Text Readability */}
-                            <div className="absolute inset-0 z-10 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent flex flex-col justify-end p-2">
-                                <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                            </div>
-
-                            {/* Content Over the Background */}
-                            <div className="relative z-20 w-full flex flex-col items-center justify-end text-center h-full">
-                                <div className="text-[11px] font-black uppercase tracking-tight text-white line-clamp-2 leading-tight mb-1 group-hover:text-orange-400 transition-colors drop-shadow-md">
-                                    {product.name}
+                                    }}
+                                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-[10px] font-bold uppercase transition-all flex items-center gap-1.5 shrink-0"
+                                >
+                                    <i className="fat fa-arrow-left"></i> Geri
+                                </button>
+                                <div className="flex items-center gap-1.5 p-1 bg-white/40 dark:bg-slate-800/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60 shrink-0">
+                                    <span 
+                                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-tight shadow-sm flex items-center gap-1.5 ${selectedCategoryName === 'Tümü' ? 'bg-amber-500 text-white shadow-amber-500/25' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-300 dark:hover:bg-slate-600'}`}
+                                        onClick={() => setSelectedCategoryName('Tümü')}
+                                    >
+                                        <i className="fat fa-folder-open"></i>
+                                        {selectedGroupName}
+                                    </span>
+                                    {selectedCategoryName !== 'Tümü' && (
+                                        <>
+                                            <i className="fat fa-angle-right text-slate-400 text-[10px]"></i>
+                                            <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-tight bg-emerald-500 text-white shadow-sm shadow-emerald-500/25 flex items-center gap-1.5">
+                                                <i className="fat fa-tags"></i>
+                                                {selectedCategoryName}
+                                                <button onClick={() => setSelectedCategoryName('Tümü')} className="ml-1 opacity-70 hover:opacity-100"><i className="fat fa-xmark"></i></button>
+                                            </span>
+                                        </>
+                                    )}
                                 </div>
-                                <div className="bg-slate-900/80 px-3 py-1 rounded-xl backdrop-blur-md border border-white/10 text-orange-400 font-extrabold text-[13px] shadow-lg">
-                                    {product.price.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} <span className="text-[10px]">₺</span>
-                                </div>
-                            </div>
-                        </button>
-                    ))}
+                            </>
+                        ) : (
+                            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">
+                                {availableGroups.filter(g => g !== 'Tümü').length > 0 ? 'Lütfen Grup Seçin' : 'Ürünler Listeleniyor'}
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                {/* Drill-Down Grid (Folder Cards or Products) */}
+                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-250px)]">
+                    {selectedGroupName === 'Tümü' && availableGroups.filter(g => g !== 'Tümü').length > 0 ? (
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
+                            {availableGroups.filter(g => g !== 'Tümü').map(g => (
+                                <button
+                                    key={g}
+                                    onClick={() => { setSelectedGroupName(g); setSelectedCategoryName('Tümü'); }}
+                                    className="group relative flex flex-col items-center justify-center p-6 bg-white dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-orange-500/50 hover:-translate-y-1 transition-all duration-300"
+                                >
+                                    <div className="w-16 h-16 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                        <i className="fat fa-folder-open text-2xl text-orange-500"></i>
+                                    </div>
+                                    <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{g}</span>
+                                </button>
+                            ))}
+                        </div>
+                    ) : selectedGroupName !== 'Tümü' && selectedCategoryName === 'Tümü' && availableCategories.filter(c => c !== 'Tümü').length > 0 ? (
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
+                            {availableCategories.filter(c => c !== 'Tümü').map(c => (
+                                <button
+                                    key={c}
+                                    onClick={() => setSelectedCategoryName(c)}
+                                    className="group relative flex flex-col items-center justify-center p-6 bg-white dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-500/50 hover:-translate-y-1 transition-all duration-300"
+                                >
+                                    <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                        <i className="fat fa-tags text-2xl text-emerald-500"></i>
+                                    </div>
+                                    <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{c}</span>
+                                </button>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 auto-rows-max">
+                            {filteredProducts.map(product => (
+                                <button
+                                    key={product.id}
+                                    onClick={() => addToCart(product)}
+                                    className="group relative bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-2xl overflow-hidden shadow-md dark:shadow-black/20 hover:border-orange-500/50 hover:shadow-orange-500/20 transition-all duration-300 flex flex-col justify-end p-2"
+                                    style={{ height: '160px', minHeight: '160px', maxHeight: '160px' }}
+                                >
+                                    {/* Background Image or Icon */}
+                                    <div className="absolute inset-0 z-0 bg-slate-800 flex items-center justify-center">
+                                        {product.imageUrl ? (
+                                            <img
+                                                src={product.imageUrl.startsWith('http') || product.imageUrl.startsWith('data:') || product.imageUrl.startsWith('/')
+                                                    ? product.imageUrl
+                                                    : `/uploads/products/${product.imageUrl}`
+                                                }
+                                                alt={product.name}
+                                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                            />
+                                        ) : (
+                                            <i className="fat fa-box-open text-[40px] text-slate-300 dark:text-slate-700 group-hover:text-orange-500/50 transition-colors duration-500"></i>
+                                        )}
+                                    </div>
+
+                                    {/* Gradient Overlay for Text Readability */}
+                                    <div className="absolute inset-0 z-10 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent flex flex-col justify-end p-2">
+                                        <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                                    </div>
+
+                                    {/* Content Over the Background */}
+                                    <div className="relative z-20 w-full flex flex-col items-center justify-end text-center h-full">
+                                        <div className="text-[11px] font-black uppercase tracking-tight text-white line-clamp-2 leading-tight mb-1 group-hover:text-orange-400 transition-colors drop-shadow-md">
+                                            {product.name}
+                                        </div>
+                                        <div className="bg-slate-900/80 px-3 py-1 rounded-xl backdrop-blur-md border border-white/10 text-orange-400 font-extrabold text-[13px] shadow-lg">
+                                            {product.price.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} <span className="text-[10px]">₺</span>
+                                        </div>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -660,6 +813,46 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 </div>
             </div>
 
+
+            {isVariationModalOpen && selectedProductForVariation && (
+                <div className="fixed inset-0 z-[140] flex items-end sm:items-center justify-center p-4 bg-slate-900/70 backdrop-blur-lg">
+                    <div className="bg-white dark:bg-slate-800 rounded-[32px] w-full max-w-md shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 animate-in slide-in-from-bottom-4 duration-300">
+                        <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-700 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-2xl bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                                        <i className="fat fa-ruler text-white text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-base font-black text-slate-800 dark:text-white uppercase tracking-tight">{selectedProductForVariation.name}</h3>
+                                        <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Boyut / Porsiyon Seç</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setIsVariationModalOpen(false)} className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/60 dark:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-white border border-slate-200 dark:border-slate-600 transition-all text-sm font-bold">&times;</button>
+                            </div>
+                        </div>
+                        <div className="p-6">
+                            <div className="grid grid-cols-2 gap-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                                {selectedProductForVariation.variations?.filter(v => v.isActive !== false).map((v: any) => (
+                                    <button
+                                        key={v.id}
+                                        onClick={() => {
+                                            setIsVariationModalOpen(false);
+                                            addToCart(selectedProductForVariation, pendingAddToCartArgs.skipExtraCheck, v.id);
+                                        }}
+                                        className="p-4 flex flex-col justify-between rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-indigo-400 dark:hover:border-indigo-500/50 hover:bg-indigo-50/50 dark:hover:bg-indigo-500/5 active:scale-95 transition-all"
+                                    >
+                                        <span className="font-bold text-sm text-slate-800 dark:text-white leading-tight mb-2">{v.variationName}</span>
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-500/20 px-2 py-0.5 rounded-full mt-auto self-start">
+                                            {v.fixedPrice !== null && v.fixedPrice !== undefined ? `₺${v.fixedPrice}` : `₺${selectedProductForVariation.price} (Baz)`}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Ekstra Ürün Popup Modal */}
             {/* Note & Modifier Selection Modal (TakeOrderView stili) */}

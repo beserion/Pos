@@ -87,4 +87,11 @@ export class SaleItem {
 
   @Column('decimal', { precision: 5, scale: 2, default: 1.00 })
   saleTypeMultiplier: number;
+
+  // --- Varyant (Yeni) ---
+  @Column({ nullable: true })
+  variationId: number;
+
+  @Column({ type: 'nvarchar', length: 200, nullable: true })
+  variationName: string;
 }

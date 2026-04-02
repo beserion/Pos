@@ -7,7 +7,7 @@ import { useAuth } from '../AuthContext';
 import { useLocale } from 'next-intl';
 import { toastSwal, showSwal } from '../utils/swal';
 import { io } from 'socket.io-client';
-import { useTheme } from 'next-themes';
+import { useThemeTransition } from '@/hooks/useThemeTransition';
 import { useParameters } from '../utils/useParameters';
 
 interface OrderItem {
@@ -36,7 +36,7 @@ export function PageClient() {
     const { user, loading } = useAuth();
     const router = useRouter();
     const locale = useLocale();
-    const { theme, setTheme } = useTheme();
+    const { theme, toggleTheme, setTheme } = useThemeTransition();
     const [mounted, setMounted] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [tickets, setTickets] = useState<OrderTicket[]>([]);
@@ -329,7 +329,7 @@ export function PageClient() {
                     </div>
                     {/* Theme Toggle */}
                     <button
-                        onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                        onClick={toggleTheme}
                         className="w-11 h-11 flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition shadow-sm"
                         title={mounted ? (theme === 'dark' ? 'Açık Tema' : 'Koyu Tema') : ''}
                     >
