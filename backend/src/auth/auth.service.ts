@@ -123,6 +123,7 @@ export class AuthService {
       sub: user.id,
       role: user.role?.name,
       cashRegisterId: user.cashRegisterId || null,
+      activeFeatures: user.firm?.activeFeatures || [],
     };
 
     try {

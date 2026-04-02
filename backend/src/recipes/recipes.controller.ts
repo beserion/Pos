@@ -12,9 +12,12 @@ import {
 } from '@nestjs/common';
 import { RecipesService } from './recipes.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { FeatureGuard } from '../auth/feature.guard';
+import { RequireFeature } from '../auth/feature.decorator';
 
 @Controller('recipes')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, FeatureGuard)
+@RequireFeature('recipe_system')
 export class RecipesController {
   constructor(private readonly recipesService: RecipesService) {}
 

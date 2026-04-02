@@ -10,7 +10,7 @@ export function PageClient() {
     const tAdmin = useTranslations('Admin');
     const tDashboard = useTranslations('Dashboard');
     const locale = useLocale();
-    const { user, loading, hasPermission, alertsBell } = useAuth();
+    const { user, loading, hasPermission, hasFeature, alertsBell } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
@@ -32,27 +32,29 @@ export function PageClient() {
         { key: 'PRODUCTS', title: tAdmin('products'), subtitle: tAdmin('productsDesc'), path: `/${locale}/admin/products`, icon: 'fa-mug-hot', color: 'text-teal-500' },
         { key: 'PRODUCTS', title: tAdmin('setMenus'), subtitle: tAdmin('setMenusDesc'), path: `/${locale}/admin/products/set-menus`, icon: 'fa-layer-group', color: 'text-indigo-500' },
         { key: 'MODIFIERS', title: tAdmin('modifiers'), subtitle: tAdmin('modifiersDesc'), path: `/${locale}/admin/modifiers`, icon: 'fa-tags', color: 'text-amber-500' },
-        { key: 'INGREDIENTS', title: tAdmin('recipes'), subtitle: tAdmin('recipesDesc'), path: `/${locale}/admin/recipes`, icon: 'fa-blender', color: 'text-emerald-500' },
+        { key: 'INGREDIENTS', title: tAdmin('recipes'), subtitle: tAdmin('recipesDesc'), path: `/${locale}/admin/recipes`, icon: 'fa-blender', color: 'text-emerald-500', featureKey: 'recipe_system' },
         { key: 'PRINTERS', title: 'Ürün Cinsleri', subtitle: 'Ürün cinslerini tanımla ve çıktı profilleri ata', path: `/${locale}/admin/product-types`, icon: 'fa-shapes', color: 'text-fuchsia-500' },
         { key: 'PRINTERS', title: 'Çıktı Profilleri', subtitle: 'Yazıcı yönlendirme profillerini yönet', path: `/${locale}/admin/output-profiles`, icon: 'fa-route', color: 'text-cyan-500' },
         { key: 'PRINTERS', title: 'Yönlendirme Kontrolü', subtitle: 'Ürün bazlı yönlendirme kurallarını incele', path: `/${locale}/admin/routing-control`, icon: 'fa-clipboard-list-check', color: 'text-lime-500' },
         { key: 'PRINTERS', title: tAdmin('printers'), subtitle: tAdmin('printersDesc'), path: `/${locale}/admin/printers`, icon: 'fa-print', color: 'text-sky-500' },
         { key: 'SALES', title: tAdmin('salesManagement'), subtitle: tAdmin('salesManagementDesc'), path: `/${locale}/admin/sales`, icon: 'fa-basket-shopping', color: 'text-orange-500' },
         { key: 'ORDERS', title: tAdmin('purchaseOrders'), subtitle: tAdmin('purchaseOrdersDesc'), path: `/${locale}/admin/orders`, icon: 'fa-cart-shopping', color: 'text-amber-500' },
-        { key: 'COURIERS', title: tAdmin('couriers'), subtitle: tAdmin('couriersDesc'), path: `/${locale}/admin/couriers`, icon: 'fa-user-helmet-safety', color: 'text-orange-500' },
-        { key: 'DELIVERY', title: tAdmin('deliveries'), subtitle: tAdmin('deliveriesDesc'), path: `/${locale}/admin/deliveries`, icon: 'fa-truck-fast', color: 'text-indigo-500' },
-        { key: 'WAITER', title: tAdmin('tablet'), subtitle: tAdmin('tabletDesc'), path: `/${locale}/waiter`, icon: 'fa-tablet-screen-button', color: 'text-rose-500' },
+        { key: 'COURIERS', title: tAdmin('couriers'), subtitle: tAdmin('couriersDesc'), path: `/${locale}/admin/couriers`, icon: 'fa-user-helmet-safety', color: 'text-orange-500', featureKey: 'delivery_system' },
+        { key: 'DELIVERY', title: tAdmin('deliveries'), subtitle: tAdmin('deliveriesDesc'), path: `/${locale}/admin/deliveries`, icon: 'fa-truck-fast', color: 'text-indigo-500', featureKey: 'delivery_system' },
+        { key: 'WAITER', title: tAdmin('tablet'), subtitle: tAdmin('tabletDesc'), path: `/${locale}/waiter`, icon: 'fa-tablet-screen-button', color: 'text-rose-500', featureKey: 'waiter_app' },
         { key: 'SYSTEM', title: 'Parametreler', subtitle: 'Modül bazlı sistem ayarları', path: `/${locale}/admin/parameters`, icon: 'fa-sliders', color: 'text-violet-500' },
         { key: 'ALERTS', title: tDashboard('alerts'), subtitle: tDashboard('alertsDesc'), path: `/${locale}/admin/alerts`, icon: 'fa-bell-on', color: 'text-rose-500' },
     ];
 
     const filteredSections = sections.filter(sec => {
         const matchesPermission = hasPermission(`${sec.key}:VIEW`);
+        const matchesFeature = sec.featureKey ? hasFeature(sec.featureKey) : true;
+        
         const query = searchQuery.toLowerCase();
         const matchesSearch = !searchQuery ||
             (sec.title?.toLowerCase().includes(query)) ||
             (sec.subtitle?.toLowerCase().includes(query));
-        return matchesPermission && matchesSearch;
+        return matchesPermission && matchesFeature && matchesSearch;
     });
 
     if (loading) return null;

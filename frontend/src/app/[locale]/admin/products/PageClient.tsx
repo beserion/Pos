@@ -28,6 +28,8 @@ interface Product {
     outputProfile?: any;
     recipes?: { ingredientId: number; ingredientName?: string; quantity: number; unit: string }[];
     modifiers?: Modifier[];
+    stockGroup?: string;
+    stockGroupId?: number | null;
     variations?: any[];
 }
 
@@ -58,6 +60,7 @@ export function PageClient() {
     const [allModifiers, setAllModifiers] = useState<Modifier[]>([]);
     const [stockCards, setStockCards] = useState<any[]>([]);
     const [recipeHeaders, setRecipeHeaders] = useState<any[]>([]);
+    const [stockGroups, setStockGroups] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -81,6 +84,8 @@ export function PageClient() {
         outputProfileId: null,
         recipes: [],
         modifiers: [],
+        stockGroup: '',
+        stockGroupId: null,
         variations: []
     });
 
@@ -98,7 +103,7 @@ export function PageClient() {
         if (!user?.token) return;
         try {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
-            const [prodRes, printRes, modRes, typesRes, profilesRes, depRes, stocksRes, recipesRes] = await Promise.all([
+            const [prodRes, printRes, modRes, typesRes, profilesRes, depRes, stocksRes, stockGroupsRes, recipesRes] = await Promise.all([
                 axios.get(`${API_URL}/products`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/printers`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/modifiers`, { headers: { Authorization: `Bearer ${user.token}` } }),
@@ -106,6 +111,7 @@ export function PageClient() {
                 axios.get(`${API_URL}/output-profiles`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/departments`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/stock-cards`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: [] })),
+                axios.get(`${API_URL}/stock-groups`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: [] })),
                 axios.get(`${API_URL}/recipes`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: [] }))
             ]);
             setProducts(prodRes.data);
@@ -116,6 +122,7 @@ export function PageClient() {
             setOutputProfiles(profilesRes.data);
             setDepartments(depRes.data);
             setStockCards(Array.isArray(stocksRes.data) ? stocksRes.data : (stocksRes.data?.data || []));
+            setStockGroups(Array.isArray(stockGroupsRes.data) ? stockGroupsRes.data : (stockGroupsRes.data?.data || []));
             setRecipeHeaders(Array.isArray(recipesRes.data) ? recipesRes.data : (recipesRes.data?.data || []));
         } catch (error) {
             console.error('Error fetching data', error);
@@ -543,7 +550,7 @@ export function PageClient() {
                                                     </div>
                                                 </div>
 
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                                     <div>
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">ÜRÜN CİNSİ</label>
                                                         <div className="relative">
@@ -558,10 +565,31 @@ export function PageClient() {
                                                         </div>
                                                     </div>
                                                     <div>
+                                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">STOK GRUBU</label>
+                                                        <div className="relative">
+                                                            <i className="fat fa-layer-group absolute left-4 top-4 text-teal-500/50"></i>
+                                                            <select 
+                                                                value={formData.stockGroupId || ''} 
+                                                                onChange={(e) => {
+                                                                    const id = e.target.value ? parseInt(e.target.value) : null;
+                                                                    const group = stockGroups.find(g => g.id === id);
+                                                                    setFormData({ ...formData, stockGroupId: id, stockGroup: group?.name || '' });
+                                                                }} 
+                                                                className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer"
+                                                            >
+                                                                <option value="">Grup Seçin</option>
+                                                                {stockGroups.map(sg => (
+                                                                    <option key={sg.id} value={sg.id}>{sg.name}</option>
+                                                                ))}
+                                                            </select>
+                                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                        </div>
+                                                    </div>
+                                                    <div>
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCategory')}</label>
                                                         <div className="relative">
                                                             <i className="fat fa-folder-tree absolute left-4 top-4 text-teal-500/50"></i>
-                                                            <select value={formData.category} onChange={(e) => handleCategoryChange(e.target.value)} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                            <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
                                                                 <option value="">{t('selectCategory')}</option>
                                                                 {categoryOptions.map(cat => (
                                                                     <option key={cat.value} value={cat.value}>{cat.value}</option>

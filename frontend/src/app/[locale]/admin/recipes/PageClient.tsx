@@ -47,7 +47,7 @@ export function PageClient() {
     const tc = useTranslations('Common');
     const locale = useLocale();
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, hasFeature } = useAuth();
 
     const [products, setProducts] = useState<Product[]>([]);
     const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
@@ -60,6 +60,8 @@ export function PageClient() {
     
     const [loading, setLoading] = useState(true);
     const [loadingRecipe, setLoadingRecipe] = useState(false);
+
+    const hasRecipeFeature = user ? hasFeature('recipe_system') : false;
 
     useEffect(() => {
         if (user?.token) {
@@ -260,6 +262,16 @@ export function PageClient() {
                 <div className="flex-1 flex flex-col items-center justify-center p-20 z-10">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mb-4"></div>
                     <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t('loadingRecipes')}</p>
+                </div>
+            ) : !hasRecipeFeature ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-20 z-10">
+                    <div className="w-24 h-24 rounded-full bg-slate-100 dark:bg-slate-800/50 flex items-center justify-center mb-6">
+                        <i className="fat fa-lock text-4xl text-slate-400"></i>
+                    </div>
+                    <h3 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tighter mb-2">Premium Modül Kapalı</h3>
+                    <p className="text-slate-500 dark:text-slate-400 font-bold text-sm max-w-md text-center">
+                        Firmanızın lisansında "Reçete ve Üretim Sistemi" aktif değil. Bu modülü kullanabilmek için lütfen satış temsilcinizle iletişime geçerek lisansınızı yükseltin.
+                    </p>
                 </div>
             ) : (
                 <div className="flex-1 flex gap-6 px-[50px] pb-8 relative z-10 overflow-hidden min-h-0">

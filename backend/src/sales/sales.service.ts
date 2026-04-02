@@ -354,15 +354,21 @@ export class SalesService implements OnModuleInit {
             saleItems.push(savedParent);
 
             if (item.subItems && item.subItems.length > 0) {
+              const isMerging = Boolean(mergeSaleIds && mergeSaleIds.length > 0);
               for (const subItem of item.subItems) {
+                // Eğer birleştirme (merge) yapılıyorsa miktar zaten mutlaktır, değilse parent ile çarpılır
+                const finalSubQty = isMerging ? Number(subItem.quantity) : (Number(subItem.quantity) * Number(item.quantity));
+                const finalSubUnitPrice = Number(subItem.unitPrice || 0);
+                const finalSubTotal = isMerging ? (subItem.total || (finalSubUnitPrice * finalSubQty)) : (finalSubUnitPrice * finalSubQty);
+
                 const newSub = manager.create(SaleItem, {
                   productId: subItem.productId,
-                  quantity: subItem.quantity * item.quantity,
-                  unitPrice: subItem.unitPrice || 0,
+                  quantity: finalSubQty,
+                  unitPrice: finalSubUnitPrice,
                   saleType: item.saleType || 'STANDARD',
                   saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
                   costPrice: subItem.costPrice || 0,
-                  total: (subItem.unitPrice || 0) * (subItem.quantity * item.quantity),
+                  total: finalSubTotal,
                   parentItemId: savedParent.id,
                   menuGroupId: String(subItem.menuGroupId || ''),
                   isMarshed: false,
@@ -427,10 +433,19 @@ export class SalesService implements OnModuleInit {
         if (!mergeSaleIds || mergeSaleIds.length === 0) {
           await this.deductStockForSale(savedSale, manager);
         } else {
+          // SQL Server'da "Foreign Key" kısıtlaması nedeniyle hiyerarşik silme hatalarını (parentSaleId)
+          // önlemek için silinecek olan tüm adisyonlara yönelik olan (onlara bağlı olan çocukların) referanslarını temizliyoruz.
+          if (mergeSaleIds && mergeSaleIds.length > 0) {
+            await manager.update(Sale, { parentSaleId: In(mergeSaleIds) }, { parentSaleId: null as any });
+          }
+
           for (const oldId of mergeSaleIds) {
             const oldSale = await manager.findOne(Sale, { where: { id: oldId }, relations: ['items'] });
             if (oldSale) {
-              if (oldSale.items) await manager.delete(SaleItem, oldSale.items.map(i => i.id));
+              // SQL Server'da "IN ()" hatası almamak için dizi uzunluğu kontrolü
+              if (oldSale.items && oldSale.items.length > 0) {
+                await manager.delete(SaleItem, oldSale.items.map(i => i.id));
+              }
               await manager.delete(Sale, oldId);
             }
           }
@@ -666,6 +681,12 @@ export class SalesService implements OnModuleInit {
       // account_transactions tablosuna toplu upsert edilir.
 
       // 5. Cleanup empty old temporary sales
+      if (oldSaleIds.size > 0) {
+         const oldIds = Array.from(oldSaleIds);
+         // Hiyerarşik silme hatasını önlemek için önce bu adisyonlara yönelik referansları (child) temizle
+         await manager.update(Sale, { parentSaleId: In(oldIds) }, { parentSaleId: null as any });
+      }
+
       for (const oldSaleId of oldSaleIds) {
         const remainingItems = await manager.count(SaleItem, { where: { sale: { id: oldSaleId } } });
         if (remainingItems === 0) {

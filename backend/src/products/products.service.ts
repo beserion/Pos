@@ -57,7 +57,8 @@ export class ProductsService {
         return await this.productRepository
             .createQueryBuilder('p')
             .leftJoinAndSelect('p.variations', 'v')
-            .select(['p.id', 'p.name', 'p.price', 'p.category', 'p.imageUrl', 'p.isQuickSale', 'p.sku', 'p.productTypeId', 'p.printerId', 'p.orderIndex', 'v.id', 'v.variationName', 'v.fixedPrice', 'v.priceFactor', 'v.inventoryLinkType', 'v.isActive'])
+            .leftJoinAndSelect('p.linkedStockCard', 'sc')
+            .select(['p.id', 'p.name', 'p.price', 'p.category', 'p.imageUrl', 'p.isQuickSale', 'p.sku', 'p.productTypeId', 'p.printerId', 'p.orderIndex', 'p.stockGroup', 'p.stockGroupId', 'v.id', 'v.variationName', 'v.fixedPrice', 'v.priceFactor', 'v.inventoryLinkType', 'v.isActive', 'sc.id', 'sc.stockGroup', 'sc.category'])
             .where('p.isIngredient IS NULL OR p.isIngredient = :val', { val: false })
             .orderBy('p.orderIndex', 'ASC')
             .addOrderBy('p.id', 'ASC')
