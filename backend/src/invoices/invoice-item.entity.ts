@@ -24,7 +24,7 @@ export class InvoiceItem {
   @JoinColumn({ name: 'stockCardId' })
   stockCard: StockCard;
 
-  @Column({ nullable: true , default: 0 })
+  @Column({ nullable: true })
   stockCardId: number;
 
   @Column({ nullable: true })

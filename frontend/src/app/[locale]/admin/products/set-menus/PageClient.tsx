@@ -13,6 +13,7 @@ interface SetGroupItem {
     priceDiff: number;
     isDefault: boolean;
     isActive: boolean;
+    entitlementCost?: number;
 }
 
 interface SetGroup {
@@ -27,6 +28,7 @@ interface SetGroup {
 interface SetMenu {
     id?: number;
     setType: string;
+    bundleEntitlementLimit?: number;
     isActive: boolean;
     showAsParent: boolean;
     splitToSubItems: boolean;
@@ -75,6 +77,7 @@ export function PageClient() {
         outputProfileId: null,
         setMenu: {
             setType: 'FIX',
+            bundleEntitlementLimit: 0,
             isActive: true,
             showAsParent: true,
             splitToSubItems: false,
@@ -162,7 +165,7 @@ export function PageClient() {
         } else {
             setFormData({
                 id: 0, name: '', sku: `SET-${Date.now().toString().slice(-6)}`, price: 0, category: '', isActive: true, isSet: true,
-                setMenu: { setType: 'FIX', isActive: true, showAsParent: true, splitToSubItems: false, groups: [] }
+                setMenu: { setType: 'FIX', bundleEntitlementLimit: 0, isActive: true, showAsParent: true, splitToSubItems: false, groups: [] }
             });
         }
         setActiveTab('genel');
@@ -200,7 +203,7 @@ export function PageClient() {
         setFormData(prev => {
             const newGroups = [...(prev.setMenu?.groups || [])];
             if (!newGroups[gIdx].items.find(i => i.productId === productId)) {
-                newGroups[gIdx].items.push({ productId, priceMode: 'INCLUDED', priceDiff: 0, isDefault: false, isActive: true });
+                newGroups[gIdx].items.push({ productId, priceMode: 'INCLUDED', priceDiff: 0, isDefault: false, isActive: true, entitlementCost: 1 });
             }
             return { ...prev, setMenu: { ...prev.setMenu!, groups: newGroups } };
         });
@@ -388,6 +391,17 @@ export function PageClient() {
                                         <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Fiks Menüler seçim ekranı açmadan doğrudan sepete varsayılanları koyar. Seçmeli Menüler ise zorunlu grupların (Min Seçim) tamamlanmasını bekler.</p>
                                     </div>
 
+                                    {formData.setMenu?.setType === 'BUNDLE' && (
+                                        <div className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 p-6 rounded-3xl border border-orange-200 dark:border-orange-700/50 mt-4">
+                                            <label className="block text-[10px] font-black text-orange-600 dark:text-orange-400 uppercase tracking-widest mb-2 px-1">TÜKETİM HAKKI (LIMIT / ENTITLEMENT)</label>
+                                            <div className="relative w-full max-w-sm">
+                                                <i className="fat fa-ticket absolute left-4 top-4 text-orange-500/50 dark:text-orange-400/50"></i>
+                                                <input type="number" step="0.5" value={formData.setMenu?.bundleEntitlementLimit || 0} onChange={e => setFormData({...formData, setMenu: {...formData.setMenu!, bundleEntitlementLimit: parseFloat(e.target.value)}})} className="w-full pl-12 pr-4 py-3.5 bg-white dark:bg-slate-800 border border-orange-200 dark:border-orange-700/50 rounded-2xl text-orange-600 dark:text-orange-400 font-black focus:ring-4 focus:ring-orange-500/10 outline-none uppercase transform-wide" placeholder="Örn: 4 Hak" />
+                                            </div>
+                                            <p className="text-xs font-bold text-orange-500 dark:text-orange-500/80 mt-3 mb-0">Bu ürünü alan müşteri toplam kaç hakediş puanına sahip olacak? Örn: 4</p>
+                                        </div>
+                                    )}
+
                                     <div className="flex justify-between items-end">
                                         <div>
                                             <h4 className="text-sm font-black text-slate-700 dark:text-slate-200 uppercase tracking-widest">Seçim Grupları</h4>
@@ -453,6 +467,9 @@ export function PageClient() {
                                                                     <tr className="bg-slate-100/50 dark:bg-slate-800/80 border-b border-slate-100 dark:border-slate-700/50">
                                                                         <th className="px-5 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Ürün</th>
                                                                         <th className="px-5 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-center w-32">Fiyat Farkı (₺)</th>
+                                                                        {formData.setMenu?.setType === 'BUNDLE' && (
+                                                                            <th className="px-5 py-3 text-[10px] font-black text-orange-500 dark:text-orange-400 uppercase tracking-widest text-center w-28">Puan/Ağırlık</th>
+                                                                        )}
                                                                         <th className="px-5 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-center w-24">Varsayılan?</th>
                                                                         <th className="px-5 py-3 w-16 text-right"></th>
                                                                     </tr>
@@ -468,6 +485,11 @@ export function PageClient() {
                                                                                 <td className="px-5 py-3 text-center">
                                                                                     <input type="number" value={item.priceDiff} onChange={e => updateItemInGroup(gIdx, iIdx, 'priceDiff', Number(e.target.value))} className="w-full text-center px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-teal-600 dark:text-teal-400 font-black text-sm outline-none focus:border-teal-500" />
                                                                                 </td>
+                                                                                {formData.setMenu?.setType === 'BUNDLE' && (
+                                                                                    <td className="px-5 py-3 text-center bg-orange-50/30 dark:bg-orange-900/10">
+                                                                                        <input type="number" step="0.1" value={item.entitlementCost ?? 1} onChange={e => updateItemInGroup(gIdx, iIdx, 'entitlementCost', Number(e.target.value))} className="w-full text-center px-2 py-1.5 bg-white dark:bg-slate-800 border border-orange-200 dark:border-orange-700/50 rounded-lg text-orange-600 dark:text-orange-400 font-black text-sm outline-none focus:border-orange-500" />
+                                                                                    </td>
+                                                                                )}
                                                                                 <td className="px-5 py-3 text-center">
                                                                                     <label className="relative inline-flex items-center cursor-pointer">
                                                                                         <input type="checkbox" checked={item.isDefault} onChange={e => updateItemInGroup(gIdx, iIdx, 'isDefault', e.target.checked)} className="sr-only peer" />

@@ -8,9 +8,10 @@ import { showSwal, toastSwal } from '../utils/swal';
 import { io } from 'socket.io-client';
 import { useTranslations, useLocale } from 'next-intl';
 import { useThemeTransition } from '@/hooks/useThemeTransition';
+import SetMenuSelectionModal from '../pos/SetMenuSelectionModal';
 
-interface Product { id: number; name: string; price: number; category: string; imageUrl?: string; printerId?: number; variations?: any[]; }
-interface OrderItem { product: Product; quantity: number; variationId?: number; variationName?: string; extraPrice?: number; }
+interface Product { id: number; name: string; price: number; category: string; imageUrl?: string; printerId?: number; variations?: any[]; isSet?: boolean; setMenu?: any; sku: string; }
+interface OrderItem { product: Product; quantity: number; variationId?: number; variationName?: string; extraPrice?: number; subItems?: any[]; uniqueId?: string; }
 interface SaleItem { id: number; productName: string; quantity: number; unitPrice: number; total: number; status: string; }
 interface TableSale { id: number; totalAmount: number; status: string; items: SaleItem[]; }
 interface Table {
@@ -43,6 +44,8 @@ export function PageClient() {
 
     const [isVariationModalOpen, setIsVariationModalOpen] = useState(false);
     const [selectedProductForVariation, setSelectedProductForVariation] = useState<Product | null>(null);
+    const [isSetMenuModalOpen, setIsSetMenuModalOpen] = useState(false);
+    const [selectedSetMenuProduct, setSelectedSetMenuProduct] = useState<Product | null>(null);
 
     const [pinCode, setPinCode] = useState('');
     const [isPinRequired, setIsPinRequired] = useState(true);
@@ -149,6 +152,12 @@ export function PageClient() {
             return;
         }
 
+        if (product.isSet) {
+            setSelectedSetMenuProduct(product);
+            setIsSetMenuModalOpen(true);
+            return;
+        }
+
         let extraPriceFromVariation = 0;
         let vName: string | undefined;
         let vId: number | undefined;
@@ -170,6 +179,22 @@ export function PageClient() {
             }
             return [...prev, { product, quantity: 1, variationId: vId, variationName: vName, extraPrice: extraPriceFromVariation }];
         });
+    };
+
+    const handleSetMenuConfirm = (subItems: any[], extraPrice: number) => {
+        if (!selectedSetMenuProduct) return;
+        setCart(prev => [
+            ...prev,
+            {
+                product: selectedSetMenuProduct,
+                quantity: 1,
+                subItems,
+                extraPrice,
+                uniqueId: Date.now().toString() + Math.random().toString(36).substring(7)
+            }
+        ]);
+        setIsSetMenuModalOpen(false);
+        setSelectedSetMenuProduct(null);
     };
 
     const removeFromCart = (itemToRemove: OrderItem) => {
@@ -197,7 +222,8 @@ export function PageClient() {
                     unitPrice: item.product.price + (item.extraPrice || 0),
                     total: item.quantity * (item.product.price + (item.extraPrice || 0)),
                     variationId: item.variationId,
-                    variationName: item.variationName
+                    variationName: item.variationName,
+                    subItems: item.subItems
                 }))
             };
 

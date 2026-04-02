@@ -29,6 +29,7 @@ interface Product {
     isSet?: boolean;
     setMenu?: {
         setType: string;
+        bundleEntitlementLimit?: number;
         groups: {
             id?: number;
             groupName: string;
@@ -38,6 +39,7 @@ interface Product {
                 productId: number;
                 priceDiff: number;
                 isDefault: boolean;
+                entitlementCost?: number;
             }[];
         }[];
     };

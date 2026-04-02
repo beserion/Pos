@@ -368,7 +368,7 @@ export function PageClient() {
                                                 <i className="fat fa-tag absolute left-4 top-3.5 text-slate-400 text-sm"></i>
                                                 <input 
                                                     type="text" 
-                                                    value={currentRecipe.name} 
+                                                    value={currentRecipe.name || ''} 
                                                     onChange={(e) => setCurrentRecipe({ ...currentRecipe, name: e.target.value })} 
                                                     className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-2 focus:ring-orange-500/50 outline-none transition-shadow" 
                                                     placeholder="Örn: Standart Margarita" 
@@ -440,7 +440,7 @@ export function PageClient() {
                                                                     <input 
                                                                         type="number" 
                                                                         step="0.0001" 
-                                                                        value={line.quantity || ''} 
+                                                                        value={line.quantity ?? ''} 
                                                                         onChange={(e) => handleLineChange(idx, 'quantity', parseFloat(e.target.value) || 0)} 
                                                                         className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-800 dark:text-white font-black text-sm text-center focus:border-orange-500 outline-none transition-colors"
                                                                     />
