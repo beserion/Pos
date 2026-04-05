@@ -7,7 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Invoice } from './invoice.entity';
 import { InvoiceItem } from './invoice-item.entity';
-import { StocksService } from '../stocks/stocks.service';
+import { StockMovementsService } from '../stock-movements/stock-movements.service';
 
 @Injectable()
 export class InvoicesService {
@@ -16,7 +16,7 @@ export class InvoicesService {
     private invoiceRepository: Repository<Invoice>,
     @InjectRepository(InvoiceItem)
     private invoiceItemRepository: Repository<InvoiceItem>,
-    private readonly stocksService: StocksService,
+    private readonly stockMovementsService: StockMovementsService,
   ) {}
 
   async findAll(
@@ -207,19 +207,17 @@ export class InvoicesService {
     if (invoiceType === 'PURCHASE' || invoiceType === 'SALE') {
       for (const item of data.items) {
         if (item.stockCardId) {
-          if (invoiceType === 'PURCHASE') {
-            await this.stocksService.addStock(
-              item.stockCardId,
-              Number(item.quantity),
-              data.warehouseLocation || 'default',
-            );
-          } else {
-            await this.stocksService.deductStock(
-              item.stockCardId,
-              Number(item.quantity),
-              data.warehouseLocation || 'default',
-            );
-          }
+          await this.stockMovementsService.createMovement({
+            stockCardId: item.stockCardId,
+            movementType: invoiceType === 'PURCHASE' ? 'purchase' : 'direct_sale_consumption',
+            quantity: invoiceType === 'PURCHASE' ? Number(item.quantity) : -Number(item.quantity),
+            unit: item.unit || 'adet',
+            unitCost: Number(item.unitPrice),
+            sourceType: 'INVOICE',
+            sourceId: savedInvoice.id,
+            documentNo: savedInvoice.invoiceNumber,
+            description: `${invoiceType === 'PURCHASE' ? 'Alış' : 'Satış'} Faturası: ${savedInvoice.invoiceNumber}`,
+          });
         }
       }
     }
@@ -279,7 +277,17 @@ export class InvoicesService {
       subtotal += q * price;
       taxAmount += (q * price * vat) / 100;
       
-      await this.stocksService.addStock(c.id, Number(q), 'Merkez');
+      await this.stockMovementsService.createMovement({
+        stockCardId: c.id,
+        movementType: 'purchase',
+        quantity: Number(q),
+        unit: 'adet',
+        unitCost: price,
+        sourceType: 'INVOICE',
+        sourceId: savedInvoice.id,
+        documentNo: savedInvoice.invoiceNumber,
+        description: 'Test faturası girişi',
+      });
     }
 
     savedInvoice.subtotal = subtotal;
@@ -316,27 +324,7 @@ export class InvoicesService {
     const existing = await this.findOne(id);
 
     if (existing.status !== 'CANCELLED') {
-      for (const item of existing.items || []) {
-        if (item.stockCardId) {
-          try {
-            if (existing.invoiceType === 'PURCHASE') {
-              await this.stocksService.deductStock(
-                item.stockCardId,
-                Number(item.quantity),
-                existing.warehouseLocation || 'default',
-              );
-            } else if (existing.invoiceType === 'SALE') {
-              await this.stocksService.addStock(
-                item.stockCardId,
-                Number(item.quantity),
-                existing.warehouseLocation || 'default',
-              );
-            }
-          } catch (e) {
-            console.error('Error revering stock on update:', e);
-          }
-        }
-      }
+      await this.stockMovementsService.deleteMovementsBySource('INVOICE', id);
     }
 
     if (existing.items && existing.items.length > 0) {
@@ -412,23 +400,17 @@ export class InvoicesService {
     if (existing.status !== 'CANCELLED') {
       for (const item of items) {
         if (item.stockCardId) {
-          try {
-            if (newType === 'PURCHASE') {
-              await this.stocksService.addStock(
-                item.stockCardId,
-                Number(item.quantity),
-                existing.warehouseLocation || 'default',
-              );
-            } else if (newType === 'SALE') {
-              await this.stocksService.deductStock(
-                item.stockCardId,
-                Number(item.quantity),
-                existing.warehouseLocation || 'default',
-              );
-            }
-          } catch (e) {
-            console.error('Error applying stock on update:', e);
-          }
+          await this.stockMovementsService.createMovement({
+            stockCardId: item.stockCardId,
+            movementType: newType === 'PURCHASE' ? 'purchase' : 'direct_sale_consumption',
+            quantity: newType === 'PURCHASE' ? Number(item.quantity) : -Number(item.quantity),
+            unit: item.unit || 'adet',
+            unitCost: Number(item.unitPrice),
+            sourceType: 'INVOICE',
+            sourceId: existing.id,
+            documentNo: existing.invoiceNumber,
+            description: `Fatura Güncelleme (${newType === 'PURCHASE' ? 'Alış' : 'Satış'}): ${existing.invoiceNumber}`,
+          });
         }
       }
     }
@@ -443,23 +425,21 @@ export class InvoicesService {
     await this.invoiceRepository.save(invoice);
 
     if (oldStatus !== 'CANCELLED' && status === 'CANCELLED') {
-      for (const item of invoice.items || []) {
-        if (item.stockCardId) {
-          if (invoice.invoiceType === 'PURCHASE') {
-            await this.stocksService.deductStock(item.stockCardId, Number(item.quantity), invoice.warehouseLocation || 'default');
-          } else if (invoice.invoiceType === 'SALE') {
-            await this.stocksService.addStock(item.stockCardId, Number(item.quantity), invoice.warehouseLocation || 'default');
-          }
-        }
-      }
+      await this.stockMovementsService.deleteMovementsBySource('INVOICE', id);
     } else if (oldStatus === 'CANCELLED' && status !== 'CANCELLED') {
       for (const item of invoice.items || []) {
         if (item.stockCardId) {
-          if (invoice.invoiceType === 'PURCHASE') {
-            await this.stocksService.addStock(item.stockCardId, Number(item.quantity), invoice.warehouseLocation || 'default');
-          } else if (invoice.invoiceType === 'SALE') {
-            await this.stocksService.deductStock(item.stockCardId, Number(item.quantity), invoice.warehouseLocation || 'default');
-          }
+          await this.stockMovementsService.createMovement({
+            stockCardId: item.stockCardId,
+            movementType: invoice.invoiceType === 'PURCHASE' ? 'purchase' : 'direct_sale_consumption',
+            quantity: invoice.invoiceType === 'PURCHASE' ? Number(item.quantity) : -Number(item.quantity),
+            unit: item.unit || 'adet',
+            unitCost: Number(item.unitPrice),
+            sourceType: 'INVOICE',
+            sourceId: invoice.id,
+            documentNo: invoice.invoiceNumber,
+            description: `Fatura İptal Geri Alma (${invoice.invoiceType === 'PURCHASE' ? 'Alış' : 'Satış'}): ${invoice.invoiceNumber}`,
+          });
         }
       }
     }
@@ -469,15 +449,7 @@ export class InvoicesService {
   async remove(id: number): Promise<void> {
     const invoice = await this.findOne(id);
     if (invoice.status !== 'CANCELLED') {
-      for (const item of invoice.items || []) {
-        if (item.stockCardId) {
-          if (invoice.invoiceType === 'PURCHASE') {
-            await this.stocksService.deductStock(item.stockCardId, Number(item.quantity), invoice.warehouseLocation || 'default');
-          } else if (invoice.invoiceType === 'SALE') {
-            await this.stocksService.addStock(item.stockCardId, Number(item.quantity), invoice.warehouseLocation || 'default');
-          }
-        }
-      }
+      await this.stockMovementsService.deleteMovementsBySource('INVOICE', id);
     }
     await this.invoiceRepository.delete(id);
   }

@@ -1087,6 +1087,12 @@ export class SalesService implements OnModuleInit {
     const items = sale.items;
     if (!items || items.length === 0) return;
 
+    // Varsayılan depo bilgisini çek (Reçete tüketimi için)
+    const warehouseResult = await manager.query(
+      `SELECT value FROM system_parameters WHERE [module] = 'stock' AND [key] = 'default_warehouse_id'`
+    );
+    const defaultWarehouseId = warehouseResult[0]?.value ? parseInt(warehouseResult[0].value) : undefined;
+
     for (const item of items) {
       if (!item.productId) continue;
 
@@ -1148,6 +1154,7 @@ export class SalesService implements OnModuleInit {
               'SALE',
               sale.id,
               sale.userId || sale.waiterId,
+              defaultWarehouseId,
               manager
             );
 
@@ -1171,6 +1178,7 @@ export class SalesService implements OnModuleInit {
                 'SALE',
                 sale.id,
                 sale.userId || sale.waiterId,
+                defaultWarehouseId,
                 manager,
               );
             } else {
@@ -1188,6 +1196,7 @@ export class SalesService implements OnModuleInit {
                'SALE',
                sale.id,
                sale.userId || sale.waiterId,
+               defaultWarehouseId,
                manager,
              );
           }
