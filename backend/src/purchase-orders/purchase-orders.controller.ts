@@ -13,9 +13,12 @@ import { PurchaseOrdersService } from './purchase-orders.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Permissions } from '../auth/permissions.decorator';
 import { PurchaseOrder } from './purchase-order.entity';
+import { RequireFeature } from '../auth/feature.decorator';
+import { FeatureGuard } from '../auth/feature.guard';
 
 @Controller('purchase-orders')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, FeatureGuard)
+@RequireFeature('finance_system')
 export class PurchaseOrdersController {
   constructor(private readonly poService: PurchaseOrdersService) { }
 

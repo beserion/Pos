@@ -36,7 +36,7 @@ export function PageClient() {
     const tDashboard = useTranslations('Dashboard');
     const tAdmin = useTranslations('Admin');
     const locale = useLocale();
-    const { user, loading, logout, hasPermission, alertsBell } = useAuth();
+    const { user, loading, logout, hasPermission, hasFeature, alertsBell } = useAuth();
     const { params } = useParameters();
     const router = useRouter();
     const { theme, toggleTheme } = useThemeTransition();
@@ -94,7 +94,8 @@ export function PageClient() {
             icon: 'fa-calendar-check',
             color: 'from-fuchsia-600 to-pink-600',
             bg: 'bg-fuchsia-600',
-            route: `/${locale}/reservations`
+            route: `/${locale}/reservations`,
+            featureKey: 'reservation_system'
         },
         {
             id: 'pos',
@@ -134,7 +135,8 @@ export function PageClient() {
             icon: 'fa-truck-fast',
             color: 'from-amber-500 to-orange-600',
             bg: 'bg-amber-500',
-            route: `/${locale}/delivery`
+            route: `/${locale}/delivery`,
+            featureKey: 'delivery_system'
         },
         {
             id: 'kitchen',
@@ -144,7 +146,8 @@ export function PageClient() {
             icon: 'fa-utensils',
             color: 'from-orange-500 to-red-600',
             bg: 'bg-orange-500',
-            route: `/${locale}/kitchen`
+            route: `/${locale}/kitchen`,
+            featureKey: 'kds_system'
         },
         {
             id: 'sales',
@@ -184,7 +187,8 @@ export function PageClient() {
             icon: 'fa-building-columns',
             color: 'from-blue-500 to-indigo-600',
             bg: 'bg-blue-500',
-            route: `/${locale}/finance/accounts`
+            route: `/${locale}/finance/accounts`,
+            featureKey: 'finance_system'
         },
         {
             id: 'finance',
@@ -194,7 +198,8 @@ export function PageClient() {
             icon: 'fa-coins',
             color: 'from-yellow-500 to-amber-600',
             bg: 'bg-yellow-500',
-            route: `/${locale}/finance`
+            route: `/${locale}/finance`,
+            featureKey: 'finance_system'
         },
         {
             id: 'invoices',
@@ -204,7 +209,8 @@ export function PageClient() {
             icon: 'fa-file-invoice',
             color: 'from-sky-500 to-indigo-600',
             bg: 'bg-sky-500',
-            route: `/${locale}/invoices`
+            route: `/${locale}/invoices`,
+            featureKey: 'finance_system'
         },
         {
             id: 'inventory',
@@ -214,7 +220,8 @@ export function PageClient() {
             icon: 'fa-boxes-stacked',
             color: 'from-emerald-500 to-teal-600',
             bg: 'bg-emerald-500',
-            route: `/${locale}/inventory`
+            route: `/${locale}/inventory`,
+            featureKey: 'inventory_system'
         },
         {
             id: 'reports',
@@ -229,8 +236,12 @@ export function PageClient() {
     ], [tDashboard, tAdmin, locale]);
 
     const allowedCards = useMemo(() => {
-        return ALL_CARDS.filter(c => hasPermission(c.permission));
-    }, [ALL_CARDS, hasPermission]);
+        return ALL_CARDS.filter(c => {
+            const matchesPermission = hasPermission(c.permission);
+            const matchesFeature = (c as any).featureKey ? hasFeature((c as any).featureKey) : true;
+            return matchesPermission && matchesFeature;
+        });
+    }, [ALL_CARDS, hasPermission, hasFeature]);
 
     useEffect(() => {
         if (!user || loading) return;

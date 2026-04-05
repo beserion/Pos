@@ -397,7 +397,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 serviceFee: appliedServiceFee,
                 status: 'COMPLETED',
                 totalAmount: selectedGrandTotal,
-                mergeSaleIds: activeOrderIds,
+                mergeSaleIds: Array.from(new Set(activeOrderIds)),
                 cashRegisterId: activeCashRegister?.id || null,
                 shiftId: activeShift?.id || null,
                 items: itemsToPay.map(item => {
@@ -408,7 +408,13 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                         quantity: item.quantity,
                         unitPrice: item.product.price * (item.saleTypeMultiplier || 1),
                         total: Number(((base + extras) * 1.1).toFixed(2)),
-                        subItems: item.subItems
+                        subItems: (item.subItems || []).map((sub: any) => ({
+                            productId: sub.productId,
+                            quantity: sub.quantity,
+                            unitPrice: sub.unitPrice,
+                            total: sub.total,
+                            menuGroupId: sub.menuGroupId
+                        }))
                     };
                 })
             };

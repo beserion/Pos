@@ -12,9 +12,12 @@ import {
 import { FinanceService } from './finance.service';
 import { AccountTransaction } from './account-transaction.entity';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RequireFeature } from '../auth/feature.decorator';
+import { FeatureGuard } from '../auth/feature.guard';
 
 @Controller('finance')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, FeatureGuard)
+@RequireFeature('finance_system')
 export class FinanceController {
   constructor(private readonly financeService: FinanceService) {}
 

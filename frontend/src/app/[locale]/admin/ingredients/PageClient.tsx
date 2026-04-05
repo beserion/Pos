@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 
 interface Product {
     id: number;
@@ -24,7 +25,8 @@ export function PageClient() {
     const tp = useTranslations('Products');
     const locale = useLocale();
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, hasFeature } = useAuth();
+    
     const [ingredients, setIngredients] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -41,12 +43,12 @@ export function PageClient() {
     });
 
     useEffect(() => {
-        if (user?.token) {
+        if (user?.token && hasFeature('recipe_system')) {
             fetchData();
         } else if (user === null) {
             setLoading(false);
         }
-    }, [user]);
+    }, [user, hasFeature]);
 
     const fetchData = async () => {
         if (!user?.token) return;
@@ -137,6 +139,14 @@ export function PageClient() {
             default: return unit;
         }
     };
+
+    if (user && !hasFeature('recipe_system')) {
+        return (
+            <div className="h-screen bg-slate-50 dark:bg-slate-900 flex flex-col pt-20">
+                <PremiumModuleLocked moduleName="Reçete & Stok Sistemi (Hammaddeler)" featureKey="recipe_system" />
+            </div>
+        );
+    }
 
     return (
         <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">

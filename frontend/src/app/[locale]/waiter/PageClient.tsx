@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { useAuth } from '../AuthContext';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import { showSwal, toastSwal } from '../utils/swal';
 import { io } from 'socket.io-client';
 import { useTranslations, useLocale } from 'next-intl';
@@ -26,7 +27,7 @@ interface Table {
 interface Zone { id: number; name: string; }
 
 export function PageClient() {
-    const { user, loginPin, loginPinOnly, loading, alertsBell } = useAuth();
+    const { user, loginPin, loginPinOnly, loading, alertsBell, hasFeature } = useAuth();
     const router = useRouter();
     const locale = useLocale();
     const t = useTranslations('Common');
@@ -276,6 +277,14 @@ export function PageClient() {
 
     const filteredProducts = selectedCategory === 'Tümü' ? products : products.filter(p => p.category === selectedCategory);
     const cartTotal = cart.reduce((sum, item) => sum + ((item.product.price + (item.extraPrice || 0)) * item.quantity), 0);
+
+    if (user && !hasFeature('waiter_system')) {
+        return (
+            <div className="h-screen bg-slate-50 dark:bg-slate-900 flex flex-col">
+                <PremiumModuleLocked moduleName="Garson / Terminal Sistemi" featureKey="waiter_system" />
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-slate-100 dark:bg-slate-900 flex flex-col font-sans pb-20 overflow-y-auto">

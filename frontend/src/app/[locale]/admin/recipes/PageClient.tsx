@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 
 interface Product {
     id: number;
@@ -47,7 +48,7 @@ export function PageClient() {
     const tc = useTranslations('Common');
     const locale = useLocale();
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, hasFeature } = useAuth();
 
     const [products, setProducts] = useState<Product[]>([]);
     const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
@@ -61,13 +62,15 @@ export function PageClient() {
     const [loading, setLoading] = useState(true);
     const [loadingRecipe, setLoadingRecipe] = useState(false);
 
+    const hasRecipeFeature = user ? hasFeature('recipe_system') : false;
+
     useEffect(() => {
-        if (user?.token) {
+        if (user?.token && hasFeature('recipe_system')) {
             fetchInitialData();
         } else if (user === null) {
             setLoading(false);
         }
-    }, [user]);
+    }, [user, hasFeature]);
 
     const fetchInitialData = async () => {
         if (!user?.token) return;
@@ -227,22 +230,30 @@ export function PageClient() {
         }
     };
 
-    return (
-        <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">
-            {/* Background Decorations */}
-            <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-orange-500/5 blur-[120px] pointer-events-none z-0"></div>
-            <div className="absolute bottom-[-10%] left-[-5%] w-[40%] h-[40%] rounded-full bg-rose-500/5 blur-[120px] pointer-events-none z-0"></div>
+    if (user && !hasRecipeFeature) {
+        return (
+            <div className="h-screen bg-slate-50 dark:bg-slate-900 flex flex-col">
+                <PremiumModuleLocked moduleName="Reçete ve Üretim Sistemi" featureKey="recipe_system" />
+            </div>
+        );
+    }
 
-            <div className="w-full px-[50px] pt-8 pb-4 relative z-10 shrink-0">
-                {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                        <i className="fat fa-blender text-orange-500/80 drop-shadow-sm transition-transform hover:scale-110 hover:rotate-3 duration-300 ease-out" style={{ fontSize: '50px' }}></i>
-                        <div className="flex flex-col">
+    return (
+        <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">
+            {/* Background Decorations */}
+            <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-orange-500/5 blur-[120px] pointer-events-none transition-colors duration-500"></div>
+            <div className="absolute bottom-[-10%] left-[-5%] w-[40%] h-[40%] rounded-full bg-amber-500/5 blur-[120px] pointer-events-none transition-colors duration-500"></div>
+
+            <div className="w-full px-[50px] py-8 relative z-10 flex flex-col h-full">
+                {/* Header Section */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 shrink-0">
+                    <div className="flex items-center">
+                        <i className={`fat fa-blender me-3 text-orange-600 dark:text-orange-400`} style={{ fontSize: '50px' }}></i>
+                        <div>
                             <h3 className="mb-0 text-3xl font-extralight text-orange-600 dark:text-orange-400 leading-none uppercase tracking-[0.25em]" id="title">
                                 {t('title')}
                             </h3>
-                            <div className="h-1 w-1/2 bg-gradient-to-r from-orange-400 to-transparent rounded-full mt-2 mb-1"></div>
+                            <div className="h-1 w-full bg-gradient-to-r from-orange-400/60 to-transparent rounded-full mt-2 mb-1"></div>
                             <h5 className="text-muted mb-0 text-lg font-medium text-slate-400 dark:text-slate-500 mt-0.5">
                                 {t('subtitle')}
                             </h5>
@@ -254,15 +265,14 @@ export function PageClient() {
                         </button>
                     </div>
                 </div>
-            </div>
 
-            {loading ? (
-                <div className="flex-1 flex flex-col items-center justify-center p-20 z-10">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mb-4"></div>
-                    <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t('loadingRecipes')}</p>
-                </div>
-            ) : (
-                <div className="flex-1 flex gap-6 px-[50px] pb-8 relative z-10 overflow-hidden min-h-0">
+                {loading ? (
+                    <div className="flex-1 flex flex-col items-center justify-center p-20 z-10">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mb-4"></div>
+                        <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t('loadingRecipes')}</p>
+                    </div>
+                ) : (
+                    <div className="flex-1 flex gap-6 pb-8 relative z-10 overflow-hidden min-h-0">
                     
                     {/* LEFT PANEL: Products List */}
                     <div className="w-[380px] flex flex-col bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border border-white dark:border-slate-700/50 rounded-[32px] overflow-hidden shadow-sm shrink-0">
@@ -518,7 +528,8 @@ export function PageClient() {
                         ) : null}
                     </div>
                 </div>
-            )}
+                )}
+            </div>
         </div>
     );
 }

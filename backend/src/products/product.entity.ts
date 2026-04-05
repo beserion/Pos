@@ -123,6 +123,16 @@ export class Product {
   @OneToOne(() => SetMenu, (setMenu) => setMenu.product, { cascade: true })
   setMenu: SetMenu;
 
+  @Column({ nullable: true })
+  stockGroup: string;
+
+  @Column({ nullable: true })
+  stockGroupId: number;
+
+  @ManyToOne('StockGroup', { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'stockGroupId' })
+  stockGroupRelation: any;
+
   // Ürün Cinsi (zorunlu)
   @Column({ nullable: true })
   productTypeId: number;

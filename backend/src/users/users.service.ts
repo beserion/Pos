@@ -16,13 +16,13 @@ export class UsersService {
   ) { }
 
   async findAll(): Promise<User[]> {
-    return await this.userRepository.find({ relations: ['role'] });
+    return await this.userRepository.find({ relations: ['role', 'firm'] });
   }
 
   async findOne(id: number): Promise<User> {
     const user = await this.userRepository.findOne({
       where: { id },
-      relations: ['role'],
+      relations: ['role', 'firm'],
     });
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
@@ -33,14 +33,14 @@ export class UsersService {
   async findByEmail(email: string): Promise<User | null> {
     return await this.userRepository.findOne({
       where: { email },
-      relations: ['role'],
+      relations: ['role', 'firm'],
     });
   }
 
   async findByPhone(phone: string): Promise<User | null> {
     return await this.userRepository.findOne({
       where: { phone },
-      relations: ['role'],
+      relations: ['role', 'firm'],
     });
   }
 
@@ -66,14 +66,14 @@ export class UsersService {
   async findByPin(id: number, pinCode: string): Promise<User | null> {
     return await this.userRepository.findOne({
       where: { id, pinCode },
-      relations: ['role'],
+      relations: ['role', 'firm'],
     });
   }
 
   async findByPinOnly(pinCode: string): Promise<User | null> {
     return await this.userRepository.findOne({
       where: { pinCode },
-      relations: ['role'],
+      relations: ['role', 'firm'],
     });
   }
 
