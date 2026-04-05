@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { Location } from '../locations/location.entity';
 import type { OutputProfile } from '../output-profiles/output-profile.entity';
+import { ParentGroup } from '../parent-groups/parent-group.entity';
 
 @Entity('departments')
 export class Department {
@@ -35,6 +36,13 @@ export class Department {
   // Ana ürün seçilince ekstrayı otomatik aç
   @Column({ default: false })
   autoOpenExtraPopup: boolean;
+
+  @Column({ nullable: true })
+  parentGroupId: number;
+
+  @ManyToOne(() => ParentGroup, (parentGroup) => parentGroup.departments, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'parentGroupId' })
+  parentGroup: ParentGroup;
 
   @Column({ default: true })
   isActive: boolean;

@@ -52,7 +52,7 @@ interface Product {
 }
 
 export function PageClient() {
-    const t = useTranslations('Products'); 
+    const t = useTranslations('Products');
     const tc = useTranslations('Common');
     const locale = useLocale();
     const router = useRouter();
@@ -61,7 +61,7 @@ export function PageClient() {
     const [allProducts, setAllProducts] = useState<Product[]>([]);
     const [departments, setDepartments] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    
+
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'genel' | 'kurallar'>('genel');
     const [formData, setFormData] = useState<Product>({
@@ -158,7 +158,7 @@ export function PageClient() {
         if (prod) {
             // Ensure setMenu exists when editing an old product that was marked `isSet` without setup
             const mergedProd = {
-                ...prod, 
+                ...prod,
                 setMenu: prod.setMenu || { setType: 'FIX', isActive: true, showAsParent: true, splitToSubItems: false, groups: [] }
             };
             setFormData(mergedProd);
@@ -237,11 +237,11 @@ export function PageClient() {
                         </div>
                     </div>
                     <div className="flex gap-3">
-                        <button onClick={() => router.push(`/${locale}/admin`)} className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center gap-2">
-                            <i className="fat fa-reply"></i> {tc('back')}
-                        </button>
                         <button onClick={() => openModal()} className="px-6 py-3 bg-teal-50 text-teal-600 border border-teal-200 font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-teal-100 transition-all flex items-center gap-2">
                             <i className="fat fa-plus-circle text-lg"></i> Yeni Set Menü
+                        </button>
+                        <button onClick={() => router.push(`/${locale}/admin/products`)} className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center gap-2">
+                            <i className="fat fa-reply"></i> {tc('back')}
                         </button>
                     </div>
                 </div>
@@ -322,7 +322,7 @@ export function PageClient() {
                             </div>
                             <button onClick={() => setIsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 shadow-sm transition-all">&times;</button>
                         </div>
-                        
+
                         <div className="flex bg-slate-100 dark:bg-slate-900/50 p-1 mx-8 mt-8 rounded-2xl shrink-0">
                             <button type="button" onClick={() => setActiveTab('genel')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'genel' ? 'bg-white dark:bg-slate-800 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Genel Bilgiler</button>
                             <button type="button" onClick={() => setActiveTab('kurallar')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'kurallar' ? 'bg-white dark:bg-slate-800 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Set Kuralları & Ürünler</button>
@@ -335,14 +335,14 @@ export function PageClient() {
                                         <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 px-1">Menü Adı</label>
                                         <div className="relative">
                                             <i className="fat fa-bowl-food absolute left-4 top-4 text-teal-500/50 dark:text-teal-400/50"></i>
-                                            <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-slate-200 font-bold focus:ring-4 focus:ring-teal-500/10 outline-none" placeholder="Örn: Tavuk Menü" />
+                                            <input type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-slate-200 font-bold focus:ring-4 focus:ring-teal-500/10 outline-none" placeholder="Örn: Tavuk Menü" />
                                         </div>
                                     </div>
                                     <div>
                                         <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 px-1">Kategori</label>
                                         <div className="relative">
                                             <i className="fat fa-folder-tree absolute left-4 top-4 text-teal-500/50 dark:text-teal-400/50"></i>
-                                            <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-slate-200 font-bold focus:ring-4 focus:ring-teal-500/10 outline-none appearance-none">
+                                            <select value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-slate-200 font-bold focus:ring-4 focus:ring-teal-500/10 outline-none appearance-none">
                                                 <option value="">Kategori Seçin</option>
                                                 {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
                                             </select>
@@ -353,14 +353,14 @@ export function PageClient() {
                                         <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 px-1">Fiyat (Satış Bedeli)</label>
                                         <div className="relative">
                                             <i className="fat fa-money-bill-1-wave absolute left-4 top-4 text-teal-500/50 dark:text-teal-400/50"></i>
-                                            <input type="number" step="0.01" value={formData.price} onChange={e => setFormData({...formData, price: parseFloat(e.target.value)})} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-slate-200 font-bold focus:ring-4 focus:ring-teal-500/10 outline-none text-teal-600 dark:text-teal-400" />
+                                            <input type="number" step="0.01" value={formData.price} onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-slate-200 font-bold focus:ring-4 focus:ring-teal-500/10 outline-none text-teal-600 dark:text-teal-400" />
                                         </div>
                                     </div>
                                     <div>
                                         <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 px-1">Stok Kodu (SKU)</label>
                                         <div className="relative">
                                             <i className="fat fa-barcode-read absolute left-4 top-4 text-teal-500/50 dark:text-teal-400/50"></i>
-                                            <input type="text" value={formData.sku} onChange={e => setFormData({...formData, sku: e.target.value})} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-500 dark:text-slate-400 font-bold font-mono focus:ring-4 focus:ring-teal-500/10 outline-none uppercase" />
+                                            <input type="text" value={formData.sku} onChange={e => setFormData({ ...formData, sku: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-500 dark:text-slate-400 font-bold font-mono focus:ring-4 focus:ring-teal-500/10 outline-none uppercase" />
                                         </div>
                                     </div>
                                     <div className="col-span-2">
@@ -380,7 +380,7 @@ export function PageClient() {
                                             <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 px-1">SET TİPİ</label>
                                             <div className="relative">
                                                 <i className="fat fa-code-merge absolute left-4 top-4 text-indigo-500/50 dark:text-indigo-400/50"></i>
-                                                <select value={formData.setMenu?.setType} onChange={e => setFormData({...formData, setMenu: {...formData.setMenu!, setType: e.target.value}})} className="w-full pl-12 pr-4 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-indigo-600 dark:text-indigo-400 font-black focus:ring-4 focus:ring-indigo-500/10 outline-none appearance-none uppercase transform-wide">
+                                                <select value={formData.setMenu?.setType} onChange={e => setFormData({ ...formData, setMenu: { ...formData.setMenu!, setType: e.target.value } })} className="w-full pl-12 pr-4 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-indigo-600 dark:text-indigo-400 font-black focus:ring-4 focus:ring-indigo-500/10 outline-none appearance-none uppercase transform-wide">
                                                     <option value="FIX">Fiks Menü (Sabit İçerik)</option>
                                                     <option value="CHOICE">Seçmeli Menü</option>
                                                     <option value="BUNDLE">Kampanya / Bundle Set</option>
@@ -396,7 +396,7 @@ export function PageClient() {
                                             <label className="block text-[10px] font-black text-orange-600 dark:text-orange-400 uppercase tracking-widest mb-2 px-1">TÜKETİM HAKKI (LIMIT / ENTITLEMENT)</label>
                                             <div className="relative w-full max-w-sm">
                                                 <i className="fat fa-ticket absolute left-4 top-4 text-orange-500/50 dark:text-orange-400/50"></i>
-                                                <input type="number" step="0.5" value={formData.setMenu?.bundleEntitlementLimit || 0} onChange={e => setFormData({...formData, setMenu: {...formData.setMenu!, bundleEntitlementLimit: parseFloat(e.target.value)}})} className="w-full pl-12 pr-4 py-3.5 bg-white dark:bg-slate-800 border border-orange-200 dark:border-orange-700/50 rounded-2xl text-orange-600 dark:text-orange-400 font-black focus:ring-4 focus:ring-orange-500/10 outline-none uppercase transform-wide" placeholder="Örn: 4 Hak" />
+                                                <input type="number" step="0.5" value={formData.setMenu?.bundleEntitlementLimit || 0} onChange={e => setFormData({ ...formData, setMenu: { ...formData.setMenu!, bundleEntitlementLimit: parseFloat(e.target.value) } })} className="w-full pl-12 pr-4 py-3.5 bg-white dark:bg-slate-800 border border-orange-200 dark:border-orange-700/50 rounded-2xl text-orange-600 dark:text-orange-400 font-black focus:ring-4 focus:ring-orange-500/10 outline-none uppercase transform-wide" placeholder="Örn: 4 Hak" />
                                             </div>
                                             <p className="text-xs font-bold text-orange-500 dark:text-orange-500/80 mt-3 mb-0">Bu ürünü alan müşteri toplam kaç hakediş puanına sahip olacak? Örn: 4</p>
                                         </div>
@@ -447,10 +447,10 @@ export function PageClient() {
                                                             </select>
                                                             <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none text-xs"></i>
                                                         </div>
-                                                        <button 
+                                                        <button
                                                             onClick={() => {
                                                                 const sel = document.getElementById(`pSelect-${gIdx}`) as HTMLSelectElement;
-                                                                if(sel.value) addItemToGroup(gIdx, Number(sel.value));
+                                                                if (sel.value) addItemToGroup(gIdx, Number(sel.value));
                                                                 sel.value = "";
                                                             }}
                                                             className="px-6 py-3 bg-teal-50 text-teal-600 font-black text-xs uppercase tracking-widest border border-teal-200 rounded-xl hover:bg-teal-100 transition-all flex items-center gap-2"

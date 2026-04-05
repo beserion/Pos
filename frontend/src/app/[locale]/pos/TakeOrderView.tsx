@@ -150,6 +150,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [tables, setTables] = useState<Table[]>([]);
     const [zones, setZones] = useState<Zone[]>([]);
     const [departments, setDepartments] = useState<any[]>([]);
+    const [parentGroups, setParentGroups] = useState<any[]>([]);
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
     const [selectedZone, setSelectedZone] = useState<number | null>(null);
     const [cart, setCart] = useState<OrderItem[]>([]);
@@ -160,8 +161,8 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     const [productTypes, setProductTypes] = useState<ProductType[]>([]);
     const [selectedProductTypeId, setSelectedProductTypeId] = useState<number | 'all'>('all');
-    const [selectedGroupName, setSelectedGroupName] = useState<string>('Tümü');
-    const [selectedCategoryName, setSelectedCategoryName] = useState<string>('Tümü');
+    const [selectedParentGroupId, setSelectedParentGroupId] = useState<number | 'all' | 'unassigned' | null>(null);
+    const [selectedDepartmentId, setSelectedDepartmentId] = useState<number | 'all' | null>(null);
 
     // --- Ekstra Popup State ---
     const [extraPopupOpen, setExtraPopupOpen] = useState(false);
@@ -208,18 +209,20 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         try {
             const token = Cookies.get('token') || localStorage.getItem('token');
             if (!token) return;
-            const [productsRes, tablesRes, zonesRes, depsRes, typesRes] = await Promise.all([
+            const [productsRes, tablesRes, zonesRes, depsRes, typesRes, pGroupsRes] = await Promise.all([
                 fetch(`${API_URL}/products`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
                 fetch(`${API_URL}/tables`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
                 fetch(`${API_URL}/zones`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
                 fetch(`${API_URL}/departments`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => []),
-                fetch(`${API_URL}/product-types`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => [])
+                fetch(`${API_URL}/product-types`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => []),
+                fetch(`${API_URL}/parent-groups`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => [])
             ]);
             setProducts(Array.isArray(productsRes) ? productsRes : []);
             setTables(Array.isArray(tablesRes) ? tablesRes : []);
             setZones(Array.isArray(zonesRes) ? zonesRes : []);
             setDepartments(Array.isArray(depsRes) ? depsRes : []);
             setProductTypes(Array.isArray(typesRes) ? typesRes : []);
+            setParentGroups(Array.isArray(pGroupsRes) ? pGroupsRes : []);
             if (Array.isArray(zonesRes) && zonesRes.length > 0) setSelectedZone(zonesRes[0].id);
         } catch (error) {
             console.error('Error fetching POS data:', error);
@@ -280,25 +283,24 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     const productTypeOptions = [{ id: 'all', name: 'Tümü' }, ...productTypes];
 
-    const availableGroups = ['Tümü', ...Array.from(new Set(
-        products
-            .filter(p => selectedProductTypeId === 'all' || p.productTypeId === selectedProductTypeId)
-            .map(p => p.stockGroup || p.linkedStockCard?.stockGroup || 'Diğer')
-    ))];
-
-    const availableCategories = ['Tümü', ...Array.from(new Set(
-        products
-            .filter(p => (selectedProductTypeId === 'all' || p.productTypeId === selectedProductTypeId) &&
-                (selectedGroupName === 'Tümü' || (p.stockGroup || p.linkedStockCard?.stockGroup || 'Diğer') === selectedGroupName))
-            .map(p => p.category || p.linkedStockCard?.category || 'Genel')
-    ))];
-
     const filteredProducts = products.filter(p => {
         const matchesType = selectedProductTypeId === 'all' || p.productTypeId === selectedProductTypeId;
-        const matchesGroup = selectedGroupName === 'Tümü' || (p.stockGroup || p.linkedStockCard?.stockGroup || 'Diğer') === selectedGroupName;
-        const matchesCategory = selectedCategoryName === 'Tümü' || (p.category || p.linkedStockCard?.category || 'Genel') === selectedCategoryName;
-        const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
-        return matchesType && matchesGroup && matchesCategory && matchesSearch;
+        
+        // Arama yapılıyorsa hiyerarşiyi baypas et
+        if (searchQuery.trim() !== '') {
+            return matchesType && p.name.toLowerCase().includes(searchQuery.toLowerCase());
+        }
+
+        // Kategori seçilmediyse ürün gösterme (Grup/Kategori kartları gösterilecek)
+        if (!selectedDepartmentId) return false;
+
+        if (selectedDepartmentId === 'all') return matchesType;
+
+        const dept = departments.find(d => d.id === selectedDepartmentId);
+        if (!dept) return false;
+
+        const matchesCategory = p.category === dept.name || (!p.category && dept.name === 'Diğer');
+        return matchesType && matchesCategory;
     });
 
     const handleTableClick = async (table: Table) => {
@@ -948,8 +950,8 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                         key={t.id}
                                         onClick={() => {
                                             setSelectedProductTypeId(t.id as any);
-                                            setSelectedGroupName('Tümü');
-                                            setSelectedCategoryName('Tümü');
+                                            setSelectedParentGroupId(null);
+                                            setSelectedDepartmentId(null);
                                         }}
                                         className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all whitespace-nowrap shrink-0 ${selectedProductTypeId === t.id
                                             ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/25 scale-[1.02]'
@@ -965,14 +967,14 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                             <div className="flex items-center gap-2">
                                 {/* Dinamik Alt Filtreler (sol) -> Breadcrumb'a Dönüştü */}
                                 <div className="flex-1 flex items-center gap-1.5 overflow-x-auto scrollbar-none min-h-[32px]">
-                                    {selectedGroupName !== 'Tümü' ? (
+                                    {(selectedParentGroupId || selectedDepartmentId) && !searchQuery ? (
                                         <>
                                             <button 
                                                 onClick={() => {
-                                                    if (selectedCategoryName !== 'Tümü') {
-                                                        setSelectedCategoryName('Tümü');
+                                                    if (selectedDepartmentId) {
+                                                        setSelectedDepartmentId(null);
                                                     } else {
-                                                        setSelectedGroupName('Tümü');
+                                                        setSelectedParentGroupId(null);
                                                     }
                                                 }}
                                                 className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-[10px] font-bold uppercase transition-all flex items-center gap-1.5 shrink-0"
@@ -980,23 +982,22 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                                 <i className="fat fa-arrow-left"></i> Geri
                                             </button>
                                             <div className="flex items-center gap-1.5 p-1 bg-white/40 dark:bg-slate-800/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60 shrink-0">
-                                                <span 
-                                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-tight shadow-sm flex items-center gap-1.5 ${selectedCategoryName === 'Tümü' ? 'bg-amber-500 text-white shadow-amber-500/25' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-300 dark:hover:bg-slate-600'}`}
-                                                    onClick={() => setSelectedCategoryName('Tümü')}
-                                                >
-                                                    <i className="fat fa-folder-open"></i>
-                                                    {selectedGroupName}
-                                                    {selectedCategoryName === 'Tümü' && (
-                                                        <button onClick={(e) => { e.stopPropagation(); setSelectedGroupName('Tümü'); }} className="ml-1 opacity-70 hover:opacity-100"><i className="fat fa-xmark"></i></button>
-                                                    )}
-                                                </span>
-                                                {selectedCategoryName !== 'Tümü' && (
+                                                {selectedParentGroupId && (
+                                                    <span 
+                                                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-tight shadow-sm flex items-center gap-1.5 ${!selectedDepartmentId ? 'bg-indigo-500 text-white shadow-indigo-500/25' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-300 dark:hover:bg-slate-600'}`}
+                                                        onClick={() => setSelectedDepartmentId(null)}
+                                                    >
+                                                        <i className="fat fa-folder-tree"></i>
+                                                        {parentGroups.find(pg => pg.id === selectedParentGroupId)?.name || 'Üst Grup'}
+                                                    </span>
+                                                )}
+                                                {selectedDepartmentId && (
                                                     <>
                                                         <i className="fat fa-angle-right text-slate-400 text-[10px]"></i>
                                                         <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-tight bg-emerald-500 text-white shadow-sm shadow-emerald-500/25 flex items-center gap-1.5">
                                                             <i className="fat fa-tags"></i>
-                                                            {selectedCategoryName}
-                                                            <button onClick={() => setSelectedCategoryName('Tümü')} className="ml-1 opacity-70 hover:opacity-100"><i className="fat fa-xmark"></i></button>
+                                                            {departments.find(d => d.id === selectedDepartmentId)?.name || 'Kategori'}
+                                                            <button onClick={() => setSelectedDepartmentId(null)} className="ml-1 opacity-70 hover:opacity-100"><i className="fat fa-xmark"></i></button>
                                                         </span>
                                                     </>
                                                 )}
@@ -1004,7 +1005,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                         </>
                                     ) : (
                                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">
-                                            {availableGroups.filter(g => g !== 'Tümü').length > 0 ? 'Lütfen Grup Seçin' : 'Ürünler Listeleniyor'}
+                                            {searchQuery ? `"${searchQuery}" için sonuçlar` : 'Lütfen Grup veya Kategori Seçin'}
                                         </span>
                                     )}
                                 </div>
@@ -1069,33 +1070,59 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                         </div>
 
                         <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-280px)]">
-                            {selectedGroupName === 'Tümü' && availableGroups.filter(g => g !== 'Tümü').length > 0 ? (
+                            {!selectedDepartmentId && !searchQuery ? (
                                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-                                    {availableGroups.filter(g => g !== 'Tümü').map(g => (
+                                    {/* SEVİYE 1: Üst Gruplar ve Bağımsız Kategoriler */}
+                                    {!selectedParentGroupId && (
+                                        <>
+                                            {parentGroups.filter(pg => {
+                                                if (selectedProductTypeId === 'all') return true;
+                                                const pgDepts = departments.filter(d => d.parentGroupId === pg.id);
+                                                return products.some(p => p.productTypeId === selectedProductTypeId && pgDepts.some(d => d.name === p.category));
+                                            }).map(pg => (
+                                                <button
+                                                    key={`pg-${pg.id}`}
+                                                    onClick={() => setSelectedParentGroupId(pg.id)}
+                                                    className="group relative flex flex-col items-center justify-center p-6 bg-white/70 dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-indigo-400 hover:-translate-y-1 transition-all duration-300"
+                                                >
+                                                    <div className="w-16 h-16 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                                        <i className="fat fa-folder-tree text-2xl text-indigo-500"></i>
+                                                    </div>
+                                                    <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{pg.name}</span>
+                                                </button>
+                                            ))}
+                                            {departments.filter(d => !d.parentGroupId).filter(d => {
+                                                if (selectedProductTypeId === 'all') return true;
+                                                return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
+                                            }).map(d => (
+                                                <button
+                                                    key={`dept-${d.id}`}
+                                                    onClick={() => setSelectedDepartmentId(d.id)}
+                                                    className="group relative flex flex-col items-center justify-center p-6 bg-white/70 dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-400 hover:-translate-y-1 transition-all duration-300"
+                                                >
+                                                    <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                                        <i className="fat fa-tags text-2xl text-emerald-500"></i>
+                                                    </div>
+                                                    <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
+                                                </button>
+                                            ))}
+                                        </>
+                                    )}
+
+                                    {/* SEVİYE 2: Seçili Üst Gruba Bağlı Kategoriler */}
+                                    {selectedParentGroupId && departments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
+                                        if (selectedProductTypeId === 'all') return true;
+                                        return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
+                                    }).map(d => (
                                         <button
-                                            key={g}
-                                            onClick={() => { setSelectedGroupName(g); setSelectedCategoryName('Tümü'); }}
-                                            className="group relative flex flex-col items-center justify-center p-6 bg-white/70 dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-amber-400 hover:-translate-y-1 transition-all duration-300"
-                                        >
-                                            <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                                                <i className="fat fa-folder-open text-2xl text-amber-500"></i>
-                                            </div>
-                                            <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{g}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            ) : selectedGroupName !== 'Tümü' && selectedCategoryName === 'Tümü' && availableCategories.filter(c => c !== 'Tümü').length > 0 ? (
-                                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-                                    {availableCategories.filter(c => c !== 'Tümü').map(c => (
-                                        <button
-                                            key={c}
-                                            onClick={() => setSelectedCategoryName(c)}
+                                            key={`dept-sub-${d.id}`}
+                                            onClick={() => setSelectedDepartmentId(d.id)}
                                             className="group relative flex flex-col items-center justify-center p-6 bg-white/70 dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-400 hover:-translate-y-1 transition-all duration-300"
                                         >
                                             <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                                                 <i className="fat fa-tags text-2xl text-emerald-500"></i>
                                             </div>
-                                            <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{c}</span>
+                                            <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
                                         </button>
                                     ))}
                                 </div>

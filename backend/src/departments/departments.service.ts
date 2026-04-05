@@ -11,11 +11,11 @@ export class DepartmentsService {
   ) {}
 
   findAll() {
-    return this.repository.find({ relations: ['location'] });
+    return this.repository.find({ relations: ['location', 'parentGroup', 'extraDepartment', 'outputProfile'] });
   }
 
   findOne(id: number) {
-    return this.repository.findOne({ where: { id }, relations: ['location'] });
+    return this.repository.findOne({ where: { id }, relations: ['location', 'parentGroup', 'extraDepartment', 'outputProfile'] });
   }
 
   async create(data: Partial<Department>) {
