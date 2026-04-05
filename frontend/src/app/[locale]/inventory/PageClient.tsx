@@ -470,9 +470,16 @@ export function PageClient() {
 
     const openModal = (card?: StockCard) => {
         setActiveTab('general');
+        const hasRecipeLicense = hasFeature('recipe_system');
         if (card) {
-            setFormData({ ...card });
+            const updatedCard = { ...card };
+            if (!hasRecipeLicense) {
+                updatedCard.stockNature = 'traded_good';
+                updatedCard.baseUnit = 'adet';
+            }
+            setFormData(updatedCard);
         } else {
+            const defaultVat = availableTaxRates.length > 0 ? parseFloat(availableTaxRates[0]) : 20;
             setFormData({
                 id: 0,
                 name: '',
@@ -493,12 +500,13 @@ export function PageClient() {
                 warehouseId: null,
                 stockNature: 'traded_good',
                 primaryVendor: '',
-                purchaseVat: 20,
+                purchaseVat: defaultVat,
                 lastPurchasePrice: 0,
                 averageCost: 0,
                 sku: '',
                 outputProfileId: null,
-                note: ''
+                note: '',
+                stockGroupId: null
             });
         }
         setIsModalOpen(true);
@@ -874,11 +882,17 @@ export function PageClient() {
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Stok Doğası (Nature)</label>
                                                 <select value={formData.stockNature} onChange={(e) => setFormData({ ...formData, stockNature: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                    <option value="raw_material">Hammadde</option>
-                                                    <option value="traded_good">Ticari Mal (Al-Sat)</option>
-                                                    <option value="semi_finished">Yarı Mamul</option>
-                                                    <option value="consumable">Sarf Malzeme</option>
-                                                    <option value="packaging">Paketleme</option>
+                                                    {!hasFeature('recipe_system') ? (
+                                                        <option value="traded_good">Ticari Mal (Al-Sat)</option>
+                                                    ) : (
+                                                        <>
+                                                            <option value="raw_material">Hammadde</option>
+                                                            <option value="traded_good">Ticari Mal (Al-Sat)</option>
+                                                            <option value="semi_finished">Yarı Mamul</option>
+                                                            <option value="consumable">Sarf Malzeme</option>
+                                                            <option value="packaging">Paketleme</option>
+                                                        </>
+                                                    )}
                                                 </select>
                                             </div>
                                         </div>
@@ -926,7 +940,11 @@ export function PageClient() {
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1 text-teal-600">Takip Birimi (Base Unit)</label>
                                                 <select value={formData.baseUnit} onChange={(e) => setFormData({ ...formData, baseUnit: e.target.value })} className="w-full px-4 py-3.5 bg-teal-50 dark:bg-teal-900/10 border border-teal-200 dark:border-teal-700 rounded-2xl text-teal-800 dark:text-teal-300 font-bold outline-none appearance-none">
-                                                    {unitOptions.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+                                                    {!hasFeature('recipe_system') ? (
+                                                        <option value="adet">Adet</option>
+                                                    ) : (
+                                                        unitOptions.map(u => <option key={u.value} value={u.value}>{u.label}</option>)
+                                                    )}
                                                 </select>
                                             </div>
                                             <div>

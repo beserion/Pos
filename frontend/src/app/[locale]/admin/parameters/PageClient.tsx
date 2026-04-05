@@ -39,7 +39,6 @@ const defaultModules: Module[] = [
         params: [
             { key: 'default_payment_method', label: 'Varsayılan Ödeme Yöntemi', type: 'select', value: 'KASA', options: ['KASA', 'KREDI_KARTI', 'HAVALE'] },
             { key: 'service_fee_rate', label: 'Servis Ücreti (%)', description: 'Toplam tutara eklenen servis bedeli', type: 'number', value: 10, unit: '%' },
-            { key: 'tax_rate', label: 'Varsayılan KDV Oranı (%)', type: 'number', value: 8, unit: '%' },
             { key: 'available_tax_rates', label: 'Geçerli KDV Oranları', description: 'Virgülle ayırarak giriniz (Örn: 0,1,10,20)', type: 'text', value: '0,1,10,20' },
             { key: 'allow_discount', label: 'İndirime İzin Ver', type: 'boolean', value: true },
             { key: 'max_discount_rate', label: 'Maksimum İndirim (%)', type: 'number', value: 20, unit: '%' },
@@ -233,24 +232,26 @@ export function PageClient() {
         setIsSaving(true);
 
         try {
-            // Her modülü bağımsız, paralel olarak kaydet
-            await Promise.all(
-                modules.map(mod => {
-                    const items = mod.params.map(p => ({
-                        module: mod.id,
-                        key: p.key,
-                        value: String(p.value),
-                        label: p.label,
-                        type: p.type,
-                        description: p.description,
-                    }));
-                    return fetch(`${API_URL}/parameters/bulk`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                        body: JSON.stringify({ items }),
-                    }).then(res => { if (!res.ok) throw new Error(`${mod.title} kaydedilemedi`); });
-                })
+            // Tüm modüllerdeki tüm parametreleri tek bir dizide topla
+            const allItems = modules.flatMap(mod => 
+                mod.params.map(p => ({
+                    module: mod.id,
+                    key: p.key,
+                    value: String(p.value),
+                    label: p.label,
+                    type: p.type,
+                    description: p.description,
+                }))
             );
+
+            // Tek bir toplu (bulk) istek gönder
+            const res = await fetch(`${API_URL}/parameters/bulk`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ items: allItems }),
+            });
+
+            if (!res.ok) throw new Error('Parametreler kaydedilemedi');
 
             invalidateParameterCache();
             setIsDirty(false);
@@ -349,7 +350,7 @@ export function PageClient() {
                         <i className="fat fa-spinner-third animate-spin text-5xl text-violet-500"></i>
                         <div className="text-center">
                             <p className="font-black text-slate-800 dark:text-white text-lg">Kaydediliyor</p>
-                            <p className="text-sm text-slate-400 mt-1">{modules.length} modül paralel olarak veritabanına yazılıyor...</p>
+                            <p className="text-sm text-slate-400 mt-1">Tüm parametreler güvenli bir şekilde tek seferde veritabanına yazılıyor...</p>
                         </div>
                         <div className="flex gap-1 mt-1">
                             {modules.map((m, i) => (

@@ -5,6 +5,7 @@ import { StockMovement } from './stock-movement.entity';
 import { StockCardsService } from '../stock-cards/stock-cards.service';
 import { RecipesService } from '../recipes/recipes.service';
 import { ParametersService } from '../parameters/parameters.service';
+import { StocksService } from '../stocks/stocks.service';
 
 @Injectable()
 export class StockMovementsService {
@@ -15,6 +16,7 @@ export class StockMovementsService {
     @Inject(forwardRef(() => RecipesService))
     private recipesService: RecipesService,
     private parametersService: ParametersService,
+    private stocksService: StocksService,
   ) {}
 
   // ─── Core Movement Creation ──────────────────────────
@@ -78,7 +80,21 @@ export class StockMovementsService {
       userId: data.userId,
     });
 
-    return repo.save(movement);
+    const saved = await repo.save(movement);
+
+    // Sync with warehouse-based stocks table (StocksService)
+    try {
+      const location = data.warehouseId ? `Warehouse #${data.warehouseId}` : 'default';
+      if (data.quantity > 0) {
+        await this.stocksService.addStock(data.stockCardId, data.quantity, location, manager);
+      } else if (data.quantity < 0) {
+        await this.stocksService.deductStock(data.stockCardId, Math.abs(data.quantity), location, manager);
+      }
+    } catch (e) {
+      console.error('StockMovementsService: Error syncing with StocksService:', e);
+    }
+
+    return saved;
   }
 
   // ─── Sales Consumption ───────────────────────────────
@@ -94,6 +110,7 @@ export class StockMovementsService {
     sourceType: string = 'SALE',
     sourceId?: number,
     userId?: number,
+    warehouseId?: number,
     manager?: any,
   ): Promise<StockMovement> {
     return this.createMovement({
@@ -104,6 +121,7 @@ export class StockMovementsService {
       unit,
       sourceType,
       sourceId,
+      warehouseId,
       description: `Direkt ürün satışı (Stock Link)`,
       userId,
     }, manager);
@@ -120,6 +138,7 @@ export class StockMovementsService {
     sourceType: string = 'SALE',
     sourceId?: number,
     userId?: number,
+    warehouseId?: number,
     manager?: any,
   ): Promise<StockMovement[]> {
     const recipe = await this.recipesService.findActiveByProduct(productId);
@@ -140,6 +159,7 @@ export class StockMovementsService {
         unit: line.unit,
         sourceType,
         sourceId,
+        warehouseId,
         description: `Reçete tüketimi: ${recipe.product?.name || `Ürün #${productId}`}`,
         userId,
       }, manager);
@@ -160,6 +180,7 @@ export class StockMovementsService {
     sourceType: string = 'SALE',
     sourceId?: number,
     userId?: number,
+    warehouseId?: number,
     manager?: any,
   ): Promise<StockMovement[]> {
     const header = await this.recipesService.findOne(recipeHeaderId);
@@ -180,6 +201,7 @@ export class StockMovementsService {
         unit: line.unit,
         sourceType,
         sourceId,
+        warehouseId,
         description: `Reçete tüketimi (Varyant): ${header.name || `RecipeHeader #${recipeHeaderId}`}`,
         userId,
       }, manager);
@@ -409,12 +431,25 @@ export class StockMovementsService {
     const movements = await repo.find({ where: { sourceType, sourceId } });
 
     for (const m of movements) {
-      // Reverse stock adjustment: delta was 'm.quantity', so delta to reverse is '-m.quantity'
+      // 1. Reverse high-level stock card currentStock
       await this.stockCardsService.adjustStock(
         m.stockCardId,
         -Number(m.quantity),
         manager,
       );
+
+      // 2. Reverse warehouse-based stock (StocksService)
+      try {
+        const location = m.warehouseId ? `Warehouse #${m.warehouseId}` : 'default';
+        const reverseQty = -Number(m.quantity);
+        if (reverseQty > 0) {
+          await this.stocksService.addStock(m.stockCardId, reverseQty, location, manager);
+        } else if (reverseQty < 0) {
+          await this.stocksService.deductStock(m.stockCardId, Math.abs(reverseQty), location, manager);
+        }
+      } catch (e) {
+        console.error('StockMovementsService: Error reversing StocksService in deleteMovementsBySource:', e);
+      }
     }
 
     // Delete the movements

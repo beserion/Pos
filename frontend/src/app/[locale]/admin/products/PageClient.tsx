@@ -32,6 +32,10 @@ interface Product {
     stockGroupId?: number | null;
     variations?: any[];
     vatRate: number;
+    inventoryLinkType?: string;
+    linkedStockItemId?: number | null;
+    directStockQty?: number;
+    directStockUnit?: string;
 }
 
 interface Modifier {
@@ -95,6 +99,7 @@ export function PageClient() {
     const [currentRecipe, setCurrentRecipe] = useState<RecipeHeader | null>(null);
     const [recipeSummary, setRecipeSummary] = useState<any>(null);
     const [loadingRecipe, setLoadingRecipe] = useState(false);
+    const hasRecipeLicense = (user?.firm?.activeFeatures || []).includes('recipe_system');
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'genel' | 'gorsel' | 'recete' | 'ozellik' | 'yonlendirme' | 'varyant'>('genel');
@@ -120,7 +125,11 @@ export function PageClient() {
         stockGroup: '',
         stockGroupId: null,
         variations: [],
-        vatRate: 0
+        vatRate: 0,
+        inventoryLinkType: 'none',
+        linkedStockItemId: null,
+        directStockQty: 0,
+        directStockUnit: 'adet'
     });
 
     const [ingredientProduct, setIngredientProduct] = useState({ ingredientId: 0, quantity: 0, unit: 'adet' });
@@ -346,12 +355,20 @@ export function PageClient() {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             
+            // Veriyi temizle: Reçete satırlarındaki stockCard nesnesini ve ana nesnedeki product nesnesini çıkar
+            const { product, ...cleanRecipe } = currentRecipe as any;
+            const sanitizedLines = (cleanRecipe.lines || []).map((line: any) => {
+                const { stockCard, ...cleanLine } = line;
+                return cleanLine;
+            });
+            const cleanPayload = { ...cleanRecipe, lines: sanitizedLines };
+
             if (currentRecipe.id === 0) {
-                const { id, ...postData } = currentRecipe;
+                const { id, ...postData } = cleanPayload;
                 await axios.post(`${API_URL}/recipes`, postData, config);
                 toastSwal({ title: tc('success'), text: 'Reçete başarıyla oluşturuldu.', icon: 'success' });
             } else {
-                await axios.put(`${API_URL}/recipes/${currentRecipe.id}`, currentRecipe, config);
+                await axios.put(`${API_URL}/recipes/${currentRecipe.id}`, cleanPayload, config);
                 toastSwal({ title: tc('success'), text: 'Reçete başarıyla güncellendi.', icon: 'success' });
             }
             
@@ -389,9 +406,21 @@ export function PageClient() {
 
     const openModal = (prod?: Product) => {
         if (prod) {
-            setFormData({ ...prod, recipes: prod.recipes || [], modifiers: prod.modifiers || [], variations: prod.variations || [] });
-            fetchRecipeForProduct(prod.id);
+            setFormData({ 
+                ...prod, 
+                recipes: prod.recipes || [], 
+                modifiers: prod.modifiers || [], 
+                variations: prod.variations || [],
+                inventoryLinkType: prod.inventoryLinkType || 'none',
+                linkedStockItemId: prod.linkedStockItemId || null,
+                directStockQty: prod.directStockQty || 0,
+                directStockUnit: prod.directStockUnit || 'adet'
+            });
+            if (hasRecipeLicense) {
+                fetchRecipeForProduct(prod.id);
+            }
         } else {
+            const defaultVatRate = (parameters.find(p => p.key === 'available_tax_rates')?.value || "0,1,10,20").split(',')[0].trim();
             setFormData({
                 id: 0,
                 name: '',
@@ -412,7 +441,11 @@ export function PageClient() {
                 recipes: [],
                 modifiers: [],
                 variations: [],
-                vatRate: 0
+                vatRate: parseFloat(defaultVatRate) || 0,
+                inventoryLinkType: 'none',
+                linkedStockItemId: null,
+                directStockQty: 0,
+                directStockUnit: 'adet'
             });
             setCurrentRecipe(null);
             setRecipeSummary(null);
@@ -772,7 +805,7 @@ export function PageClient() {
                                                                 onChange={(e) => setFormData({ ...formData, vatRate: parseFloat(e.target.value) || 0 })}
                                                                 className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer"
                                                             >
-                                                                {(parameters.find(p => p.key === 'vat_rates')?.value || "0,1,10,20").split(',').map((rate: string) => (
+                                                                {(parameters.find(p => p.key === 'available_tax_rates')?.value || "0,1,10,20").split(',').map((rate: string) => (
                                                                     <option key={rate} value={rate.trim()}>%{rate.trim()}</option>
                                                                 ))}
                                                             </select>
@@ -921,7 +954,87 @@ export function PageClient() {
 
                                         {activeTab === 'recete' && (
                                             <div className="space-y-8">
-                                                {!formData.id ? (
+                                                {!hasRecipeLicense ? (
+                                                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                                        <div className="p-6 bg-slate-50 dark:bg-slate-900/30 rounded-[32px] border border-slate-200 dark:border-slate-700">
+                                                            <div className="flex items-center gap-4 mb-6">
+                                                                <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center text-orange-500 text-xl">
+                                                                    <i className="fat fa-boxes-stacked"></i>
+                                                                </div>
+                                                                <div>
+                                                                    <h4 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest mb-1">STOK EŞLEŞTİRME</h4>
+                                                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Basit Stok Takibi</p>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">STOK TAKİP KURALI</label>
+                                                                    <div className="relative">
+                                                                        <select 
+                                                                            value={formData.inventoryLinkType || 'none'} 
+                                                                            onChange={(e) => setFormData({ ...formData, inventoryLinkType: e.target.value })} 
+                                                                            className="w-full px-4 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-orange-500/10 outline-none appearance-none cursor-pointer"
+                                                                        >
+                                                                            <option value="none">Stok Düşümü Yapılmayacak</option>
+                                                                            <option value="direct_stock">Tekil Stok Kartından Düşülsün</option>
+                                                                        </select>
+                                                                        <i className="fat fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                                                                    </div>
+                                                                </div>
+
+                                                                {formData.inventoryLinkType === 'direct_stock' && (
+                                                                    <>
+                                                                        <div>
+                                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">EŞLEŞEN STOK KARTI</label>
+                                                                            <div className="relative">
+                                                                                <select 
+                                                                                    value={formData.linkedStockItemId || ''} 
+                                                                                    onChange={(e) => {
+                                                                                        const val = e.target.value ? parseInt(e.target.value) : null;
+                                                                                        const sc = stockCards.find(c => c.id === val);
+                                                                                        setFormData({ ...formData, linkedStockItemId: val, directStockUnit: sc?.baseUnit || 'adet' });
+                                                                                    }}
+                                                                                    className="w-full px-4 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-orange-500/10 outline-none appearance-none cursor-pointer"
+                                                                                >
+                                                                                    <option value="">Stok Kartı Seçin</option>
+                                                                                    {stockCards.map(c => (
+                                                                                        <option key={c.id} value={c.id}>{c.name} ({c.baseUnit})</option>
+                                                                                    ))}
+                                                                                </select>
+                                                                                <i className="fat fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <div>
+                                                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">DÜŞÜLECEK MİKTAR ({formData.directStockUnit || 'Birim'})</label>
+                                                                            <div className="relative">
+                                                                                <input 
+                                                                                    type="number" 
+                                                                                    step="0.0001" 
+                                                                                    value={formData.directStockQty || ''} 
+                                                                                    onChange={(e) => setFormData({ ...formData, directStockQty: parseFloat(e.target.value) || 0 })} 
+                                                                                    className="w-full px-4 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-black text-center focus:ring-4 focus:ring-orange-500/10 outline-none transition-shadow" 
+                                                                                    placeholder="Örn: 1 veya 0.05"
+                                                                                />
+                                                                            </div>
+                                                                        </div>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="p-6 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/50 rounded-[32px] flex gap-4 items-start">
+                                                            <i className="fat fa-shield-halved text-blue-500 text-xl mt-1"></i>
+                                                            <div>
+                                                                <h4 className="text-sm font-black text-blue-900 dark:text-blue-400 uppercase tracking-widest m-0 leading-none mb-2">Gelişmiş Reçete Kilidi</h4>
+                                                                <p className="text-xs text-blue-700 dark:text-blue-500 font-bold m-0 leading-relaxed uppercase tracking-tighter">
+                                                                    Şu anda temel stok takibi modundasınız. Birden fazla malzemeden oluşan karmaşık reçeteler, maliyet analizleri ve hammadde takibi için "Stok & Reçete" lisansı gereklidir.
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ) : !formData.id ? (
                                                     <div className="flex flex-col items-center justify-center p-12 bg-orange-50 dark:bg-orange-900/10 border-2 border-dashed border-orange-200 dark:border-orange-800 rounded-[32px] text-center">
                                                         <i className="fat fa-circle-exclamation text-4xl text-orange-500 mb-4"></i>
                                                         <h4 className="text-sm font-black text-orange-900 dark:text-orange-400 m-0 uppercase tracking-widest">Önce Ürünü Kaydetmelisiniz</h4>

@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PurchaseOrder } from './purchase-order.entity';
 import { PurchaseOrderItem } from './purchase-order-item.entity';
+import { StockMovementsService } from '../stock-movements/stock-movements.service';
 import { StocksService } from '../stocks/stocks.service';
 import { FinanceService } from '../finance/finance.service';
 
@@ -17,6 +18,7 @@ export class PurchaseOrdersService {
     private poRepository: Repository<PurchaseOrder>,
     @InjectRepository(PurchaseOrderItem)
     private poItemRepository: Repository<PurchaseOrderItem>,
+    private stockMovementsService: StockMovementsService,
     private stocksService: StocksService,
     private financeService: FinanceService,
   ) { }
@@ -129,7 +131,17 @@ export class PurchaseOrdersService {
     if (po.status === 'RECEIVED') throw new BadRequestException('This purchase order is already received');
     if (po.status === 'CANCELLED') throw new BadRequestException('Cannot receive a cancelled purchase order');
     for (const item of po.items) {
-        await this.stocksService.addStock(item.stockCardId, Number(item.quantity));
+      await this.stockMovementsService.createMovement({
+        stockCardId: item.stockCardId,
+        movementType: 'purchase',
+        quantity: Number(item.quantity),
+        unit: item.unit || 'adet',
+        unitCost: Number(item.unitPrice),
+        sourceType: 'PURCHASE_ORDER',
+        sourceId: po.id,
+        documentNo: `PO-${po.id}`,
+        description: `Satın Alma Siparişi Teslimatı: #PO-${po.id}`,
+      });
     }
     po.status = 'RECEIVED';
     return await this.poRepository.save(po);
@@ -154,7 +166,17 @@ export class PurchaseOrdersService {
     // Update stock if not already received
     if (po.status !== 'RECEIVED') {
       for (const item of po.items) {
-        await this.stocksService.addStock(item.stockCardId, Number(item.quantity));
+        await this.stockMovementsService.createMovement({
+          stockCardId: item.stockCardId,
+          movementType: 'purchase',
+          quantity: Number(item.quantity),
+          unit: item.unit || 'adet',
+          unitCost: Number(item.unitPrice),
+          sourceType: 'PURCHASE_ORDER',
+          sourceId: po.id,
+          documentNo: invoiceData.invoiceNumber || `PO-${po.id}`,
+          description: `Faturayla Teslim Alım: ${invoiceData.invoiceNumber || `#PO-${po.id}`}`,
+        });
       }
     }
 
