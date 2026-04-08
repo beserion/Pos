@@ -107,10 +107,13 @@ export function PageClient() {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
             const [recipeRes, summaryRes] = await Promise.all([
                 axios.get(`${API_URL}/recipes/by-product/${product.id}`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: null })),
-                axios.get(`${API_URL}/recipes/cost/${product.id}`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: null }))
+                axios.get(`${API_URL}/recipes/summary/${product.id}`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: null }))
             ]);
 
-            if (recipeRes.data) {
+            if (recipeRes.data && Array.isArray(recipeRes.data) && recipeRes.data.length > 0) {
+                const activeRecipe = recipeRes.data.find((r: any) => r.isActive) || recipeRes.data[0];
+                setCurrentRecipe(activeRecipe);
+            } else if (recipeRes.data && !Array.isArray(recipeRes.data) && Object.keys(recipeRes.data).length > 0) {
                 setCurrentRecipe(recipeRes.data);
             } else {
                 // Initialize empty recipe for this product
@@ -495,27 +498,27 @@ export function PageClient() {
                                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                                 <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-100 dark:border-slate-700">
                                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Satış Fiyatı</p>
-                                                    <p className="text-xl font-black text-slate-800 dark:text-white">₺{recipeSummary.salePrice.toFixed(2)}</p>
+                                                    <p className="text-xl font-black text-slate-800 dark:text-white">₺{recipeSummary.salePrice?.toFixed(2) || '0.00'}</p>
                                                 </div>
                                                 <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-rose-100 dark:border-rose-900/30">
                                                     <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-1">Toplam Maliyet</p>
-                                                    <p className="text-xl font-black text-rose-600 dark:text-rose-400">₺{recipeSummary.totalCost.toFixed(2)}</p>
+                                                    <p className="text-xl font-black text-rose-600 dark:text-rose-400">₺{recipeSummary.foodCost?.toFixed(2) || '0.00'}</p>
                                                 </div>
                                                 <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-emerald-100 dark:border-emerald-900/30">
                                                     <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Kâr Tutarı</p>
-                                                    <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">₺{recipeSummary.profitAmount.toFixed(2)}</p>
+                                                    <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">₺{recipeSummary.profit?.toFixed(2) || '0.00'}</p>
                                                 </div>
                                                 <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-indigo-100 dark:border-indigo-900/30">
                                                     <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1">Cost Oranı</p>
                                                     <div className="flex items-center gap-2 mt-1">
                                                         <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                                                             <div 
-                                                                className={`h-full rounded-full ${recipeSummary.costPercentage > 50 ? 'bg-rose-500' : recipeSummary.costPercentage > 30 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
-                                                                style={{ width: `${Math.min(recipeSummary.costPercentage, 100)}%` }}
+                                                                className={`h-full rounded-full ${recipeSummary.costRatio > 50 ? 'bg-rose-500' : recipeSummary.costRatio > 30 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
+                                                                style={{ width: `${Math.min(recipeSummary.costRatio || 0, 100)}%` }}
                                                             ></div>
                                                         </div>
                                                         <p className="text-base leading-none font-black text-indigo-600 dark:text-indigo-400">
-                                                            %{recipeSummary.costPercentage.toFixed(1)}
+                                                            %{recipeSummary.costRatio?.toFixed(1) || '0.0'}
                                                         </p>
                                                     </div>
                                                 </div>

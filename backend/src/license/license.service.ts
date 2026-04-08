@@ -60,7 +60,8 @@ export class LicenseService implements OnApplicationBootstrap {
       try {
         const response = await axios.post(`${panelUrl}/api/licenses/validate`, {
           licenseKey: licenseKey,
-          deviceId: deviceId
+          deviceId: deviceId,
+          deviceName: os.hostname(),
         }, {
           headers: { 'x-api-key': apiKey }
         });
@@ -110,21 +111,24 @@ export class LicenseService implements OnApplicationBootstrap {
       return { isValid: false, modules: [], daysOffline: 0, reason: 'Lisans süresi dolmuş' };
     }
 
-    // Online Verify Denemesi (Asenkron arka planda da yapılabilir, ama anlık statü alıyoruz)
+    // Online Verify Denemesi
     const panelUrl = process.env.PANEL_URL;
     const apiKey = process.env.LICENSE_API_KEY;
     let onlineValid = false;
+    let onlineModules: string[] = [];
 
     if (panelUrl && apiKey) {
       try {
         const payload = { licenseKey: currentLicense.licenseKey, deviceId: currentLicense.deviceId };
         const response = await axios.post(`${panelUrl}/api/licenses/verify`, payload, {
           headers: { 'x-api-key': apiKey },
-          timeout: 5000 // 5 sn bekle
+          timeout: 5000
         });
 
         if (response.data.valid) {
           onlineValid = true;
+          // ✅ Panel'den gelen GÜNCEL modülleri kullan
+          onlineModules = response.data.modules || [];
           currentLicense.lastOnlineCheck = new Date();
           await this.licenseRepo.save(currentLicense);
         } else {
@@ -148,9 +152,12 @@ export class LicenseService implements OnApplicationBootstrap {
       }
     }
 
+    // Online ise Panel'den gelen modülleri, offline ise şifreli key'deki modülleri kullan
+    const activeModules = onlineValid ? onlineModules : decrypted.modules;
+
     return {
       isValid: true,
-      modules: decrypted.modules,
+      modules: activeModules,
       daysOffline,
       details: decrypted,
     };

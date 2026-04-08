@@ -1,13 +1,13 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
-import { useAuth } from '../AuthContext';
+import { useAuth } from '../../AuthContext';
 import { useRouter } from 'next/navigation';
 import { useThemeTransition } from '@/hooks/useThemeTransition';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { useTranslations, useLocale } from 'next-intl';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
-import { useParameters } from '../utils/useParameters';
+import { useParameters } from '../../utils/useParameters';
 
 import {
     DndContext,

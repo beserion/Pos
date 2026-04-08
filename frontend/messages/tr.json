@@ -14,6 +14,7 @@
         "passive": "Pasif",
         "saved": "Kaydedildi",
         "updated": "Güncellendi",
+        "deleted": "Silindi",
         "success": "Başarılı",
         "error": "Hata",
         "systemError": "Sistem hatası",

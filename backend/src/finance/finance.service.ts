@@ -114,8 +114,8 @@ export class FinanceService {
             erpType = 'CREDIT';
           }
         } else if (saved.type === 'EXPENSE') {
-          // Purchases increase our debt to supplier (Debit for the ledger account)
-          erpType = 'DEBIT';
+          // Purchases increase our debt to supplier (Credit for the ledger account decreases currentBalance)
+          erpType = 'CREDIT';
         }
 
         await this.partnersService.updateBalance(
@@ -259,5 +259,54 @@ export class FinanceService {
       where: { partnerId },
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async removeBySource(sourceType: string, sourceId: number): Promise<void> {
+    const transaction = await this.transactionRepository.findOne({
+      where: { sourceType, sourceId },
+    });
+    
+    if (transaction) {
+      // Reverse balance before removing
+      if (transaction.companyAccountId) {
+        const reverseType = transaction.type === 'INCOME' ? 'EXPENSE' : 'INCOME';
+        await this.companyAccountService.updateBalance(
+          transaction.companyAccountId,
+          transaction.amount,
+          reverseType
+        );
+      }
+
+      if (transaction.partnerId) {
+        // Reverse partner balance
+        // Current implementation of updateBalance handles reversal if we pass the opposite type
+        // But let's be explicit: if it was INCOME (Credit), we give DEBIT to reverse it.
+        // If it was EXPENSE (Credit), we give DEBIT to reverse it? No, mapping was complex.
+        
+        let reverseErpType: 'DEBIT' | 'CREDIT' | 'INCOME' | 'EXPENSE';
+        
+        if (transaction.type === 'INCOME') {
+          // It was a Sale (DEBIT) or Payment (CREDIT). 
+          // If it was a Sale (which uses DEBIT), its reverse is CREDIT.
+          // If it was a Payment (which uses CREDIT), its reverse is DEBIT.
+          if (transaction.category === 'Satış' || transaction.sourceType === 'ORDER' || transaction.sourceType === 'SALE' || transaction.sourceType === 'INVOICE') {
+             reverseErpType = 'CREDIT';
+          } else {
+             reverseErpType = 'DEBIT';
+          }
+        } else {
+          // It was an Expense (Purchase), which used CREDIT. So reverse is DEBIT.
+          reverseErpType = 'DEBIT';
+        }
+
+        await this.partnersService.updateBalance(
+          transaction.partnerId,
+          transaction.amount,
+          reverseErpType
+        );
+      }
+
+      await this.transactionRepository.delete(transaction.id);
+    }
   }
 }

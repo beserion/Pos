@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { Invoice } from './invoice.entity';
 import { InvoiceItem } from './invoice-item.entity';
 import { StockMovementsService } from '../stock-movements/stock-movements.service';
+import { FinanceService } from '../finance/finance.service';
 
 @Injectable()
 export class InvoicesService {
@@ -17,6 +18,7 @@ export class InvoicesService {
     @InjectRepository(InvoiceItem)
     private invoiceItemRepository: Repository<InvoiceItem>,
     private readonly stockMovementsService: StockMovementsService,
+    private readonly financeService: FinanceService,
   ) {}
 
   async findAll(
@@ -220,6 +222,21 @@ export class InvoicesService {
           });
         }
       }
+
+      // Add Finance Transaction for Partner Account
+      if (savedInvoice.partnerId) {
+        await this.financeService.create({
+          partnerId: savedInvoice.partnerId,
+          amount: savedInvoice.grandTotal,
+          type: invoiceType === 'PURCHASE' ? 'EXPENSE' : 'INCOME',
+          category: invoiceType === 'PURCHASE' ? 'Alış Faturası' : 'Satış faturası',
+          description: `${invoiceType === 'PURCHASE' ? 'Alış' : 'Satış'} Faturası: ${savedInvoice.invoiceNumber}`,
+          paymentMethod: savedInvoice.paymentMethod || 'CASH',
+          sourceType: 'INVOICE',
+          sourceId: savedInvoice.id,
+          createdAt: savedInvoice.issueDate || new Date(),
+        });
+      }
     }
 
     return this.findOne(savedInvoice.id);
@@ -396,6 +413,9 @@ export class InvoicesService {
     await this.invoiceRepository.save(existing);
     if (itemEntities.length > 0) await this.invoiceItemRepository.save(itemEntities);
 
+    // Delete existing Finance Transaction and recreate it via service method
+    await this.financeService.removeBySource('INVOICE', id);
+
     const newType = existing.invoiceType;
     if (existing.status !== 'CANCELLED') {
       for (const item of items) {
@@ -413,6 +433,21 @@ export class InvoicesService {
           });
         }
       }
+
+      // Recreate Finance Transaction
+      if (existing.partnerId) {
+        await this.financeService.create({
+          partnerId: existing.partnerId,
+          amount: existing.grandTotal,
+          type: newType === 'PURCHASE' ? 'EXPENSE' : 'INCOME',
+          category: newType === 'PURCHASE' ? 'Alış Faturası' : 'Satış faturası',
+          description: `${newType === 'PURCHASE' ? 'Alış' : 'Satış'} Faturası: ${existing.invoiceNumber} (Güncelleme)`,
+          paymentMethod: existing.paymentMethod || 'CASH',
+          sourceType: 'INVOICE',
+          sourceId: existing.id,
+          createdAt: existing.issueDate || new Date(),
+        });
+      }
     }
 
     return this.findOne(id);
@@ -426,6 +461,7 @@ export class InvoicesService {
 
     if (oldStatus !== 'CANCELLED' && status === 'CANCELLED') {
       await this.stockMovementsService.deleteMovementsBySource('INVOICE', id);
+      await this.financeService.removeBySource('INVOICE', id);
     } else if (oldStatus === 'CANCELLED' && status !== 'CANCELLED') {
       for (const item of invoice.items || []) {
         if (item.stockCardId) {
@@ -442,6 +478,21 @@ export class InvoicesService {
           });
         }
       }
+
+      // Restore Finance Transaction
+      if (invoice.partnerId) {
+        await this.financeService.create({
+          partnerId: invoice.partnerId,
+          amount: invoice.grandTotal,
+          type: invoice.invoiceType === 'PURCHASE' ? 'EXPENSE' : 'INCOME',
+          category: invoice.invoiceType === 'PURCHASE' ? 'Alış Faturası' : 'Satış faturası',
+          description: `${invoice.invoiceType === 'PURCHASE' ? 'Alış' : 'Satış'} Faturası: ${invoice.invoiceNumber} (İptal Geri Alındı)`,
+          paymentMethod: invoice.paymentMethod || 'CASH',
+          sourceType: 'INVOICE',
+          sourceId: invoice.id,
+          createdAt: invoice.issueDate || new Date(),
+        });
+      }
     }
     return this.findOne(id);
   }
@@ -450,6 +501,7 @@ export class InvoicesService {
     const invoice = await this.findOne(id);
     if (invoice.status !== 'CANCELLED') {
       await this.stockMovementsService.deleteMovementsBySource('INVOICE', id);
+      await this.financeService.removeBySource('INVOICE', id);
     }
     await this.invoiceRepository.delete(id);
   }

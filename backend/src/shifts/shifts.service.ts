@@ -179,27 +179,16 @@ export class ShiftsService {
    * Calculates the current business date based on parameters
    */
   async getCurrentBusinessDate(): Promise<string> {
-    const now = new Date();
-    let businessDateStr = now.toISOString().split('T')[0];
-    
-    try {
-      // Default to 04:00 AM if not set
-      const startHourStr = await this.parametersService.getValue('pos', 'business_day_start_hour') || '04:00';
-      const [startHour, startMinute] = startHourStr.split(':').map(Number);
-      
-      const currentHour = now.getHours();
-      const currentMinute = now.getMinutes();
-
-      // If current time is strictly before the business day start time, it belongs to the previous business day
-      if (currentHour < startHour || (currentHour === startHour && currentMinute < startMinute)) {
-        const yesterday = new Date(now);
-        yesterday.setDate(yesterday.getDate() - 1);
-        businessDateStr = yesterday.toISOString().split('T')[0];
-      }
-    } catch (err) {
-      console.error('Error calculating business date, falling back to current date:', err);
+    const activeDate = await this.parametersService.getValue('pos', 'active_business_date');
+    if (activeDate && activeDate.trim().length === 10) {
+      return activeDate;
     }
-    return businessDateStr;
+
+    // Parametre yoksa bugünün yerel tarihini güvenli bir şekilde döndür
+    const now = new Date();
+    const offset = now.getTimezoneOffset();
+    const localNow = new Date(now.getTime() - (offset * 60 * 1000));
+    return localNow.toISOString().split('T')[0];
   }
 
   /** Get the active (OPEN) shift for a user */

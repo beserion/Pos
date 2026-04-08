@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { StockCard } from './stock-card.entity';
@@ -85,8 +85,7 @@ export class StockCardsService {
   }
 
   async remove(id: number): Promise<void> {
-    await this.findOne(id);
-    await this.stockCardRepository.delete(id);
+    throw new BadRequestException('Güvenlik kuralı gereği sistemden stok kartı kalıcı olarak silinemez. Lütfen kartı düzenleyerek "Pasif" konuma alınız.');
   }
 
   async getCategories(): Promise<string[]> {

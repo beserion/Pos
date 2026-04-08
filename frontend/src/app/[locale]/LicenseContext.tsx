@@ -9,6 +9,8 @@ interface LicenseContextType {
   daysOffline: number;
   loading: boolean;
   refreshLicense: () => void;
+  /** Belirtilen modülün aktif olup olmadığını kontrol eder. Lisans yokken false döner. */
+  hasModule: (moduleKey: string) => boolean;
 }
 
 const LicenseContext = createContext<LicenseContextType>({} as LicenseContextType);
@@ -145,8 +147,13 @@ export const LicenseProvider = ({ children }: { children: React.ReactNode }) => 
     );
   }
 
+  const hasModule = (moduleKey: string): boolean => {
+    if (!isValid) return false;
+    return modules.includes(moduleKey);
+  };
+
   return (
-    <LicenseContext.Provider value={{ isValid, modules, daysOffline, loading, refreshLicense: fetchStatus }}>
+    <LicenseContext.Provider value={{ isValid, modules, daysOffline, loading, refreshLicense: fetchStatus, hasModule }}>
       {children}
     </LicenseContext.Provider>
   );

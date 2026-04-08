@@ -13,6 +13,7 @@ export interface AppParameters {
   max_discount_rate: number;
   receipt_footer: string;
   screen_timeout: number;  // dakika cinsinden — 0 = devre dışı
+  shift_system_enabled: boolean;
 
   // Mutfak
   warning_time: number;
@@ -74,6 +75,7 @@ export const DEFAULT_PARAMS: AppParameters = {
   max_discount_rate: 20,
   receipt_footer: 'Teşekkür ederiz! Tekrar bekleriz.',
   screen_timeout: 180,  // 180 saniye varsayılan (3 dakika)
+  shift_system_enabled: true,
 
   warning_time: 10,
   critical_time: 20,

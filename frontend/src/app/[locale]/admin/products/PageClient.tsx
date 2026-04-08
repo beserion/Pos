@@ -230,9 +230,11 @@ export function PageClient() {
                 });
                 toastSwal({ title: tc('deleted'), text: t('deleteSuccess'), icon: 'success' });
                 fetchData();
-            } catch (error) {
-                console.error('Error deleting product', error);
-                showSwal({ title: tc('error'), text: tc('deleteError'), icon: 'error' });
+            } catch (error: any) {
+                if (error?.response?.status !== 400) {
+                    console.error('Error deleting product', error);
+                }
+                showSwal({ title: tc('error'), text: error?.response?.data?.message || tc('deleteError'), icon: 'error' });
             }
         }
     };
@@ -282,10 +284,13 @@ export function PageClient() {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
             const [recipeRes, summaryRes] = await Promise.all([
                 axios.get(`${API_URL}/recipes/by-product/${productId}`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: null })),
-                axios.get(`${API_URL}/recipes/cost/${productId}`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: null }))
+                axios.get(`${API_URL}/recipes/summary/${productId}`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: null }))
             ]);
 
-            if (recipeRes.data) {
+            if (recipeRes.data && Array.isArray(recipeRes.data) && recipeRes.data.length > 0) {
+                const activeRecipe = recipeRes.data.find((r: any) => r.isActive) || recipeRes.data[0];
+                setCurrentRecipe(activeRecipe);
+            } else if (recipeRes.data && !Array.isArray(recipeRes.data) && Object.keys(recipeRes.data).length > 0) {
                 setCurrentRecipe(recipeRes.data);
             } else {
                 setCurrentRecipe({
@@ -373,6 +378,9 @@ export function PageClient() {
             }
             
             fetchRecipeForProduct(currentRecipe.productId);
+            // Refresh recipeHeaders so the new recipe appears in variant dropdowns
+            const recipesRes = await axios.get(`${API_URL}/recipes`, config).catch(() => ({ data: [] }));
+            setRecipeHeaders(Array.isArray(recipesRes.data) ? recipesRes.data : (recipesRes.data?.data || []));
         } catch (error: any) {
             console.error('Error saving recipe', error);
             showSwal({ title: tc('error'), text: error?.response?.data?.message || tc('saveError'), icon: 'error' });
@@ -397,6 +405,9 @@ export function PageClient() {
                 await axios.delete(`${API_URL}/recipes/${currentRecipe.id}`, { headers: { Authorization: `Bearer ${user.token}` } });
                 toastSwal({ title: tc('success'), text: 'Reçete başarıyla silindi.', icon: 'success' });
                 fetchRecipeForProduct(currentRecipe.productId);
+                // Refresh recipe headers
+                const recipesRes = await axios.get(`${API_URL}/recipes`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: [] }));
+                setRecipeHeaders(Array.isArray(recipesRes.data) ? recipesRes.data : (recipesRes.data?.data || []));
             } catch (error: any) {
                 console.error('Error deleting recipe', error);
                 showSwal({ title: tc('error'), text: error?.response?.data?.message || tc('deleteError'), icon: 'error' });
@@ -517,6 +528,11 @@ export function PageClient() {
         { key: 'unitMl', value: 'ml' },
         { key: 'unitPortion', value: 'portion' }
     ];
+
+    const variantSystemEnabledParam = parameters.find(p => p.key === 'variant_system_enabled');
+    const isVariantSystemEnabled = variantSystemEnabledParam ? (variantSystemEnabledParam.value === 'true' || variantSystemEnabledParam.value === true) : true;
+
+    const availableVariantRecipes = (Array.isArray(recipeHeaders) ? recipeHeaders : []).filter(rh => rh.productId === formData.id);
 
     return (
         <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">
@@ -729,7 +745,9 @@ export function PageClient() {
                                     <button type="button" onClick={() => setActiveTab('gorsel')} className={`flex-[1_0_auto] px-3 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'gorsel' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabImage')}</button>
                                     <button type="button" onClick={() => setActiveTab('recete')} className={`flex-[1_0_auto] px-3 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'recete' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>{t('tabRecipe')}</button>
                                     <button type="button" onClick={() => setActiveTab('ozellik')} className={`flex-[1_0_auto] px-3 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'ozellik' ? 'bg-white dark:bg-slate-700 text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Özellikler</button>
-                                    <button type="button" onClick={() => setActiveTab('varyant')} className={`flex-[1_0_auto] px-3 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'varyant' ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Varyantlar</button>
+                                    {isVariantSystemEnabled && (
+                                        <button type="button" onClick={() => setActiveTab('varyant')} className={`flex-[1_0_auto] px-3 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'varyant' ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Varyantlar</button>
+                                    )}
                                 </div>
 
                                 <div className="p-8 pb-4 flex-1 overflow-y-auto">
@@ -1093,9 +1111,14 @@ export function PageClient() {
                                                                 <h4 className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-2 m-0">
                                                                     <i className="fat fa-list-check text-orange-500"></i> İçindekiler / Stok Kullanımı
                                                                 </h4>
-                                                                <button type="button" onClick={handleAddRecipeLine} className="px-4 py-2 bg-white dark:bg-slate-700 border border-orange-100 dark:border-orange-500/20 text-orange-600 dark:text-orange-400 font-black text-[10px] uppercase tracking-widest rounded-xl shadow-sm hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-all flex items-center gap-2">
-                                                                    <i className="fat fa-plus text-xs"></i> Satır Ekle
-                                                                </button>
+                                                                <div className="flex gap-2">
+                                                                    <button type="button" onClick={() => setCurrentRecipe({ id: 0, productId: formData.id, name: 'Yeni Reçete (Örn: L Boy)', isActive: false, note: '', lines: [] })} className="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-black text-[10px] uppercase tracking-widest rounded-xl shadow-sm hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-all flex items-center gap-2">
+                                                                        <i className="fat fa-file-circle-plus text-xs"></i> Yeni Yan Reçete Aç
+                                                                    </button>
+                                                                    <button type="button" onClick={handleAddRecipeLine} className="px-4 py-2 bg-white dark:bg-slate-700 border border-orange-100 dark:border-orange-500/20 text-orange-600 dark:text-orange-400 font-black text-[10px] uppercase tracking-widest rounded-xl shadow-sm hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-all flex items-center gap-2">
+                                                                        <i className="fat fa-plus text-xs"></i> Satır Ekle
+                                                                    </button>
+                                                                </div>
                                                             </div>
                                                             
                                                             <div className="overflow-x-auto min-h-[200px]">
@@ -1182,27 +1205,27 @@ export function PageClient() {
                                                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                                                     <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50">
                                                                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Satış Fiyatı</p>
-                                                                        <p className="text-2xl font-black text-slate-800 dark:text-white m-0">₺{recipeSummary.salePrice.toFixed(2)}</p>
+                                                                        <p className="text-2xl font-black text-slate-800 dark:text-white m-0">₺{recipeSummary.salePrice?.toFixed(2) || '0.00'}</p>
                                                                     </div>
                                                                     <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-rose-100 dark:border-rose-900/30">
                                                                         <p className="text-[9px] font-black text-rose-500 uppercase tracking-widest mb-1.5 leading-none">Toplam Maliyet</p>
-                                                                        <p className="text-2xl font-black text-rose-600 dark:text-rose-400 m-0">₺{recipeSummary.totalCost.toFixed(2)}</p>
+                                                                        <p className="text-2xl font-black text-rose-600 dark:text-rose-400 m-0">₺{recipeSummary.foodCost?.toFixed(2) || '0.00'}</p>
                                                                     </div>
                                                                     <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-emerald-100 dark:border-emerald-900/30">
                                                                         <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 leading-none">Kâr Tutarı</p>
-                                                                        <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 m-0">₺{recipeSummary.profitAmount.toFixed(2)}</p>
+                                                                        <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 m-0">₺{recipeSummary.profit?.toFixed(2) || '0.00'}</p>
                                                                     </div>
                                                                     <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-indigo-100 dark:border-indigo-900/30">
                                                                         <p className="text-[9px] font-black text-indigo-500 uppercase tracking-widest mb-2 leading-none">Maliyet Oranı (Cost %)</p>
                                                                         <div className="flex items-center gap-3">
                                                                             <div className="flex-1 h-2.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden shadow-inner">
                                                                                 <div 
-                                                                                    className={`h-full rounded-full transition-all duration-1000 ${recipeSummary.costPercentage > 50 ? 'bg-gradient-to-r from-rose-500 to-rose-600' : recipeSummary.costPercentage > 30 ? 'bg-gradient-to-r from-amber-500 to-amber-600' : 'bg-gradient-to-r from-emerald-500 to-emerald-600'}`} 
-                                                                                    style={{ width: `${Math.min(recipeSummary.costPercentage, 100)}%` }}
+                                                                                    className={`h-full rounded-full transition-all duration-1000 ${recipeSummary.costRatio > 50 ? 'bg-gradient-to-r from-rose-500 to-rose-600' : recipeSummary.costRatio > 30 ? 'bg-gradient-to-r from-amber-500 to-amber-600' : 'bg-gradient-to-r from-emerald-500 to-emerald-600'}`} 
+                                                                                    style={{ width: `${Math.min(recipeSummary.costRatio || 0, 100)}%` }}
                                                                                 ></div>
                                                                             </div>
                                                                             <p className="text-lg leading-none font-black text-indigo-600 dark:text-indigo-400 m-0">
-                                                                                %{recipeSummary.costPercentage.toFixed(1)}
+                                                                                %{recipeSummary.costRatio?.toFixed(1) || '0.0'}
                                                                             </p>
                                                                         </div>
                                                                     </div>
@@ -1272,7 +1295,7 @@ export function PageClient() {
                                             </div>
                                         )}
 
-                                        {activeTab === 'varyant' && (
+                                        {activeTab === 'varyant' && isVariantSystemEnabled && (
                                             <div className="space-y-6">
                                                 <div className="flex justify-between items-center bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-3xl border border-indigo-100 dark:border-indigo-800/50">
                                                     <div>
@@ -1359,8 +1382,8 @@ export function PageClient() {
                                                                                 <div className="relative flex items-center">
                                                                                     <select value={v.recipeHeaderId || ''} onChange={e => { const nv = [...formData.variations!]; nv[idx].recipeHeaderId = e.target.value ? parseInt(e.target.value) : null; setFormData({ ...formData, variations: nv }); }} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-2 focus:ring-slate-500/30 outline-none appearance-none">
                                                                                         <option value="">Reçete Başlığı Seçin (Örn: L Boy Özel Reçete)</option>
-                                                                                        {(Array.isArray(recipeHeaders) ? recipeHeaders : []).map((rh: any) => (
-                                                                                            <option key={rh.id} value={rh.id}>{rh.name || `Başlıksız Reçete #${rh.id} (${rh.product?.name})`}</option>
+                                                                                        {availableVariantRecipes.map((rh: any) => (
+                                                                                            <option key={rh.id} value={rh.id}>{rh.name || `Başlıksız Reçete #${rh.id}`}{!rh.isActive ? ' (Pasif)' : ''}</option>
                                                                                         ))}
                                                                                     </select>
                                                                                     <i className="fat fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>

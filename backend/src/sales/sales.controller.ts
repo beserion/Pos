@@ -52,10 +52,7 @@ export class SalesController {
     );
   }
 
-  @Post('end-of-day')
-  endOfDay(@Body('userId') userId?: number) {
-    return this.salesService.endOfDay(userId);
-  }
+
 
   @Get('transfer/logs')
   getTransferLogs(

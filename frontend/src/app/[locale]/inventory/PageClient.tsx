@@ -439,7 +439,9 @@ export function PageClient() {
                 toastSwal({ title: tc('deleted'), text: 'Stok kartı başarıyla silindi.', icon: 'success' });
                 fetchData();
             } catch (error: any) {
-                console.error('Error deleting stock card', error);
+                if (error?.response?.status !== 400) {
+                    console.error('Error deleting stock card', error);
+                }
                 showSwal({ title: tc('error'), text: error?.response?.data?.message || tc('deleteError'), icon: 'error' });
             }
         }

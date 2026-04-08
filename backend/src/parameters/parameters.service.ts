@@ -64,6 +64,8 @@ export class ParametersService implements OnModuleInit {
         { module: 'pos', key: 'shift_system_enabled', value: 'true', label: 'Vardiyalı Kasiyer Sistemi', type: 'boolean', description: 'Vardiyalı kasiyer sistemi aktif mi?' },
         { module: 'pos', key: 'end_of_day_min_hours', value: '6', label: 'Gün Sonu Min. Saat Aralığı', type: 'number', description: 'İki gün sonu arasında minimum kaç saat geçmeli?' },
         { module: 'pos', key: 'vat_rates', value: '0,1,10,20', label: 'KDV Oranları', type: 'text', description: 'Virgülle ayrılmış KDV oranları' },
+        { module: 'pos', key: 'block_eod_if_tables_open', value: 'false', label: 'Açık Masa Varken Gün Sonunu Engelle', type: 'boolean', description: 'Eğer açık (ödenmemiş) masa varsa gün sonu alınmasını engeller.' },
+        { module: 'pos', key: 'auto_close_shifts_on_eod', value: 'true', label: 'Gün Sonunda Vardiyaları Otomatik Kapat', type: 'boolean', description: 'Gün sonu alındığında hala açık olan vardiyalar otomatik olarak beklenen tutar ile kapatılsın mı?' },
       ];
 
       for (const p of defaultParams) {
