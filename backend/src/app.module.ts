@@ -11,6 +11,8 @@ import { SalesModule } from './sales/sales.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { DeliveriesModule } from './deliveries/deliveries.module';
 import { AuthModule } from './auth/auth.module';
+import { LicenseModule } from './license/license.module';
+import { SystemLicense } from './license/license.entity';
 import { LocationsModule } from './locations/locations.module';
 import { TablesModule } from './tables/tables.module';
 import { EmployeesModule } from './employees/employees.module';
@@ -97,6 +99,8 @@ import { StockGroupsModule } from './stock-groups/stock-groups.module';
 import { ProductVariation } from './products/product-variation.entity';
 import { Firm } from './firms/firm.entity';
 import { FirmsModule } from './firms/firms.module';
+import { ParentGroup } from './parent-groups/parent-group.entity';
+import { ParentGroupsModule } from './parent-groups/parent-groups.module';
 
 import { ScheduleModule } from '@nestjs/schedule';
 
@@ -176,6 +180,8 @@ import { ScheduleModule } from '@nestjs/schedule';
             StockGroup,
             ProductVariation,
             Firm,
+            ParentGroup,
+            SystemLicense,
           ],
           synchronize: true, // Auto-sync enabled by user permission
           logging: true,
@@ -240,6 +246,8 @@ import { ScheduleModule } from '@nestjs/schedule';
     InventoryModule,
     StockGroupsModule,
     FirmsModule,
+    ParentGroupsModule,
+    LicenseModule,
   ],
   controllers: [AppController],
   providers: [AppService],

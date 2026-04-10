@@ -16,7 +16,7 @@ interface Location {
 
 export function PageClient() {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, hasFeature } = useAuth();
     const [locations, setLocations] = useState<Location[]>([]);
     const [loading, setLoading] = useState(true);
     const tCommon = useTranslations('Common');
@@ -95,6 +95,15 @@ export function PageClient() {
     };
 
     const openModal = (loc?: Location) => {
+        if (!loc && locations.length > 0 && !hasFeature('branch_system')) {
+            showSwal({ 
+                title: 'Lisans Yetrsiz', 
+                text: 'İkinci bir şube ekleyebilmek için Şubeli Sistem modülü gerekmektedir. Lütfen panel üzerinden lisansınızı yükseltin.', 
+                icon: 'warning' 
+            });
+            return;
+        }
+
         if (loc) setFormData(loc);
         else setFormData({ id: 0, name: '', address: '', phone: '', isActive: true });
         setIsModalOpen(true);

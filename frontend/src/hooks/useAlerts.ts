@@ -27,7 +27,19 @@ export function useAlerts(userId: number | null, roleId?: number | null) {
   const [criticalPopup, setCriticalPopup] = useState<AlertNotification | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
-  const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')));
+  const getApiUrl = () => {
+    if (typeof window === 'undefined') return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+    
+    const hostname = window.location.hostname;
+    // Eğer localhost veya yerel bir IP ise (192.168... veya 10... gibi) yerel API'yi dene
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || /^192\.168\./.test(hostname) || /^10\./.test(hostname)) {
+      return `http://${hostname}:3050`;
+    }
+    
+    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+  };
+
+  const API_URL = getApiUrl();
 
   /** İlk yüklemede REST'ten mevcut bildirimleri çek */
   const fetchNotifications = useCallback(async () => {

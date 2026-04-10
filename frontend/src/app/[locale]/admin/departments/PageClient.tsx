@@ -11,6 +11,12 @@ interface OutputProfile {
     name: string;
 }
 
+interface ParentGroup {
+    id: number;
+    name: string;
+    description?: string;
+}
+
 interface Department {
     id: number;
     name: string;
@@ -20,9 +26,12 @@ interface Department {
     extraDepartmentId?: number | null;
     extraDepartment?: Department;
     autoOpenExtraPopup?: boolean;
+    parentGroupId?: number | null;
+    parentGroup?: ParentGroup;
 }
 
-const EMPTY: Department = { id: 0, name: '', isActive: true, outputProfileId: null, extraDepartmentId: null, autoOpenExtraPopup: false };
+const EMPTY_PARENT_GROUP: ParentGroup = { id: 0, name: '' };
+const EMPTY: Department = { id: 0, name: '', isActive: true, outputProfileId: null, extraDepartmentId: null, autoOpenExtraPopup: false, parentGroupId: null };
 
 export function PageClient() {
     const locale = useLocale();
@@ -30,9 +39,12 @@ export function PageClient() {
     const { user } = useAuth();
     const [items, setItems] = useState<Department[]>([]);
     const [outputProfiles, setOutputProfiles] = useState<OutputProfile[]>([]);
+    const [parentGroups, setParentGroups] = useState<ParentGroup[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isParentGroupModalOpen, setIsParentGroupModalOpen] = useState(false);
     const [formData, setFormData] = useState<Department>({ ...EMPTY });
+    const [parentGroupFormData, setParentGroupFormData] = useState<ParentGroup>({ ...EMPTY_PARENT_GROUP });
 
     useEffect(() => { if (user?.token) fetchData(); else if (user === null) setLoading(false); }, [user]);
 
@@ -41,12 +53,14 @@ export function PageClient() {
         try {
             const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
             const h = { headers: { Authorization: `Bearer ${user.token}` } };
-            const [depRes, opRes] = await Promise.all([
+            const [depRes, opRes, pgRes] = await Promise.all([
                 axios.get(`${API}/departments`, h),
-                axios.get(`${API}/output-profiles`, h)
+                axios.get(`${API}/output-profiles`, h),
+                axios.get(`${API}/parent-groups`, h).catch(() => ({ data: [] }))
             ]);
             setItems(depRes.data);
             setOutputProfiles(opRes.data);
+            setParentGroups(pgRes.data);
         } catch { showSwal({ title: 'Hata', text: 'Veri yüklenemedi', icon: 'error' }); }
         finally { setLoading(false); }
     };
@@ -59,11 +73,11 @@ export function PageClient() {
             const h = { headers: { Authorization: `Bearer ${user.token}` } };
             const payload = { ...formData };
             if (payload.id === 0) {
-                const { id, outputProfile, extraDepartment, ...data } = payload as any;
+                const { id, outputProfile, extraDepartment, parentGroup, ...data } = payload as any;
                 await axios.post(`${API}/departments`, data, h);
                 toastSwal({ title: 'Başarılı', text: 'Kaydedildi', icon: 'success' });
             } else {
-                const { outputProfile, extraDepartment, ...data } = payload as any;
+                const { outputProfile, extraDepartment, parentGroup, ...data } = payload as any;
                 await axios.put(`${API}/departments/${payload.id}`, data, h);
                 toastSwal({ title: 'Başarılı', text: 'Güncellendi', icon: 'success' });
             }
@@ -86,6 +100,35 @@ export function PageClient() {
         }
     };
 
+    const handleParentGroupSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!user?.token) return;
+        try {
+            const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+            const h = { headers: { Authorization: `Bearer ${user.token}` } };
+            if (parentGroupFormData.id === 0) {
+                await axios.post(`${API}/parent-groups`, { name: parentGroupFormData.name, description: parentGroupFormData.description }, h);
+            } else {
+                await axios.put(`${API}/parent-groups/${parentGroupFormData.id}`, { name: parentGroupFormData.name, description: parentGroupFormData.description }, h);
+            }
+            toastSwal({ title: 'Başarılı', text: 'Üst grup kaydedildi', icon: 'success' });
+            setParentGroupFormData({ ...EMPTY_PARENT_GROUP });
+            fetchData();
+        } catch { showSwal({ title: 'Hata', text: 'Üst grup kayıt hatası', icon: 'error' }); }
+    };
+
+    const handleParentGroupDelete = async (id: number) => {
+        const result = await showSwal({ title: 'Emin misiniz?', text: 'Bu üst grup silinecek.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Sil', cancelButtonText: 'İptal' });
+        if (result.isConfirmed && user?.token) {
+            try {
+                const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+                await axios.delete(`${API}/parent-groups/${id}`, { headers: { Authorization: `Bearer ${user.token}` } });
+                toastSwal({ title: 'Silindi', text: 'Üst grup silindi', icon: 'success' });
+                fetchData();
+            } catch { showSwal({ title: 'Hata', text: 'Silme hatası', icon: 'error' }); }
+        }
+    };
+
     const openModal = (item?: Department) => {
         setFormData(item ? { ...item } : { ...EMPTY });
         setIsModalOpen(true);
@@ -101,12 +144,15 @@ export function PageClient() {
                     <div className="flex items-center">
                         <i className="fat fa-layer-group me-3 text-indigo-600 dark:text-indigo-400" style={{ fontSize: '50px' }}></i>
                         <div>
-                            <h3 className="mb-0 text-3xl font-extralight text-indigo-600 dark:text-indigo-400 leading-none uppercase tracking-[0.25em]">KATEGORİLER / STOK GRUBU</h3>
+                            <h3 className="mb-0 text-3xl font-extralight text-indigo-600 dark:text-indigo-400 leading-none uppercase tracking-[0.25em]">ÜRÜN GRUPLARI</h3>
                             <div className="h-1 w-full bg-gradient-to-r from-indigo-400 to-transparent rounded-full mt-2 mb-1"></div>
                             <h5 className="text-muted mb-0 text-lg font-medium text-slate-400 dark:text-slate-500 mt-0.5">Kategorileri, ekstra ürün gruplarını ve çıktı profili kurallarını yönetin</h5>
                         </div>
                     </div>
                     <div className="flex gap-3">
+                        <button onClick={() => setIsParentGroupModalOpen(true)} className="px-6 py-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-600 dark:text-amber-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-amber-100 transition-all flex items-center gap-2">
+                            <i className="fat fa-folder-tree text-lg"></i> Üst Gruplar
+                        </button>
                         <button onClick={() => openModal()} className="px-6 py-3 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-indigo-100 transition-all flex items-center gap-2">
                             <i className="fat fa-plus-circle text-lg"></i> Yeni Kategori
                         </button>
@@ -128,6 +174,7 @@ export function PageClient() {
                                     <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-700/50">
                                         <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest" style={{ width: '50px' }}>ID</th>
                                         <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">KATEGORİ ADI</th>
+                                        <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">ÜST GRUP</th>
                                         <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">EKSTRA ÜRÜN GRUBU</th>
                                         <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">OTO. POPUP</th>
                                         <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">ÇIKTI PROFİLİ</th>
@@ -146,6 +193,14 @@ export function PageClient() {
                                                     </div>
                                                     <span className="font-black text-slate-800 dark:text-white text-lg">{item.name}</span>
                                                 </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {item.parentGroupId ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 dark:bg-indigo-500/10 rounded-lg border border-indigo-200 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-400 font-bold text-sm">
+                                                        <i className="fat fa-folder-tree text-xs"></i>
+                                                        {item.parentGroup?.name || parentGroups.find(pg => pg.id === item.parentGroupId)?.name || 'Yükleniyor...'}
+                                                    </span>
+                                                ) : <span className="text-sm font-bold text-slate-400">-</span>}
                                             </td>
                                             <td className="px-6 py-4">
                                                 {item.extraDepartmentId ? (
@@ -195,6 +250,65 @@ export function PageClient() {
                 )}
             </div>
 
+            {/* Parent Group Management Modal */}
+            {isParentGroupModalOpen && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-2xl animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-2xl shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col max-h-[80vh]">
+                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20">
+                            <div>
+                                <h2 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase mb-0">
+                                    <i className="fat fa-folder-tree text-amber-500"></i> Üst Grup Yönetimi
+                                </h2>
+                            </div>
+                            <button onClick={() => setIsParentGroupModalOpen(false)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white transition-all">&times;</button>
+                        </div>
+
+                        <div className="p-8 flex-1 overflow-auto">
+                            <form onSubmit={handleParentGroupSave} className="flex gap-4 mb-8">
+                                <div className="flex-1">
+                                    <input
+                                        type="text"
+                                        required
+                                        placeholder="Üst Grup Adı (Örn: Gıda, İçecek...)"
+                                        value={parentGroupFormData.name}
+                                        onChange={(e) => setParentGroupFormData({ ...parentGroupFormData, name: e.target.value })}
+                                        className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-amber-500/10 outline-none transition-shadow"
+                                    />
+                                </div>
+                                <button type="submit" className="px-6 py-3 bg-amber-600 hover:bg-amber-500 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2">
+                                    {parentGroupFormData.id ? 'GÜNCELLE' : 'EKLE'}
+                                </button>
+                                {parentGroupFormData.id !== 0 && (
+                                    <button type="button" onClick={() => setParentGroupFormData({ ...EMPTY_PARENT_GROUP })} className="px-4 py-3 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl">&times;</button>
+                                )}
+                            </form>
+
+                            <div className="space-y-3">
+                                {parentGroups.map(group => (
+                                    <div key={group.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-700/50 rounded-2xl group hover:border-amber-500/30 transition-all">
+                                        <span className="font-bold text-slate-700 dark:text-slate-200">{group.name}</span>
+                                        <div className="flex gap-2 opacity-100 group-hover:opacity-100 transition-all">
+                                            <button onClick={() => setParentGroupFormData(group)} className="w-8 h-8 flex items-center justify-center bg-white dark:bg-slate-800 text-blue-500 rounded-lg border border-slate-100 dark:border-slate-700 hover:bg-blue-500 hover:text-white transition-all">
+                                                <i className="fat fa-pen-field text-xs"></i>
+                                            </button>
+                                            <button onClick={() => handleParentGroupDelete(group.id)} className="w-8 h-8 flex items-center justify-center bg-white dark:bg-slate-800 text-red-500 rounded-lg border border-slate-100 dark:border-slate-700 hover:bg-red-500 hover:text-white transition-all">
+                                                <i className="fat fa-trash-can text-xs"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                                {parentGroups.length === 0 && (
+                                    <div className="p-10 text-center opacity-40">
+                                        <i className="fat fa-folder-open text-4xl mb-2"></i>
+                                        <p className="text-xs font-bold uppercase tracking-widest">Üst Grup Tanımlanmamış</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xl animate-in fade-in zoom-in duration-300">
@@ -208,11 +322,30 @@ export function PageClient() {
                         </div>
                         <form onSubmit={handleSave} className="p-8 space-y-5">
                             {/* Kategori Adı */}
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">KATEGORİ ADI</label>
-                                <div className="relative">
-                                    <i className="fat fa-layer-group absolute left-4 top-4 text-indigo-500/50"></i>
-                                    <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder="ör: Yiyecek, İçecek..." />
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">KATEGORİ ADI</label>
+                                    <div className="relative">
+                                        <i className="fat fa-layer-group absolute left-4 top-4 text-indigo-500/50"></i>
+                                        <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder="ör: Yiyecek..." />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-2 px-1">ÜST GRUP</label>
+                                    <div className="relative">
+                                        <i className="fat fa-folder-tree absolute left-4 top-4 text-indigo-500/50"></i>
+                                        <select
+                                            value={formData.parentGroupId || ''}
+                                            onChange={(e) => setFormData({ ...formData, parentGroupId: e.target.value ? parseInt(e.target.value) : null })}
+                                            className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow appearance-none cursor-pointer"
+                                        >
+                                            <option value="">Üst Grup Yok</option>
+                                            {parentGroups.map(pg => (
+                                                <option key={pg.id} value={pg.id}>{pg.name}</option>
+                                            ))}
+                                        </select>
+                                        <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                    </div>
                                 </div>
                             </div>
 

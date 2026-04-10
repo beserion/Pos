@@ -116,6 +116,15 @@ export function PageClient() {
     };
 
     const openModal = (ware?: Warehouse) => {
+        if (!ware && warehouses.length > 0 && !hasFeature('branch_system')) {
+            showSwal({ 
+                title: 'Lisans Yetersiz', 
+                text: 'İkinci bir depo ekleyebilmek için Şubeli Sistem modülü gerekmektedir. Lütfen panel üzerinden lisansınızı yükseltin.', 
+                icon: 'warning' 
+            });
+            return;
+        }
+
         if (ware) {
             setFormData({
                 id: ware.id,

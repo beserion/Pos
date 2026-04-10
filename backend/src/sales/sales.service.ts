@@ -13,7 +13,6 @@ import { KitchenGateway } from '../orders/kitchen.gateway';
 import { FinanceService } from '../finance/finance.service';
 import { PartnersService } from '../partners/partners.service';
 import { PrintersService } from '../printers/printers.service';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { AlertsService } from '../alerts/alerts.service';
 import { StockMovementsService } from '../stock-movements/stock-movements.service';
 import { ProductsService } from '../products/products.service';
@@ -734,129 +733,9 @@ export class SalesService implements OnModuleInit {
     return { pending, finished, total };
   }
 
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-  async handleAutomaticEndOfDay() {
-    this.logger.log('Zamanlanmış görev: Otomatik Gün Sonu başlatılıyor...');
-    try {
-      const result = await this.endOfDay();
-      this.logger.log(`Otomatik Gün Sonu tamamlandı: Toplam ₺${result.grandTotal}`);
-    } catch (error) {
-      this.logger.error('Otomatik Gün Sonu sırasında hata oluştu:', error);
-    }
-  }
+  // Automatic End of Day and manual endOfDay logic moved to BusinessDayService
+  // Automatic End of Day and manual endOfDay logic moved to BusinessDayService
 
-  async endOfDay(userId?: number): Promise<{
-    date: string;
-    cashTotal: number;
-    cardTotal: number;
-    bankTotal: number;
-    grandTotal: number;
-  }> {
-    // Bugünün başlangıcı ve sonu
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
-
-    // Bugün tamamlanan ve henüz gün sonu kapatılmamış satışları çek
-    const sales = await this.saleRepository
-      .createQueryBuilder('sale')
-      .where('sale.status = :status', { status: 'COMPLETED' })
-      .andWhere('sale.status != :cancelled', { cancelled: 'CANCELLED' })
-      .andWhere('sale.createdAt >= :start', { start: todayStart })
-      .andWhere('sale.createdAt <= :end', { end: todayEnd })
-      .andWhere('sale.isEndOfDayClosed = :closed', { closed: false })
-      .getMany();
-
-    if (sales.length === 0) {
-      return { date: todayStart.toLocaleDateString('tr-TR'), cashTotal: 0, cardTotal: 0, bankTotal: 0, grandTotal: 0 };
-    }
-
-    let cashTotal = 0;
-    let cardTotal = 0;
-    let bankTotal = 0;
-
-    for (const sale of sales) {
-      const method = sale.paymentMethod?.toUpperCase();
-      if (method === 'KASA' || method === 'CASH') {
-        cashTotal += Number(sale.totalAmount);
-      } else if (method === 'KREDI_KARTI' || method === 'CREDIT_CARD' || method === 'CC') {
-        cardTotal += Number(sale.totalAmount);
-      } else if (method === 'BANKA' || method === 'EFT' || method === 'HAVALE') {
-        bankTotal += Number(sale.totalAmount);
-      } else {
-        // paymentMethod belirsizse ayrıştırılmış alanları kullan
-        cashTotal += Number(sale.paidAmountCash || 0);
-        cardTotal += Number(sale.paidAmountCreditCard || 0);
-      }
-    }
-
-    const dateStr = todayStart.toLocaleDateString('tr-TR');
-
-    // Finans kayıtlarını upsert et (aynı gün tekrar yapılırsa yeni kayıt açmaz, mevcut güncellenir)
-    if (cashTotal > 0) {
-      await this.financeService.upsertEndOfDay({
-        amount: cashTotal,
-        description: `Gün Sonu Nakit Tahsilat - ${dateStr}`,
-        category: 'Gün Sonu',
-        paymentMethod: 'KASA',
-        userId,
-      });
-    }
-
-    if (cardTotal > 0) {
-      await this.financeService.upsertEndOfDay({
-        amount: cardTotal,
-        description: `Gün Sonu Kredi Kartı Tahsilat - ${dateStr}`,
-        category: 'Gün Sonu',
-        paymentMethod: 'KREDI_KARTI',
-        userId,
-      });
-    }
-
-    if (bankTotal > 0) {
-      await this.financeService.upsertEndOfDay({
-        amount: bankTotal,
-        description: `Gün Sonu Banka Tahsilat - ${dateStr}`,
-        category: 'Gün Sonu',
-        paymentMethod: 'BANKA',
-        userId,
-      });
-    }
-
-    // Satışları kapatıldı olarak işaretle
-    const saleIds = sales.map(s => s.id);
-    await this.saleRepository.createQueryBuilder()
-      .update(Sale)
-      .set({ isEndOfDayClosed: true })
-      .whereInIds(saleIds)
-      .execute();
-
-    const grandTotal = cashTotal + cardTotal + bankTotal;
-
-    // Denetim logu
-    try {
-      await this.saleRepository.query(`
-        INSERT INTO audit_logs (timestamp, userId, actionType, amount, description, companyId)
-        VALUES (GETDATE(), @0, 'END_OF_DAY', @1, @2, 1)
-      `, [userId || 0, grandTotal, `Gün Sonu Kapatıldı. Toplam Hasılat: ₺${grandTotal}`]);
-    } catch { /* sessizce geç */ }
-
-    // Bildirim tetikle (Manuel ve Otomatik Ortak)
-    this.alertsService.trigger('END_OF_DAY', {
-      triggerUserId: userId,
-      description: `Gün Sonu Kapatıldı. Toplam Hasılat: ₺${grandTotal}`,
-      numericValue: grandTotal,
-    }).catch(() => {});
-
-    return {
-      date: dateStr,
-      cashTotal,
-      cardTotal,
-      bankTotal,
-      grandTotal,
-    };
-  }
 
   async cancelTableOrders(tableId: number): Promise<void> {
     await this.saleRepository.manager.transaction(async (manager) => {
@@ -1087,6 +966,12 @@ export class SalesService implements OnModuleInit {
     const items = sale.items;
     if (!items || items.length === 0) return;
 
+    // Varsayılan depo bilgisini çek (Reçete tüketimi için)
+    const warehouseResult = await manager.query(
+      `SELECT value FROM system_parameters WHERE [module] = 'stock' AND [key] = 'default_warehouse_id'`
+    );
+    const defaultWarehouseId = warehouseResult[0]?.value ? parseInt(warehouseResult[0].value) : undefined;
+
     for (const item of items) {
       if (!item.productId) continue;
 
@@ -1148,6 +1033,7 @@ export class SalesService implements OnModuleInit {
               'SALE',
               sale.id,
               sale.userId || sale.waiterId,
+              defaultWarehouseId,
               manager
             );
 
@@ -1171,6 +1057,7 @@ export class SalesService implements OnModuleInit {
                 'SALE',
                 sale.id,
                 sale.userId || sale.waiterId,
+                defaultWarehouseId,
                 manager,
               );
             } else {
@@ -1188,6 +1075,7 @@ export class SalesService implements OnModuleInit {
                'SALE',
                sale.id,
                sale.userId || sale.waiterId,
+               defaultWarehouseId,
                manager,
              );
           }

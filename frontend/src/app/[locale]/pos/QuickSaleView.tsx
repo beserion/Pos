@@ -78,8 +78,8 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [products, setProducts] = useState<Product[]>([]);
     const [productTypeOptions, setProductTypeOptions] = useState<{ id: string | number; name: string }[]>([]);
     const [selectedProductTypeId, setSelectedProductTypeId] = useState<number | 'all'>('all');
-    const [selectedGroupName, setSelectedGroupName] = useState<string>('Tümü');
-    const [selectedCategoryName, setSelectedCategoryName] = useState<string>('Tümü');
+    const [selectedParentGroupId, setSelectedParentGroupId] = useState<number | 'all' | 'unassigned' | null>(null);
+    const [selectedDepartmentId, setSelectedDepartmentId] = useState<number | 'all' | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [cart, setCart] = useState<CartItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -92,16 +92,17 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [selectedSetMenuProduct, setSelectedSetMenuProduct] = useState<Product | null>(null);
     const [isSetMenuModalOpen, setIsSetMenuModalOpen] = useState(false);
 
+    const [isVariationModalOpen, setIsVariationModalOpen] = useState(false);
+    const [selectedProductForVariation, setSelectedProductForVariation] = useState<Product | null>(null);
+    const [pendingAddToCartArgs, setPendingAddToCartArgs] = useState<{ skipExtraCheck?: boolean }>({});
+
     const [departments, setDepartments] = useState<any[]>([]);
+    const [parentGroups, setParentGroups] = useState<any[]>([]);
     const [extraPopupOpen, setExtraPopupOpen] = useState(false);
     const [extraPopupProducts, setExtraPopupProducts] = useState<Product[]>([]);
     const [extraPopupParentProduct, setExtraPopupParentProduct] = useState<Product | null>(null);
     const [pendingExtraCartItem, setPendingExtraCartItem] = useState<CartItem | null>(null);
 
-    // --- Variation Modal State ---
-    const [isVariationModalOpen, setIsVariationModalOpen] = useState(false);
-    const [selectedProductForVariation, setSelectedProductForVariation] = useState<Product | null>(null);
-    const [pendingAddToCartArgs, setPendingAddToCartArgs] = useState<{ skipExtraCheck?: boolean }>({});
 
     const [noteModalItem, setNoteModalItem] = useState<CartItem | null>(null);
     const [tempNote, setTempNote] = useState('');
@@ -177,15 +178,17 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
         try {
             const token = Cookies.get('token');
             const headers = { Authorization: `Bearer ${token}` };
-            const [productsRes, departmentsRes, typesRes] = await Promise.all([
+            const [productsRes, departmentsRes, typesRes, pGroupsRes] = await Promise.all([
                 axios.get(`${API_URL}/products/quicksale`, { headers }),
                 axios.get(`${API_URL}/departments`, { headers }),
-                axios.get(`${API_URL}/product-types`, { headers })
+                axios.get(`${API_URL}/product-types`, { headers }),
+                axios.get(`${API_URL}/parent-groups`, { headers })
             ]);
 
             const allProducts = productsRes.data;
             setProducts(allProducts);
             setDepartments(departmentsRes.data);
+            setParentGroups(pGroupsRes.data || []);
             
             const types = typesRes.data || [];
             setProductTypeOptions([{ id: 'all', name: tc('all') }, ...types]);
@@ -204,35 +207,27 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     }, [user, authLoading, locale]);
 
 
-    // --- Drill-Down Mantığı (TakeOrderView ile Senkron) ---
-    const availableGroups = useMemo(() => {
-        const filteredByCins = selectedProductTypeId === 'all' 
-            ? products 
-            : products.filter(p => (p as any).productTypeId === selectedProductTypeId);
-        
-        const groups = Array.from(new Set(filteredByCins.map(p => p.stockGroup || p.linkedStockCard?.stockGroup || 'Diğer').filter(Boolean)));
-        return ['Tümü', ...groups.sort()];
-    }, [products, selectedProductTypeId]);
-
-    const availableCategories = useMemo(() => {
-        const filteredByGroup = products.filter(p => {
-            const matchesCins = selectedProductTypeId === 'all' || (p as any).productTypeId === selectedProductTypeId;
-            const matchesGroup = selectedGroupName === 'Tümü' || (p.stockGroup || p.linkedStockCard?.stockGroup || 'Diğer') === selectedGroupName;
-            return matchesCins && matchesGroup;
-        });
-        const cats = Array.from(new Set(filteredByGroup.map(p => p.category || p.linkedStockCard?.category || 'Genel').filter(Boolean)));
-        return ['Tümü', ...cats.sort()];
-    }, [products, selectedProductTypeId, selectedGroupName]);
-
     const filteredProducts = useMemo(() => {
         return products.filter(p => {
             const matchesCins = selectedProductTypeId === 'all' || (p as any).productTypeId === selectedProductTypeId;
-            const matchesGroup = selectedGroupName === 'Tümü' || (p.stockGroup || p.linkedStockCard?.stockGroup || 'Diğer') === selectedGroupName;
-            const matchesCategory = selectedCategoryName === 'Tümü' || (p.category || p.linkedStockCard?.category || 'Genel') === selectedCategoryName;
-            const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.sku?.includes(searchQuery);
-            return matchesCins && matchesGroup && matchesCategory && matchesSearch;
+            
+            // Arama yapılıyorsa hiyerarşiyi baypas et
+            if (searchQuery.trim() !== '') {
+                return matchesCins && (p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.sku?.includes(searchQuery));
+            }
+
+            // Kategori seçilmediyse ürün gösterme
+            if (!selectedDepartmentId) return false;
+            
+            if (selectedDepartmentId === 'all') return matchesCins;
+
+            const dept = departments.find(d => d.id === selectedDepartmentId);
+            if (!dept) return false;
+
+            const matchesCategory = p.category === dept.name || (!p.category && dept.name === 'Diğer');
+            return matchesCins && matchesCategory;
         });
-    }, [products, selectedProductTypeId, selectedGroupName, selectedCategoryName, searchQuery]);
+    }, [products, selectedProductTypeId, selectedDepartmentId, searchQuery, departments]);
 
     const addToCart = (product: Product, skipExtraCheck: boolean = false, forceVariationId?: number) => {
         if (!forceVariationId && product.variations && product.variations.filter(v => v.isActive !== false).length > 0) {
@@ -543,8 +538,8 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                                 key={t.id}
                                 onClick={() => {
                                     setSelectedProductTypeId(t.id as any);
-                                    setSelectedGroupName('Tümü');
-                                    setSelectedCategoryName('Tümü');
+                                    setSelectedParentGroupId(null);
+                                    setSelectedDepartmentId(null);
                                 }}
                                 className={`px-5 h-10 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap flex items-center justify-center ${selectedProductTypeId === t.id ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm'}`}
                             >
@@ -557,14 +552,14 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 {/* Drill-Down Navigasyon (Breadcrumb) */}
                 <div className="flex items-center gap-2 mb-4">
                     <div className="flex-1 flex items-center gap-1.5 overflow-x-auto scrollbar-none min-h-[32px]">
-                        {selectedGroupName !== 'Tümü' ? (
+                        {(selectedParentGroupId || selectedDepartmentId) && !searchQuery ? (
                             <>
                                 <button 
                                     onClick={() => {
-                                        if (selectedCategoryName !== 'Tümü') {
-                                            setSelectedCategoryName('Tümü');
+                                        if (selectedDepartmentId) {
+                                            setSelectedDepartmentId(null);
                                         } else {
-                                            setSelectedGroupName('Tümü');
+                                            setSelectedParentGroupId(null);
                                         }
                                     }}
                                     className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-[10px] font-bold uppercase transition-all flex items-center gap-1.5 shrink-0"
@@ -572,20 +567,22 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                                     <i className="fat fa-arrow-left"></i> Geri
                                 </button>
                                 <div className="flex items-center gap-1.5 p-1 bg-white/40 dark:bg-slate-800/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60 shrink-0">
-                                    <span 
-                                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-tight shadow-sm flex items-center gap-1.5 ${selectedCategoryName === 'Tümü' ? 'bg-amber-500 text-white shadow-amber-500/25' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-300 dark:hover:bg-slate-600'}`}
-                                        onClick={() => setSelectedCategoryName('Tümü')}
-                                    >
-                                        <i className="fat fa-folder-open"></i>
-                                        {selectedGroupName}
-                                    </span>
-                                    {selectedCategoryName !== 'Tümü' && (
+                                    {selectedParentGroupId && (
+                                        <span 
+                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-tight shadow-sm flex items-center gap-1.5 ${!selectedDepartmentId ? 'bg-orange-500 text-white shadow-orange-500/25' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-300 dark:hover:bg-slate-600'}`}
+                                            onClick={() => setSelectedDepartmentId(null)}
+                                        >
+                                            <i className="fat fa-folder-tree"></i>
+                                            {parentGroups.find(pg => pg.id === selectedParentGroupId)?.name || 'Üst Grup'}
+                                        </span>
+                                    )}
+                                    {selectedDepartmentId && (
                                         <>
                                             <i className="fat fa-angle-right text-slate-400 text-[10px]"></i>
                                             <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-tight bg-emerald-500 text-white shadow-sm shadow-emerald-500/25 flex items-center gap-1.5">
                                                 <i className="fat fa-tags"></i>
-                                                {selectedCategoryName}
-                                                <button onClick={() => setSelectedCategoryName('Tümü')} className="ml-1 opacity-70 hover:opacity-100"><i className="fat fa-xmark"></i></button>
+                                                {departments.find(d => d.id === selectedDepartmentId)?.name || 'Kategori'}
+                                                <button onClick={() => setSelectedDepartmentId(null)} className="ml-1 opacity-70 hover:opacity-100"><i className="fat fa-xmark"></i></button>
                                             </span>
                                         </>
                                     )}
@@ -593,7 +590,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                             </>
                         ) : (
                             <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">
-                                {availableGroups.filter(g => g !== 'Tümü').length > 0 ? 'Lütfen Grup Seçin' : 'Ürünler Listeleniyor'}
+                                {searchQuery ? `"${searchQuery}" için sonuçlar` : 'Lütfen Grup veya Kategori Seçin'}
                             </span>
                         )}
                     </div>
@@ -601,33 +598,59 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
 
                 {/* Drill-Down Grid (Folder Cards or Products) */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-250px)]">
-                    {selectedGroupName === 'Tümü' && availableGroups.filter(g => g !== 'Tümü').length > 0 ? (
+                    {!selectedDepartmentId && !searchQuery ? (
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
-                            {availableGroups.filter(g => g !== 'Tümü').map(g => (
+                            {/* SEVİYE 1: Üst Gruplar ve Bağımsız Kategoriler */}
+                            {!selectedParentGroupId && (
+                                <>
+                                    {parentGroups.filter(pg => {
+                                        if (selectedProductTypeId === 'all') return true;
+                                        const pgDepts = departments.filter(d => d.parentGroupId === pg.id);
+                                        return products.some(p => (p as any).productTypeId === selectedProductTypeId && pgDepts.some(d => d.name === p.category));
+                                    }).map(pg => (
+                                        <button
+                                            key={`pg-${pg.id}`}
+                                            onClick={() => setSelectedParentGroupId(pg.id)}
+                                            className="group relative flex flex-col items-center justify-center p-6 bg-white dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-orange-500/50 hover:-translate-y-1 transition-all duration-300"
+                                        >
+                                            <div className="w-16 h-16 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                                <i className="fat fa-folder-tree text-2xl text-orange-500"></i>
+                                            </div>
+                                            <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{pg.name}</span>
+                                        </button>
+                                    ))}
+                                    {departments.filter(d => !d.parentGroupId).filter(d => {
+                                        if (selectedProductTypeId === 'all') return true;
+                                        return products.some(p => (p as any).productTypeId === selectedProductTypeId && p.category === d.name);
+                                    }).map(d => (
+                                        <button
+                                            key={`dept-${d.id}`}
+                                            onClick={() => setSelectedDepartmentId(d.id)}
+                                            className="group relative flex flex-col items-center justify-center p-6 bg-white dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-500/50 hover:-translate-y-1 transition-all duration-300"
+                                        >
+                                            <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                                <i className="fat fa-tags text-2xl text-emerald-500"></i>
+                                            </div>
+                                            <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
+                                        </button>
+                                    ))}
+                                </>
+                            )}
+
+                            {/* SEVİYE 2: Seçili Üst Gruba Bağlı Kategoriler */}
+                            {selectedParentGroupId && departments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
+                                if (selectedProductTypeId === 'all') return true;
+                                return products.some(p => (p as any).productTypeId === selectedProductTypeId && p.category === d.name);
+                            }).map(d => (
                                 <button
-                                    key={g}
-                                    onClick={() => { setSelectedGroupName(g); setSelectedCategoryName('Tümü'); }}
-                                    className="group relative flex flex-col items-center justify-center p-6 bg-white dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-orange-500/50 hover:-translate-y-1 transition-all duration-300"
-                                >
-                                    <div className="w-16 h-16 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                                        <i className="fat fa-folder-open text-2xl text-orange-500"></i>
-                                    </div>
-                                    <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{g}</span>
-                                </button>
-                            ))}
-                        </div>
-                    ) : selectedGroupName !== 'Tümü' && selectedCategoryName === 'Tümü' && availableCategories.filter(c => c !== 'Tümü').length > 0 ? (
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
-                            {availableCategories.filter(c => c !== 'Tümü').map(c => (
-                                <button
-                                    key={c}
-                                    onClick={() => setSelectedCategoryName(c)}
+                                    key={`dept-sub-${d.id}`}
+                                    onClick={() => setSelectedDepartmentId(d.id)}
                                     className="group relative flex flex-col items-center justify-center p-6 bg-white dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-500/50 hover:-translate-y-1 transition-all duration-300"
                                 >
                                     <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                                         <i className="fat fa-tags text-2xl text-emerald-500"></i>
                                     </div>
-                                    <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{c}</span>
+                                    <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
                                 </button>
                             ))}
                         </div>

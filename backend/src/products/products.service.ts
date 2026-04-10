@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product } from './product.entity';
@@ -197,8 +197,7 @@ export class ProductsService {
     }
 
     async remove(id: number): Promise<void> {
-        await this.findOne(id);
-        await this.productRepository.delete(id);
+        throw new BadRequestException('Güvenlik kuralı gereği ürünler kalıcı olarak silinemez. Lütfen silmek yerine ürünü pasife almayı (Gizle) deneyin.');
     }
 
     async reorderProducts(items: { id: number, orderIndex: number }[]): Promise<void> {

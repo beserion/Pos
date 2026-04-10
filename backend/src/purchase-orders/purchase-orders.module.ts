@@ -7,6 +7,7 @@ import { PurchaseOrdersController } from './purchase-orders.controller';
 import { StocksModule } from '../stocks/stocks.module';
 import { SecurityModule } from '../auth/security.module';
 import { FinanceModule } from '../finance/finance.module';
+import { StockMovementsModule } from '../stock-movements/stock-movements.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { FinanceModule } from '../finance/finance.module';
     StocksModule,
     SecurityModule,
     FinanceModule,
+    StockMovementsModule,
   ],
   providers: [PurchaseOrdersService],
   controllers: [PurchaseOrdersController],

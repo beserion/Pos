@@ -1,13 +1,8 @@
 'use client';
-import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
-import axios from 'axios';
-import Cookies from 'js-cookie';
-import { useAuth } from '@/app/[locale]/AuthContext';
-import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
-
-const API = (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
+import { useLicense } from '@/app/[locale]/LicenseContext';
+import { ShieldCheck, ShieldOff, ExternalLink, RefreshCw } from 'lucide-react';
 
 interface Feature {
     key: string;
@@ -17,88 +12,27 @@ interface Feature {
     color: string;
 }
 
-const PREMIUM_FEATURES: Feature[] = [
-    { key: 'recipe_system', label: 'Stok & Reçete Sistemi', description: 'Ürün reçeteleri, hammadde takibi ve maliyet analizi.', icon: 'fa-blender', color: 'text-emerald-500' },
-    { key: 'inventory_system', label: 'Envanter Yönetimi', description: 'Depo yönetimi, stok sayımı ve kritik stok uyarıları.', icon: 'fa-boxes-stacked', color: 'text-lime-500' },
-    { key: 'kds_system', label: 'Mutfak Ekranı (KDS)', description: 'Görsel sipariş hazırlık ekranı ve pişirme süreleri takibi.', icon: 'fa-fire-burner', color: 'text-rose-500' },
-    { key: 'reservation_system', label: 'Rezervasyon Sistemi', description: 'Masa rezervasyonu, müşteri yönetimi ve hatırlatıcılar.', icon: 'fa-calendar-check', color: 'text-indigo-500' },
-    { key: 'delivery_system', label: 'Paket Servis & Kurye Paneli', description: 'Dış servis siparişleri, kurye takibi ve harita entegrasyonu.', icon: 'fa-truck-fast', color: 'text-orange-500' },
-    { key: 'finance_system', label: 'Finans & Cari & Fatura', description: 'Fatura yönetimi, cari hesap takibi ve detaylı finansal raporlar.', icon: 'fa-building-columns', color: 'text-blue-500' },
-    { key: 'waiter_system', label: 'Garson / Terminal Sistemi', description: 'Tablet/Mobil üzerinden sipariş alma ve masa yönetimi.', icon: 'fa-tablet-screen-button', color: 'text-violet-500' },
+const KNOWN_MODULES: Feature[] = [
+    { key: 'core_v1',        label: 'Ana Yazılım Lisansı', description: 'Kasa (POS), sipariş yönetimi, temel satış ve raporlar.',         icon: 'fa-cash-register',       color: 'text-blue-500' },
+    { key: 'kds',            label: 'Mutfak Ekranı (KDS)',  description: 'Görsel sipariş hazırlık ekranı ve pişirme süreleri takibi.',       icon: 'fa-fire-burner',         color: 'text-rose-500' },
+    { key: 'qr_menu',        label: 'QR Menü',              description: 'Müşterilerin telefonuyla tarayıp sipariş verdiği dijital menü.',   icon: 'fa-qrcode',              color: 'text-emerald-500' },
+    { key: 'accounting',     label: 'Ön Muhasebe Modülü',   description: 'Fatura yönetimi, cari hesap takibi ve finansal raporlar.',         icon: 'fa-building-columns',    color: 'text-blue-500' },
+    { key: 'recipe_system',  label: 'Reçete / Yarı Mamul',  description: 'Ürün reçeteleri, hammadde takibi ve maliyet analizi.',            icon: 'fa-blender',             color: 'text-lime-500' },
+    { key: 'waiter_app',     label: 'Garson Uygulaması',    description: 'Tablet/Mobil üzerinden sipariş alma ve masa yönetimi.',           icon: 'fa-tablet-screen-button',color: 'text-violet-500' },
+    { key: 'delivery',       label: 'Paket Servis & Kurye', description: 'Dış servis siparişleri, kurye takibi ve harita entegrasyonu.',    icon: 'fa-truck-fast',          color: 'text-orange-500' },
+    { key: 'ecommerce',      label: 'E-Ticaret Entegrasyonu', description: 'Online satış kanalları ve e-ticaret platform entegrasyonu.',    icon: 'fa-cart-shopping',       color: 'text-cyan-500' },
+    { key: 'crm',            label: 'Gelişmiş CRM',          description: 'Müşteri ilişkileri yönetimi ve sadakat programları.',            icon: 'fa-users-gear',          color: 'text-pink-500' },
+    { key: 'branch_system',  label: 'Şubeli Sistem',        description: 'Birden fazla şube ve depo ekleme, merkezi stok yönetimi.',        icon: 'fa-network-wired',       color: 'text-purple-500' },
 ];
 
 export function PageClient() {
     const router = useRouter();
     const locale = useLocale();
-    const { user, login } = useAuth();
-    const [activeFeatures, setActiveFeatures] = useState<string[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-
-    useEffect(() => {
-        if (user?.firm?.activeFeatures) {
-            setActiveFeatures(user.firm.activeFeatures);
-            setLoading(false);
-        } else if (user?.firm?.id) {
-            fetchFirmFeatures();
-        }
-    }, [user]);
-
-    const fetchFirmFeatures = async () => {
-        try {
-            const token = Cookies.get('token');
-            const res = await axios.get(`${API}/firms/${user?.firm?.id}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setActiveFeatures(res.data.activeFeatures || []);
-        } catch (error) {
-            console.error('Firm fetch error:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const toggleFeature = (key: string) => {
-        setActiveFeatures(prev =>
-            prev.includes(key) ? prev.filter(f => f !== key) : [...prev, key]
-        );
-    };
-
-    const handleSave = async () => {
-        if (!user?.firm?.id) return;
-        setSaving(true);
-        try {
-            const token = Cookies.get('token');
-            await axios.put(`${API}/firms/${user.firm.id}`, {
-                activeFeatures: activeFeatures
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-
-            toastSwal({ icon: 'success', title: 'Lisans Ayarları Güncellendi', text: 'Değişikliklerin yansıması için sistem yeniden yüklenebilir.' });
-            
-            // Backend update user's firm features in memory if possible, 
-            // but usually a re-login or hard refresh is better.
-            setTimeout(() => {
-                window.location.reload(); // Hard reload to refresh user context
-            }, 2000);
-
-        } catch (error: any) {
-            showSwal({ icon: 'error', title: 'Hata', text: error.response?.data?.message || 'Güncelleme başarısız.' });
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    if (loading) return (
-        <div className="h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
-            <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
-        </div>
-    );
+    const { isValid, modules, daysOffline, refreshLicense } = useLicense();
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans transition-colors duration-300 relative overflow-hidden">
-            {/* Ambient Background Blobs */}
+            {/* Ambient Background */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
                 <div className="absolute top-[-5%] right-[-5%] w-[40%] h-[40%] rounded-full bg-indigo-500/5 dark:bg-indigo-600/10 blur-[120px]"></div>
                 <div className="absolute bottom-[-5%] left-[-5%] w-[40%] h-[40%] rounded-full bg-purple-500/5 dark:bg-purple-600/10 blur-[120px]"></div>
@@ -113,7 +47,7 @@ export function PageClient() {
                         </div>
                         <div>
                             <h1 className="text-3xl font-black text-slate-800 dark:text-white uppercase tracking-tight leading-none mb-2">Lisans Yönetimi</h1>
-                            <p className="text-slate-500 dark:text-slate-400 font-medium italic">Firmanıza ait premium modül yetkilerini yönetin.</p>
+                            <p className="text-slate-500 dark:text-slate-400 font-medium italic">Panel üzerinden atanan aktif modül lisanslarınız.</p>
                         </div>
                     </div>
                     <div className="flex gap-3">
@@ -121,31 +55,50 @@ export function PageClient() {
                             onClick={() => router.push(`/${locale}/admin`)}
                             className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-2xl hover:bg-slate-100 transition-all flex items-center gap-2"
                         >
-                            <i className="fat fa-reply"></i> Vazgeç
+                            <i className="fat fa-reply"></i> Geri
                         </button>
                         <button
-                            onClick={handleSave}
-                            disabled={saving}
-                            className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-lg shadow-indigo-500/30 transition-all flex items-center gap-2 disabled:opacity-50"
+                            onClick={refreshLicense}
+                            className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-2xl hover:bg-slate-100 transition-all flex items-center gap-2"
                         >
-                            {saving ? <i className="fat fa-spinner animate-spin"></i> : <i className="fat fa-check"></i>}
-                            DEĞİŞİKLİKLERİ KAYDET
+                            <RefreshCw className="w-4 h-4" /> Yenile
                         </button>
                     </div>
                 </div>
 
-                {/* Features Grid */}
+                {/* Durum Kartı */}
+                <div className={`mb-8 p-6 rounded-[32px] border-2 flex items-center gap-5 ${isValid
+                    ? 'bg-emerald-50 dark:bg-emerald-500/5 border-emerald-200 dark:border-emerald-500/20'
+                    : 'bg-red-50 dark:bg-red-500/5 border-red-200 dark:border-red-500/20'}`}
+                >
+                    {isValid
+                        ? <ShieldCheck className="w-12 h-12 text-emerald-500 flex-shrink-0" />
+                        : <ShieldOff className="w-12 h-12 text-red-500 flex-shrink-0" />
+                    }
+                    <div>
+                        <h2 className={`text-xl font-bold ${isValid ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
+                            {isValid ? 'Lisans Aktif' : 'Lisans Geçersiz'}
+                        </h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                            {isValid
+                                ? `${modules.length} modül aktif${daysOffline > 0 ? ` • ${daysOffline} gündür çevrimdışı` : ' • Çevrimiçi doğrulandı'}`
+                                : 'Lütfen geçerli bir lisans anahtarı girin veya panel yöneticinizle iletişime geçin.'
+                            }
+                        </p>
+                    </div>
+                </div>
+
+                {/* Modüller */}
                 <div className="grid grid-cols-1 gap-4">
-                    {PREMIUM_FEATURES.map((feature) => {
-                        const isActive = activeFeatures.includes(feature.key);
+                    {KNOWN_MODULES.map((feature) => {
+                        const isActive = modules.includes(feature.key);
                         return (
                             <div
                                 key={feature.key}
-                                onClick={() => toggleFeature(feature.key)}
-                                className={`group p-6 rounded-[32px] border-2 transition-all cursor-pointer flex items-center justify-between
-                                    ${isActive 
-                                        ? 'bg-white dark:bg-slate-800/60 border-indigo-500 shadow-xl shadow-indigo-500/10' 
-                                        : 'bg-slate-100/50 dark:bg-slate-800/20 border-transparent border-dashed grayscale opacity-60 hover:grayscale-0 hover:opacity-100 hover:border-slate-300 dark:hover:border-slate-700'
+                                className={`group p-6 rounded-[32px] border-2 flex items-center justify-between transition-all
+                                    ${isActive
+                                        ? 'bg-white dark:bg-slate-800/60 border-indigo-500 shadow-xl shadow-indigo-500/10'
+                                        : 'bg-slate-100/50 dark:bg-slate-800/20 border-transparent grayscale opacity-50'
                                     }`}
                             >
                                 <div className="flex items-center gap-6">
@@ -161,29 +114,35 @@ export function PageClient() {
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-4">
-                                    <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full transition-all
+                                <div className="flex items-center gap-4 flex-shrink-0">
+                                    <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full
                                         ${isActive ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-slate-300 dark:bg-slate-700 text-slate-500'}`}>
-                                        {isActive ? 'AKTİF' : 'KAPALI'}
+                                        {isActive ? 'AKTİF' : 'LİSANS YOK'}
                                     </span>
-                                    
-                                    <div className={`w-14 h-8 rounded-full p-1 transition-all duration-300 ${isActive ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
-                                        <div className={`w-6 h-6 bg-white rounded-full transition-all duration-300 shadow-md ${isActive ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                                    </div>
                                 </div>
                             </div>
                         );
                     })}
                 </div>
 
-                {/* Info Note */}
+                {/* Bilgi Notu */}
                 <div className="mt-10 p-6 bg-indigo-50 dark:bg-indigo-500/5 border border-indigo-100 dark:border-indigo-500/20 rounded-[32px] flex gap-4 items-start">
                     <i className="fat fa-circle-info text-indigo-500 text-xl mt-1"></i>
                     <div>
-                        <h4 className="font-bold text-indigo-900 dark:text-indigo-300">Önemli Bilgi</h4>
+                        <h4 className="font-bold text-indigo-900 dark:text-indigo-300">Lisans Değişikliği</h4>
                         <p className="text-sm text-indigo-700/70 dark:text-indigo-400/70 mt-1 leading-relaxed">
-                            Buradaki değişiklikler firmanızın genel lisans ayarıdır. Bir modülü kapattığınızda, o modül tüm kullanıcılarınız için (garsonlar, mutfak personeli vb.) anında erişilemez hale gelecektir. Değişikliklerin tam olarak yansıması için sistem sayfayı yenileyecektir.
+                            Modül lisanslarınız yalnızca PosNetX Yönetim Paneli üzerinden değiştirilebilir. 
+                            Yeni bir modül satın almak veya mevcut lisansınızla ilgili işlem yapmak için bayi veya yetkili satıcınızla iletişime geçin.
                         </p>
+                        <a 
+                            href="http://localhost:3005" 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 mt-3 text-indigo-600 dark:text-indigo-400 font-semibold text-sm hover:underline"
+                        >
+                            <ExternalLink className="w-4 h-4" />
+                            PosNetX Panel'e Git
+                        </a>
                     </div>
                 </div>
             </div>

@@ -7,7 +7,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Invoice } from './invoice.entity';
 import { InvoiceItem } from './invoice-item.entity';
-import { StocksService } from '../stocks/stocks.service';
+import { StockMovementsService } from '../stock-movements/stock-movements.service';
+import { FinanceService } from '../finance/finance.service';
 
 @Injectable()
 export class InvoicesService {
@@ -16,7 +17,8 @@ export class InvoicesService {
     private invoiceRepository: Repository<Invoice>,
     @InjectRepository(InvoiceItem)
     private invoiceItemRepository: Repository<InvoiceItem>,
-    private readonly stocksService: StocksService,
+    private readonly stockMovementsService: StockMovementsService,
+    private readonly financeService: FinanceService,
   ) {}
 
   async findAll(
@@ -207,20 +209,33 @@ export class InvoicesService {
     if (invoiceType === 'PURCHASE' || invoiceType === 'SALE') {
       for (const item of data.items) {
         if (item.stockCardId) {
-          if (invoiceType === 'PURCHASE') {
-            await this.stocksService.addStock(
-              item.stockCardId,
-              Number(item.quantity),
-              data.warehouseLocation || 'default',
-            );
-          } else {
-            await this.stocksService.deductStock(
-              item.stockCardId,
-              Number(item.quantity),
-              data.warehouseLocation || 'default',
-            );
-          }
+          await this.stockMovementsService.createMovement({
+            stockCardId: item.stockCardId,
+            movementType: invoiceType === 'PURCHASE' ? 'purchase' : 'direct_sale_consumption',
+            quantity: invoiceType === 'PURCHASE' ? Number(item.quantity) : -Number(item.quantity),
+            unit: item.unit || 'adet',
+            unitCost: Number(item.unitPrice),
+            sourceType: 'INVOICE',
+            sourceId: savedInvoice.id,
+            documentNo: savedInvoice.invoiceNumber,
+            description: `${invoiceType === 'PURCHASE' ? 'Alış' : 'Satış'} Faturası: ${savedInvoice.invoiceNumber}`,
+          });
         }
+      }
+
+      // Add Finance Transaction for Partner Account
+      if (savedInvoice.partnerId) {
+        await this.financeService.create({
+          partnerId: savedInvoice.partnerId,
+          amount: savedInvoice.grandTotal,
+          type: invoiceType === 'PURCHASE' ? 'EXPENSE' : 'INCOME',
+          category: invoiceType === 'PURCHASE' ? 'Alış Faturası' : 'Satış faturası',
+          description: `${invoiceType === 'PURCHASE' ? 'Alış' : 'Satış'} Faturası: ${savedInvoice.invoiceNumber}`,
+          paymentMethod: savedInvoice.paymentMethod || 'CASH',
+          sourceType: 'INVOICE',
+          sourceId: savedInvoice.id,
+          createdAt: savedInvoice.issueDate || new Date(),
+        });
       }
     }
 
@@ -279,7 +294,17 @@ export class InvoicesService {
       subtotal += q * price;
       taxAmount += (q * price * vat) / 100;
       
-      await this.stocksService.addStock(c.id, Number(q), 'Merkez');
+      await this.stockMovementsService.createMovement({
+        stockCardId: c.id,
+        movementType: 'purchase',
+        quantity: Number(q),
+        unit: 'adet',
+        unitCost: price,
+        sourceType: 'INVOICE',
+        sourceId: savedInvoice.id,
+        documentNo: savedInvoice.invoiceNumber,
+        description: 'Test faturası girişi',
+      });
     }
 
     savedInvoice.subtotal = subtotal;
@@ -316,27 +341,7 @@ export class InvoicesService {
     const existing = await this.findOne(id);
 
     if (existing.status !== 'CANCELLED') {
-      for (const item of existing.items || []) {
-        if (item.stockCardId) {
-          try {
-            if (existing.invoiceType === 'PURCHASE') {
-              await this.stocksService.deductStock(
-                item.stockCardId,
-                Number(item.quantity),
-                existing.warehouseLocation || 'default',
-              );
-            } else if (existing.invoiceType === 'SALE') {
-              await this.stocksService.addStock(
-                item.stockCardId,
-                Number(item.quantity),
-                existing.warehouseLocation || 'default',
-              );
-            }
-          } catch (e) {
-            console.error('Error revering stock on update:', e);
-          }
-        }
-      }
+      await this.stockMovementsService.deleteMovementsBySource('INVOICE', id);
     }
 
     if (existing.items && existing.items.length > 0) {
@@ -408,28 +413,40 @@ export class InvoicesService {
     await this.invoiceRepository.save(existing);
     if (itemEntities.length > 0) await this.invoiceItemRepository.save(itemEntities);
 
+    // Delete existing Finance Transaction and recreate it via service method
+    await this.financeService.removeBySource('INVOICE', id);
+
     const newType = existing.invoiceType;
     if (existing.status !== 'CANCELLED') {
       for (const item of items) {
         if (item.stockCardId) {
-          try {
-            if (newType === 'PURCHASE') {
-              await this.stocksService.addStock(
-                item.stockCardId,
-                Number(item.quantity),
-                existing.warehouseLocation || 'default',
-              );
-            } else if (newType === 'SALE') {
-              await this.stocksService.deductStock(
-                item.stockCardId,
-                Number(item.quantity),
-                existing.warehouseLocation || 'default',
-              );
-            }
-          } catch (e) {
-            console.error('Error applying stock on update:', e);
-          }
+          await this.stockMovementsService.createMovement({
+            stockCardId: item.stockCardId,
+            movementType: newType === 'PURCHASE' ? 'purchase' : 'direct_sale_consumption',
+            quantity: newType === 'PURCHASE' ? Number(item.quantity) : -Number(item.quantity),
+            unit: item.unit || 'adet',
+            unitCost: Number(item.unitPrice),
+            sourceType: 'INVOICE',
+            sourceId: existing.id,
+            documentNo: existing.invoiceNumber,
+            description: `Fatura Güncelleme (${newType === 'PURCHASE' ? 'Alış' : 'Satış'}): ${existing.invoiceNumber}`,
+          });
         }
+      }
+
+      // Recreate Finance Transaction
+      if (existing.partnerId) {
+        await this.financeService.create({
+          partnerId: existing.partnerId,
+          amount: existing.grandTotal,
+          type: newType === 'PURCHASE' ? 'EXPENSE' : 'INCOME',
+          category: newType === 'PURCHASE' ? 'Alış Faturası' : 'Satış faturası',
+          description: `${newType === 'PURCHASE' ? 'Alış' : 'Satış'} Faturası: ${existing.invoiceNumber} (Güncelleme)`,
+          paymentMethod: existing.paymentMethod || 'CASH',
+          sourceType: 'INVOICE',
+          sourceId: existing.id,
+          createdAt: existing.issueDate || new Date(),
+        });
       }
     }
 
@@ -443,24 +460,38 @@ export class InvoicesService {
     await this.invoiceRepository.save(invoice);
 
     if (oldStatus !== 'CANCELLED' && status === 'CANCELLED') {
-      for (const item of invoice.items || []) {
-        if (item.stockCardId) {
-          if (invoice.invoiceType === 'PURCHASE') {
-            await this.stocksService.deductStock(item.stockCardId, Number(item.quantity), invoice.warehouseLocation || 'default');
-          } else if (invoice.invoiceType === 'SALE') {
-            await this.stocksService.addStock(item.stockCardId, Number(item.quantity), invoice.warehouseLocation || 'default');
-          }
-        }
-      }
+      await this.stockMovementsService.deleteMovementsBySource('INVOICE', id);
+      await this.financeService.removeBySource('INVOICE', id);
     } else if (oldStatus === 'CANCELLED' && status !== 'CANCELLED') {
       for (const item of invoice.items || []) {
         if (item.stockCardId) {
-          if (invoice.invoiceType === 'PURCHASE') {
-            await this.stocksService.addStock(item.stockCardId, Number(item.quantity), invoice.warehouseLocation || 'default');
-          } else if (invoice.invoiceType === 'SALE') {
-            await this.stocksService.deductStock(item.stockCardId, Number(item.quantity), invoice.warehouseLocation || 'default');
-          }
+          await this.stockMovementsService.createMovement({
+            stockCardId: item.stockCardId,
+            movementType: invoice.invoiceType === 'PURCHASE' ? 'purchase' : 'direct_sale_consumption',
+            quantity: invoice.invoiceType === 'PURCHASE' ? Number(item.quantity) : -Number(item.quantity),
+            unit: item.unit || 'adet',
+            unitCost: Number(item.unitPrice),
+            sourceType: 'INVOICE',
+            sourceId: invoice.id,
+            documentNo: invoice.invoiceNumber,
+            description: `Fatura İptal Geri Alma (${invoice.invoiceType === 'PURCHASE' ? 'Alış' : 'Satış'}): ${invoice.invoiceNumber}`,
+          });
         }
+      }
+
+      // Restore Finance Transaction
+      if (invoice.partnerId) {
+        await this.financeService.create({
+          partnerId: invoice.partnerId,
+          amount: invoice.grandTotal,
+          type: invoice.invoiceType === 'PURCHASE' ? 'EXPENSE' : 'INCOME',
+          category: invoice.invoiceType === 'PURCHASE' ? 'Alış Faturası' : 'Satış faturası',
+          description: `${invoice.invoiceType === 'PURCHASE' ? 'Alış' : 'Satış'} Faturası: ${invoice.invoiceNumber} (İptal Geri Alındı)`,
+          paymentMethod: invoice.paymentMethod || 'CASH',
+          sourceType: 'INVOICE',
+          sourceId: invoice.id,
+          createdAt: invoice.issueDate || new Date(),
+        });
       }
     }
     return this.findOne(id);
@@ -469,15 +500,8 @@ export class InvoicesService {
   async remove(id: number): Promise<void> {
     const invoice = await this.findOne(id);
     if (invoice.status !== 'CANCELLED') {
-      for (const item of invoice.items || []) {
-        if (item.stockCardId) {
-          if (invoice.invoiceType === 'PURCHASE') {
-            await this.stocksService.deductStock(item.stockCardId, Number(item.quantity), invoice.warehouseLocation || 'default');
-          } else if (invoice.invoiceType === 'SALE') {
-            await this.stocksService.addStock(item.stockCardId, Number(item.quantity), invoice.warehouseLocation || 'default');
-          }
-        }
-      }
+      await this.stockMovementsService.deleteMovementsBySource('INVOICE', id);
+      await this.financeService.removeBySource('INVOICE', id);
     }
     await this.invoiceRepository.delete(id);
   }

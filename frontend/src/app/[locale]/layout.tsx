@@ -1,8 +1,10 @@
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
-export const dynamicParams = false;
+export const dynamicParams = true;
+export const dynamic = 'force-dynamic';
 import { notFound } from 'next/navigation';
 import { AuthProvider } from './AuthContext';
+import { LicenseProvider } from './LicenseContext';
 import { ThemeProvider as NextThemeProvider } from 'next-themes';
 import Watermark from '@/components/Watermark';
 import '../globals.css';
@@ -46,7 +48,9 @@ export default async function RootLayout({
         <Watermark />
         <NextIntlClientProvider locale={locale} messages={messages}>
           <NextThemeProvider attribute="class" defaultTheme="light" enableSystem>
-            <AuthProvider locale={locale}>{children}</AuthProvider>
+            <LicenseProvider>
+              <AuthProvider locale={locale}>{children}</AuthProvider>
+            </LicenseProvider>
           </NextThemeProvider>
         </NextIntlClientProvider>
       </body>
