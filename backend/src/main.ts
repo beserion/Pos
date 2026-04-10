@@ -61,13 +61,16 @@ async function bootstrap() {
         'https://posbackend.beserion.com.tr',
         'https://api.posnetx.com',
         'https://posnetx.com',
-        'https://apitest.posnetx.com',
+        'https://api.posnetx.com',
         'https://test.posnetx.com',
         'https://localhost:5173',
         'wss://test.posnetx.com',
         'wss://apitest.posnetx.com',
         'http://localhost:3000',
         'http://localhost:3001',
+        'https://localhost:3000',
+        'https://garson.posnetx.com',
+        'https://boss.posnetx.com',
       ];
       if (allowedOrigins.indexOf(origin) !== -1) {
         callback(null, true);
