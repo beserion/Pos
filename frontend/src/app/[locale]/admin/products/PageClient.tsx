@@ -435,7 +435,7 @@ export function PageClient() {
             setFormData({
                 id: 0,
                 name: '',
-                sku: '',
+                sku: generateSku(''), // Başlangıçta boş kategori için SKU üret
                 barcode: '',
                 price: 0,
                 category: '',
@@ -495,9 +495,10 @@ export function PageClient() {
     };
 
     const generateSku = (categoryName: string) => {
-        if (!categoryName) return '';
-        // İlk 3 karakter (Türkçe karakter uyumu için toLocaleLowerCase('tr'))
-        const prefix = categoryName.substring(0, 3).toLocaleLowerCase('tr');
+        // Kategori yoksa "URUN" ön ekini kullan, varsa ilk 3 karakteri al
+        const prefixStr = (categoryName && categoryName.trim() !== '') ? categoryName : 'URUN';
+        const prefix = prefixStr.substring(0, 3).toLocaleLowerCase('tr');
+        
         const sameCategorySkus = products
             .filter(p => p.sku && p.sku.toLocaleLowerCase('tr').startsWith(`${prefix}-`))
             .map(p => {
@@ -512,7 +513,7 @@ export function PageClient() {
 
     const handleCategoryChange = (val: string) => {
         let newSku = formData.sku;
-        if (formData.id === 0 && val) {
+        if (formData.id === 0) {
             newSku = generateSku(val);
         }
         setFormData({ ...formData, category: val, sku: newSku });
