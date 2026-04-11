@@ -291,8 +291,11 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             return matchesType && p.name.toLowerCase().includes(searchQuery.toLowerCase());
         }
 
-        // Kategori seçilmediyse ürün gösterme (Grup/Kategori kartları gösterilecek)
-        if (!selectedDepartmentId) return false;
+        // Kategori seçilmediyse: Sadece kategorisi olmayan ürünleri göster
+        if (!selectedDepartmentId) {
+            const hasNoCategory = !p.category || p.category.trim() === '' || p.category === 'Diğer';
+            return matchesType && hasNoCategory;
+        }
 
         if (selectedDepartmentId === 'all') return matchesType;
 
@@ -1071,61 +1074,84 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
                         <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-280px)]">
                             {!selectedDepartmentId && !searchQuery ? (
-                                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-                                    {/* SEVİYE 1: Üst Gruplar ve Bağımsız Kategoriler */}
-                                    {!selectedParentGroupId && (
-                                        <>
-                                            {parentGroups.filter(pg => {
-                                                if (selectedProductTypeId === 'all') return true;
-                                                const pgDepts = departments.filter(d => d.parentGroupId === pg.id);
-                                                return products.some(p => p.productTypeId === selectedProductTypeId && pgDepts.some(d => d.name === p.category));
-                                            }).map(pg => (
-                                                <button
-                                                    key={`pg-${pg.id}`}
-                                                    onClick={() => setSelectedParentGroupId(pg.id)}
-                                                    className="group relative flex flex-col items-center justify-center p-6 bg-white/70 dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-indigo-400 hover:-translate-y-1 transition-all duration-300"
-                                                >
-                                                    <div className="w-16 h-16 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                                                        <i className="fat fa-folder-tree text-2xl text-indigo-500"></i>
-                                                    </div>
-                                                    <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{pg.name}</span>
-                                                </button>
-                                            ))}
-                                            {departments.filter(d => !d.parentGroupId).filter(d => {
-                                                if (selectedProductTypeId === 'all') return true;
-                                                return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
-                                            }).map(d => (
-                                                <button
-                                                    key={`dept-${d.id}`}
-                                                    onClick={() => setSelectedDepartmentId(d.id)}
-                                                    className="group relative flex flex-col items-center justify-center p-6 bg-white/70 dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-400 hover:-translate-y-1 transition-all duration-300"
-                                                >
-                                                    <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                                                        <i className="fat fa-tags text-2xl text-emerald-500"></i>
-                                                    </div>
-                                                    <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
-                                                </button>
-                                            ))}
-                                        </>
-                                    )}
+                                <>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+                                        {/* SEVİYE 1: Üst Gruplar ve Bağımsız Kategoriler */}
+                                        {!selectedParentGroupId && (
+                                            <>
+                                                {parentGroups.filter(pg => {
+                                                    if (selectedProductTypeId === 'all') return true;
+                                                    const pgDepts = departments.filter(d => d.parentGroupId === pg.id);
+                                                    return products.some(p => p.productTypeId === selectedProductTypeId && pgDepts.some(d => d.name === p.category));
+                                                }).map(pg => (
+                                                    <button
+                                                        key={`pg-${pg.id}`}
+                                                        onClick={() => setSelectedParentGroupId(pg.id)}
+                                                        className="group relative flex flex-col items-center justify-center p-6 bg-white/70 dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-indigo-400 hover:-translate-y-1 transition-all duration-300"
+                                                    >
+                                                        <div className="w-16 h-16 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                                            <i className="fat fa-folder-tree text-2xl text-indigo-500"></i>
+                                                        </div>
+                                                        <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{pg.name}</span>
+                                                    </button>
+                                                ))}
+                                                {departments.filter(d => !d.parentGroupId).filter(d => {
+                                                    if (selectedProductTypeId === 'all') return true;
+                                                    return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
+                                                }).map(d => (
+                                                    <button
+                                                        key={`dept-${d.id}`}
+                                                        onClick={() => setSelectedDepartmentId(d.id)}
+                                                        className="group relative flex flex-col items-center justify-center p-6 bg-white/70 dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-400 hover:-translate-y-1 transition-all duration-300"
+                                                    >
+                                                        <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                                            <i className="fat fa-tags text-2xl text-emerald-500"></i>
+                                                        </div>
+                                                        <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
+                                                    </button>
+                                                ))}
+                                            </>
+                                        )}
 
-                                    {/* SEVİYE 2: Seçili Üst Gruba Bağlı Kategoriler */}
-                                    {selectedParentGroupId && departments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
-                                        if (selectedProductTypeId === 'all') return true;
-                                        return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
-                                    }).map(d => (
-                                        <button
-                                            key={`dept-sub-${d.id}`}
-                                            onClick={() => setSelectedDepartmentId(d.id)}
-                                            className="group relative flex flex-col items-center justify-center p-6 bg-white/70 dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-400 hover:-translate-y-1 transition-all duration-300"
-                                        >
-                                            <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                                                <i className="fat fa-tags text-2xl text-emerald-500"></i>
+                                        {/* SEVİYE 2: Seçili Üst Gruba Bağlı Kategoriler */}
+                                        {selectedParentGroupId && departments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
+                                            if (selectedProductTypeId === 'all') return true;
+                                            return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
+                                        }).map(d => (
+                                            <button
+                                                key={`dept-sub-${d.id}`}
+                                                onClick={() => setSelectedDepartmentId(d.id)}
+                                                className="group relative flex flex-col items-center justify-center p-6 bg-white/70 dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-400 hover:-translate-y-1 transition-all duration-300"
+                                            >
+                                                <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                                    <i className="fat fa-tags text-2xl text-emerald-500"></i>
+                                                </div>
+                                                <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* Kategorisi olmayan ürünleri doğrudan göster */}
+                                    {filteredProducts.length > 0 && (
+                                        <div className="space-y-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
+                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Kategorisiz Ürünler</span>
+                                                <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
                                             </div>
-                                            <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
-                                        </button>
-                                    ))}
-                                </div>
+                                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+                                                {filteredProducts.map(p => (
+                                                    <SortableProductCard
+                                                        key={p.id}
+                                                        product={p}
+                                                        onClick={() => addToCart(p)}
+                                                        isDesignMode={false}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
                             ) : (
                                 <DndContext
                                     sensors={sensors}

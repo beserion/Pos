@@ -216,8 +216,11 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 return matchesCins && (p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.sku?.includes(searchQuery));
             }
 
-            // Kategori seçilmediyse ürün gösterme
-            if (!selectedDepartmentId) return false;
+            // Kategori seçilmediyse: Sadece kategorisi olmayan ürünleri göster
+            if (!selectedDepartmentId) {
+                const hasNoCategory = !p.category || p.category.trim() === '' || p.category === 'Diğer';
+                return matchesCins && hasNoCategory;
+            }
             
             if (selectedDepartmentId === 'all') return matchesCins;
 
@@ -599,61 +602,115 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 {/* Drill-Down Grid (Folder Cards or Products) */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-250px)]">
                     {!selectedDepartmentId && !searchQuery ? (
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
-                            {/* SEVİYE 1: Üst Gruplar ve Bağımsız Kategoriler */}
-                            {!selectedParentGroupId && (
-                                <>
-                                    {parentGroups.filter(pg => {
-                                        if (selectedProductTypeId === 'all') return true;
-                                        const pgDepts = departments.filter(d => d.parentGroupId === pg.id);
-                                        return products.some(p => (p as any).productTypeId === selectedProductTypeId && pgDepts.some(d => d.name === p.category));
-                                    }).map(pg => (
-                                        <button
-                                            key={`pg-${pg.id}`}
-                                            onClick={() => setSelectedParentGroupId(pg.id)}
-                                            className="group relative flex flex-col items-center justify-center p-6 bg-white dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-orange-500/50 hover:-translate-y-1 transition-all duration-300"
-                                        >
-                                            <div className="w-16 h-16 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                                                <i className="fat fa-folder-tree text-2xl text-orange-500"></i>
-                                            </div>
-                                            <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{pg.name}</span>
-                                        </button>
-                                    ))}
-                                    {departments.filter(d => !d.parentGroupId).filter(d => {
-                                        if (selectedProductTypeId === 'all') return true;
-                                        return products.some(p => (p as any).productTypeId === selectedProductTypeId && p.category === d.name);
-                                    }).map(d => (
-                                        <button
-                                            key={`dept-${d.id}`}
-                                            onClick={() => setSelectedDepartmentId(d.id)}
-                                            className="group relative flex flex-col items-center justify-center p-6 bg-white dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-500/50 hover:-translate-y-1 transition-all duration-300"
-                                        >
-                                            <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                                                <i className="fat fa-tags text-2xl text-emerald-500"></i>
-                                            </div>
-                                            <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
-                                        </button>
-                                    ))}
-                                </>
-                            )}
+                        <>
+                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
+                                {/* SEVİYE 1: Üst Gruplar ve Bağımsız Kategoriler */}
+                                {!selectedParentGroupId && (
+                                    <>
+                                        {parentGroups.filter(pg => {
+                                            if (selectedProductTypeId === 'all') return true;
+                                            const pgDepts = departments.filter(d => d.parentGroupId === pg.id);
+                                            return products.some(p => (p as any).productTypeId === selectedProductTypeId && pgDepts.some(d => d.name === p.category));
+                                        }).map(pg => (
+                                            <button
+                                                key={`pg-${pg.id}`}
+                                                onClick={() => setSelectedParentGroupId(pg.id)}
+                                                className="group relative flex flex-col items-center justify-center p-6 bg-white dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-orange-500/50 hover:-translate-y-1 transition-all duration-300"
+                                            >
+                                                <div className="w-16 h-16 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                                    <i className="fat fa-folder-tree text-2xl text-orange-500"></i>
+                                                </div>
+                                                <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{pg.name}</span>
+                                            </button>
+                                        ))}
+                                        {departments.filter(d => !d.parentGroupId).filter(d => {
+                                            if (selectedProductTypeId === 'all') return true;
+                                            return products.some(p => (p as any).productTypeId === selectedProductTypeId && p.category === d.name);
+                                        }).map(d => (
+                                            <button
+                                                key={`dept-${d.id}`}
+                                                onClick={() => setSelectedDepartmentId(d.id)}
+                                                className="group relative flex flex-col items-center justify-center p-6 bg-white dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-500/50 hover:-translate-y-1 transition-all duration-300"
+                                            >
+                                                <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                                    <i className="fat fa-tags text-2xl text-emerald-500"></i>
+                                                </div>
+                                                <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
+                                            </button>
+                                        ))}
+                                    </>
+                                )}
 
-                            {/* SEVİYE 2: Seçili Üst Gruba Bağlı Kategoriler */}
-                            {selectedParentGroupId && departments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
-                                if (selectedProductTypeId === 'all') return true;
-                                return products.some(p => (p as any).productTypeId === selectedProductTypeId && p.category === d.name);
-                            }).map(d => (
-                                <button
-                                    key={`dept-sub-${d.id}`}
-                                    onClick={() => setSelectedDepartmentId(d.id)}
-                                    className="group relative flex flex-col items-center justify-center p-6 bg-white dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-500/50 hover:-translate-y-1 transition-all duration-300"
-                                >
-                                    <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                                        <i className="fat fa-tags text-2xl text-emerald-500"></i>
+                                {/* SEVİYE 2: Seçili Üst Gruba Bağlı Kategoriler */}
+                                {selectedParentGroupId && departments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
+                                    if (selectedProductTypeId === 'all') return true;
+                                    return products.some(p => (p as any).productTypeId === selectedProductTypeId && p.category === d.name);
+                                }).map(d => (
+                                    <button
+                                        key={`dept-sub-${d.id}`}
+                                        onClick={() => setSelectedDepartmentId(d.id)}
+                                        className="group relative flex flex-col items-center justify-center p-6 bg-white dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-500/50 hover:-translate-y-1 transition-all duration-300"
+                                    >
+                                        <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                                            <i className="fat fa-tags text-2xl text-emerald-500"></i>
+                                        </div>
+                                        <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Kategorisi olmayan ürünleri doğrudan göster */}
+                            {filteredProducts.length > 0 && (
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Kategorisiz Ürünler</span>
+                                        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
                                     </div>
-                                    <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
-                                </button>
-                            ))}
-                        </div>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 auto-rows-max">
+                                        {filteredProducts.map(product => (
+                                            <button
+                                                key={product.id}
+                                                onClick={() => addToCart(product)}
+                                                className="group relative bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-2xl overflow-hidden shadow-md dark:shadow-black/20 hover:border-orange-500/50 hover:shadow-orange-500/20 transition-all duration-300 flex flex-col justify-end p-2"
+                                                style={{ height: '160px', minHeight: '160px', maxHeight: '160px' }}
+                                            >
+                                                {/* Background Image or Icon */}
+                                                <div className="absolute inset-0 z-0 bg-slate-800 flex items-center justify-center">
+                                                    {product.imageUrl ? (
+                                                        <img
+                                                            src={product.imageUrl.startsWith('http') || product.imageUrl.startsWith('data:') || product.imageUrl.startsWith('/')
+                                                                ? product.imageUrl
+                                                                : `/uploads/products/${product.imageUrl}`
+                                                            }
+                                                            alt={product.name}
+                                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                                        />
+                                                    ) : (
+                                                        <i className="fat fa-box-open text-[40px] text-slate-300 dark:text-slate-700 group-hover:text-orange-500/50 transition-colors duration-500"></i>
+                                                    )}
+                                                </div>
+
+                                                {/* Gradient Overlay for Text Readability */}
+                                                <div className="absolute inset-0 z-10 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent flex flex-col justify-end p-2">
+                                                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                                                </div>
+
+                                                {/* Content Over the Background */}
+                                                <div className="relative z-20 w-full flex flex-col items-center justify-end text-center h-full">
+                                                    <div className="text-[11px] font-black uppercase tracking-tight text-white line-clamp-2 leading-tight mb-1 group-hover:text-orange-400 transition-colors drop-shadow-md">
+                                                        {product.name}
+                                                    </div>
+                                                    <div className="bg-slate-900/80 px-3 py-1 rounded-xl backdrop-blur-md border border-white/10 text-orange-400 font-extrabold text-[13px] shadow-lg">
+                                                        {product.price.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} <span className="text-[10px]">₺</span>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </>
                     ) : (
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 auto-rows-max">
                             {filteredProducts.map(product => (
