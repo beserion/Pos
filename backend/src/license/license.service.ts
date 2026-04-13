@@ -163,6 +163,13 @@ export class LicenseService implements OnApplicationBootstrap {
     };
   }
 
+  async getLocalModules(): Promise<string[]> {
+    const licenses = await this.licenseRepo.find();
+    if (!licenses || licenses.length === 0) return [];
+    const decrypted = LicenseCryptoUtil.decryptKey(licenses[0].licenseKey);
+    return decrypted ? decrypted.modules : [];
+  }
+
   async getStatus() {
     return this.checkLicenseStatus();
   }

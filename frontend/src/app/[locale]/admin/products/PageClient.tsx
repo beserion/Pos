@@ -82,7 +82,7 @@ export function PageClient() {
     const tc = useTranslations('Common');
     const locale = useLocale();
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, hasFeature } = useAuth();
     const [products, setProducts] = useState<Product[]>([]);
     const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
@@ -99,7 +99,7 @@ export function PageClient() {
     const [currentRecipe, setCurrentRecipe] = useState<RecipeHeader | null>(null);
     const [recipeSummary, setRecipeSummary] = useState<any>(null);
     const [loadingRecipe, setLoadingRecipe] = useState(false);
-    const hasRecipeLicense = (user?.firm?.activeFeatures || []).includes('recipe_system');
+    const hasRecipeLicense = hasFeature('recipe_system');
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'genel' | 'gorsel' | 'recete' | 'ozellik' | 'yonlendirme' | 'varyant'>('genel');

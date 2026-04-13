@@ -242,41 +242,95 @@ export class OrderRoutingService {
   /**
    * Kontrol listesi: ürün → etkin profil + kaynak bilgisi.
    * Döküman bölüm 14.5.
+   * Performans Optimizasyonu: N+1 sorgu problemini engellemek için bulk DB fetch ve memory-based çözümleme kullanır.
    */
   async getRoutingControlList(): Promise<RoutingControlEntry[]> {
-    const products = await this.productRepo.find({
-      relations: ['productType', 'outputProfile'],
-    });
+    // Tüm ilgili tabloları tek seferde (batch) çek
+    const [products, departments, stockCards, productTypes, outputProfiles] = await Promise.all([
+      this.productRepo.find(),
+      this.departmentRepo.find(),
+      this.stockCardRepo.find(),
+      this.productTypeRepo.find(),
+      this.outputProfileRepo.find()
+    ]);
 
-    const result: RoutingControlEntry[] = [];
-
-    for (const product of products) {
-      const resolved = await this.resolveOutputProfile(product.id);
-
-      result.push({
-        productId: product.id,
-        productName: product.name,
-        productTypeName: product.productType?.name || 'Tanımsız',
-        categoryName: product.category || '-',
-        hasCardOverride: !!(product.outputProfileId && product.outputProfileId > 0),
-        hasGroupOverride: false, // Aşağıda hesaplanacak
-        effectiveProfileName: resolved.profile?.name || 'TANIMSIZ',
-        effectiveSource: resolved.source,
-      });
+    // Hızlı erişim için Map'ler oluştur
+    const profileMap = new Map<number, string>();
+    for (const op of outputProfiles) {
+      profileMap.set(op.id, op.name);
     }
 
-    // Grup override kontrolü
-    const departments = await this.departmentRepo.find();
+    const deptMap = new Map<string, Department>();
+    for (const d of departments) {
+      if (d.name) deptMap.set(d.name, d);
+    }
+
+    const stockCardMap = new Map<number, StockCard>();
+    for (const sc of stockCards) {
+      stockCardMap.set(sc.id, sc);
+    }
+
+    const pTypeMap = new Map<number, ProductType>();
+    for (const pt of productTypes) {
+      pTypeMap.set(pt.id, pt);
+    }
+
     const deptOverrides = new Set(
       departments
         .filter(d => d.outputProfileId && d.outputProfileId > 0)
         .map(d => d.name)
     );
 
-    for (const entry of result) {
-      if (deptOverrides.has(entry.categoryName)) {
-        entry.hasGroupOverride = true;
+    const result: RoutingControlEntry[] = [];
+
+    for (const product of products) {
+      let effectiveProfileName = 'TANIMSIZ';
+      let effectiveSource = 'DEFAULT';
+      
+      const stockCard = (product.inventoryLinkType === 'direct_stock' && product.linkedStockItemId) 
+        ? stockCardMap.get(product.linkedStockItemId) || null 
+        : null;
+
+      const pType = product.productTypeId ? pTypeMap.get(product.productTypeId) : null;
+
+      // 1. Ürün (Product) Override
+      if (product.outputProfileId && product.outputProfileId > 0 && profileMap.has(product.outputProfileId)) {
+        effectiveProfileName = profileMap.get(product.outputProfileId)!;
+        effectiveSource = 'STOCK_CARD';
       }
+      // 2. Stok Kartı (Stock) Override
+      else if (stockCard && stockCard.outputProfileId && stockCard.outputProfileId > 0 && profileMap.has(stockCard.outputProfileId)) {
+        effectiveProfileName = profileMap.get(stockCard.outputProfileId)!;
+        effectiveSource = 'STOCK_CARD';
+      }
+      // 3. Ürün Grubu (Product Group) Override
+      else if (product.category && deptMap.has(product.category) && deptMap.get(product.category)!.outputProfileId && profileMap.has(deptMap.get(product.category)!.outputProfileId)) {
+        const pId = deptMap.get(product.category)!.outputProfileId;
+        effectiveProfileName = profileMap.get(pId)!;
+        effectiveSource = 'STOCK_GROUP';
+      }
+      // 4. Stok Grubu (Stock Group) Override
+      else if (stockCard && stockCard.stockGroup && deptMap.has(stockCard.stockGroup) && deptMap.get(stockCard.stockGroup)!.outputProfileId && profileMap.has(deptMap.get(stockCard.stockGroup)!.outputProfileId)) {
+        const pId = deptMap.get(stockCard.stockGroup)!.outputProfileId;
+        effectiveProfileName = profileMap.get(pId)!;
+        effectiveSource = 'STOCK_GROUP';
+      }
+      // 5. Ürün Cinsi (Product Type) Override
+      else if (pType && pType.outputProfileId && pType.outputProfileId > 0 && profileMap.has(pType.outputProfileId)) {
+        effectiveProfileName = profileMap.get(pType.outputProfileId)!;
+        effectiveSource = 'PRODUCT_TYPE';
+      }
+
+      result.push({
+        productId: product.id,
+        productName: product.name,
+        productTypeName: pType?.name || 'Tanımsız',
+        categoryName: product.category || '-',
+        hasCardOverride: !!(product.outputProfileId && product.outputProfileId > 0),
+        hasGroupOverride: product.category ? deptOverrides.has(product.category) : false,
+        effectiveProfileName,
+        effectiveSource,
+      });
     }
 
     return result;

@@ -20,7 +20,7 @@ export class FeatureGuard implements CanActivate {
     // Features are now freshly fetched from DB in JwtStrategy.validate
     const activeFeatures = user?.firm?.activeFeatures || user?.activeFeatures || [];
 
-    if (!activeFeatures.includes(requiredFeature)) {
+    if (!activeFeatures.includes(requiredFeature) && !activeFeatures.includes('ALL')) {
       throw new ForbiddenException(`Access denied. Your license does not cover the feature: ${requiredFeature}`);
     }
 

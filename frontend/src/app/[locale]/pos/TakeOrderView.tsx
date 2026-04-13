@@ -769,12 +769,8 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         } catch (e) {
             showSwal({ title: 'Hata', text: 'Sistem hatası oluştu.', icon: 'error' });
         }
-    };
-
-
-
-    if (loading || !user) return null;
-
+    };    // Auth ve data yüklenirken erken dönmeyip (return null YERINE), UI'ı çizip loading overlay göstereceğiz.
+    
     return (
         <div className="flex h-screen bg-slate-50 dark:bg-slate-800 font-sans overflow-hidden transition-colors duration-300 relative">
             {/* Dekoratif Glassmorphism Arka Planlar */}
@@ -782,6 +778,14 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             <div className="absolute bottom-[20%] left-[20%] w-[40%] h-[40%] rounded-full bg-teal-500/10 dark:bg-teal-600/10 blur-[100px] z-0 pointer-events-none transition-colors duration-500"></div>
 
             <div className="flex-1 flex flex-col p-6 overflow-hidden w-full md:w-auto relative z-10 transition-all">
+                {/* Safe Loading Overlay */}
+                {(dataLoading || loading || !user) && (
+                    <div className="absolute inset-0 z-50 bg-slate-50/80 dark:bg-slate-800/80 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-none">
+                        <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-emerald-500 mb-4"></div>
+                        <p className="text-emerald-600 dark:text-emerald-400 font-black text-sm uppercase tracking-widest animate-pulse">Menü Yükleniyor...</p>
+                    </div>
+                )}
+                
                 <div className="mb-6 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-500 flex items-center justify-center">

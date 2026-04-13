@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../app/[locale]/AuthContext';
-
+import { startPrefetch } from '../../app/[locale]/utils/posPrefetch';
 interface BusinessDayStatus {
     activeBusinessDate: string;
     realDate: string;
@@ -56,6 +56,8 @@ export default function BusinessDayGuard({ apiUrl, onReady }: BusinessDayGuardPr
 
     useEffect(() => {
         if (user && token) {
+            // İş günü kontrolü ile eşzamanlı olarak POS verilerini ön-bellekle
+            startPrefetch(apiUrl, token as string);
             checkBusinessDay();
         }
     }, [user]);
@@ -244,22 +246,7 @@ export default function BusinessDayGuard({ apiUrl, onReady }: BusinessDayGuardPr
 
     // ─── LOADING ──────────────────────────────────────────────────
     if (screen === 'loading') {
-        return (
-            <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-2xl flex items-center justify-center">
-                <div className="flex flex-col items-center gap-6">
-                    <div className="relative">
-                        <div className="animate-spin rounded-full h-20 w-20 border-b-2 border-indigo-500"></div>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            <i className="fat fa-calendar-check text-indigo-400 text-2xl"></i>
-                        </div>
-                    </div>
-                    <div className="text-center">
-                        <p className="text-white/80 font-bold text-sm uppercase tracking-widest">İş Günü Kontrol Ediliyor</p>
-                        <p className="text-white/40 text-xs mt-1">Program tarihi ve kapanış durumu doğrulanıyor...</p>
-                    </div>
-                </div>
-            </div>
-        );
+        return null; // Artık arka planda sessiz çalışıyor
     }
 
     // ─── READY ────────────────────────────────────────────────────
@@ -347,7 +334,7 @@ export default function BusinessDayGuard({ apiUrl, onReady }: BusinessDayGuardPr
                                     {/* Eksik kapanışı tamamla (gün sonu al) */}
                                     {status.dateDiff === 0 && (
                                         <button
-                                            onClick={handleEndOfDay}
+                                            onClick={() => handleEndOfDay(false)}
                                             disabled={submitting}
                                             className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-black text-lg shadow-lg shadow-indigo-500/30 transition-all active:scale-[0.98] disabled:opacity-50 uppercase tracking-wider"
                                         >

@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
+import { getPrefetchedData, getPrefetchPromise, invalidatePrefetchCache } from '../utils/posPrefetch';
 import Cookies from 'js-cookie';
 import { useAuth } from '../AuthContext';
 import { useLocale, useTranslations } from 'next-intl';
@@ -178,20 +179,38 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
         try {
             const token = Cookies.get('token');
             const headers = { Authorization: `Bearer ${token}` };
-            const [productsRes, departmentsRes, typesRes, pGroupsRes] = await Promise.all([
-                axios.get(`${API_URL}/products/quicksale`, { headers }),
-                axios.get(`${API_URL}/departments`, { headers }),
-                axios.get(`${API_URL}/product-types`, { headers }),
-                axios.get(`${API_URL}/parent-groups`, { headers })
-            ]);
 
-            const allProducts = productsRes.data;
-            setProducts(allProducts);
-            setDepartments(departmentsRes.data);
-            setParentGroups(pGroupsRes.data || []);
-            
-            const types = typesRes.data || [];
-            setProductTypeOptions([{ id: 'all', name: tc('all') }, ...types]);
+            // Önce prefetch cache'i kontrol et
+            let cached = getPrefetchedData();
+            if (!cached) {
+                const pending = getPrefetchPromise();
+                if (pending) {
+                    cached = await pending;
+                }
+            }
+
+            if (cached && cached.quicksaleProducts && cached.departments) {
+                // Cache'ten oku
+                setProducts(cached.quicksaleProducts);
+                setDepartments(cached.departments);
+                setParentGroups(cached.parentGroups || []);
+                const types = cached.productTypes || [];
+                setProductTypeOptions([{ id: 'all', name: tc('all') }, ...types]);
+                invalidatePrefetchCache();
+            } else {
+                // Fallback: normal fetch
+                const [productsRes, departmentsRes, typesRes, pGroupsRes] = await Promise.all([
+                    axios.get(`${API_URL}/products/quicksale`, { headers }),
+                    axios.get(`${API_URL}/departments`, { headers }),
+                    axios.get(`${API_URL}/product-types`, { headers }),
+                    axios.get(`${API_URL}/parent-groups`, { headers })
+                ]);
+                setProducts(productsRes.data);
+                setDepartments(departmentsRes.data);
+                setParentGroups(pGroupsRes.data || []);
+                const types = typesRes.data || [];
+                setProductTypeOptions([{ id: 'all', name: tc('all') }, ...types]);
+            }
         } catch (error) {
             console.error('Error fetching products:', error);
         } finally {
@@ -592,9 +611,11 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                                 </div>
                             </>
                         ) : (
-                            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">
-                                {searchQuery ? `"${searchQuery}" için sonuçlar` : 'Lütfen Grup veya Kategori Seçin'}
-                            </span>
+                            searchQuery ? (
+                                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">
+                                    &quot;{searchQuery}&quot; için sonuçlar
+                                </span>
+                            ) : null
                         )}
                     </div>
                 </div>
@@ -659,57 +680,48 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                                 ))}
                             </div>
 
-                            {/* Kategorisi olmayan ürünleri doğrudan göster */}
-                            {filteredProducts.length > 0 && (
-                                <div className="space-y-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Kategorisiz Ürünler</span>
-                                        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
-                                    </div>
-                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 auto-rows-max">
-                                        {filteredProducts.map(product => (
-                                            <button
-                                                key={product.id}
-                                                onClick={() => addToCart(product)}
-                                                className="group relative bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-2xl overflow-hidden shadow-md dark:shadow-black/20 hover:border-orange-500/50 hover:shadow-orange-500/20 transition-all duration-300 flex flex-col justify-end p-2"
-                                                style={{ height: '160px', minHeight: '160px', maxHeight: '160px' }}
-                                            >
-                                                {/* Background Image or Icon */}
-                                                <div className="absolute inset-0 z-0 bg-slate-800 flex items-center justify-center">
-                                                    {product.imageUrl ? (
-                                                        <img
-                                                            src={product.imageUrl.startsWith('http') || product.imageUrl.startsWith('data:') || product.imageUrl.startsWith('/')
-                                                                ? product.imageUrl
-                                                                : `/uploads/products/${product.imageUrl}`
-                                                            }
-                                                            alt={product.name}
-                                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                                                        />
-                                                    ) : (
-                                                        <i className="fat fa-box-open text-[40px] text-slate-300 dark:text-slate-700 group-hover:text-orange-500/50 transition-colors duration-500"></i>
-                                                    )}
-                                                </div>
+                            {/* Kategorisiz ürünleri doğrudan klasörlerle aynı grid'de göster */}
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 auto-rows-max">
+                                {filteredProducts.map(product => (
+                                    <button
+                                        key={product.id}
+                                        onClick={() => addToCart(product)}
+                                        className="group relative bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-2xl overflow-hidden shadow-md dark:shadow-black/20 hover:border-orange-500/50 hover:shadow-orange-500/20 transition-all duration-300 flex flex-col justify-end p-2"
+                                        style={{ height: '160px', minHeight: '160px', maxHeight: '160px' }}
+                                    >
+                                        {/* Background Image or Icon */}
+                                        <div className="absolute inset-0 z-0 bg-slate-800 flex items-center justify-center">
+                                            {product.imageUrl ? (
+                                                <img
+                                                    src={product.imageUrl.startsWith('http') || product.imageUrl.startsWith('data:') || product.imageUrl.startsWith('/')
+                                                        ? product.imageUrl
+                                                        : `/uploads/products/${product.imageUrl}`
+                                                    }
+                                                    alt={product.name}
+                                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                                />
+                                            ) : (
+                                                <i className="fat fa-box-open text-[40px] text-slate-300 dark:text-slate-700 group-hover:text-orange-500/50 transition-colors duration-500"></i>
+                                            )}
+                                        </div>
 
-                                                {/* Gradient Overlay for Text Readability */}
-                                                <div className="absolute inset-0 z-10 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent flex flex-col justify-end p-2">
-                                                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                                                </div>
+                                        {/* Gradient Overlay for Text Readability */}
+                                        <div className="absolute inset-0 z-10 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent flex flex-col justify-end p-2">
+                                            <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                                        </div>
 
-                                                {/* Content Over the Background */}
-                                                <div className="relative z-20 w-full flex flex-col items-center justify-end text-center h-full">
-                                                    <div className="text-[11px] font-black uppercase tracking-tight text-white line-clamp-2 leading-tight mb-1 group-hover:text-orange-400 transition-colors drop-shadow-md">
-                                                        {product.name}
-                                                    </div>
-                                                    <div className="bg-slate-900/80 px-3 py-1 rounded-xl backdrop-blur-md border border-white/10 text-orange-400 font-extrabold text-[13px] shadow-lg">
-                                                        {product.price.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} <span className="text-[10px]">₺</span>
-                                                    </div>
-                                                </div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                                        {/* Content Over the Background */}
+                                        <div className="relative z-20 w-full flex flex-col items-center justify-end text-center h-full">
+                                            <div className="text-[11px] font-black uppercase tracking-tight text-white line-clamp-2 leading-tight mb-1 group-hover:text-orange-400 transition-colors drop-shadow-md">
+                                                {product.name}
+                                            </div>
+                                            <div className="bg-slate-900/80 px-3 py-1 rounded-xl backdrop-blur-md border border-white/10 text-orange-400 font-extrabold text-[13px] shadow-lg">
+                                                {product.price.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} <span className="text-[10px]">₺</span>
+                                            </div>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
                         </>
                     ) : (
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 auto-rows-max">
