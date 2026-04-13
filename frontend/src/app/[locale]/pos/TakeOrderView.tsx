@@ -54,7 +54,7 @@ function SortableProductCard({ product, onClick, isDesignMode }: { product: Prod
             style={style}
             {...(isDesignMode ? { ...attributes, ...listeners } : {})}
             onClick={() => { if (!isDesignMode) onClick(); }}
-            className={`relative h-40 bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-md border overflow-hidden group ${!isDesignMode ? 'transition-all duration-300 border-slate-100 dark:border-slate-700 active:scale-95' : 'transition-colors duration-200 cursor-grab active:cursor-grabbing ring-2 ring-indigo-500/50 border-indigo-500/30'} flex justify-center w-full`}
+            className={`relative h-32 bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-md border overflow-hidden group ${!isDesignMode ? 'transition-all duration-300 border-slate-100 dark:border-slate-700 active:scale-95' : 'transition-colors duration-200 cursor-grab active:cursor-grabbing ring-2 ring-indigo-500/50 border-indigo-500/30'} flex justify-center w-full`}
         >
             <div className={`absolute inset-0 bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center transition-transform duration-500 group-hover:scale-105 pointer-events-none`}>
                 {product.imageUrl ? (
@@ -71,9 +71,9 @@ function SortableProductCard({ product, onClick, isDesignMode }: { product: Prod
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/30 to-transparent"></div>
             </div>
 
-            <div className="absolute bottom-0 left-0 right-0 p-2 flex flex-col items-center text-center justify-end z-10 pointer-events-none">
-                <span className="font-bold text-white text-[11px] leading-tight mb-0.5 drop-shadow-md line-clamp-2">{product.name}</span>
-                <span className="font-extrabold text-white bg-emerald-600/90 backdrop-blur-sm px-2 py-0.5 rounded-full text-[10px] shadow-sm mt-1 border border-emerald-400/30">₺{product.price}</span>
+            <div className="absolute bottom-0 left-0 right-0 p-1.5 flex flex-col items-center text-center justify-end z-10 pointer-events-none">
+                <span className="font-bold text-white text-[10px] leading-tight mb-0 drop-shadow-md line-clamp-2">{product.name}</span>
+                <span className="font-extrabold text-white bg-emerald-600/90 backdrop-blur-sm px-2 py-0.5 rounded-full text-[9px] shadow-sm mt-0.5 border border-emerald-400/30">₺{product.price}</span>
             </div>
 
             {product.isSet && (
@@ -131,7 +131,7 @@ interface ExistingOrder {
     items: { id: number; product: { id: number; name: string; price: number; isSet?: boolean }; quantity: number; unitPrice: number; isPaid: boolean; isWaiting: boolean; isMarshed: boolean; parentItemId?: number; }[];
 }
 interface Zone { id: number; name: string; }
-interface Table { id: number; name: string; status: string; waiterName?: string; orderStartTime?: string; currentTotal?: number; zone: { id: number } }
+interface Table { id: number; name: string; status: string; waiterName?: string; orderStartTime?: string; currentTotal?: number; isBillRequested?: boolean; zone: { id: number } }
 
 export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => void }) {
     const { user, loginPinOnly, logout, loading } = useAuth();
@@ -201,6 +201,8 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     const [selectedSetMenuProduct, setSelectedSetMenuProduct] = useState<Product | null>(null);
     const [isSetMenuModalOpen, setIsSetMenuModalOpen] = useState(false);
+
+    const [isBillRequestedAlertOpen, setIsBillRequestedAlertOpen] = useState(false);
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
     const { params } = useParameters();
@@ -285,7 +287,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     const filteredProducts = products.filter(p => {
         const matchesType = selectedProductTypeId === 'all' || p.productTypeId === selectedProductTypeId;
-        
+
         // Arama yapılıyorsa hiyerarşiyi baypas et
         if (searchQuery.trim() !== '') {
             return matchesType && p.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -311,6 +313,11 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         setActiveTab('menu');
         setCart([]);
 
+        if (table.isBillRequested) {
+            // Keep the tab 'menu' but don't reset cart/subchecks yet? 
+            // Actually, we should still fetch sub-checks to show the current total if needed.
+        }
+
         if (table.status === 'DOLU' || table.status === 'REZERVE' || table.currentTotal) {
             try {
                 const token = localStorage.getItem('token') || (user as any)?.token;
@@ -331,7 +338,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                     setAllFlatChecks(flat);
 
                     if (flat.length > 0) {
-                        setActiveSubCheckId('ALL');
+                        setActiveSubCheckId(flat[0].id);
                         setExistingOrders(flat);
                     } else {
                         setAllFlatChecks([]);
@@ -353,6 +360,27 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             setAllFlatChecks([]);
             setActiveSubCheckId(null);
             setExistingOrders([]);
+        }
+    };
+
+    const reopenTable = async () => {
+        if (!selectedTable) return;
+        try {
+            const token = localStorage.getItem('token') || (user as any)?.token;
+            const res = await fetch(`${API_URL}/tables/${selectedTable.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ isBillRequested: false })
+            });
+
+            if (res.ok) {
+                // Proced with normal flow
+                const updatedTable = { ...selectedTable, isBillRequested: false };
+                setSelectedTable(updatedTable);
+                setTables(prev => prev.map(t => t.id === updatedTable.id ? updatedTable : t));
+            }
+        } catch (err) {
+            console.error("Failed to reopen table", err);
         }
     };
 
@@ -385,7 +413,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                 }
             }
         }
-        
+
         const newItem: OrderItem = { product, quantity: 1, note, isWaiting: false, saleType: activeSaleType, saleTypeMultiplier: m, variationId: vId, variationName: vName, extraPrice: extraPriceFromVariation };
 
         // Ekstra popup kontrolü
@@ -782,72 +810,100 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             <div className="absolute bottom-[20%] left-[20%] w-[40%] h-[40%] rounded-full bg-teal-500/10 dark:bg-teal-600/10 blur-[100px] z-0 pointer-events-none transition-colors duration-500"></div>
 
             <div className="flex-1 flex flex-col p-6 overflow-hidden w-full md:w-auto relative z-10 transition-all">
-                <div className="mb-6 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
-                            <i className="fat fa-utensils text-2xl"></i>
+                {selectedTable?.isBillRequested ? (
+                    <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+                        <div className="w-32 h-32 bg-amber-100 dark:bg-amber-500/10 rounded-full flex items-center justify-center mb-8 animate-pulse shadow-xl shadow-amber-500/20">
+                            <i className="fat fa-receipt text-5xl text-amber-600 dark:text-amber-400"></i>
                         </div>
-                        <div>
-                            <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 leading-tight">
-                                Sipariş Ekranı{selectedTable ? ` — ${selectedTable.name}` : ''}
-                            </h1>
+                        <h2 className="text-4xl font-black text-slate-800 dark:text-white mb-4 tracking-tight uppercase">Hesap İstendi</h2>
+                        <p className="text-lg text-slate-500 dark:text-slate-400 font-bold max-w-md mb-12 leading-relaxed">
+                            Bu masanın adisyonu istenmiş durumda. Yeni sipariş girişi yapmak için masayı tekrar açmanız gerekir.
+                        </p>
 
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        {activeTab === 'menu' && (
-                            <div className="relative min-w-[250px]">
-                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                    <i className="fat fa-search text-slate-400"></i>
-                                </div>
-                                <input
-                                    type="text"
-                                    placeholder="Ürün Ara..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="block w-full pl-10 pr-4 py-2 border border-slate-200 dark:border-slate-700 rounded-full bg-white/60 dark:bg-slate-800/60 backdrop-blur-md text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all font-bold shadow-sm text-sm"
-                                />
-                                {searchQuery && (
-                                    <button
-                                        onClick={() => setSearchQuery('')}
-                                        className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-rose-500 transition-colors"
-                                    >
-                                        <i className="fat fa-circle-xmark"></i>
-                                    </button>
-                                )}
-                            </div>
-                        )}
-                        {activeTab === 'menu' && (
+                        <div className="flex flex-col sm:flex-row gap-4 w-full max-w-lg">
+                            <button
+                                onClick={reopenTable}
+                                className="flex-1 py-5 rounded-3xl bg-gradient-to-r from-amber-500 to-orange-600 text-white font-black text-lg uppercase tracking-widest shadow-2xl shadow-amber-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+                            >
+                                <i className="fat fa-unlock text-2xl"></i> Masayı Geri Aç
+                            </button>
                             <button
                                 onClick={() => { setActiveTab('tables'); setSelectedTable(null); }}
-                                className="text-slate-500 hover:text-emerald-600 flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-colors bg-white/60 dark:bg-slate-800/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/50 dark:border-slate-700/50 shadow-sm">
-                                <i className="fat fa-reply"></i> MASALAR
-                            </button>
-                        )}
-
-
-
-
-                        <button
-                            onClick={onSwitchToPos}
-                            className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-all bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 backdrop-blur-md px-5 py-2.5 rounded-full border border-indigo-500/20 shadow-sm active:scale-95">
-                            <i className="fat fa-cash-register text-indigo-500"></i> Kasa
-                        </button>
-
-                        <button onClick={() => router.push(`/${locale}/dashboard`)} className="px-6 py-3 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black text-xs uppercase tracking-widest border border-slate-200 dark:border-slate-700 transition flex items-center gap-2">
-                            <i className="fat fa-home"></i> Ana Menü
-                        </button>
-
-                        {mounted && (
-                            <button
-                                onClick={toggleTheme}
-                                className="w-10 h-10 flex items-center justify-center rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all text-xl"
-                                title={theme === 'dark' ? 'Açık Tema' : 'Koyu Tema'}
+                                className="flex-1 py-5 rounded-3xl bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-black text-lg uppercase tracking-widest border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all hover:shadow-lg"
                             >
-                                <i className={`fat ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-emerald-500`}></i>
+                                Masalara Dön
                             </button>
-                        )}
-                        {/* {mounted && (
+                        </div>
+                    </div>
+                ) : (
+                    <>
+
+                        <div className="mb-6 flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
+                                    <i className="fat fa-utensils text-2xl"></i>
+                                </div>
+                                <div>
+                                    <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 leading-tight">
+                                        Sipariş Ekranı{selectedTable ? ` — ${selectedTable.name}` : ''}
+                                    </h1>
+
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                {activeTab === 'menu' && (
+                                    <div className="relative min-w-[250px]">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                            <i className="fat fa-search text-slate-400"></i>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            placeholder="Ürün Ara..."
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            className="block w-full pl-10 pr-4 py-2 border border-slate-200 dark:border-slate-700 rounded-full bg-white/60 dark:bg-slate-800/60 backdrop-blur-md text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all font-bold shadow-sm text-sm"
+                                        />
+                                        {searchQuery && (
+                                            <button
+                                                onClick={() => setSearchQuery('')}
+                                                className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-rose-500 transition-colors"
+                                            >
+                                                <i className="fat fa-circle-xmark"></i>
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                                {activeTab === 'menu' && (
+                                    <button
+                                        onClick={() => { setActiveTab('tables'); setSelectedTable(null); }}
+                                        className="text-slate-500 hover:text-emerald-600 flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-colors bg-white/60 dark:bg-slate-800/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/50 dark:border-slate-700/50 shadow-sm">
+                                        <i className="fat fa-reply"></i> MASALAR
+                                    </button>
+                                )}
+
+
+
+
+                                <button
+                                    onClick={onSwitchToPos}
+                                    className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-all bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 backdrop-blur-md px-5 py-2.5 rounded-full border border-indigo-500/20 shadow-sm active:scale-95">
+                                    <i className="fat fa-cash-register text-indigo-500"></i> Kasa
+                                </button>
+
+                                <button onClick={() => router.push(`/${locale}/dashboard`)} className="px-6 py-3 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black text-xs uppercase tracking-widest border border-slate-200 dark:border-slate-700 transition flex items-center gap-2">
+                                    <i className="fat fa-home"></i> Ana Menü
+                                </button>
+
+                                {mounted && (
+                                    <button
+                                        onClick={toggleTheme}
+                                        className="w-10 h-10 flex items-center justify-center rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all text-xl"
+                                        title={theme === 'dark' ? 'Açık Tema' : 'Koyu Tema'}
+                                    >
+                                        <i className={`fat ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-emerald-500`}></i>
+                                    </button>
+                                )}
+                                {/* {mounted && (
                             <button
                                 onClick={toggleTheme}
                                 className="w-10 h-10 flex items-center justify-center rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-white/10 dark:border-white/5 transition-all text-xl"
@@ -856,339 +912,386 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                 {theme === 'dark' ? '☀️' : '🌙'}
                             </button>
                         )} */}
-                    </div>
-                </div>
-
-                {activeTab === 'tables' ? (
-                    <>
-                        {/* Zone Seçimi */}
-                        <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-none">
-                            {Array.isArray(zones) && zones.map(z => (
-                                <button
-                                    key={z.id}
-                                    onClick={() => setSelectedZone(z.id)}
-                                    className={`px-5 py-2.5 rounded-full font-bold whitespace-nowrap transition-all shadow-sm ${selectedZone === z.id ? 'bg-emerald-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}`}
-                                >
-                                    {z.name}
-                                </button>
-                            ))}
+                            </div>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-150px)]">
-                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                                {Array.isArray(tables) && tables.filter(t => t.zone?.id === selectedZone).map(table => (
-                                    <div
-                                        key={table.id}
-                                        onClick={() => handleTableClick(table)}
-                                        className={`relative p-6 rounded-[32px] cursor-pointer shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border flex flex-col items-center justify-center text-center gap-2 group ${selectedTable?.id === table.id ? 'ring-4 ring-emerald-500 scale-105 ' : ''}${table.status === 'BOŞ' ? 'bg-white/60 dark:bg-slate-800/60 border-white dark:border-slate-700' :
-                                            table.status === 'REZERVE' ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30' :
-                                                'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30'}`}
-                                    >
-                                        <div className="absolute top-4 right-4 animate-pulse">
-                                            <div className={`w-2 h-2 rounded-full ${table.status === 'BOŞ' ? 'bg-emerald-500' : table.status === 'REZERVE' ? 'bg-amber-500' : 'bg-rose-500'}`}></div>
+                        {activeTab === 'tables' ? (
+                            <>
+                                {/* Zone Seçimi */}
+                                <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-none">
+                                    {Array.isArray(zones) && zones.map(z => (
+                                        <button
+                                            key={z.id}
+                                            onClick={() => setSelectedZone(z.id)}
+                                            className={`px-5 py-2.5 rounded-full font-bold whitespace-nowrap transition-all shadow-sm ${selectedZone === z.id ? 'bg-emerald-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}`}
+                                        >
+                                            {z.name}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-150px)]">
+                                    {(() => {
+                                        const zoneTables = Array.isArray(tables) ? tables.filter(t => t.zone?.id === selectedZone) : [];
+                                        let effectiveCols = 4;
+                                        if (zoneTables.length > 15) effectiveCols = 10;
+                                        else if (zoneTables.length >= 5) effectiveCols = 7;
+                                        else effectiveCols = 4;
+
+                                        return (
+                                            <div
+                                                className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-none gap-4"
+                                                style={{
+                                                    gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth >= 1024
+                                                        ? `repeat(${effectiveCols}, minmax(0, 1fr))`
+                                                        : undefined
+                                                }}
+                                            >
+                                                {zoneTables.map(table => (
+                                            <div
+                                                key={table.id}
+                                                onClick={() => handleTableClick(table)}
+                                                className={`relative p-3 rounded-2xl cursor-pointer shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border flex flex-col items-center justify-center text-center gap-1 group ${selectedTable?.id === table.id ? 'ring-4 ring-emerald-500 scale-105 ' : ''}${table.isBillRequested
+                                                    ? 'bg-yellow-100 dark:bg-yellow-500/20 border-yellow-400 dark:border-yellow-500/50 shadow-yellow-500/30 animate-[pulse_3s_ease-in-out_infinite]'
+                                                    : table.status === 'BOŞ' ? 'bg-white/60 dark:bg-slate-800/60 border-white dark:border-slate-700' :
+                                                        table.status === 'REZERVE' ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30' :
+                                                            'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30'}`}
+                                            >
+                                                <div className="absolute top-4 right-4 animate-pulse">
+                                                    <div className={`w-2 h-2 rounded-full ${table.status === 'BOŞ' ? 'bg-emerald-500' : table.status === 'REZERVE' ? 'bg-amber-500' : 'bg-rose-500'}`}></div>
+                                                </div>
+
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (table.status !== 'DOLU') {
+                                                            toastSwal({ icon: 'warning', title: 'Boş masa transfer edilemez!' });
+                                                            return;
+                                                        }
+                                                        setTransferSourceTableId(table.id);
+                                                        setTransferSourceTableName(table.name);
+                                                        setTransferMode('TABLE_TRANSFER');
+                                                        setTransferSelectedItemIds([]);
+                                                        setIsTransferModalOpen(true);
+                                                    }}
+                                                    className="absolute top-3 left-3 w-8 h-8 flex items-center justify-center rounded-xl bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-500/30 transition-all opacity-70 hover:opacity-100"
+                                                    title="Masa Transfer"
+                                                >
+                                                    <i className="fat fa-arrow-right-arrow-left text-xs"></i>
+                                                </button>
+
+                                                <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">
+                                                    {table.status === 'BOŞ' ? '🪑' : table.status === 'REZERVE' ? '📅' : '🍽️'}
+                                                </span>
+                                                <span className="font-extrabold text-slate-800 dark:text-white uppercase tracking-tighter text-sm">{table.name}</span>
+
+                                                {table.status === 'DOLU' ? (
+                                                    <div className="flex flex-col items-center gap-1 mt-1 border-t border-rose-200 dark:border-rose-500/20 pt-3 w-full">
+                                                        <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">
+                                                            <span className="opacity-70">👤</span>
+                                                            <span>{table.waiterName || 'POS / Garson'}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                                                            <span className="opacity-70">🕒</span>
+                                                            <span>{formatTime(table.orderStartTime)}</span>
+                                                        </div>
+                                                        <div className="mt-2 text-rose-700 dark:text-rose-300 font-extrabold text-sm drop-shadow-sm">
+                                                            ₺{Number(table.currentTotal || 0).toFixed(2)}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-col items-center gap-1 mt-1 opacity-40">
+                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('emptyTable') || 'BOŞ MASA'}</span>
+                                                    </div>
+                                                )}
+
+                                                <span className={`text-[9px] font-black px-3 py-1 rounded-full mt-2 uppercase tracking-tighter ${table.status === 'BOŞ' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' :
+                                                    table.status === 'REZERVE' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' :
+                                                        'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'}`}>
+                                                    {table.status}
+                                                </span>
+                                            </div>
+                                        ))}
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            </>
+                        ) : (
+                            <div className="h-full flex flex-col">
+
+                                <div className="flex flex-col gap-1.5 mb-3">
+                                    {/* Satır 1: Ürün Cinsleri ve Aksiyon Butonları (Sola ve Sağa Hizalı) */}
+                                    <div className="flex items-center justify-between gap-2 w-full">
+                                        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none flex-1">
+                                            {productTypeOptions.map(t => (
+                                                <button
+                                                    key={t.id}
+                                                    onClick={() => {
+                                                        setSelectedProductTypeId(t.id as any);
+                                                        setSelectedParentGroupId(null);
+                                                        setSelectedDepartmentId(null);
+                                                    }}
+                                                    className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all whitespace-nowrap shrink-0 ${selectedProductTypeId === t.id
+                                                        ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/25 scale-[1.02]'
+                                                        : 'bg-white/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-slate-700/80 hover:border-indigo-400/50 hover:text-indigo-500 dark:hover:text-indigo-400 hover:shadow-sm'
+                                                        }`}
+                                                >
+                                                    {t.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {/* Aksiyon Butonları (sağ) */}
+                                        <div className="shrink-0 flex items-center gap-1 px-1.5 py-1 bg-white/40 dark:bg-slate-800/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60 mb-1">
+                                            {isDesignMode ? (
+                                                <button
+                                                    onClick={async () => {
+                                                        const newOrder = filteredProducts.map((p, i) => ({ id: p.id, orderIndex: i }));
+                                                        const token = localStorage.getItem('token') || Cookies.get('token');
+                                                        try {
+                                                            const res = await fetch(`${API_URL}/products/reorder`, {
+                                                                method: 'PUT',
+                                                                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                                                body: JSON.stringify({ items: newOrder })
+                                                            });
+                                                            if (res.ok) {
+                                                                toastSwal({ icon: 'success', title: 'Tasarım Kaydedildi' });
+                                                            } else {
+                                                                throw new Error('Hata');
+                                                            }
+                                                        } catch (e) {
+                                                            toastSwal({ icon: 'error', title: 'Hata', text: 'Sıra kaydedilemedi.' });
+                                                        }
+                                                        setIsDesignMode(false);
+                                                    }}
+                                                    className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 bg-indigo-500 text-white shadow-md shadow-indigo-500/30 animate-pulse"
+                                                >
+                                                    <i className="fat fa-save"></i> Kaydet
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => setIsDesignMode(true)}
+                                                    className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/10"
+                                                    title="Tasarım Modu"
+                                                >
+                                                    <i className="fat fa-pen-ruler"></i>
+                                                </button>
+                                            )}
+                                            <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 shrink-0" />
+                                            <button
+                                                onClick={() => setActiveSaleType('HALF')}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 ${activeSaleType === 'HALF' ? 'bg-orange-500 text-white shadow-sm shadow-orange-500/25' : 'text-slate-400 hover:text-orange-500 hover:bg-orange-500/10'}`}
+                                            >
+                                                <i className="fat fa-glass-half"></i> Yarım
+                                            </button>
+                                            <button
+                                                onClick={() => setActiveSaleType('STANDARD')}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 ${activeSaleType === 'STANDARD' ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/25' : 'text-slate-400 hover:text-emerald-500 hover:bg-emerald-500/10'}`}
+                                            >
+                                                <i className="fat fa-check"></i> Std
+                                            </button>
+                                            <button
+                                                onClick={() => setActiveSaleType('DOUBLE')}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 ${activeSaleType === 'DOUBLE' ? 'bg-violet-500 text-white shadow-sm shadow-violet-500/25' : 'text-slate-400 hover:text-violet-500 hover:bg-violet-500/10'}`}
+                                            >
+                                                <i className="fat fa-glass-water"></i> Duble
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Satır 2: Aksiyon Butonları + Dinamik Alt Filtreler — aynı satırda */}
+                                    <div className="flex items-center gap-2">
+                                        {/* Dinamik Alt Filtreler (sol) -> Breadcrumb'a Dönüştü */}
+                                        <div className="flex-1 flex items-center gap-1.5 overflow-x-auto scrollbar-none min-h-[32px]">
+                                            {(selectedParentGroupId || selectedDepartmentId) && !searchQuery ? (
+                                                <>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (selectedDepartmentId) {
+                                                                setSelectedDepartmentId(null);
+                                                            } else {
+                                                                setSelectedParentGroupId(null);
+                                                            }
+                                                        }}
+                                                        className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-[10px] font-bold uppercase transition-all flex items-center gap-1.5 shrink-0"
+                                                    >
+                                                        <i className="fat fa-arrow-left"></i> Geri
+                                                    </button>
+                                                    <div className="flex items-center gap-1.5 p-1 bg-white/40 dark:bg-slate-800/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60 shrink-0">
+                                                        {selectedParentGroupId && (
+                                                            <span
+                                                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-tight shadow-sm flex items-center gap-1.5 ${!selectedDepartmentId ? 'bg-indigo-500 text-white shadow-indigo-500/25' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-300 dark:hover:bg-slate-600'}`}
+                                                                onClick={() => setSelectedDepartmentId(null)}
+                                                            >
+                                                                <i className="fat fa-folder-tree"></i>
+                                                                {parentGroups.find(pg => pg.id === selectedParentGroupId)?.name || 'Üst Grup'}
+                                                            </span>
+                                                        )}
+                                                        {selectedDepartmentId && (
+                                                            <>
+                                                                <i className="fat fa-angle-right text-slate-400 text-[10px]"></i>
+                                                                <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-tight bg-emerald-500 text-white shadow-sm shadow-emerald-500/25 flex items-center gap-1.5">
+                                                                    <i className="fat fa-tags"></i>
+                                                                    {departments.find(d => d.id === selectedDepartmentId)?.name || 'Kategori'}
+                                                                    <button onClick={() => setSelectedDepartmentId(null)} className="ml-1 opacity-70 hover:opacity-100"><i className="fat fa-xmark"></i></button>
+                                                                </span>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">
+                                                    {searchQuery ? `"${searchQuery}" için sonuçlar` : ''}
+                                                </span>
+                                            )}
                                         </div>
 
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (table.status !== 'DOLU') {
-                                                    toastSwal({ icon: 'warning', title: 'Boş masa transfer edilemez!' });
-                                                    return;
-                                                }
-                                                setTransferSourceTableId(table.id);
-                                                setTransferSourceTableName(table.name);
-                                                setTransferMode('TABLE_TRANSFER');
-                                                setTransferSelectedItemIds([]);
-                                                setIsTransferModalOpen(true);
-                                            }}
-                                            className="absolute top-3 left-3 w-8 h-8 flex items-center justify-center rounded-xl bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-500/30 transition-all opacity-70 hover:opacity-100"
-                                            title="Masa Transfer"
-                                        >
-                                            <i className="fat fa-arrow-right-arrow-left text-xs"></i>
-                                        </button>
 
-                                        <span className="text-4xl mb-1 group-hover:scale-110 transition-transform">
-                                            {table.status === 'BOŞ' ? '🪑' : table.status === 'REZERVE' ? '📅' : '🍽️'}
-                                        </span>
-                                        <span className="font-extrabold text-slate-800 dark:text-white uppercase tracking-tighter text-lg">{table.name}</span>
-
-                                        {table.status === 'DOLU' ? (
-                                            <div className="flex flex-col items-center gap-1 mt-1 border-t border-rose-200 dark:border-rose-500/20 pt-3 w-full">
-                                                <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">
-                                                    <span className="opacity-70">👤</span>
-                                                    <span>{table.waiterName || 'POS / Garson'}</span>
-                                                </div>
-                                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
-                                                    <span className="opacity-70">🕒</span>
-                                                    <span>{formatTime(table.orderStartTime)}</span>
-                                                </div>
-                                                <div className="mt-2 text-rose-700 dark:text-rose-300 font-extrabold text-sm drop-shadow-sm">
-                                                    ₺{(Number(table.currentTotal || 0) * 1.1).toFixed(2)}
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="flex flex-col items-center gap-1 mt-1 opacity-40">
-                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('emptyTable') || 'BOŞ MASA'}</span>
-                                            </div>
-                                        )}
-
-                                        <span className={`text-[9px] font-black px-3 py-1 rounded-full mt-2 uppercase tracking-tighter ${table.status === 'BOŞ' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' :
-                                            table.status === 'REZERVE' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' :
-                                                'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'}`}>
-                                            {table.status}
-                                        </span>
                                     </div>
-                                ))}
-                            </div>
-                        </div>
-                    </>
-                ) : (
-                    <div className="h-full flex flex-col">
+                                </div>
 
-                        <div className="flex flex-col gap-1.5 mb-3">
-                            {/* Satır 1: Ürün Cinsleri — tam genişlik scroll */}
-                            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-                                {productTypeOptions.map(t => (
-                                    <button
-                                        key={t.id}
-                                        onClick={() => {
-                                            setSelectedProductTypeId(t.id as any);
-                                            setSelectedParentGroupId(null);
-                                            setSelectedDepartmentId(null);
-                                        }}
-                                        className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all whitespace-nowrap shrink-0 ${selectedProductTypeId === t.id
-                                            ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/25 scale-[1.02]'
-                                            : 'bg-white/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-slate-700/80 hover:border-indigo-400/50 hover:text-indigo-500 dark:hover:text-indigo-400 hover:shadow-sm'
-                                        }`}
-                                    >
-                                        {t.name}
-                                    </button>
-                                ))}
-                            </div>
-
-                            {/* Satır 2: Aksiyon Butonları + Dinamik Alt Filtreler — aynı satırda */}
-                            <div className="flex items-center gap-2">
-                                {/* Dinamik Alt Filtreler (sol) -> Breadcrumb'a Dönüştü */}
-                                <div className="flex-1 flex items-center gap-1.5 overflow-x-auto scrollbar-none min-h-[32px]">
-                                    {(selectedParentGroupId || selectedDepartmentId) && !searchQuery ? (
+                                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-280px)]">
+                                    {!selectedDepartmentId && !searchQuery ? (
                                         <>
-                                            <button 
-                                                onClick={() => {
-                                                    if (selectedDepartmentId) {
-                                                        setSelectedDepartmentId(null);
-                                                    } else {
-                                                        setSelectedParentGroupId(null);
-                                                    }
-                                                }}
-                                                className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-[10px] font-bold uppercase transition-all flex items-center gap-1.5 shrink-0"
-                                            >
-                                                <i className="fat fa-arrow-left"></i> Geri
-                                            </button>
-                                            <div className="flex items-center gap-1.5 p-1 bg-white/40 dark:bg-slate-800/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60 shrink-0">
-                                                {selectedParentGroupId && (
-                                                    <span 
-                                                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-tight shadow-sm flex items-center gap-1.5 ${!selectedDepartmentId ? 'bg-indigo-500 text-white shadow-indigo-500/25' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-300 dark:hover:bg-slate-600'}`}
-                                                        onClick={() => setSelectedDepartmentId(null)}
-                                                    >
-                                                        <i className="fat fa-folder-tree"></i>
-                                                        {parentGroups.find(pg => pg.id === selectedParentGroupId)?.name || 'Üst Grup'}
-                                                    </span>
-                                                )}
-                                                {selectedDepartmentId && (
+                                            <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-4 mb-6 mt-2 p-2">
+                                                {/* SEVİYE 1: Üst Gruplar ve Bağımsız Kategoriler */}
+                                                {!selectedParentGroupId && (
                                                     <>
-                                                        <i className="fat fa-angle-right text-slate-400 text-[10px]"></i>
-                                                        <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-tight bg-emerald-500 text-white shadow-sm shadow-emerald-500/25 flex items-center gap-1.5">
-                                                            <i className="fat fa-tags"></i>
-                                                            {departments.find(d => d.id === selectedDepartmentId)?.name || 'Kategori'}
-                                                            <button onClick={() => setSelectedDepartmentId(null)} className="ml-1 opacity-70 hover:opacity-100"><i className="fat fa-xmark"></i></button>
-                                                        </span>
+                                                        {parentGroups.filter(pg => {
+                                                            if (selectedProductTypeId === 'all') return true;
+                                                            const pgDepts = departments.filter(d => d.parentGroupId === pg.id);
+                                                            return products.some(p => p.productTypeId === selectedProductTypeId && pgDepts.some(d => d.name === p.category));
+                                                        }).map(pg => (
+                                                            <button
+                                                                key={`pg-${pg.id}`}
+                                                                onClick={() => setSelectedParentGroupId(pg.id)}
+                                                                className="group relative flex flex-col items-center justify-center p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-indigo-400 hover:-translate-y-1 transition-all duration-300"
+                                                            >
+                                                                <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
+                                                                    <i className="fat fa-folder-tree text-lg text-indigo-500"></i>
+                                                                </div>
+                                                                <span className="text-[10px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{pg.name}</span>
+                                                            </button>
+                                                        ))}
+                                                        {departments.filter(d => !d.parentGroupId).filter(d => {
+                                                            if (selectedProductTypeId === 'all') return true;
+                                                            return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
+                                                        }).map(d => (
+                                                            <button
+                                                                key={`dept-${d.id}`}
+                                                                onClick={() => setSelectedDepartmentId(d.id)}
+                                                                className="group relative flex flex-col items-center justify-center p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-400 hover:-translate-y-1 transition-all duration-300"
+                                                            >
+                                                                <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
+                                                                    <i className="fat fa-tags text-lg text-emerald-500"></i>
+                                                                </div>
+                                                                <span className="text-[10px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
+                                                            </button>
+                                                        ))}
                                                     </>
                                                 )}
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">
-                                            {searchQuery ? `"${searchQuery}" için sonuçlar` : 'Lütfen Grup veya Kategori Seçin'}
-                                        </span>
-                                    )}
-                                </div>
 
-                                {/* Aksiyon Butonları (sağ) */}
-                                <div className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 bg-white/40 dark:bg-slate-800/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
-                                    {isDesignMode ? (
-                                        <button
-                                            onClick={async () => {
-                                                const newOrder = filteredProducts.map((p, i) => ({ id: p.id, orderIndex: i }));
-                                                const token = localStorage.getItem('token') || Cookies.get('token');
-                                                try {
-                                                    const res = await fetch(`${API_URL}/products/reorder`, {
-                                                        method: 'PUT',
-                                                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                                                        body: JSON.stringify({ items: newOrder })
-                                                    });
-                                                    if (res.ok) {
-                                                        toastSwal({ icon: 'success', title: 'Tasarım Kaydedildi' });
-                                                    } else {
-                                                        throw new Error('Hata');
-                                                    }
-                                                } catch (e) {
-                                                    toastSwal({ icon: 'error', title: 'Hata', text: 'Sıra kaydedilemedi.' });
-                                                }
-                                                setIsDesignMode(false);
-                                            }}
-                                            className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 bg-indigo-500 text-white shadow-md shadow-indigo-500/30 animate-pulse"
-                                        >
-                                            <i className="fat fa-save"></i> Kaydet
-                                        </button>
-                                    ) : (
-                                        <button
-                                            onClick={() => setIsDesignMode(true)}
-                                            className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/10"
-                                            title="Tasarım Modu"
-                                        >
-                                            <i className="fat fa-pen-ruler"></i>
-                                        </button>
-                                    )}
-                                    <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 shrink-0" />
-                                    <button
-                                        onClick={() => setActiveSaleType('HALF')}
-                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 ${activeSaleType === 'HALF' ? 'bg-orange-500 text-white shadow-sm shadow-orange-500/25' : 'text-slate-400 hover:text-orange-500 hover:bg-orange-500/10'}`}
-                                    >
-                                        <i className="fat fa-glass-half"></i> Yarım
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveSaleType('STANDARD')}
-                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 ${activeSaleType === 'STANDARD' ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/25' : 'text-slate-400 hover:text-emerald-500 hover:bg-emerald-500/10'}`}
-                                    >
-                                        <i className="fat fa-check"></i> Std
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveSaleType('DOUBLE')}
-                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 ${activeSaleType === 'DOUBLE' ? 'bg-violet-500 text-white shadow-sm shadow-violet-500/25' : 'text-slate-400 hover:text-violet-500 hover:bg-violet-500/10'}`}
-                                    >
-                                        <i className="fat fa-glass-water"></i> Duble
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-280px)]">
-                            {!selectedDepartmentId && !searchQuery ? (
-                                <>
-                                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-                                        {/* SEVİYE 1: Üst Gruplar ve Bağımsız Kategoriler */}
-                                        {!selectedParentGroupId && (
-                                            <>
-                                                {parentGroups.filter(pg => {
-                                                    if (selectedProductTypeId === 'all') return true;
-                                                    const pgDepts = departments.filter(d => d.parentGroupId === pg.id);
-                                                    return products.some(p => p.productTypeId === selectedProductTypeId && pgDepts.some(d => d.name === p.category));
-                                                }).map(pg => (
-                                                    <button
-                                                        key={`pg-${pg.id}`}
-                                                        onClick={() => setSelectedParentGroupId(pg.id)}
-                                                        className="group relative flex flex-col items-center justify-center p-6 bg-white/70 dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-indigo-400 hover:-translate-y-1 transition-all duration-300"
-                                                    >
-                                                        <div className="w-16 h-16 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                                                            <i className="fat fa-folder-tree text-2xl text-indigo-500"></i>
-                                                        </div>
-                                                        <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{pg.name}</span>
-                                                    </button>
-                                                ))}
-                                                {departments.filter(d => !d.parentGroupId).filter(d => {
+                                                {/* SEVİYE 2: Seçili Üst Gruba Bağlı Kategoriler */}
+                                                {selectedParentGroupId && departments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
                                                     if (selectedProductTypeId === 'all') return true;
                                                     return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
                                                 }).map(d => (
                                                     <button
-                                                        key={`dept-${d.id}`}
+                                                        key={`dept-sub-${d.id}`}
                                                         onClick={() => setSelectedDepartmentId(d.id)}
-                                                        className="group relative flex flex-col items-center justify-center p-6 bg-white/70 dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-400 hover:-translate-y-1 transition-all duration-300"
+                                                        className="group relative flex flex-col items-center justify-center p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-400 hover:-translate-y-1 transition-all duration-300"
                                                     >
-                                                        <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                                                            <i className="fat fa-tags text-2xl text-emerald-500"></i>
+                                                        <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
+                                                            <i className="fat fa-tags text-lg text-emerald-500"></i>
                                                         </div>
-                                                        <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
+                                                        <span className="text-[10px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
                                                     </button>
                                                 ))}
-                                            </>
-                                        )}
+                                            </div>
 
-                                        {/* SEVİYE 2: Seçili Üst Gruba Bağlı Kategoriler */}
-                                        {selectedParentGroupId && departments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
-                                            if (selectedProductTypeId === 'all') return true;
-                                            return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
-                                        }).map(d => (
-                                            <button
-                                                key={`dept-sub-${d.id}`}
-                                                onClick={() => setSelectedDepartmentId(d.id)}
-                                                className="group relative flex flex-col items-center justify-center p-6 bg-white/70 dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-400 hover:-translate-y-1 transition-all duration-300"
-                                            >
-                                                <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                                                    <i className="fat fa-tags text-2xl text-emerald-500"></i>
+                                            {/* Kategorisi olmayan ürünleri doğrudan göster */}
+                                            {filteredProducts.length > 0 && (
+                                                <div className="space-y-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Kategorisiz Ürünler</span>
+                                                        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
+                                                    </div>
+                                                    <DndContext
+                                                        sensors={sensors}
+                                                        collisionDetection={closestCenter}
+                                                        onDragStart={handleDragStart}
+                                                        onDragEnd={handleDragEnd}
+                                                        onDragCancel={() => setActiveDragItem(null)}
+                                                    >
+                                                        <SortableContext items={filteredProducts.map(p => p.id)} strategy={rectSortingStrategy}>
+                                                            <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-4 mb-6 relative p-2">
+                                                                {filteredProducts.map(p => (
+                                                                    <SortableProductCard
+                                                                        key={p.id}
+                                                                        product={p}
+                                                                        onClick={() => addToCart(p)}
+                                                                        isDesignMode={isDesignMode}
+                                                                    />
+                                                                ))}
+                                                            </div>
+                                                        </SortableContext>
+                                                        <DragOverlay dropAnimation={{
+                                                            duration: 300,
+                                                            easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+                                                            sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.4' } } })
+                                                        }}>
+                                                            {activeDragItem ? (
+                                                                <SortableProductCard
+                                                                    product={activeDragItem}
+                                                                    onClick={() => { }}
+                                                                    isDesignMode={true}
+                                                                />
+                                                            ) : null}
+                                                        </DragOverlay>
+                                                    </DndContext>
                                                 </div>
-                                                <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-
-                                    {/* Kategorisi olmayan ürünleri doğrudan göster */}
-                                    {filteredProducts.length > 0 && (
-                                        <div className="space-y-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
-                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Kategorisiz Ürünler</span>
-                                                <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
-                                            </div>
-                                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-                                                {filteredProducts.map(p => (
+                                            )}
+                                        </>
+                                    ) : (
+                                        <DndContext
+                                            sensors={sensors}
+                                            collisionDetection={closestCenter}
+                                            onDragStart={handleDragStart}
+                                            onDragEnd={handleDragEnd}
+                                            onDragCancel={() => setActiveDragItem(null)}
+                                        >
+                                            <SortableContext items={filteredProducts.map(p => p.id)} strategy={rectSortingStrategy}>
+                                                <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-4 mb-6 relative p-2">
+                                                    {filteredProducts.map(p => (
+                                                        <SortableProductCard
+                                                            key={p.id}
+                                                            product={p}
+                                                            onClick={() => addToCart(p)}
+                                                            isDesignMode={isDesignMode}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </SortableContext>
+                                            <DragOverlay dropAnimation={{
+                                                duration: 300,
+                                                easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+                                                sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.4' } } })
+                                            }}>
+                                                {activeDragItem ? (
                                                     <SortableProductCard
-                                                        key={p.id}
-                                                        product={p}
-                                                        onClick={() => addToCart(p)}
-                                                        isDesignMode={false}
+                                                        product={activeDragItem}
+                                                        onClick={() => { }}
+                                                        isDesignMode={true}
                                                     />
-                                                ))}
-                                            </div>
-                                        </div>
+                                                ) : null}
+                                            </DragOverlay>
+                                        </DndContext>
                                     )}
-                                </>
-                            ) : (
-                                <DndContext
-                                    sensors={sensors}
-                                    collisionDetection={closestCenter}
-                                    onDragStart={handleDragStart}
-                                    onDragEnd={handleDragEnd}
-                                    onDragCancel={() => setActiveDragItem(null)}
-                                >
-                                    <SortableContext items={filteredProducts.map(p => p.id)} strategy={rectSortingStrategy}>
-                                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6 relative">
-                                            {filteredProducts.map(p => (
-                                                <SortableProductCard
-                                                    key={p.id}
-                                                    product={p}
-                                                    onClick={() => addToCart(p)}
-                                                    isDesignMode={isDesignMode}
-                                                />
-                                            ))}
-                                        </div>
-                                    </SortableContext>
-                                    <DragOverlay dropAnimation={{
-                                        duration: 300,
-                                        easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
-                                        sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.4' } } })
-                                    }}>
-                                        {activeDragItem ? (
-                                            <SortableProductCard
-                                                product={activeDragItem}
-                                                onClick={() => { }}
-                                                isDesignMode={true}
-                                            />
-                                        ) : null}
-                                    </DragOverlay>
-                                </DndContext>
-                            )}
-                        </div>
-                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
 
@@ -1756,7 +1859,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                     </div>
                 </div>
             )}
-            
+
             {/* Transfer Modal */}
             <TransferModal
                 isOpen={isTransferModalOpen}

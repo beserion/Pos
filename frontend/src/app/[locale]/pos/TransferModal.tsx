@@ -285,7 +285,7 @@ export default function TransferModal({
                         </span>
                         {table.status === 'DOLU' && table.currentTotal > 0 && (
                           <span className="block text-xs font-bold text-rose-600 dark:text-rose-400 mt-1">
-                            ₺{(Number(table.currentTotal) * 1.1).toFixed(0)}
+                            ₺{Number(table.currentTotal).toFixed(0)}
                           </span>
                         )}
                         {targetTableId === table.id && (
