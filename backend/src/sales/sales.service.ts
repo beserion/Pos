@@ -424,6 +424,7 @@ export class SalesService implements OnModuleInit {
               waiterName: savedSale.status === 'COMPLETED' ? '' : (waiter ? `${waiter.firstName} ${waiter.lastName}` : (table.waiterName || 'Sistem')),
               currentTotal: savedSale.status === 'COMPLETED' ? 0 : (Number(table.currentTotal || 0) + effectiveTotal),
               orderStartTime: table.status === 'BOŞ' ? new Date() : (savedSale.status === 'COMPLETED' ? null as any : table.orderStartTime),
+              isBillRequested: false
             });
           }
         }
@@ -670,6 +671,7 @@ export class SalesService implements OnModuleInit {
             freshTable.status = 'BOŞ';
             freshTable.waiterName = '';
             freshTable.orderStartTime = null as any;
+            (freshTable as any).isBillRequested = false;
           }
           await manager.save(Table, freshTable);
         }
@@ -750,6 +752,7 @@ export class SalesService implements OnModuleInit {
           waiterName: '',
           currentTotal: 0,
           orderStartTime: () => 'NULL',
+          isBillRequested: false,
         });
       }
     });
