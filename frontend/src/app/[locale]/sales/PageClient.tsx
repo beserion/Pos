@@ -4,7 +4,7 @@ import { useAuth } from '../AuthContext';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { showSwal, toastSwal } from '../utils/swal';
-import { useTheme } from 'next-themes';
+import { useThemeTransition } from '@/hooks/useThemeTransition';
 
 interface Sale {
     id: number;
@@ -26,7 +26,7 @@ export function PageClient() {
     const router = useRouter();
     const locale = useLocale();
     const tc = useTranslations('Common');
-    const { theme, setTheme } = useTheme();
+    const { theme } = useThemeTransition();
 
     const [sales, setSales] = useState<Sale[]>([]);
     const [dataLoading, setDataLoading] = useState(true);
@@ -105,72 +105,80 @@ export function PageClient() {
         }
     };
 
-    const handleEndOfDay = async () => {
-        const result = await showSwal({
-            title: 'Gün Sonu Al',
-            html: '<div class="text-left py-2">' +
-                '<p class="text-sm text-slate-500 mb-2">Bugünkü <b>Tamamlanmış</b> satışlarınızın nakit ve kart dökümleri ayrılarak kasaya işlenecektir.</p>' +
-                '<p class="text-xs font-bold text-rose-500 border-l-2 border-rose-500 pl-2 bg-rose-50 dark:bg-rose-500/10 py-1 uppercase">Bu işlem geri alınamaz.</p>' +
-                '</div>',
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonText: 'Evet, Gün Sonunu Al',
-            cancelButtonText: 'İptal',
-            confirmButtonColor: '#4f46e5',
-        });
+    const handleEndOfDay = async (forceParam?: any) => {
+        const force = typeof forceParam === 'boolean' ? forceParam : false;
+        if (!force) {
+            const result = await showSwal({
+                title: 'Gün Sonu Al',
+                html: '<div class="text-left py-2">' +
+                    '<p class="text-sm text-slate-500 mb-2">Gün sonu işlemini başlatmak üzeresiniz.</p>' +
+                    '<p class="text-xs font-bold text-rose-500 border-l-2 border-rose-500 pl-2 bg-rose-50 dark:bg-rose-500/10 py-1 uppercase">Bu işlem geri alınamaz.</p>' +
+                    '</div>',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Evet, Gün Sonunu Al',
+                cancelButtonText: 'İptal',
+                confirmButtonColor: '#4f46e5',
+            });
+            if (!result.isConfirmed) return;
+        }
 
-        if (result.isConfirmed) {
-            try {
-                const token = localStorage.getItem('token') || (user as any)?.token;
-                const res = await fetch(API_URL + '/sales/end-of-day', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                    body: JSON.stringify({ userId: user?.id || (user as any)?.sub })
-                });
+        try {
+            const token = localStorage.getItem('token') || (user as any)?.token;
+            const res = await fetch(`${API_URL}/business-day/end-of-day`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ 
+                    note: 'Satış Yönetimi (sales) üzerinden gün sonu',
+                    force: force
+                })
+            });
 
-                if (!res.ok) throw new Error('Gün sonu sunucu hatası');
-                const data = await res.json();
-                const { cashTotal, cardTotal, bankTotal, grandTotal, date } = data;
+            const data = await res.json();
 
-                if (grandTotal === 0) {
-                    toastSwal({ icon: 'info', title: 'Kapatılacak satış bulunamadı.' });
-                    return;
+            if (!res.ok) {
+                if (data.message && data.message.startsWith('CONFIRM_FUTURE_DATE|')) {
+                    const msg = data.message.split('|')[1];
+                    const futureConfirm = await showSwal({
+                        title: 'Erken Gün Sonu?',
+                        text: msg,
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Evet, Gün Sonu Al',
+                        cancelButtonText: 'Hayır, Vazgeç',
+                        confirmButtonColor: '#ef4444',
+                        cancelButtonColor: '#64748b',
+                    });
+
+                    if (futureConfirm.isConfirmed) {
+                        return handleEndOfDay(true); // force true
+                    }
+                } else {
+                    showSwal({ icon: 'error', title: 'Hata', text: data.message || 'Gün sonu işlemi tamamlanamadı.' });
                 }
-
-                await showSwal({
-                    title: 'Gün Sonu Raporu',
-                    html: '<div class="text-left w-full space-y-3">' +
-                        '<div class="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">' +
-                        '<div class="flex justify-between items-center mb-1">' +
-                        '<div class="text-xs font-bold text-slate-400 uppercase tracking-widest">Tarih</div>' +
-                        '<div class="text-sm font-black text-slate-700 dark:text-slate-200">' + date + '</div>' +
-                        '</div></div>' +
-                        '<div class="grid grid-cols-2 gap-3">' +
-                        '<div class="p-4 bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl border border-emerald-100 dark:border-emerald-500/20">' +
-                        '<div class="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-1">Nakit</div>' +
-                        '<div class="text-xl font-black text-emerald-700 dark:text-emerald-300">₺' + cashTotal + '</div>' +
-                        '</div>' +
-                        '<div class="p-4 bg-indigo-50 dark:bg-indigo-500/10 rounded-2xl border border-indigo-100 dark:border-indigo-500/20">' +
-                        '<div class="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">Kart</div>' +
-                        '<div class="text-xl font-black text-indigo-700 dark:text-indigo-300">₺' + cardTotal + '</div>' +
-                        '</div></div>' +
-                        (bankTotal > 0 ?
-                            '<div class="p-4 bg-blue-50 dark:bg-blue-500/10 rounded-2xl border border-blue-100 dark:border-blue-500/20">' +
-                            '<div class="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest mb-1">Banka</div>' +
-                            '<div class="text-xl font-black text-blue-700 dark:text-blue-300">₺' + bankTotal + '</div>' +
-                            '</div>' : '') +
-                        '<div class="p-5 bg-slate-900 rounded-[28px] text-center shadow-xl">' +
-                        '<div class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Toplam Gün Sonu</div>' +
-                        '<div class="text-3xl font-black text-white">₺' + grandTotal + '</div>' +
-                        '</div></div>',
-                    icon: 'success',
-                });
-
-                fetchSales();
-            } catch (error) {
-                console.error('Error in End of Day:', error);
-                showSwal({ icon: 'error', title: 'Hata', text: 'Gün sonu işlemi tamamlanamadı.' });
+                return;
             }
+
+            let zReportHtml = '';
+            if (data.zReportId) {
+                zReportHtml = `<div class="p-4 bg-indigo-50 dark:bg-indigo-500/10 rounded-2xl border border-indigo-100 dark:border-indigo-500/20 text-center"><div class="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">Z-Raporu No</div><div class="text-xl font-black text-indigo-700 dark:text-indigo-300">#${data.zReportId.toString().padStart(6, '0')}</div></div>`;
+            }
+
+            await showSwal({
+                title: 'Gün Sonu Tamamlandı',
+                html: '<div class="text-left w-full space-y-3">' +
+                    '<div class="p-3 bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl border border-emerald-100 dark:border-emerald-500/20">' +
+                    '<div class="flex justify-between items-center mb-1">' +
+                    '<div class="text-xs font-bold text-emerald-600 uppercase tracking-widest">Yeni İş Günü</div>' +
+                    '<div class="text-sm font-black text-emerald-700 dark:text-emerald-300">' + (data.newBusinessDate || '-') + '</div>' +
+                    '</div></div>' + zReportHtml + '</div>',
+                icon: 'success',
+            });
+
+            fetchSales();
+        } catch (error) {
+            console.error('Error in End of Day:', error);
+            showSwal({ icon: 'error', title: 'Hata', text: 'Gün sonu işlemi sırasında bir hata oluştu.' });
         }
     };
 

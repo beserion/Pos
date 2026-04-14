@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { StockCard } from './stock-card.entity';
@@ -24,7 +24,8 @@ export class StockCardsService {
   ): Promise<{ data: StockCard[]; total: number; lastPage: number }> {
     const query = this.stockCardRepository
       .createQueryBuilder('sc')
-      .leftJoinAndSelect('sc.warehouse', 'warehouse');
+      .leftJoinAndSelect('sc.warehouse', 'warehouse')
+      .leftJoinAndSelect('sc.stockGroupRelation', 'stockGroup');
 
     if (search) {
       query.andWhere(
@@ -55,14 +56,14 @@ export class StockCardsService {
     return this.stockCardRepository.find({
       where: { isActive: true },
       order: { name: 'ASC' },
-      relations: ['warehouse'],
+      relations: ['warehouse', 'stockGroupRelation'],
     });
   }
 
   async findOne(id: number): Promise<StockCard> {
     const card = await this.stockCardRepository.findOne({
       where: { id },
-      relations: ['warehouse'],
+      relations: ['warehouse', 'stockGroupRelation'],
     });
     if (!card) {
       throw new NotFoundException(`StockCard with ID ${id} not found`);
@@ -84,8 +85,7 @@ export class StockCardsService {
   }
 
   async remove(id: number): Promise<void> {
-    await this.findOne(id);
-    await this.stockCardRepository.delete(id);
+    throw new BadRequestException('Güvenlik kuralı gereği sistemden stok kartı kalıcı olarak silinemez. Lütfen kartı düzenleyerek "Pasif" konuma alınız.');
   }
 
   async getCategories(): Promise<string[]> {

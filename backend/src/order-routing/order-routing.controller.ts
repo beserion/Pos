@@ -1,9 +1,9 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { OrderRoutingService, RoutingControlEntry } from './order-routing.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Permissions } from '../auth/permissions.decorator';
 
 @Controller('order-routing')
-@UseGuards(JwtAuthGuard)
+@Permissions('PRINTERS:VIEW')
 export class OrderRoutingController {
   constructor(private readonly service: OrderRoutingService) {}
 

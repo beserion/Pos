@@ -6,6 +6,7 @@ import Cookies from 'js-cookie';
 import { useAuth } from '../AuthContext';
 import { showSwal } from '../utils/swal';
 import { useLocale, useTranslations } from 'next-intl';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -50,7 +51,7 @@ interface Reservation {
 export function PageClient() {
     const router = useRouter();
     const locale = useLocale();
-    const { user, loading: authLoading } = useAuth();
+    const { user, loading: authLoading, hasFeature } = useAuth();
     const API_URL = (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
 
     const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -92,8 +93,8 @@ export function PageClient() {
 
     useEffect(() => {
         if (!authLoading && !user) router.push(`/${locale}/login`);
-        if (user) fetchData();
-    }, [user, authLoading, locale]);
+        if (user && hasFeature('reservation_system')) fetchData();
+    }, [user, authLoading, locale, hasFeature]);
 
     const handleSave = async () => {
         try {
@@ -171,6 +172,14 @@ export function PageClient() {
     };
 
     if (loading || authLoading) return <div className="h-screen flex items-center justify-center text-white">Yükleniyor...</div>;
+
+    if (user && !hasFeature('reservation_system')) {
+        return (
+            <div className="h-screen bg-slate-50 dark:bg-slate-900 flex flex-col">
+                <PremiumModuleLocked moduleName="Rezervasyon Sistemi" featureKey="reservation_system" />
+            </div>
+        );
+    }
 
     return (
         <div className="h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-8 flex flex-col overflow-hidden">

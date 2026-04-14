@@ -59,7 +59,7 @@ export class OrdersService {
     if (lowStockProducts.length === 0) return [];
 
     const items: Partial<OrderItem>[] = lowStockProducts.map(item => ({
-      productId: item.productId,
+      stockCardId: item.stockCardId,
       quantity: item.minStockLevel - item.currentStock,
       unitPrice: item.costPrice,
       unit: item.unit,
@@ -83,7 +83,7 @@ export class OrdersService {
     if (order.status === 'CANCELLED') throw new BadRequestException('İptal edilmiş sipariş kabul edilemez.');
 
     for (const item of order.items) {
-      await this.stocksService.addStock(item.productId, Number(item.quantity));
+      await this.stocksService.addStock(item.stockCardId, Number(item.quantity));
     }
     order.status = 'RECEIVED';
     return await this.orderRepository.save(order);
@@ -104,7 +104,7 @@ export class OrdersService {
 
     if (order.status !== 'RECEIVED') {
       for (const item of order.items) {
-        await this.stocksService.addStock(item.productId, Number(item.quantity));
+        await this.stocksService.addStock(item.stockCardId, Number(item.quantity));
       }
     }
 

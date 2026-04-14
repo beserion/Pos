@@ -41,4 +41,7 @@ export class SetGroupItem {
 
   @Column({ default: true })
   isActive: boolean;
+
+  @Column({ type: 'float', default: 1 })
+  entitlementCost: number;
 }

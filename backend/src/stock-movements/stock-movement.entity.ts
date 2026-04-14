@@ -31,11 +31,27 @@ export class StockMovement {
   @JoinColumn({ name: 'stockCardId' })
   stockCard: StockCard;
 
+  @Column({ type: 'date', nullable: true })
+  businessDate: Date;
+
   @Column()
   movementType: string;
+<<<<<<< HEAD
+=======
+  // opening_balance, purchase, goods_receipt, count_adjustment, 
+  // recipe_consumption, direct_sale_consumption, waste, spoilage, 
+  // transfer_out, transfer_in, return_in, return_out, manual_adjustment
+
+  @Column('decimal', { precision: 12, scale: 4, default: 0 })
+  qtyIn: number;
+
+  @Column('decimal', { precision: 12, scale: 4, default: 0 })
+  qtyOut: number;
+>>>>>>> upstream/server
 
   // ─── Miktar Alanları (§15) ───────────────────────────
   @Column('decimal', { precision: 12, scale: 4 })
+<<<<<<< HEAD
   quantity: number; // Mevcut: +/- toplam miktar
 
   @Column('decimal', { precision: 12, scale: 4, default: 0 })
@@ -49,6 +65,9 @@ export class StockMovement {
 
   @Column('decimal', { precision: 12, scale: 4, default: 0 })
   stockAfter: number; // qtyAfter: hareket sonrası bakiye
+=======
+  quantity: number; // Net miktar (in - out)
+>>>>>>> upstream/server
 
   @Column({ default: 'adet' })
   unit: string;
@@ -60,9 +79,17 @@ export class StockMovement {
   @Column('decimal', { precision: 12, scale: 4, default: 0 })
   totalCost: number;
 
+<<<<<<< HEAD
   // ─── Tarih (§15) ────────────────────────────────────
   @Column({ type: 'date', nullable: true })
   businessDate: Date; // İş günü tarihi
+=======
+  @Column('decimal', { precision: 12, scale: 4, default: 0 })
+  qtyBefore: number;
+
+  @Column('decimal', { precision: 12, scale: 4, default: 0 })
+  stockAfter: number; // qty_after
+>>>>>>> upstream/server
 
   // ─── Depo ───────────────────────────────────────────
   @Column({ nullable: true })
@@ -88,27 +115,45 @@ export class StockMovement {
 
   // Geriye uyumluluk alias'lar
   @Column({ nullable: true })
-  referenceType: string;
+  documentType: string;
 
   @Column({ nullable: true })
-  referenceId: number;
+  documentNo: string;
 
+<<<<<<< HEAD
   // ─── Kullanıcı (§15) ───────────────────────────────
+=======
+  @Column({ nullable: true })
+  sourceType: string;
+
+  @Column({ nullable: true })
+  sourceId: number;
+
+>>>>>>> upstream/server
   @Column({ nullable: true })
   userId: number;
 
   @Column({ nullable: true })
+<<<<<<< HEAD
   approveUserId: number; // Onaylayan kullanıcı
 
   // ─── Sebep / Not (§15) ─────────────────────────────
+=======
+  approveUserId: number;
+
+>>>>>>> upstream/server
   @Column({ nullable: true })
   reasonCode: string;
 
   @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
+<<<<<<< HEAD
   note: string;
 
   @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
   description: string; // Eski alan, note ile aynı amaca hizmet
+=======
+  description: string; // note
+>>>>>>> upstream/server
 
   @CreateDateColumn()
   createdAt: Date;

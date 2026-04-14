@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../app/[locale]/AuthContext';
-
+import { startPrefetch } from '../../app/[locale]/utils/posPrefetch';
 interface BusinessDayStatus {
     activeBusinessDate: string;
     realDate: string;
@@ -43,15 +43,21 @@ export default function BusinessDayGuard({ apiUrl, onReady }: BusinessDayGuardPr
     const [rolloverNote, setRolloverNote] = useState('');
     const [rolloverIsClosed, setRolloverIsClosed] = useState(true);
 
-    // Continue same date
-    const [continueNote, setContinueNote] = useState('');
+    // Erken gün sonu onayı
+    const [showFutureConfirm, setShowFutureConfirm] = useState(false);
+    const [futureConfirmMsg, setFutureConfirmMsg] = useState('');
+
+    // Aynı tarihte devam onayı
     const [showContinueModal, setShowContinueModal] = useState(false);
+    const [continueNote, setContinueNote] = useState('');
 
     const token = user?.token || (typeof localStorage !== 'undefined' && localStorage.getItem('token'));
     const headers: any = { Authorization: `Bearer ${token}` };
 
     useEffect(() => {
         if (user && token) {
+            // İş günü kontrolü ile eşzamanlı olarak POS verilerini ön-bellekle
+            startPrefetch(apiUrl, token as string);
             checkBusinessDay();
         }
     }, [user]);
@@ -73,15 +79,15 @@ export default function BusinessDayGuard({ apiUrl, onReady }: BusinessDayGuardPr
             const data: BusinessDayStatus = await res.json();
             setStatus(data);
 
-            if (data.canAccessSales) {
-                setScreen('ready');
-                onReady();
-            } else if (data.needsRollover && data.closedDayQueue.length > 0) {
+            if (data.needsRollover && data.closedDayQueue.length > 0) {
                 // Önce mevcut gün kapanış kontrolünü göster
                 setRolloverQueue(data.closedDayQueue);
                 setRolloverIndex(0);
                 setRolloverNote('');
                 setScreen('status');
+            } else if (data.canAccessSales) {
+                setScreen('ready');
+                onReady();
             } else {
                 setScreen('status');
             }
@@ -94,22 +100,32 @@ export default function BusinessDayGuard({ apiUrl, onReady }: BusinessDayGuardPr
     };
 
     // ─── Gün sonu al ──────────────────────────────────────────────
-    const handleEndOfDay = async () => {
+    const handleEndOfDay = async (force: boolean = false) => {
         setSubmitting(true);
         setError('');
         try {
             const res = await fetch(`${apiUrl}/business-day/end-of-day`, {
                 method: 'POST',
                 headers: { ...headers, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ note: 'POS açılış öncesi gün sonu' }),
+                body: JSON.stringify({ 
+                    note: force ? 'Erken gün sonu (onaylandı)' : 'POS açılış öncesi gün sonu',
+                    force: force
+                }),
             });
 
+            const data = await res.json();
+
             if (res.ok) {
-                const data = await res.json();
+                setShowFutureConfirm(false);
                 await checkBusinessDay();
             } else {
-                const errData = await res.json();
-                setError(errData.message || 'Gün sonu alınamadı.');
+                if (data.message && data.message.startsWith('CONFIRM_FUTURE_DATE|')) {
+                    const msg = data.message.split('|')[1];
+                    setFutureConfirmMsg(msg);
+                    setShowFutureConfirm(true);
+                } else {
+                    setError(data.message || 'Gün sonu alınamadı.');
+                }
             }
         } catch (err: any) {
             setError('Gün sonu işleminde hata oluştu.');
@@ -136,8 +152,7 @@ export default function BusinessDayGuard({ apiUrl, onReady }: BusinessDayGuardPr
             });
 
             if (res.ok) {
-                const data = await res.json();
-                if (data.nextDateToProcess) {
+                if (rolloverIndex + 1 < rolloverQueue.length) {
                     // Sıradaki gün
                     setRolloverIndex((prev) => prev + 1);
                     setRolloverNote('');
@@ -188,6 +203,35 @@ export default function BusinessDayGuard({ apiUrl, onReady }: BusinessDayGuardPr
         }
     };
 
+    // ─── Gerçek Tarihe Dön (Hata Düzeltme) ────────────────────────
+    const handleFixDate = async () => {
+        if (!status || !status.realDate) return;
+        setSubmitting(true);
+        setError('');
+
+        try {
+            const res = await fetch(`${apiUrl}/business-day/technical-date-fix`, {
+                method: 'POST',
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    newDate: status.realDate, 
+                    note: 'Kullanıcı talebiyle gelecek tarihten gerçek tarihe dönüldü.' 
+                }),
+            });
+
+            if (res.ok) {
+                await checkBusinessDay();
+            } else {
+                const errData = await res.json();
+                setError(errData.message || 'Tarih düzeltme işlemi başarısız oldu.');
+            }
+        } catch {
+            setError('İşlem sırasında sunucuyla iletişim kurulamadı.');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     const formatDate = (d: string) => {
         if (!d) return '-';
         const date = new Date(d);
@@ -202,22 +246,7 @@ export default function BusinessDayGuard({ apiUrl, onReady }: BusinessDayGuardPr
 
     // ─── LOADING ──────────────────────────────────────────────────
     if (screen === 'loading') {
-        return (
-            <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-2xl flex items-center justify-center">
-                <div className="flex flex-col items-center gap-6">
-                    <div className="relative">
-                        <div className="animate-spin rounded-full h-20 w-20 border-b-2 border-indigo-500"></div>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            <i className="fat fa-calendar-check text-indigo-400 text-2xl"></i>
-                        </div>
-                    </div>
-                    <div className="text-center">
-                        <p className="text-white/80 font-bold text-sm uppercase tracking-widest">İş Günü Kontrol Ediliyor</p>
-                        <p className="text-white/40 text-xs mt-1">Program tarihi ve kapanış durumu doğrulanıyor...</p>
-                    </div>
-                </div>
-            </div>
-        );
+        return null; // Artık arka planda sessiz çalışıyor
     }
 
     // ─── READY ────────────────────────────────────────────────────
@@ -285,40 +314,59 @@ export default function BusinessDayGuard({ apiUrl, onReady }: BusinessDayGuardPr
 
                         {/* İşlem butonları */}
                         <div className="grid grid-cols-1 gap-3 pt-4 border-t border-slate-100 dark:border-slate-700/50">
-                            {/* Eksik kapanışı tamamla (gün sonu al) */}
-                            {status.dateDiff === 0 && (
+                            
+                            {/* Gelecek Tarih Hatası (dateDiff < 0) Durumu */}
+                            {status.dateDiff < 0 ? (
                                 <button
-                                    onClick={handleEndOfDay}
+                                    onClick={handleFixDate}
                                     disabled={submitting}
-                                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-black text-lg shadow-lg shadow-indigo-500/30 transition-all active:scale-[0.98] disabled:opacity-50 uppercase tracking-wider"
+                                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-400 hover:to-red-500 text-white font-black text-lg shadow-lg shadow-rose-500/30 transition-all active:scale-[0.98] disabled:opacity-50 uppercase tracking-wider"
                                 >
                                     {submitting ? (
-                                        <><i className="fas fa-spinner fa-spin mr-2"></i>İşleniyor...</>
+                                        <><i className="fas fa-spinner fa-spin mr-2"></i>Düzeltiliyor...</>
                                     ) : (
-                                        <><i className="fat fa-check-double mr-2"></i>Eksik Kapanışı Tamamla</>
+                                        <><i className="fat fa-clock-rotate-left mr-2"></i>Gerçek Tarihe Dön ({formatDate(status.realDate)})</>
                                     )}
                                 </button>
-                            )}
+                            ) : (
+                                /* Normal İşlemler (dateDiff >= 0) */
+                                <>
+                                    {/* Eksik kapanışı tamamla (gün sonu al) */}
+                                    {status.dateDiff === 0 && (
+                                        <button
+                                            onClick={() => handleEndOfDay(false)}
+                                            disabled={submitting}
+                                            className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-black text-lg shadow-lg shadow-indigo-500/30 transition-all active:scale-[0.98] disabled:opacity-50 uppercase tracking-wider"
+                                        >
+                                            {submitting ? (
+                                                <><i className="fas fa-spinner fa-spin mr-2"></i>İşleniyor...</>
+                                            ) : (
+                                                <><i className="fat fa-check-double mr-2"></i>Eksik Kapanışı Tamamla</>
+                                            )}
+                                        </button>
+                                    )}
 
-                            {/* Kapalı gün devrine geç */}
-                            {status.needsRollover && rolloverQueue.length > 0 && (
-                                <button
-                                    onClick={() => setScreen('rollover')}
-                                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-black text-lg shadow-lg shadow-amber-500/30 transition-all active:scale-[0.98] uppercase tracking-wider"
-                                >
-                                    <i className="fat fa-forward mr-2"></i>Kapalı Gün Devrine Geç
-                                    <span className="text-amber-100 text-sm ml-2 font-normal">({rolloverQueue.length} gün)</span>
-                                </button>
-                            )}
+                                    {/* Kapalı gün devrine geç */}
+                                    {status.needsRollover && rolloverQueue.length > 0 && (
+                                        <button
+                                            onClick={() => setScreen('rollover')}
+                                            className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-black text-lg shadow-lg shadow-amber-500/30 transition-all active:scale-[0.98] uppercase tracking-wider"
+                                        >
+                                            <i className="fat fa-forward mr-2"></i>Kapalı Gün Devrine Geç
+                                            <span className="text-amber-100 text-sm ml-2 font-normal">({rolloverQueue.length} gün)</span>
+                                        </button>
+                                    )}
 
-                            {/* Aynı tarihte devam et — sadece yetkili */}
-                            {isAuthorized && (
-                                <button
-                                    onClick={() => { setShowContinueModal(true); setContinueNote(''); setError(''); }}
-                                    className="w-full py-3 rounded-2xl bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-bold text-sm uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
-                                >
-                                    <i className="fat fa-arrow-rotate-right mr-2"></i>Aynı Program Tarihinde Devam Et
-                                </button>
+                                    {/* Aynı tarihte devam et — sadece yetkili */}
+                                    {isAuthorized && (
+                                        <button
+                                            onClick={() => { setShowContinueModal(true); setContinueNote(''); setError(''); }}
+                                            className="w-full py-3 rounded-2xl bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-bold text-sm uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
+                                        >
+                                            <i className="fat fa-arrow-rotate-right mr-2"></i>Aynı Program Tarihinde Devam Et
+                                        </button>
+                                    )}
+                                </>
                             )}
 
                             <button
@@ -370,6 +418,39 @@ export default function BusinessDayGuard({ apiUrl, onReady }: BusinessDayGuardPr
                                 >
                                     {submitting ? <i className="fas fa-spinner fa-spin mr-1"></i> : <i className="fat fa-check mr-1"></i>}
                                     Onayla ve Devam Et
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Gelecek tarih onay modal */}
+                {showFutureConfirm && (
+                    <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
+                        <div className="bg-white dark:bg-slate-800 rounded-[32px] w-full max-w-md shadow-2xl border border-white/20 dark:border-slate-700/50 p-8 transform animate-in fade-in zoom-in duration-300">
+                            <div className="w-20 h-20 bg-rose-100 dark:bg-rose-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <i className="fat fa-calendar-clock text-4xl text-rose-500"></i>
+                            </div>
+                            <h3 className="text-2xl font-black text-center text-slate-800 dark:text-white mb-3">Erken Gün Sonu?</h3>
+                            <p className="text-base text-slate-500 dark:text-slate-400 text-center mb-8 font-medium whitespace-pre-line">
+                                {futureConfirmMsg}
+                            </p>
+
+                            <div className="flex flex-col gap-3">
+                                <button
+                                    onClick={() => handleEndOfDay(true)}
+                                    disabled={submitting}
+                                    className="w-full py-4 rounded-2xl bg-rose-500 hover:bg-rose-400 text-white font-black text-lg shadow-lg shadow-rose-500/30 transition-all active:scale-[0.98] disabled:opacity-50"
+                                >
+                                    {submitting ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fat fa-check-double mr-2"></i>}
+                                    Evet, Gün Sonu Al
+                                </button>
+                                <button
+                                    onClick={() => setShowFutureConfirm(false)}
+                                    disabled={submitting}
+                                    className="w-full py-4 rounded-2xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-black text-lg transition-all"
+                                >
+                                    Hayır, Vazgeç
                                 </button>
                             </div>
                         </div>

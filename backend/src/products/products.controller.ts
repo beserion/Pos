@@ -28,6 +28,12 @@ export class ProductsController {
   async findAllQuickSale() {
     return this.productsService.findAllQuickSale();
   }
+  
+  @Get('transactions')
+  @Permissions('VIEW_SALES')
+  async findAllTransactions() {
+    return this.productsService.findAllTransactions();
+  }
 
   @Get(':id')
   @Permissions('VIEW_PRODUCTS', 'VIEW_INVOICES', 'VIEW_SALES')
@@ -39,6 +45,12 @@ export class ProductsController {
   @Permissions('ADD_PRODUCTS')
   create(@Body() productData: Partial<Product>) {
     return this.productsService.create(productData);
+  }
+
+  @Put('reorder')
+  @Permissions('EDIT_PRODUCTS', 'VIEW_PRODUCTS', 'VIEW_SALES')
+  reorder(@Body() reorderData: { items: { id: number, orderIndex: number }[] }) {
+    return this.productsService.reorderProducts(reorderData.items);
   }
 
   @Put(':id')

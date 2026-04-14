@@ -45,4 +45,7 @@ export class Table {
 
   @Column({ default: false })
   isDeleted: boolean;
+
+  @Column({ default: false })
+  isBillRequested: boolean;
 }

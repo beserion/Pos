@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+=======
+import { Injectable, NotFoundException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+>>>>>>> upstream/server
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product } from './product.entity';
@@ -6,6 +10,8 @@ import { Recipe } from '../recipes/recipe.entity';
 import { Modifier } from '../modifiers/modifier.entity';
 import { RecipeHeader } from '../recipes/recipe-header.entity';
 import { ParametersService } from '../parameters/parameters.service';
+
+import { ProductTransaction } from './product-transaction.entity';
 
 @Injectable()
 export class ProductsService {
@@ -16,9 +22,14 @@ export class ProductsService {
         private recipeRepository: Repository<Recipe>,
         @InjectRepository(Modifier)
         private modifierRepository: Repository<Modifier>,
+<<<<<<< HEAD
         @InjectRepository(RecipeHeader)
         private recipeHeaderRepository: Repository<RecipeHeader>,
         private parametersService: ParametersService,
+=======
+        @InjectRepository(ProductTransaction)
+        private transactionRepository: Repository<ProductTransaction>,
+>>>>>>> upstream/server
     ) { }
 
     async countProducts(): Promise<number> {
@@ -27,11 +38,16 @@ export class ProductsService {
 
     async findAll(): Promise<Product[]> {
         const products = await this.productRepository.find({
+<<<<<<< HEAD
             relations: [
                 'recipes', 'printer', 'productType', 'outputProfile',
                 'setMenu', 'setMenu.groups', 'setMenu.groups.items',
                 'linkedStockCard',
             ],
+=======
+            relations: ['recipes', 'variations', 'printer', 'productType', 'outputProfile', 'setMenu', 'setMenu.groups', 'setMenu.groups.items', 'linkedStockCard', 'linkedStockCard.stockGroupRelation'],
+            order: { orderIndex: 'ASC', id: 'ASC' }
+>>>>>>> upstream/server
         });
 
         if (products.length > 0) {
@@ -60,6 +76,7 @@ export class ProductsService {
         // Exclude products where isIngredient = true (handle NULL as non-ingredient)
         return await this.productRepository
             .createQueryBuilder('p')
+<<<<<<< HEAD
             .select([
                 'p.id', 'p.name', 'p.price', 'p.productGroup', 'p.imageUrl',
                 'p.isQuickSale', 'p.sku', 'p.productTypeId', 'p.printerId',
@@ -71,6 +88,14 @@ export class ProductsService {
             .andWhere('p.isActive = :active', { active: true })
             .orderBy('p.buttonOrder', 'ASC')
             .addOrderBy('p.name', 'ASC')
+=======
+            .leftJoinAndSelect('p.variations', 'v')
+            .leftJoinAndSelect('p.linkedStockCard', 'sc')
+            .select(['p.id', 'p.name', 'p.price', 'p.category', 'p.imageUrl', 'p.isQuickSale', 'p.sku', 'p.productTypeId', 'p.printerId', 'p.orderIndex', 'p.stockGroup', 'p.stockGroupId', 'v.id', 'v.variationName', 'v.fixedPrice', 'v.priceFactor', 'v.inventoryLinkType', 'v.isActive', 'sc.id', 'sc.stockGroup', 'sc.category'])
+            .where('p.isIngredient IS NULL OR p.isIngredient = :val', { val: false })
+            .orderBy('p.orderIndex', 'ASC')
+            .addOrderBy('p.id', 'ASC')
+>>>>>>> upstream/server
             .getMany();
     }
 
@@ -151,6 +176,18 @@ export class ProductsService {
     ): Promise<Product> {
         const { recipes, modifiers, ...data } = productData;
 
+        // 12.md Validasyonları: Ürün Cinsi Zorunluluğu
+        if (!data.productTypeId) {
+            throw new Error('Ürün Cinsi (sales_cins) seçilmesi zorunludur.');
+        }
+
+        // 12.md Validasyonları: Stok Bağı Kontrolü
+        if (data.inventoryLinkType === 'direct_stock') {
+            if (!data.linkedStockItemId || !data.directStockQty) {
+                throw new Error('Direkt stok bağı için stok kartı ve miktar bilgisi zorunludur.');
+            }
+        }
+
         let fetchedModifiers: Modifier[] = [];
         if (modifiers && modifiers.length > 0) {
             const modifierIds = modifiers.map(m => typeof m === 'object' ? m.id : m);
@@ -164,7 +201,8 @@ export class ProductsService {
 
         const newProduct = this.productRepository.create({
             ...data,
-            modifiers: fetchedModifiers
+            modifiers: fetchedModifiers,
+            isActive: data.isActive !== undefined ? data.isActive : true // Varsayılan aktif
         });
         const savedProduct = await this.productRepository.save(newProduct);
 
@@ -187,6 +225,21 @@ export class ProductsService {
     ): Promise<Product> {
         const product = await this.findOne(id);
         const { id: _, recipes, modifiers, ...data } = updateData as any;
+
+        // 12.md Validasyonları: Ürün Cinsi Zorunluluğu
+        if (data.productTypeId !== undefined && !data.productTypeId) {
+            throw new Error('Ürün Cinsi (sales_cins) seçilmesi zorunludur.');
+        }
+
+        // 12.md Validasyonları: Stok Bağı Kontrolü
+        const finalLinkType = data.inventoryLinkType || product.inventoryLinkType;
+        if (finalLinkType === 'direct_stock') {
+            const finalStockId = data.linkedStockItemId || product.linkedStockItemId;
+            const finalQty = data.directStockQty !== undefined ? data.directStockQty : product.directStockQty;
+            if (!finalStockId || !finalQty) {
+                throw new Error('Direkt stok bağı için stok kartı ve miktar bilgisi zorunludur.');
+            }
+        }
 
         if (modifiers !== undefined) {
             let fetchedModifiers: Modifier[] = [];
@@ -225,9 +278,7 @@ export class ProductsService {
         }
 
         if (recipes !== undefined) {
-            // Delete existing recipes for this product
             await this.recipeRepository.delete({ productId: id });
-
             if (recipes.length > 0) {
                 const recipesToSave = recipes.map((recipe: any) => ({
                     ingredientId: recipe.ingredientId,
@@ -243,8 +294,47 @@ export class ProductsService {
     }
 
     async remove(id: number): Promise<void> {
-        await this.findOne(id);
-        await this.productRepository.delete(id);
+        throw new BadRequestException('Güvenlik kuralı gereği ürünler kalıcı olarak silinemez. Lütfen silmek yerine ürünü pasife almayı (Gizle) deneyin.');
+    }
+
+    async reorderProducts(items: { id: number, orderIndex: number }[]): Promise<void> {
+        if (!items || items.length === 0) return;
+        for (const item of items) {
+             await this.productRepository.update(item.id, { orderIndex: item.orderIndex });
+        }
+    }
+
+    async findAllTransactions(): Promise<ProductTransaction[]> {
+        return await this.transactionRepository.find({
+            order: { businessDate: 'DESC', id: 'DESC' },
+            take: 5000 // Limit for performance
+        });
+    }
+
+    async recordTransaction(data: Partial<ProductTransaction>): Promise<ProductTransaction> {
+        const transaction = this.transactionRepository.create({
+            ...data,
+            businessDate: data.businessDate || new Date(),
+        });
+        return await this.transactionRepository.save(transaction);
+    }
+
+    async onModuleInit() {
+        await this.migrateInventoryLinks();
+    }
+
+    async migrateInventoryLinks() {
+        try {
+            await this.productRepository.query(`
+                UPDATE products 
+                SET inventoryLinkType = 'recipe' 
+                WHERE (inventoryLinkType = 'none' OR inventoryLinkType IS NULL)
+                  AND id IN (SELECT productId FROM recipes)
+            `);
+            console.log('Inventory link migration completed.');
+        } catch (e) {
+            console.error('Inventory link migration failed', e);
+        }
     }
 
     // ─── Validasyon raporu: Eksik bağı olan ürünler (§10, §19) ─

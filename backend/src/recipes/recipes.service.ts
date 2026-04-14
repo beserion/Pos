@@ -96,18 +96,24 @@ export class RecipesService {
       name: data.name,
       isActive: data.isActive !== false,
       note: data.note,
-      lines: data.lines.map((line) =>
+    });
+
+    const saved = await this.headerRepository.save(header);
+
+    if (data.lines && data.lines.length > 0) {
+      const newLines = data.lines.map((line) =>
         this.lineRepository.create({
+          recipeHeaderId: saved.id,
           stockCardId: line.stockCardId,
           quantity: line.quantity,
           unit: line.unit || 'adet',
           isRequired: line.isRequired !== false,
           description: line.description,
         }),
-      ),
-    });
+      );
+      await this.lineRepository.save(newLines);
+    }
 
-    const saved = await this.headerRepository.save(header);
     return this.findOne(saved.id);
   }
 
@@ -141,7 +147,10 @@ export class RecipesService {
     if (data.name !== undefined) header.name = data.name;
     if (data.isActive !== undefined) header.isActive = data.isActive;
     if (data.note !== undefined) header.note = data.note;
-    await this.headerRepository.save(header);
+    
+    // Clear relations before header save to prevent cascade issues
+    const { lines: _oldLines, product: _prod, ...headerOnly } = header;
+    await this.headerRepository.save(headerOnly);
 
     // Replace lines if provided
     if (data.lines) {

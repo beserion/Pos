@@ -4,9 +4,9 @@
   "private": true,
   "main": "electron/main.js",
   "scripts": {
-    "dev": "node update-ip.js && next dev -H 0.0.0.0",
-    "build": "node update-ip.js && next build",
-    "start": "node update-ip.js && next start -H 0.0.0.0",
+    "dev": "next dev -H 0.0.0.0",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0",
     "lint": "eslint",
     "electron:dev": "electron .",
     "electron:build": "set NEXT_OUTPUT=standalone && next build && electron-builder",
@@ -109,5 +109,10 @@
         ]
       }
     ]
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2"
   }
 }

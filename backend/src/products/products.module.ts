@@ -11,9 +11,12 @@ import { ProductVariation } from './product-variation.entity';
 import { VariationGroup } from './variation-group.entity';
 import { ParametersModule } from '../parameters/parameters.module';
 
+import { ProductTransaction } from './product-transaction.entity';
+
 import { ProductsPublicController } from './products-public.controller';
 
 @Module({
+<<<<<<< HEAD
   imports: [
     TypeOrmModule.forFeature([
       Product, Recipe, Modifier, RecipeHeader,
@@ -22,6 +25,9 @@ import { ProductsPublicController } from './products-public.controller';
     SecurityModule,
     ParametersModule,
   ],
+=======
+  imports: [TypeOrmModule.forFeature([Product, Recipe, Modifier, ProductTransaction]), SecurityModule],
+>>>>>>> upstream/server
   providers: [ProductsService],
   controllers: [ProductsController, ProductsPublicController],
   exports: [ProductsService],

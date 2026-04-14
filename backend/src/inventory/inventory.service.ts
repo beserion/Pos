@@ -93,23 +93,23 @@ export class InventoryService {
     }
 
     // Optionally filter by warehouse
-    if (data.warehouseId) {
+    if (data.warehouseId !== undefined && data.warehouseId !== null && Number(data.warehouseId) > 0) {
       stockCards = stockCards.filter(
-        (c) => !c.warehouseId || c.warehouseId === data.warehouseId,
+        (c) => c.warehouseId === Number(data.warehouseId),
       );
     }
 
     // Create session
     const session = this.sessionRepository.create({
       sessionDate: new Date(data.sessionDate),
-      warehouseId: data.warehouseId,
+      warehouseId: (data.warehouseId !== undefined && data.warehouseId !== null) ? Number(data.warehouseId) : null,
       countType: data.countType || 'FULL',
       scope: data.scope,
       status: 'DRAFT',
       isBlindCount: data.isBlindCount || false,
       note: data.note,
       createdByUserId: data.createdByUserId,
-    });
+    }) as InventorySession;
 
     const savedSession = await this.sessionRepository.save(session);
 
@@ -225,8 +225,8 @@ export class InventoryService {
         unit: line.unit,
         unitCost: Number(line.unitCost),
         warehouseId: session.warehouseId || undefined,
-        referenceType: 'INVENTORY_SESSION',
-        referenceId: sessionId,
+        sourceType: 'INVENTORY_SESSION',
+        sourceId: sessionId,
         description: `Sayım ${diff > 0 ? 'fazlası' : 'eksiği'}: ${line.stockCard?.name || `Stok #${line.stockCardId}`}`,
         userId,
       });
@@ -394,5 +394,40 @@ export class InventoryService {
     return Array.from(cardMap.values()).sort(
       (a, b) => Math.abs(b.totalDifferenceCost) - Math.abs(a.totalDifferenceCost),
     );
+  }
+
+  async reopenSession(sessionId: number): Promise<InventorySession> {
+    const session = await this.getSession(sessionId);
+
+    if (session.status !== 'COMPLETED') {
+      throw new BadRequestException('Sadece onaylanmış (Onaylandı) fişler geri alınabilir.');
+    }
+
+    // Check if it's the last completed session (highest ID among completed)
+    const lastSession = await this.sessionRepository.findOne({
+      where: { status: 'COMPLETED' },
+      order: { id: 'DESC' },
+    });
+
+    if (lastSession && lastSession.id !== sessionId) {
+      throw new BadRequestException(
+        `Sadece en son onaylanan sayım fişi (#${lastSession.id}) geri alınabilir. Bu fişten sonra daha yeni bir sayım onaylanmış.`,
+      );
+    }
+
+    // Delete stock movements and reverse stock adjustment
+    await this.stockMovementsService.deleteMovementsBySource(
+      'INVENTORY_SESSION',
+      sessionId,
+    );
+
+    // Update session status back to IN_PROGRESS (editable)
+    session.status = 'IN_PROGRESS';
+    session.approvedByUserId = null as any;
+    session.approvedAt = null as any;
+
+    await this.sessionRepository.save(session);
+
+    return this.getSession(sessionId);
   }
 }

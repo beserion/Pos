@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import WarehouseUpsert from './_WarehouseUpsert';
 
 interface Location {
@@ -27,7 +28,8 @@ export function PageClient() {
     const tAdmin = useTranslations('Admin');
     const tc = useTranslations('Common');
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, hasFeature } = useAuth();
+    
     const locale = useLocale();
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
     const [locations, setLocations] = useState<Location[]>([]);
@@ -37,10 +39,10 @@ export function PageClient() {
     const [formData, setFormData] = useState({ id: 0, name: '', address: '', latitude: 0, longitude: 0, locationId: 0, isActive: true });
 
     useEffect(() => {
-        if (user?.token) {
+        if (user?.token && hasFeature('inventory_system')) {
             fetchData();
         }
-    }, [user]);
+    }, [user, hasFeature]);
 
     const fetchData = async () => {
         if (!user?.token) return;
@@ -71,13 +73,16 @@ export function PageClient() {
             };
 
             if (formData.id === 0) {
-                await axios.post((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/warehouses', payload, config);
+                const postPayload = { ...payload };
+                delete (postPayload as any).id;
+                await axios.post((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/warehouses', postPayload, config);
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             } else {
                 await axios.put(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/warehouses/${formData.id}`, payload, config);
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             }
             setIsModalOpen(false);
+            setFormData({ id: 0, name: '', address: '', latitude: 40.7663, longitude: 29.9175, locationId: 0, isActive: true });
             fetchData();
         } catch (error: any) {
             console.error('Error saving warehouse', error);
@@ -102,14 +107,24 @@ export function PageClient() {
                 });
                 toastSwal({ title: tc('success'), text: t('deleteSuccess'), icon: 'success' });
                 fetchData();
-            } catch (error) {
+            } catch (error: any) {
                 console.error('Error deleting warehouse', error);
-                showSwal({ title: tc('error'), text: tc('error'), icon: 'error' });
+                const errorMsg = error?.response?.data?.message || tc('error');
+                showSwal({ title: tc('error'), text: errorMsg, icon: 'error' });
             }
         }
     };
 
     const openModal = (ware?: Warehouse) => {
+        if (!ware && warehouses.length > 0 && !hasFeature('branch_system')) {
+            showSwal({ 
+                title: 'Lisans Yetersiz', 
+                text: 'İkinci bir depo ekleyebilmek için Şubeli Sistem modülü gerekmektedir. Lütfen panel üzerinden lisansınızı yükseltin.', 
+                icon: 'warning' 
+            });
+            return;
+        }
+
         if (ware) {
             setFormData({
                 id: ware.id,
@@ -125,6 +140,14 @@ export function PageClient() {
         }
         setIsModalOpen(true);
     };
+
+    if (user && !hasFeature('inventory_system')) {
+        return (
+            <div className="h-screen bg-slate-50 dark:bg-slate-900 flex flex-col pt-20">
+                <PremiumModuleLocked moduleName="Depo Yönetim Sistemi" featureKey="inventory_system" />
+            </div>
+        );
+    }
 
     return (
         <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">

@@ -5,15 +5,20 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 
 interface StockCard {
     id: number;
     name: string;
     code: string;
     barcode?: string;
+<<<<<<< HEAD
     sku?: string;
     isActive: boolean;
     stockNature: string;
+=======
+    category?: string;
+>>>>>>> upstream/server
     stockGroup?: string;
     stockSubgroup?: string;
     brand?: string;
@@ -29,6 +34,7 @@ interface StockCard {
     currency: string;
     stockTrackingEnabled: boolean;
     currentStock: number;
+<<<<<<< HEAD
     criticalStock: number;
     minStock: number;
     maxStock: number;
@@ -39,6 +45,19 @@ interface StockCard {
     batchTracking: boolean;
     expiryTracking: boolean;
     serialTracking: boolean;
+=======
+    minStockLevel: number;
+    maxStockLevel?: number;
+    isActive: boolean;
+    warehouseId?: number | null;
+    stockNature: string;
+    primaryVendor?: string;
+    purchaseVat: number;
+    lastPurchasePrice: number;
+    averageCost: number;
+    sku?: string;
+    outputProfileId?: number | null;
+>>>>>>> upstream/server
     note?: string;
 }
 
@@ -56,7 +75,8 @@ export function PageClient() {
     const tc = useTranslations('Common');
     const locale = useLocale();
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, hasFeature } = useAuth();
+
 
     const [stockCards, setStockCards] = useState<StockCard[]>([]);
     const [filteredCards, setFilteredCards] = useState<StockCard[]>([]);
@@ -68,14 +88,19 @@ export function PageClient() {
     const [loading, setLoading] = useState(true);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState<'general' | 'stock' | 'extra'>('general');
     const [formData, setFormData] = useState<StockCard>({
         id: 0,
         name: '',
         code: '',
         barcode: '',
+<<<<<<< HEAD
         sku: '',
         isActive: true,
         stockNature: 'traded_good',
+=======
+        category: '',
+>>>>>>> upstream/server
         stockGroup: '',
         stockSubgroup: '',
         brand: '',
@@ -91,6 +116,7 @@ export function PageClient() {
         currency: 'TRY',
         stockTrackingEnabled: true,
         currentStock: 0,
+<<<<<<< HEAD
         criticalStock: 0,
         minStock: 0,
         maxStock: 0,
@@ -101,16 +127,29 @@ export function PageClient() {
         batchTracking: false,
         expiryTracking: false,
         serialTracking: false,
+=======
+        minStockLevel: 0,
+        maxStockLevel: 0,
+        isActive: true,
+        warehouseId: null,
+        stockNature: 'traded_good',
+        primaryVendor: '',
+        purchaseVat: 0,
+        lastPurchasePrice: 0,
+        averageCost: 0,
+        sku: '',
+        outputProfileId: null,
+>>>>>>> upstream/server
         note: ''
     });
 
     useEffect(() => {
-        if (user?.token) {
+        if (user?.token && hasFeature('inventory_system')) {
             fetchData();
         } else if (user === null) {
             setLoading(false);
         }
-    }, [user]);
+    }, [user, hasFeature]);
 
     const fetchData = async () => {
         if (!user?.token) return;
@@ -228,6 +267,7 @@ export function PageClient() {
     };
 
     const openModal = (card?: StockCard) => {
+        setActiveTab('general');
         if (card) {
             setFormData({ ...card });
         } else {
@@ -236,9 +276,13 @@ export function PageClient() {
                 name: '',
                 code: '',
                 barcode: '',
+<<<<<<< HEAD
                 sku: '',
                 isActive: true,
                 stockNature: 'traded_good',
+=======
+                category: '',
+>>>>>>> upstream/server
                 stockGroup: '',
                 stockSubgroup: '',
                 brand: '',
@@ -254,6 +298,7 @@ export function PageClient() {
                 currency: 'TRY',
                 stockTrackingEnabled: true,
                 currentStock: 0,
+<<<<<<< HEAD
                 criticalStock: 0,
                 minStock: 0,
                 maxStock: 0,
@@ -264,6 +309,19 @@ export function PageClient() {
                 batchTracking: false,
                 expiryTracking: false,
                 serialTracking: false,
+=======
+                minStockLevel: 0,
+                maxStockLevel: 0,
+                isActive: true,
+                warehouseId: null,
+                stockNature: 'traded_good',
+                primaryVendor: '',
+                purchaseVat: 0,
+                lastPurchasePrice: 0,
+                averageCost: 0,
+                sku: '',
+                outputProfileId: null,
+>>>>>>> upstream/server
                 note: ''
             });
         }
@@ -285,6 +343,14 @@ export function PageClient() {
         { value: 'kg', label: 'Kilogram (kg)' },
         { value: 'porsiyon', label: 'Porsiyon' }
     ];
+
+    if (user && !hasFeature('inventory_system')) {
+        return (
+            <div className="h-screen bg-slate-50 dark:bg-slate-900 flex flex-col pt-20">
+                <PremiumModuleLocked moduleName="Envanter Yönetim Sistemi" featureKey="inventory_system" />
+            </div>
+        );
+    }
 
     return (
         <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">
@@ -329,7 +395,7 @@ export function PageClient() {
                         <button onClick={() => openModal()} className="px-6 py-3 bg-teal-50 dark:bg-teal-500/10 border border-teal-200 dark:border-teal-500/20 text-teal-600 dark:text-teal-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-teal-100 dark:hover:bg-teal-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
                             <i className="fat fa-plus-circle text-lg"></i> Yeni Kart
                         </button>
-                        <button onClick={() => router.push(`/${locale}/admin`)} className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center gap-2">
+                        <button onClick={() => router.push(`/${locale}/inventory/`)} className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center gap-2">
                             <i className="fat fa-reply"></i> Geri
                         </button>
                     </div>
@@ -521,22 +587,43 @@ export function PageClient() {
                             <button onClick={() => setIsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white shadow-sm transition-all">&times;</button>
                         </div>
 
-                        <div className="flex-1 overflow-auto p-8">
-                            <form id="stockCardForm" onSubmit={handleSave} className="space-y-8">
+                        <div className="flex-1 overflow-auto p-0 flex flex-col">
+                            {/* Tabs */}
+                            <div className="flex px-8 bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-700 shrink-0">
+                                <button type="button" onClick={() => setActiveTab('general')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'general' ? 'border-teal-500 text-teal-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
+                                    <i className="fat fa-circle-info me-2"></i> GENEL BİLGİLER
+                                </button>
+                                <button type="button" onClick={() => setActiveTab('stock')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'stock' ? 'border-teal-500 text-teal-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
+                                    <i className="fat fa-boxes-stacked me-2"></i> STOK & BİRİM
+                                </button>
+                                <button type="button" onClick={() => setActiveTab('extra')} className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === 'extra' ? 'border-teal-500 text-teal-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
+                                    <i className="fat fa-file-invoice-dollar me-2"></i> MALİYET & YAZICI
+                                </button>
+                            </div>
 
-                                {/* Temel Bilgiler */}
-                                <div>
-                                    <h4 className="text-xs font-black text-teal-600 dark:text-teal-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                        <i className="fat fa-circle-info"></i> Temel Bilgiler
-                                    </h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Stok Adı</label>
-                                            <div className="relative">
-                                                <i className="fat fa-box absolute left-4 top-4 text-teal-500/50"></i>
-                                                <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: Bacardi 70cl" />
+                            <form id="stockCardForm" onSubmit={handleSave} className="flex-1 overflow-auto p-8">
+                                {activeTab === 'general' && (
+                                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Stok Adı</label>
+                                                <div className="relative">
+                                                    <i className="fat fa-box absolute left-4 top-4 text-teal-500/50"></i>
+                                                    <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: Bacardi 70cl" />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Ana Kategori (Departman)</label>
+                                                <div className="relative">
+                                                    <i className="fat fa-folder-tree absolute left-4 top-4 text-teal-500/50"></i>
+                                                    <input type="text" value={formData.category || ''} onChange={(e) => handleCategoryChange(e.target.value)} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: Alkoller, Sarf" list="categoryList" />
+                                                    <datalist id="categoryList">
+                                                        {categories.map(c => <option key={c} value={c} />)}
+                                                    </datalist>
+                                                </div>
                                             </div>
                                         </div>
+<<<<<<< HEAD
                                         <div>
                                             <label className="block text-[10px] font-black text-teal-600 uppercase tracking-widest mb-2 px-1">Stok Doğası (Zorunlu)</label>
                                             <div className="relative">
@@ -561,7 +648,48 @@ export function PageClient() {
                                                 <datalist id="categoryList">
                                                     {categories.map(c => <option key={c} value={c} />)}
                                                 </datalist>
+=======
+
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Stok Kodu</label>
+                                                <input type="text" required value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold uppercase font-mono focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" />
+>>>>>>> upstream/server
                                             </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Barkod</label>
+                                                <input type="text" value={formData.barcode || ''} onChange={(e) => setFormData({ ...formData, barcode: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold font-mono focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Stok Doğası (Nature)</label>
+                                                <select value={formData.stockNature} onChange={(e) => setFormData({ ...formData, stockNature: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                                    <option value="raw_material">Hammadde</option>
+                                                    <option value="traded_good">Ticari Mal (Al-Sat)</option>
+                                                    <option value="semi_finished">Yarı Mamul</option>
+                                                    <option value="consumable">Sarf Malzeme</option>
+                                                    <option value="packaging">Paketleme</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Stok Grubu</label>
+                                                <input type="text" value={formData.stockGroup || ''} onChange={(e) => setFormData({ ...formData, stockGroup: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: Viski" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Alt Grup</label>
+                                                <input type="text" value={formData.stockSubgroup || ''} onChange={(e) => setFormData({ ...formData, stockSubgroup: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: Single Malt" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Marka</label>
+                                                <input type="text" value={formData.brand || ''} onChange={(e) => setFormData({ ...formData, brand: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: Glenfiddich" />
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-4 p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl">
+                                            <input type="checkbox" checked={formData.isActive} onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })} className="w-5 h-5 accent-emerald-500" id="activeCheck" />
+                                            <label htmlFor="activeCheck" className="text-xs font-black text-emerald-600 uppercase tracking-widest cursor-pointer">Stok Kartı Aktif / Kullanımda</label>
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Alt Grup</label>
@@ -571,6 +699,7 @@ export function PageClient() {
                                             </div>
                                         </div>
                                     </div>
+<<<<<<< HEAD
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
                                         <div>
                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Stok Kodu</label>
@@ -616,34 +745,29 @@ export function PageClient() {
                                         </div>
                                     </div>
                                 </div>
+=======
+                                )}
+>>>>>>> upstream/server
 
-                                {/* Birim ve Maliyet */}
-                                <div>
-                                    <h4 className="text-xs font-black text-teal-600 dark:text-teal-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                        <i className="fat fa-scale-balanced"></i> Birim & Maliyet Tanımları
-                                    </h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1 text-teal-600">Temel Takip Birimi</label>
-                                            <div className="relative">
-                                                <select required value={formData.baseUnit} onChange={(e) => setFormData({ ...formData, baseUnit: e.target.value })} className="w-full px-4 py-3.5 bg-teal-50/50 dark:bg-teal-900/10 border border-teal-200 dark:border-teal-700/50 rounded-2xl text-teal-800 dark:text-teal-300 font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
+                                {activeTab === 'stock' && (
+                                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1 text-teal-600">Takip Birimi (Base Unit)</label>
+                                                <select value={formData.baseUnit} onChange={(e) => setFormData({ ...formData, baseUnit: e.target.value })} className="w-full px-4 py-3.5 bg-teal-50 dark:bg-teal-900/10 border border-teal-200 dark:border-teal-700 rounded-2xl text-teal-800 dark:text-teal-300 font-bold outline-none appearance-none">
                                                     {unitOptions.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
                                                 </select>
-                                                <i className="fat fa-chevron-down absolute right-4 top-4 text-teal-400 pointer-events-none"></i>
                                             </div>
-                                            <p className="text-[9px] text-slate-400 mt-1.5 px-1 font-bold">Reçetelerde kullanılacak birim</p>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Alış Birimi (Opsiyonel)</label>
-                                            <div className="relative">
-                                                <input type="text" value={formData.purchaseUnit || ''} onChange={(e) => setFormData({ ...formData, purchaseUnit: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: şişe, koli" list="purchaseUnits" />
-                                                <datalist id="purchaseUnits">
-                                                    <option value="şişe" />
-                                                    <option value="koli" />
-                                                    <option value="paket" />
-                                                </datalist>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Alış Birimi (Purchase Unit)</label>
+                                                <input type="text" value={formData.purchaseUnit || ''} onChange={(e) => setFormData({ ...formData, purchaseUnit: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold transition-shadow" placeholder="şişe, koli..." />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Dönüşüm (1 Alış = ? Takip)</label>
+                                                <input type="number" step="0.0001" value={formData.conversionRate} onChange={(e) => setFormData({ ...formData, conversionRate: parseFloat(e.target.value) || 1 })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold" />
                                             </div>
                                         </div>
+<<<<<<< HEAD
                                         <div>
                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Dönüşüm Çarpanı</label>
                                             <div className="relative">
@@ -720,10 +844,29 @@ export function PageClient() {
                                             <div className="relative">
                                                 <select value={formData.warehouseId || ''} onChange={(e) => setFormData({ ...formData, warehouseId: e.target.value ? parseInt(e.target.value) : null })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
                                                     <option value="">Depo Seçilmedi (Genel)</option>
+=======
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1 text-amber-600">Min. Stok Seviyesi</label>
+                                                <input type="number" value={formData.minStockLevel} onChange={(e) => setFormData({ ...formData, minStockLevel: parseFloat(e.target.value) || 0 })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-amber-200 dark:border-amber-900/50 rounded-2xl text-slate-800 dark:text-white font-bold" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Maks. Stok Seviyesi</label>
+                                                <input type="number" value={formData.maxStockLevel} onChange={(e) => setFormData({ ...formData, maxStockLevel: parseFloat(e.target.value) || 0 })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold" />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Varsayılan Depo</label>
+                                                <select value={formData.warehouseId || ''} onChange={(e) => setFormData({ ...formData, warehouseId: e.target.value ? parseInt(e.target.value) : null })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold appearance-none">
+                                                    <option value="">Depo Seçilmedi</option>
+>>>>>>> upstream/server
                                                     {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                                                 </select>
-                                                <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
                                             </div>
+<<<<<<< HEAD
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Çıktı Profili (Yazıcı)</label>
@@ -775,8 +918,53 @@ export function PageClient() {
                                             className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow resize-none"
                                             placeholder="Gerekirse not ekleyin..."
                                         ></textarea>
+=======
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">SKU / Referans No</label>
+                                                <input type="text" value={formData.sku || ''} onChange={(e) => setFormData({ ...formData, sku: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold" />
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
+                                )}
+
+                                {activeTab === 'extra' && (
+                                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">KDV Oranı (%)</label>
+                                                <input type="number" value={formData.purchaseVat} onChange={(e) => setFormData({ ...formData, purchaseVat: parseFloat(e.target.value) || 0 })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Son Alış Fiyatı (Net)</label>
+                                                <input type="number" step="0.0001" value={formData.lastPurchasePrice} onChange={(e) => setFormData({ ...formData, lastPurchasePrice: parseFloat(e.target.value) || 0 })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Ortalama Maliyet</label>
+                                                <input type="number" step="0.0001" value={formData.averageCost} onChange={(e) => setFormData({ ...formData, averageCost: parseFloat(e.target.value) || 0 })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold" />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Ana Tedarikçi</label>
+                                                <input type="text" value={formData.primaryVendor || ''} onChange={(e) => setFormData({ ...formData, primaryVendor: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1 text-blue-600">Yazıcı Profili</label>
+                                                <select value={formData.outputProfileId || ''} onChange={(e) => setFormData({ ...formData, outputProfileId: e.target.value ? parseInt(e.target.value) : null })} className="w-full px-4 py-3.5 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-700 rounded-2xl text-blue-800 dark:text-blue-300 font-bold appearance-none">
+                                                    <option value="">Profil Seçilmedi (Varsayılan)</option>
+                                                    {outputProfiles.map(op => <option key={op.id} value={op.id}>{op.name}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Kısa Not / Açıklama</label>
+                                            <textarea value={formData.note || ''} onChange={(e) => setFormData({ ...formData, note: e.target.value })} rows={3} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold resize-none"></textarea>
+                                        </div>
+>>>>>>> upstream/server
+                                    </div>
+                                )}
                             </form>
                         </div>
 

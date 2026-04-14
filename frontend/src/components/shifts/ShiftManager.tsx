@@ -1,6 +1,7 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
+import { useParameters } from '@/app/[locale]/utils/useParameters';
 
 interface CashRegister {
     id: number;
@@ -35,6 +36,7 @@ interface ShiftManagerProps {
 
 export default function ShiftManager({ user, apiUrl, onShiftOpen, onShiftClose }: ShiftManagerProps) {
     const tc = useTranslations('Common');
+    const { params } = useParameters(['pos']);
 
     const [activeShift, setActiveShift] = useState<ShiftData | null>(null);
     const [myCashRegister, setMyCashRegister] = useState<CashRegister | null>(null);
@@ -51,18 +53,20 @@ export default function ShiftManager({ user, apiUrl, onShiftOpen, onShiftClose }
     const [cashiers, setCashiers] = useState<any[]>([]);
 
     const [currentBusinessDate, setCurrentBusinessDate] = useState<string>('');
-    const [showZReportModal, setShowZReportModal] = useState(false);
-    const [zReportData, setZReportData] = useState<any>(null);
 
     const token = user?.token || (typeof localStorage !== 'undefined' && localStorage.getItem('token'));
     const headers = { Authorization: `Bearer ${token}` };
 
-    // Check active shift on mount
+    // Check active shift on mount or parameter load
     useEffect(() => {
-        if (user && token) {
+        if (user && token && params.shift_system_enabled !== false) {
             checkShiftStatus();
+        } else if (params.shift_system_enabled === false) {
+            // Vardiya sistemi kapalı ise loading ve error state'lerini kaldır
+            setLoading(false);
+            setError('');
         }
-    }, [user]);
+    }, [user, params.shift_system_enabled]);
 
     const checkShiftStatus = async () => {
         setLoading(true);
@@ -235,65 +239,6 @@ export default function ShiftManager({ user, apiUrl, onShiftOpen, onShiftClose }
         }
     };
 
-    const handleGenerateZReport = async () => {
-        if (!myCashRegister || !currentBusinessDate) return;
-        setSubmitting(true);
-        setError('');
-
-        try {
-            // Yeni iş günü yönetim sistemi üzerinden gün sonu al
-            // Bu endpoint: 6 saat kuralı, ileri tarih koruması, vardiya kontrolü ve Z raporu oluşturmayı içerir
-            const endOfDayRes = await fetch(`${apiUrl}/business-day/end-of-day`, {
-                method: 'POST',
-                headers: { ...headers, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ note: 'ShiftManager üzerinden gün sonu' })
-            });
-
-            if (endOfDayRes.ok) {
-                const endOfDayData = await endOfDayRes.json();
-
-                // Z raporu bilgisini çek (varsa)
-                if (endOfDayData.zReportId) {
-                    try {
-                        const zRes = await fetch(`${apiUrl}/reports/z-reports?cashRegisterId=${myCashRegister.id}&businessDate=${currentBusinessDate}`, {
-                            headers
-                        });
-                        if (zRes.ok) {
-                            const report = await zRes.json();
-                            setZReportData(report);
-                        }
-                    } catch {
-                        // Z rapor detayı alınamazsa da gün sonu başarılı
-                    }
-                }
-
-                setShowOpenModal(false);
-                setShowZReportModal(true);
-
-                // Z rapor verisi yoksa basit başarı bilgisi göster
-                if (!zReportData) {
-                    setZReportData({
-                        id: endOfDayData.zReportId || 0,
-                        businessDate: currentBusinessDate,
-                        totalOpeningCash: 0,
-                        totalClosingCash: 0,
-                        totalExpectedCash: 0,
-                        totalCashDifference: 0,
-                        totalIncome: 0,
-                        newBusinessDate: endOfDayData.newBusinessDate,
-                    });
-                }
-            } else {
-                const errData = await endOfDayRes.json();
-                setError(errData.message || 'Gün sonu alınamadı.');
-            }
-        } catch (err) {
-            console.error(err);
-            setError('Gün sonu işlemi sırasında bir hata oluştu.');
-        } finally {
-            setSubmitting(false);
-        }
-    };
 
     // Loading state
     if (loading) {
@@ -308,7 +253,7 @@ export default function ShiftManager({ user, apiUrl, onShiftOpen, onShiftClose }
     }
 
     // No assigned register error
-    if (error && !showOpenModal && !showCloseModal && !activeShift) {
+    if (params.shift_system_enabled !== false && error && !showOpenModal && !showCloseModal && !activeShift) {
         return (
             <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-xl flex items-center justify-center">
                 <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-md shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 p-10 text-center">
@@ -329,7 +274,7 @@ export default function ShiftManager({ user, apiUrl, onShiftOpen, onShiftClose }
     }
 
     // Shift Open Modal
-    if (showOpenModal && myCashRegister && !activeShift) {
+    if (params.shift_system_enabled !== false && showOpenModal && myCashRegister && !activeShift) {
         return (
             <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-xl flex items-center justify-center p-4">
                 <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-md shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50">
@@ -378,20 +323,6 @@ export default function ShiftManager({ user, apiUrl, onShiftOpen, onShiftClose }
                             )}
                         </button>
 
-                        <div className="flex items-center gap-2 mb-3">
-                            <div className="h-px bg-slate-200 dark:bg-slate-700/50 flex-1"></div>
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">VEYA</span>
-                            <div className="h-px bg-slate-200 dark:bg-slate-700/50 flex-1"></div>
-                        </div>
-
-                        <button
-                            onClick={handleGenerateZReport}
-                            disabled={submitting || !currentBusinessDate}
-                            className="w-full py-4 rounded-2xl bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700/50 text-slate-700 dark:text-slate-300 font-bold text-sm transition-all active:scale-[0.98] disabled:opacity-50 uppercase tracking-widest mb-3 flex flex-col items-center justify-center gap-1"
-                        >
-                            <span><i className="fat fa-file-invoice mr-2 text-rose-500"></i>Günü Kapat (Z-Raporu Al)</span>
-                            {currentBusinessDate && <span className="text-[10px] text-slate-400 font-normal">İş Günü: {currentBusinessDate}</span>}
-                        </button>
 
                         <button
                             onClick={() => window.history.back()}
@@ -525,128 +456,6 @@ export default function ShiftManager({ user, apiUrl, onShiftOpen, onShiftClose }
         );
     }
 
-    // Z-Report Successful Modal (Premium details view)
-    if (showZReportModal && zReportData) {
-        return (
-            <div className="fixed inset-0 z-[110] bg-slate-900/95 backdrop-blur-2xl flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
-                <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-2xl shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 my-auto">
-                    {/* Header */}
-                    <div className="bg-gradient-to-br from-indigo-600 to-blue-600 p-8 sm:p-10 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
-                        <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/10 rounded-full blur-2xl translate-y-1/3 -translate-x-1/4"></div>
-
-                        <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6">
-                            <div className="flex items-center gap-5">
-                                <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/30 shadow-inner">
-                                    <i className="fat fa-receipt text-3xl text-white"></i>
-                                </div>
-                                <div>
-                                    <h2 className="text-3xl font-black text-white tracking-tight mb-1">Gün Sonu Raporu</h2>
-                                    <div className="flex items-center gap-2 text-indigo-100 font-medium">
-                                        <i className="fat fa-calendar-day"></i> {zReportData.businessDate}
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-5 py-3 text-center min-w-[140px]">
-                                <div className="text-[10px] text-indigo-200 font-bold uppercase tracking-widest mb-1">Rapor ID</div>
-                                <div className="text-xl font-black text-white font-mono">#{zReportData.id.toString().padStart(6, '0')}</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Content */}
-                    <div className="p-8 sm:p-10">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-                            <div className="bg-slate-50 dark:bg-slate-800/50 rounded-3xl p-6 border border-slate-100 dark:border-slate-800 flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-xl bg-orange-100 dark:bg-orange-500/20 text-orange-500 flex items-center justify-center text-xl">
-                                    <i className="fat fa-money-bill-wave"></i>
-                                </div>
-                                <div>
-                                    <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Toplam Açılış Nakdi</div>
-                                    <div className="text-xl font-black text-slate-800 dark:text-white">
-                                        ₺{Number(zReportData.totalOpeningCash).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div className="bg-slate-50 dark:bg-slate-800/50 rounded-3xl p-6 border border-slate-100 dark:border-slate-800 flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-500/20 text-emerald-500 flex items-center justify-center text-xl">
-                                    <i className="fat fa-cash-register"></i>
-                                </div>
-                                <div>
-                                    <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Beklenen Kapanış Kasa</div>
-                                    <div className="text-xl font-black text-slate-800 dark:text-white">
-                                        ₺{Number(zReportData.totalExpectedCash).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="bg-slate-50 dark:bg-slate-800/50 rounded-3xl p-6 border border-slate-100 dark:border-slate-800 flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-500/20 text-blue-500 flex items-center justify-center text-xl">
-                                    <i className="fat fa-sack-dollar"></i>
-                                </div>
-                                <div>
-                                    <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Kapanış Nakdi (Bildirilen)</div>
-                                    <div className="text-xl font-black text-slate-800 dark:text-white">
-                                        ₺{Number(zReportData.totalClosingCash).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className={`rounded-3xl p-6 border flex items-center gap-4 ${Number(zReportData.totalCashDifference) === 0 ? 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800' : Number(zReportData.totalCashDifference) > 0 ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20' : 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20'}`}>
-                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl ${Number(zReportData.totalCashDifference) === 0 ? 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400' : Number(zReportData.totalCashDifference) > 0 ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400'}`}>
-                                    <i className={`fat ${Number(zReportData.totalCashDifference) === 0 ? 'fa-scale-balanced' : Number(zReportData.totalCashDifference) > 0 ? 'fa-arrow-up' : 'fa-arrow-down'}`}></i>
-                                </div>
-                                <div>
-                                    <div className="text-[10px] font-bold uppercase tracking-widest mb-1 opacity-70">Kasa Farkı</div>
-                                    <div className={`text-xl font-black ${Number(zReportData.totalCashDifference) === 0 ? 'text-slate-800 dark:text-white' : Number(zReportData.totalCashDifference) > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
-                                        {Number(zReportData.totalCashDifference) > 0 ? '+' : ''}₺{Number(zReportData.totalCashDifference).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Toplam Ciro */}
-                        <div className="bg-indigo-50 dark:bg-indigo-500/10 rounded-3xl p-6 border-2 border-indigo-100 dark:border-indigo-500/20 flex flex-col sm:flex-row items-center justify-between gap-6 mb-8">
-                            <div className="flex items-center gap-4">
-                                <div className="w-14 h-14 bg-indigo-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-indigo-500/30">
-                                    <i className="fat fa-chart-line"></i>
-                                </div>
-                                <div>
-                                    <div className="text-xs font-black text-indigo-500/70 uppercase tracking-widest mb-1">Toplam Ciro (Tüm Ödemeler)</div>
-                                    <div className="text-3xl font-black text-indigo-700 dark:text-indigo-400">
-                                        ₺{Number(zReportData.totalIncome).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="text-sm font-medium text-indigo-600/70 dark:text-indigo-400/70 max-w-[200px] text-center sm:text-right hidden sm:block leading-relaxed">
-                                Bu tutar ilgili iş gününde yapılan tüm satışların toplamıdır.
-                            </div>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex gap-4">
-                            <button
-                                onClick={() => {
-                                    setShowZReportModal(false);
-                                    window.location.href = '/tr/admin/reports'; // or redirect to login depending on your flow
-                                }}
-                                className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-2xl font-bold uppercase tracking-widest text-sm transition-colors"
-                            >
-                                <i className="fat fa-check mr-2"></i> Kapat
-                            </button>
-                            <button
-                                onClick={() => window.print()}
-                                className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold uppercase tracking-widest text-sm transition-colors shadow-lg shadow-indigo-500/30"
-                            >
-                                <i className="fat fa-print mr-2"></i> Yazdır
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
 
     // Active shift header bar — rendered inside parent via render prop pattern
     if (activeShift) {
@@ -663,6 +472,8 @@ export default function ShiftManager({ user, apiUrl, onShiftOpen, onShiftClose }
             </>
         );
     }
+
+    if (params.shift_system_enabled === false) return null;
 
     return null;
 }

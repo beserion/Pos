@@ -58,6 +58,7 @@ export class OrderRoutingService {
   ) {}
 
   /**
+<<<<<<< HEAD
    * §6 – Yazıcı Yönlendirme Öncelik Sırası (7 seviye)
    *
    * 1. Ürün kartına özel yazıcı / profil (product.outputProfileId)
@@ -67,6 +68,16 @@ export class OrderRoutingService {
    * 5. Bağlı stok grubuna özel yazıcı (stockCard.stockGroup → department eşleşmesi)
    * 6. Hiçbir tanım yoksa varsayılan yazıcı
    * 7. "Yazıcı gönderme" kuralı (productType.skipPrinterOutput || profile.noOutput)
+=======
+   * Bir ürün için etkin çıktı profilini belirler.
+   * Öncelik sırası (12.md - 14.5):
+   * 1. Ürün (Product) Override: product.outputProfileId
+   * 2. Stok Kartı (Stock) Override: product.linkedStockItemId -> stockCard.outputProfileId (Eğer direct_stock ise)
+   * 3. Ürün Grubu (Product Group) Override: product.category -> department.name
+   * 4. Stok Grubu (Stock Group) Override: stockCard.stockGroup -> department.name (Eğer direct_stock ise)
+   * 5. Ürün Cinsi (Product Type) Override: product.productTypeId -> productType.outputProfileId
+   * 6. Varsayılan (Bölüm/Mutfak)
+>>>>>>> upstream/server
    */
   async resolveOutputProfile(productId: number): Promise<ResolvedRoute> {
     const product = await this.productRepo.findOne({
@@ -79,6 +90,7 @@ export class OrderRoutingService {
       return { profile: null, source: 'DEFAULT', productId, productName: 'BİLİNMEYEN' };
     }
 
+<<<<<<< HEAD
     // §6 seviye 7 (önce kontrol): Ürün cinsi "yazıcıya gönderme" diyor mu?
     if (product.productType?.skipPrinterOutput) {
       this.logger.log(`Product "${product.name}" → Cins "${product.productType.name}" skipPrinterOutput, gönderilmiyor`);
@@ -86,11 +98,15 @@ export class OrderRoutingService {
     }
 
     // §6 seviye 1: Ürün kartına özel yazıcı / profil
+=======
+    // 1. Ürün (Product) bazında override
+>>>>>>> upstream/server
     if (product.outputProfileId && product.outputProfileId > 0) {
       const cardProfile = product.outputProfile ||
         await this.loadProfile(product.outputProfileId);
 
       if (cardProfile) {
+<<<<<<< HEAD
         if (cardProfile.noOutput) {
           this.logger.log(`Product "${product.name}" → Ürün Kartı Override → noOutput`);
           return { profile: null, source: 'NO_OUTPUT', productId, productName: product.name };
@@ -103,6 +119,35 @@ export class OrderRoutingService {
     // §6 seviye 2: Ürün grubu (Department / productGroup) bazında override
     const productGroup = product.productGroup || product.category;
     if (productGroup) {
+=======
+        return { profile: cardProfile, source: 'STOCK_CARD', productId, productName: product.name };
+      }
+    }
+
+    // Direkt Stok kontrolü için stok kartını hazırla
+    let stockCard: StockCard | null = null;
+    if (product.inventoryLinkType === 'direct_stock' && product.linkedStockItemId) {
+      stockCard = await this.stockCardRepo.findOne({
+        where: { id: product.linkedStockItemId },
+        relations: ['outputProfile'],
+      });
+    }
+
+    // 2. Stok Kartı (Stock) bazında override
+    if (stockCard && stockCard.outputProfileId && stockCard.outputProfileId > 0) {
+      const stockProfile = stockCard.outputProfile ||
+        await this.outputProfileRepo.findOne({
+          where: { id: stockCard.outputProfileId },
+          relations: ['mainPrinter', 'infoPrinter'],
+        });
+      if (stockProfile) {
+        return { profile: stockProfile, source: 'STOCK_CARD', productId, productName: product.name };
+      }
+    }
+
+    // 3. Ürün Grubu bazında override (product.category === department.name)
+    if (product.category) {
+>>>>>>> upstream/server
       const department = await this.departmentRepo.findOne({
         where: { name: productGroup },
         relations: ['outputProfile'],
@@ -110,6 +155,7 @@ export class OrderRoutingService {
 
       if (department?.outputProfileId && department.outputProfileId > 0) {
         const groupProfile = department.outputProfile ||
+<<<<<<< HEAD
           await this.loadProfile(department.outputProfileId);
 
         if (groupProfile) {
@@ -119,11 +165,42 @@ export class OrderRoutingService {
           }
           this.logger.log(`Product "${product.name}" → Ürün Grubu Override (${department.name}) → Profile: "${groupProfile.name}"`);
           return { profile: groupProfile, source: 'PRODUCT_GROUP', productId, productName: product.name };
+=======
+          await this.outputProfileRepo.findOne({
+            where: { id: department.outputProfileId },
+            relations: ['mainPrinter', 'infoPrinter'],
+          });
+        if (groupProfile) {
+          return { profile: groupProfile, source: 'STOCK_GROUP', productId, productName: product.name };
+>>>>>>> upstream/server
         }
       }
     }
 
+<<<<<<< HEAD
     // §6 seviye 3: Ürün cinsi bazında çıktı profili
+=======
+    // 4. Stok Grubu bazında override (stockCard.stockGroup === department.name)
+    if (stockCard && stockCard.stockGroup) {
+      const department = await this.departmentRepo.findOne({
+        where: { name: stockCard.stockGroup },
+        relations: ['outputProfile'],
+      });
+
+      if (department && department.outputProfileId && department.outputProfileId > 0) {
+        const groupProfile = department.outputProfile ||
+          await this.outputProfileRepo.findOne({
+            where: { id: department.outputProfileId },
+            relations: ['mainPrinter', 'infoPrinter'],
+          });
+        if (groupProfile) {
+          return { profile: groupProfile, source: 'STOCK_GROUP', productId, productName: product.name };
+        }
+      }
+    }
+
+    // 5. Ürün Cinsi (Cins) bazında çıktı profili
+>>>>>>> upstream/server
     if (product.productTypeId && product.productTypeId > 0) {
       const productType = product.productType ||
         await this.productTypeRepo.findOne({
@@ -136,16 +213,20 @@ export class OrderRoutingService {
           await this.loadProfile(productType.outputProfileId);
 
         if (typeProfile) {
+<<<<<<< HEAD
           if (typeProfile.noOutput) {
             this.logger.log(`Product "${product.name}" → Ürün Cinsi "${productType.name}" → noOutput`);
             return { profile: null, source: 'NO_OUTPUT', productId, productName: product.name };
           }
           this.logger.log(`Product "${product.name}" → Ürün Cinsi (${productType.name}) → Profile: "${typeProfile.name}"`);
+=======
+>>>>>>> upstream/server
           return { profile: typeProfile, source: 'PRODUCT_TYPE', productId, productName: product.name };
         }
       }
     }
 
+<<<<<<< HEAD
     // §6 seviye 4: direct_stock ürünlerde bağlı stok kartına özel yazıcı
     if (product.inventoryLinkType === 'direct_stock' && product.linkedStockCardId) {
       const stockCard = await this.stockCardRepo.findOne({
@@ -192,6 +273,9 @@ export class OrderRoutingService {
 
     // §6 seviye 6: Varsayılan / uyarı
     this.logger.warn(`Product "${product.name}" → Tanımlı çıktı profili bulunamadı!`);
+=======
+    // 6. Varsayılan
+>>>>>>> upstream/server
     return { profile: null, source: 'DEFAULT', productId, productName: product.name };
   }
 
@@ -264,12 +348,23 @@ export class OrderRoutingService {
 
   /**
    * Kontrol listesi: ürün → etkin profil + kaynak bilgisi.
+<<<<<<< HEAD
+=======
+   * Döküman bölüm 14.5.
+   * Performans Optimizasyonu: N+1 sorgu problemini engellemek için bulk DB fetch ve memory-based çözümleme kullanır.
+>>>>>>> upstream/server
    */
   async getRoutingControlList(): Promise<RoutingControlEntry[]> {
-    const products = await this.productRepo.find({
-      relations: ['productType', 'outputProfile'],
-    });
+    // Tüm ilgili tabloları tek seferde (batch) çek
+    const [products, departments, stockCards, productTypes, outputProfiles] = await Promise.all([
+      this.productRepo.find(),
+      this.departmentRepo.find(),
+      this.stockCardRepo.find(),
+      this.productTypeRepo.find(),
+      this.outputProfileRepo.find()
+    ]);
 
+<<<<<<< HEAD
     const result: RoutingControlEntry[] = [];
 
     for (const product of products) {
@@ -286,20 +381,85 @@ export class OrderRoutingService {
         effectiveProfileName: resolved.profile?.name || (resolved.source === 'NO_OUTPUT' ? 'ÇIKTI YOK' : 'TANIMSIZ'),
         effectiveSource: resolved.source,
       });
+=======
+    // Hızlı erişim için Map'ler oluştur
+    const profileMap = new Map<number, string>();
+    for (const op of outputProfiles) {
+      profileMap.set(op.id, op.name);
     }
 
-    // Grup override kontrolü
-    const departments = await this.departmentRepo.find();
+    const deptMap = new Map<string, Department>();
+    for (const d of departments) {
+      if (d.name) deptMap.set(d.name, d);
+    }
+
+    const stockCardMap = new Map<number, StockCard>();
+    for (const sc of stockCards) {
+      stockCardMap.set(sc.id, sc);
+    }
+
+    const pTypeMap = new Map<number, ProductType>();
+    for (const pt of productTypes) {
+      pTypeMap.set(pt.id, pt);
+>>>>>>> upstream/server
+    }
+
     const deptOverrides = new Set(
       departments
         .filter(d => d.outputProfileId && d.outputProfileId > 0)
         .map(d => d.name)
     );
 
-    for (const entry of result) {
-      if (deptOverrides.has(entry.categoryName)) {
-        entry.hasGroupOverride = true;
+    const result: RoutingControlEntry[] = [];
+
+    for (const product of products) {
+      let effectiveProfileName = 'TANIMSIZ';
+      let effectiveSource = 'DEFAULT';
+      
+      const stockCard = (product.inventoryLinkType === 'direct_stock' && product.linkedStockItemId) 
+        ? stockCardMap.get(product.linkedStockItemId) || null 
+        : null;
+
+      const pType = product.productTypeId ? pTypeMap.get(product.productTypeId) : null;
+
+      // 1. Ürün (Product) Override
+      if (product.outputProfileId && product.outputProfileId > 0 && profileMap.has(product.outputProfileId)) {
+        effectiveProfileName = profileMap.get(product.outputProfileId)!;
+        effectiveSource = 'STOCK_CARD';
       }
+      // 2. Stok Kartı (Stock) Override
+      else if (stockCard && stockCard.outputProfileId && stockCard.outputProfileId > 0 && profileMap.has(stockCard.outputProfileId)) {
+        effectiveProfileName = profileMap.get(stockCard.outputProfileId)!;
+        effectiveSource = 'STOCK_CARD';
+      }
+      // 3. Ürün Grubu (Product Group) Override
+      else if (product.category && deptMap.has(product.category) && deptMap.get(product.category)!.outputProfileId && profileMap.has(deptMap.get(product.category)!.outputProfileId)) {
+        const pId = deptMap.get(product.category)!.outputProfileId;
+        effectiveProfileName = profileMap.get(pId)!;
+        effectiveSource = 'STOCK_GROUP';
+      }
+      // 4. Stok Grubu (Stock Group) Override
+      else if (stockCard && stockCard.stockGroup && deptMap.has(stockCard.stockGroup) && deptMap.get(stockCard.stockGroup)!.outputProfileId && profileMap.has(deptMap.get(stockCard.stockGroup)!.outputProfileId)) {
+        const pId = deptMap.get(stockCard.stockGroup)!.outputProfileId;
+        effectiveProfileName = profileMap.get(pId)!;
+        effectiveSource = 'STOCK_GROUP';
+      }
+      // 5. Ürün Cinsi (Product Type) Override
+      else if (pType && pType.outputProfileId && pType.outputProfileId > 0 && profileMap.has(pType.outputProfileId)) {
+        effectiveProfileName = profileMap.get(pType.outputProfileId)!;
+        effectiveSource = 'PRODUCT_TYPE';
+      }
+
+      result.push({
+        productId: product.id,
+        productName: product.name,
+        productTypeName: pType?.name || 'Tanımsız',
+        categoryName: product.category || '-',
+        hasCardOverride: !!(product.outputProfileId && product.outputProfileId > 0),
+        hasGroupOverride: product.category ? deptOverrides.has(product.category) : false,
+        effectiveProfileName,
+        effectiveSource,
+      });
     }
 
     return result;

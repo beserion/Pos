@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
 import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 
 const API = (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
@@ -12,8 +13,8 @@ const API = (typeof window !== 'undefined' && window.location.hostname === 'loca
 
 interface InvoiceItem {
     id?: number;
-    productId: number;
-    productName: string;
+    stockCardId: number;
+    stockCardName: string;
     quantity: number;
     unit: string;
     unitPrice: number;
@@ -46,13 +47,16 @@ interface Invoice {
     createdAt: string;
 }
 
-interface Product {
+interface StockCard {
     id: number;
     name: string;
+    code: string;
     sku: string;
-    price: number;
-    costPrice: number;
-    unit: string;
+    lastPurchasePrice: number;
+    costPerBaseUnit: number;
+    baseUnit: string;
+    purchaseUnit: string;
+    purchaseVat: number;
     category: string;
     isActive: boolean;
 }
@@ -85,13 +89,13 @@ const VAT_RATES = [0, 1, 10, 20];
 export function PageClient() {
     const router = useRouter();
     const locale = useLocale();
-    const { user: currentUser } = useAuth();
+    const { user: currentUser, hasFeature } = useAuth();
 
     const getConfig = () => ({ headers: { Authorization: `Bearer ${currentUser?.token}` } });
 
     // State
     const [invoices, setInvoices] = useState<Invoice[]>([]);
-    const [products, setProducts] = useState<Product[]>([]);
+    const [stockCards, setStockCards] = useState<StockCard[]>([]);
     const [partners, setPartners] = useState<Partner[]>([]);
     const [loading, setLoading] = useState(true);
     const [view, setView] = useState<'list' | 'form'>('list');
@@ -156,11 +160,11 @@ export function PageClient() {
 
         // Separate calls for clearer error tracking
         try {
-            const prodRes = await axios.get<Product[]>(`${API}/products`, config);
-            const prodData = Array.isArray(prodRes.data) ? prodRes.data : (prodRes.data as any)?.data || [];
-            setProducts(prodData.filter((p: Product) => p.isActive));
+            const cardRes = await axios.get<StockCard[]>(`${API}/stock-cards/all`, config);
+            const cardData = Array.isArray(cardRes.data) ? cardRes.data : (cardRes.data as any)?.data || [];
+            setStockCards(cardData.filter((c: StockCard) => c.isActive));
         } catch (err: any) {
-            console.error("Products load failed:", err.response?.data || err.message);
+            console.error("Stock cards load failed:", err.response?.data || err.message);
         }
 
         try {
@@ -219,8 +223,8 @@ export function PageClient() {
                 discountRate: Number(data.discountRate) || 0,
             });
             setFormItems((data.items || []).map(item => ({
-                productId: item.productId,
-                productName: item.productName || '',
+                stockCardId: item.stockCardId,
+                stockCardName: item.stockCardName || '',
                 quantity: Number(item.quantity),
                 unit: item.unit || 'adet',
                 unitPrice: Number(item.unitPrice),
@@ -236,7 +240,7 @@ export function PageClient() {
     // ── Add Item Row ─────────────────────────────────────────────────────────────
     const addItemRow = () => {
         setFormItems(prev => [...prev, {
-            productId: 0, productName: '', quantity: 1, unit: 'adet',
+            stockCardId: 0, stockCardName: '', quantity: 1, unit: 'adet',
             unitPrice: 0, vatRate: 20, description: '',
         }]);
     };
@@ -250,13 +254,14 @@ export function PageClient() {
             const updated = [...prev];
             (updated[idx] as any)[field] = value;
 
-            // auto-fill product info
-            if (field === 'productId') {
-                const prod = products.find(p => p.id === Number(value));
-                if (prod) {
-                    updated[idx].productName = prod.name;
-                    updated[idx].unitPrice = prod.costPrice || prod.price;
-                    updated[idx].unit = prod.unit || 'adet';
+            // auto-fill stock card info
+            if (field === 'stockCardId') {
+                const card = stockCards.find(c => c.id === Number(value));
+                if (card) {
+                    updated[idx].stockCardName = card.name;
+                    updated[idx].unitPrice = card.lastPurchasePrice || card.costPerBaseUnit || 0;
+                    updated[idx].unit = card.purchaseUnit || card.baseUnit || 'adet';
+                    updated[idx].vatRate = card.purchaseVat || 20;
                 }
             }
             return updated;
@@ -286,9 +291,9 @@ export function PageClient() {
             showSwal({ title: 'Uyarı', text: 'En az bir kalem eklemelisiniz.', icon: 'warning' });
             return;
         }
-        const invalidItems = formItems.filter(i => !i.productId || i.quantity <= 0 || i.unitPrice <= 0);
+        const invalidItems = formItems.filter(i => !i.stockCardId || i.quantity <= 0 || i.unitPrice <= 0);
         if (invalidItems.length > 0) {
-            showSwal({ title: 'Uyarı', text: 'Tüm kalemlerde ürün, miktar ve birim fiyat girilmelidir.', icon: 'warning' });
+            showSwal({ title: 'Uyarı', text: 'Tüm kalemlerde stok kartı, miktar ve birim fiyat girilmelidir.', icon: 'warning' });
             return;
         }
 
@@ -298,8 +303,8 @@ export function PageClient() {
                 ...formData,
                 partnerId: formData.partnerId || undefined,
                 items: formItems.map(i => ({
-                    productId: Number(i.productId),
-                    productName: i.productName,
+                    stockCardId: Number(i.stockCardId),
+                    stockCardName: i.stockCardName,
                     quantity: Number(i.quantity),
                     unit: i.unit,
                     unitPrice: Number(i.unitPrice),
@@ -393,6 +398,14 @@ export function PageClient() {
     const totalPages = Math.ceil(totalItems / itemsPerPage);
 
     // ─── RENDER ──────────────────────────────────────────────────────────────────
+    if (currentUser && !hasFeature('finance_system')) {
+        return (
+            <div className="h-screen bg-slate-50 dark:bg-slate-900 flex flex-col">
+                <PremiumModuleLocked moduleName="Finans / Fatura Yönetimi" featureKey="finance_system" />
+            </div>
+        );
+    }
+
     if (view === 'form') return (
         <div className="h-screen bg-slate-50 dark:bg-slate-900 font-sans transition-colors duration-300 flex flex-col overflow-hidden">
             <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-indigo-500/5 blur-[120px] pointer-events-none"></div>
@@ -500,7 +513,7 @@ export function PageClient() {
                             <thead>
                                 <tr className="bg-slate-50 dark:bg-slate-900/80 sticky top-0 z-20 backdrop-blur-sm">
                                     <th className="text-left px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-10">#</th>
-                                    <th className="text-left px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ürün</th>
+                                    <th className="text-left px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Stok Kartı</th>
                                     <th className="text-center px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-32">Miktar</th>
                                     <th className="text-center px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-28">Birim</th>
                                     <th className="text-center px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-40">Birim Fiyat</th>
@@ -515,10 +528,10 @@ export function PageClient() {
                                     <tr key={idx} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                                         <td className="px-4 py-2 text-slate-400 font-bold">{idx + 1}</td>
                                         <td className="px-4 py-2">
-                                            <select value={item.productId} onChange={e => updateItem(idx, 'productId', Number(e.target.value))}
+                                            <select value={item.stockCardId} onChange={e => updateItem(idx, 'stockCardId', Number(e.target.value))}
                                                 className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500/20">
-                                                <option value={0} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">Ürün seçin...</option>
-                                                {products.map(p => <option key={p.id} value={p.id} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">{p.name} ({p.sku})</option>)}
+                                                <option value={0} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">Stok kartı seçin...</option>
+                                                {stockCards.map(c => <option key={c.id} value={c.id} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">{c.name} ({c.code || c.sku})</option>)}
                                             </select>
                                         </td>
                                         <td className="px-4 py-2">
@@ -554,7 +567,7 @@ export function PageClient() {
                                     <tr>
                                         <td colSpan={9} className="px-4 py-10 text-center text-slate-400">
                                             <i className="fat fa-box-open text-3xl mb-2 block opacity-30"></i>
-                                            <p className="text-sm font-bold">&quot;Kalem Ekle&quot; butonuyla ürün ekleyin</p>
+                                            <p className="text-sm font-bold">&quot;Kalem Ekle&quot; butonuyla stok kartı ekleyin</p>
                                         </td>
                                     </tr>
                                 )}

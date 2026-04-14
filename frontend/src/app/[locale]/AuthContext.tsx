@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useAlerts } from '../../hooks/useAlerts';
 import { AlertsBell } from '../../components/alerts/AlertsBell';
 import { AlertCriticalPopup } from '../../components/alerts/AlertCriticalPopup';
+import { useLicense } from './LicenseContext';
 
 interface AuthContextType {
     user: any;
@@ -14,6 +15,7 @@ interface AuthContextType {
     loginPinOnly: (pin: string) => Promise<any>;
     logout: () => void;
     hasPermission: (permission: string) => boolean;
+    hasFeature: (feature: string) => boolean;
     loading: boolean;
     setUser: (user: any) => void;
     alertsBell: React.ReactNode;
@@ -39,14 +41,15 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
         />
     ) : null;
 
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+
     useEffect(() => {
         const fetchProfile = async () => {
             const token = Cookies.get('token') || localStorage.getItem('token');
             if (token) {
                 try {
                     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-                    const apiBase = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
-                    const res = await axios.get(`${apiBase}/auth/me`);
+                    const res = await axios.get(`${API_URL}/auth/me`);
                     setUser({ ...res.data, token });
                     if (!localStorage.getItem('token')) {
                         localStorage.setItem('token', token);
@@ -84,11 +87,41 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
         return allUserPerms.includes(permission) || allUserPerms.includes('ALL');
     };
 
+    // Panel'den gelen gerçek lisans modüllerini al
+    const { modules: licenseModules, isValid: licenseValid } = useLicense();
+
+    // Eski firm.activeFeatures key'lerini Panel'deki gerçek moduleKey değleriyle eşleştir
+    const FEATURE_TO_LICENSE_MAP: Record<string, string> = {
+        'kds_system':          'kds',
+        'reservation_system':  'rezervasyon',
+        'delivery_system':     'delivery',
+        'finance_system':      'accounting',
+        'inventory_system':    'recipe_system',
+        'recipe_system':       'recipe_system',
+        'waiter_system':       'waiter_app',
+        'courier_system':      'delivery',
+        'branch_system':       'branch_system',
+        'qr_menu':             'qr_menu',
+        'ecommerce':           'ecommerce',
+        'crm':                 'crm',
+    };
+
+    const hasFeature = (feature: string) => {
+        // Lisans yoksa veya geçersizse hiçbir premium özelliğe izin verme
+        if (!licenseValid) return false;
+        // Her zaman mevcutsa (kasa/pos gibi) izin ver
+        if (licenseModules.includes('core_v1')) {
+            // core_v1 yoksa zaten yukarıda false döndü
+        }
+        // Panel key'ini bul
+        const licenseKey = FEATURE_TO_LICENSE_MAP[feature] || feature;
+        return licenseModules.includes(licenseKey) || licenseModules.includes('ALL');
+    };
+
     const login = async (email: string, pass: string) => {
         try {
-            const apiBase = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
-            console.log(`Attempting login to ${apiBase}/auth/login`);
-            const response = await axios.post(`${apiBase}/auth/login`, { email: email.trim(), password: pass });
+            console.log(`[AuthContext] Attempting login to: ${API_URL}/auth/login`);
+            const response = await axios.post(`${API_URL}/auth/login`, { email: email.trim(), password: pass });
             if (response.data.access_token) {
                 const token = response.data.access_token;
                 Cookies.set('token', token, { expires: 1 });
@@ -147,7 +180,7 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, loginPin, loginPinOnly, logout, hasPermission, loading, setUser, alertsBell }}>
+        <AuthContext.Provider value={{ user, login, loginPin, loginPinOnly, logout, hasPermission, hasFeature, loading, setUser, alertsBell }}>
             {children}
             <AlertCriticalPopup notification={criticalPopup} onDismiss={dismissPopup} />
         </AuthContext.Provider>

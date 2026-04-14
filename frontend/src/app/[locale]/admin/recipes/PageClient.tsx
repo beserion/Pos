@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 
 interface Product {
     id: number;
@@ -47,7 +48,7 @@ export function PageClient() {
     const tc = useTranslations('Common');
     const locale = useLocale();
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, hasFeature } = useAuth();
 
     const [products, setProducts] = useState<Product[]>([]);
     const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
@@ -61,13 +62,15 @@ export function PageClient() {
     const [loading, setLoading] = useState(true);
     const [loadingRecipe, setLoadingRecipe] = useState(false);
 
+    const hasRecipeFeature = user ? hasFeature('recipe_system') : false;
+
     useEffect(() => {
-        if (user?.token) {
+        if (user?.token && hasFeature('recipe_system')) {
             fetchInitialData();
         } else if (user === null) {
             setLoading(false);
         }
-    }, [user]);
+    }, [user, hasFeature]);
 
     const fetchInitialData = async () => {
         if (!user?.token) return;
@@ -104,10 +107,13 @@ export function PageClient() {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
             const [recipeRes, summaryRes] = await Promise.all([
                 axios.get(`${API_URL}/recipes/by-product/${product.id}`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: null })),
-                axios.get(`${API_URL}/recipes/cost/${product.id}`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: null }))
+                axios.get(`${API_URL}/recipes/summary/${product.id}`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: null }))
             ]);
 
-            if (recipeRes.data) {
+            if (recipeRes.data && Array.isArray(recipeRes.data) && recipeRes.data.length > 0) {
+                const activeRecipe = recipeRes.data.find((r: any) => r.isActive) || recipeRes.data[0];
+                setCurrentRecipe(activeRecipe);
+            } else if (recipeRes.data && !Array.isArray(recipeRes.data) && Object.keys(recipeRes.data).length > 0) {
                 setCurrentRecipe(recipeRes.data);
             } else {
                 // Initialize empty recipe for this product
@@ -227,22 +233,30 @@ export function PageClient() {
         }
     };
 
-    return (
-        <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">
-            {/* Background Decorations */}
-            <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-orange-500/5 blur-[120px] pointer-events-none z-0"></div>
-            <div className="absolute bottom-[-10%] left-[-5%] w-[40%] h-[40%] rounded-full bg-rose-500/5 blur-[120px] pointer-events-none z-0"></div>
+    if (user && !hasRecipeFeature) {
+        return (
+            <div className="h-screen bg-slate-50 dark:bg-slate-900 flex flex-col">
+                <PremiumModuleLocked moduleName="Reçete ve Üretim Sistemi" featureKey="recipe_system" />
+            </div>
+        );
+    }
 
-            <div className="w-full px-[50px] pt-8 pb-4 relative z-10 shrink-0">
-                {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                        <i className="fat fa-blender text-orange-500/80 drop-shadow-sm transition-transform hover:scale-110 hover:rotate-3 duration-300 ease-out" style={{ fontSize: '50px' }}></i>
-                        <div className="flex flex-col">
+    return (
+        <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">
+            {/* Background Decorations */}
+            <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-orange-500/5 blur-[120px] pointer-events-none transition-colors duration-500"></div>
+            <div className="absolute bottom-[-10%] left-[-5%] w-[40%] h-[40%] rounded-full bg-amber-500/5 blur-[120px] pointer-events-none transition-colors duration-500"></div>
+
+            <div className="w-full px-[50px] py-8 relative z-10 flex flex-col h-full">
+                {/* Header Section */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 shrink-0">
+                    <div className="flex items-center">
+                        <i className={`fat fa-blender me-3 text-orange-600 dark:text-orange-400`} style={{ fontSize: '50px' }}></i>
+                        <div>
                             <h3 className="mb-0 text-3xl font-extralight text-orange-600 dark:text-orange-400 leading-none uppercase tracking-[0.25em]" id="title">
                                 {t('title')}
                             </h3>
-                            <div className="h-1 w-1/2 bg-gradient-to-r from-orange-400 to-transparent rounded-full mt-2 mb-1"></div>
+                            <div className="h-1 w-full bg-gradient-to-r from-orange-400/60 to-transparent rounded-full mt-2 mb-1"></div>
                             <h5 className="text-muted mb-0 text-lg font-medium text-slate-400 dark:text-slate-500 mt-0.5">
                                 {t('subtitle')}
                             </h5>
@@ -254,15 +268,14 @@ export function PageClient() {
                         </button>
                     </div>
                 </div>
-            </div>
 
-            {loading ? (
-                <div className="flex-1 flex flex-col items-center justify-center p-20 z-10">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mb-4"></div>
-                    <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t('loadingRecipes')}</p>
-                </div>
-            ) : (
-                <div className="flex-1 flex gap-6 px-[50px] pb-8 relative z-10 overflow-hidden min-h-0">
+                {loading ? (
+                    <div className="flex-1 flex flex-col items-center justify-center p-20 z-10">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mb-4"></div>
+                        <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">{t('loadingRecipes')}</p>
+                    </div>
+                ) : (
+                    <div className="flex-1 flex gap-6 pb-8 relative z-10 overflow-hidden min-h-0">
                     
                     {/* LEFT PANEL: Products List */}
                     <div className="w-[380px] flex flex-col bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border border-white dark:border-slate-700/50 rounded-[32px] overflow-hidden shadow-sm shrink-0">
@@ -368,7 +381,7 @@ export function PageClient() {
                                                 <i className="fat fa-tag absolute left-4 top-3.5 text-slate-400 text-sm"></i>
                                                 <input 
                                                     type="text" 
-                                                    value={currentRecipe.name} 
+                                                    value={currentRecipe.name || ''} 
                                                     onChange={(e) => setCurrentRecipe({ ...currentRecipe, name: e.target.value })} 
                                                     className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-2 focus:ring-orange-500/50 outline-none transition-shadow" 
                                                     placeholder="Örn: Standart Margarita" 
@@ -440,7 +453,7 @@ export function PageClient() {
                                                                     <input 
                                                                         type="number" 
                                                                         step="0.0001" 
-                                                                        value={line.quantity || ''} 
+                                                                        value={line.quantity ?? ''} 
                                                                         onChange={(e) => handleLineChange(idx, 'quantity', parseFloat(e.target.value) || 0)} 
                                                                         className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-800 dark:text-white font-black text-sm text-center focus:border-orange-500 outline-none transition-colors"
                                                                     />
@@ -485,27 +498,27 @@ export function PageClient() {
                                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                                 <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-100 dark:border-slate-700">
                                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Satış Fiyatı</p>
-                                                    <p className="text-xl font-black text-slate-800 dark:text-white">₺{recipeSummary.salePrice.toFixed(2)}</p>
+                                                    <p className="text-xl font-black text-slate-800 dark:text-white">₺{recipeSummary.salePrice?.toFixed(2) || '0.00'}</p>
                                                 </div>
                                                 <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-rose-100 dark:border-rose-900/30">
                                                     <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-1">Toplam Maliyet</p>
-                                                    <p className="text-xl font-black text-rose-600 dark:text-rose-400">₺{recipeSummary.totalCost.toFixed(2)}</p>
+                                                    <p className="text-xl font-black text-rose-600 dark:text-rose-400">₺{recipeSummary.foodCost?.toFixed(2) || '0.00'}</p>
                                                 </div>
                                                 <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-emerald-100 dark:border-emerald-900/30">
                                                     <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Kâr Tutarı</p>
-                                                    <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">₺{recipeSummary.profitAmount.toFixed(2)}</p>
+                                                    <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">₺{recipeSummary.profit?.toFixed(2) || '0.00'}</p>
                                                 </div>
                                                 <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-indigo-100 dark:border-indigo-900/30">
                                                     <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1">Cost Oranı</p>
                                                     <div className="flex items-center gap-2 mt-1">
                                                         <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                                                             <div 
-                                                                className={`h-full rounded-full ${recipeSummary.costPercentage > 50 ? 'bg-rose-500' : recipeSummary.costPercentage > 30 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
-                                                                style={{ width: `${Math.min(recipeSummary.costPercentage, 100)}%` }}
+                                                                className={`h-full rounded-full ${recipeSummary.costRatio > 50 ? 'bg-rose-500' : recipeSummary.costRatio > 30 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
+                                                                style={{ width: `${Math.min(recipeSummary.costRatio || 0, 100)}%` }}
                                                             ></div>
                                                         </div>
                                                         <p className="text-base leading-none font-black text-indigo-600 dark:text-indigo-400">
-                                                            %{recipeSummary.costPercentage.toFixed(1)}
+                                                            %{recipeSummary.costRatio?.toFixed(1) || '0.0'}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -518,7 +531,8 @@ export function PageClient() {
                         ) : null}
                     </div>
                 </div>
-            )}
+                )}
+            </div>
         </div>
     );
 }

@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Role } from '../roles/role.entity';
+import { Firm } from '../firms/firm.entity';
 
 @Entity('users')
 export class User {
@@ -44,6 +45,10 @@ export class User {
 
   @Column('simple-array', { nullable: true })
   extraPermissions: string[];
+
+  @ManyToOne(() => Firm, (firm) => firm.users, { nullable: true })
+  @JoinColumn({ name: 'firmId' })
+  firm: Firm;
 
   @Column({ nullable: true })
   cashRegisterId: number;

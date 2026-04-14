@@ -4,7 +4,7 @@ import { useAuth } from '../AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { showSwal, toastSwal } from '../utils/swal';
 import { useLocale, useTranslations } from 'next-intl';
-import { useTheme } from 'next-themes';
+import { useThemeTransition } from '@/hooks/useThemeTransition';
 import ShiftManager from '@/components/shifts/ShiftManager';
 import TransferModal from './TransferModal';
 
@@ -33,7 +33,7 @@ interface Product {
 }
 
 interface Zone { id: number; name: string; }
-interface Table { id: number; name: string; status: string; waiterName?: string; orderStartTime?: string; currentTotal?: number; zone: { id: number } }
+interface Table { id: number; name: string; status: string; waiterName?: string; orderStartTime?: string; currentTotal?: number; isBillRequested?: boolean; zone: { id: number } }
 
 export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { onSwitchToQuickSale: () => void, onSwitchToTakeOrder: () => void }) {
     const { user, loading } = useAuth();
@@ -41,7 +41,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const locale = useLocale();
     const t = useTranslations('Admin');
     const tc = useTranslations('Common');
-    const { theme, setTheme } = useTheme();
+    const { theme, toggleTheme, setTheme } = useThemeTransition();
     const searchParams = useSearchParams();
     const restoreSaleId = searchParams.get('restoreSaleId');
     const targetTableId = searchParams.get('tableId');
@@ -73,6 +73,8 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const [splitQuantities, setSplitQuantities] = useState<Record<number, number>>({});
     const [isAddSubCheckOpen, setIsAddSubCheckOpen] = useState(false);
     const [newSubCheckLabel, setNewSubCheckLabel] = useState('');
+    const [isPrintBillModalOpen, setIsPrintBillModalOpen] = useState(false);
+    const [selectedPrintCheckIds, setSelectedPrintCheckIds] = useState<number[]>([]);
 
     // --- Transfer Modal State ---
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -246,7 +248,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
                     // Aktif sekmeyi belirle
                     if (flat.length > 0 && !activeSubCheckId) {
-                        setActiveSubCheckId('ALL');
+                        setActiveSubCheckId(flat[0].id);
                     }
 
                     if (activeSubCheckId === 'ALL' || !activeSubCheckId) {
@@ -279,7 +281,10 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                                 subCheckId: check.id,
                                                 subItems: children,
                                                 saleType: item.saleType,
-                                                saleTypeMultiplier: item.saleTypeMultiplier
+                                                saleTypeMultiplier: item.saleTypeMultiplier,
+                                                unitPrice: item.unitPrice,
+                                                variationId: item.variationId,
+                                                variationName: item.variationName
                                             });
                                         }
                                     });
@@ -302,7 +307,10 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                         subCheckId: activeCheck.id,
                                         subItems: children,
                                         saleType: item.saleType,
-                                        saleTypeMultiplier: item.saleTypeMultiplier
+                                        saleTypeMultiplier: item.saleTypeMultiplier,
+                                        unitPrice: item.unitPrice,
+                                        variationId: item.variationId,
+                                        variationName: item.variationName
                                     };
                                 });
                             setCart(newCart);
@@ -359,6 +367,89 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     };
 
 
+    const handlePrintBill = async (directCheckIds?: number[]) => {
+        const idsToPrint = directCheckIds || selectedPrintCheckIds;
+        if (!idsToPrint || idsToPrint.length === 0) {
+             toastSwal({ icon: 'warning', title: 'Lütfen yazdırılacak adisyon seçin' });
+             return;
+        }
+
+        let checksToPrint = [];
+        const isAllSelected = idsToPrint.length === allFlatChecks.length;
+        if (isAllSelected && allFlatChecks.length > 0) {
+             // Tüm adisyonlar seçiliyse birleştirip tek fiş yazdır
+             const mergedItems = allFlatChecks.flatMap((check: any) => check.items || []);
+             const mergedTotal = allFlatChecks.reduce((sum: number, check: any) => sum + Number(check.totalAmount || 0), 0);
+             checksToPrint.push({
+                 receiptNumber: allFlatChecks[0]?.receiptNumber || 'TOPLU',
+                 subCheckLabel: 'Tüm Adisyonlar',
+                 items: mergedItems,
+                 totalAmount: mergedTotal,
+                 date: new Date().toISOString()
+             });
+        } else {
+             // Ayrı ayrı fiş yazdır
+             checksToPrint = allFlatChecks.filter((check: any) => idsToPrint.includes(check.id)).map((check: any) => ({
+                 receiptNumber: check.receiptNumber,
+                 subCheckLabel: check.subCheckLabel || `Adisyon`,
+                 items: check.items || [],
+                 totalAmount: check.totalAmount,
+                 date: new Date().toISOString()
+             }));
+        }
+
+        try {
+            const token = (user as any)?.token || localStorage.getItem('token');
+            for (const check of checksToPrint) {
+                const checkItems = check.items.map((i: any) => ({
+                    name: i.product?.name || 'Ürün',
+                    quantity: i.quantity,
+                    total: Number(i.quantity) * Number(i.unitPrice),
+                    unitPrice: Number(i.unitPrice),
+                    subItems: i.subItems || []
+                }));
+
+                const reqBody = {
+                    items: checkItems,
+                    totalAmount: check.totalAmount,
+                    date: check.date,
+                    receiptNumber: check.receiptNumber,
+                    companyName: 'ANTIGRAVITY POS',
+                    paymentMethod: 'HESAP',
+                    subType: 'BILL'
+                };
+
+                const res = await fetch(`${API_URL}/printers/print-receipt`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify(reqBody)
+                });
+                
+                if (!res.ok) {
+                   toastSwal({ icon: 'error', title: 'Yazdırma Başarısız' });
+                   return;
+                }
+            }
+            
+            // Masanın hesap istendi durumunu backend üzerinde güncelle
+            if (selectedTable && selectedTable.id) {
+                await fetch(`${API_URL}/tables/${selectedTable.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ isBillRequested: true })
+                });
+                // Local state'i de hemen güncelle ki anında sarı olsun (fetchData beklemeden).
+                setSelectedTable(prev => prev ? { ...prev, isBillRequested: true } : prev);
+                setTables(prevTables => prevTables.map(t => t.id === selectedTable.id ? { ...t, isBillRequested: true } : t));
+            }
+
+            toastSwal({ icon: 'success', title: 'Yazdırma isteği gönderildi' });
+            setIsPrintBillModalOpen(false);
+        } catch (error) {
+            console.error('Yazdırma Hatası:', error);
+            toastSwal({ icon: 'error', title: 'Yazdırma bağlantı hatası!' });
+        }
+    };
 
     const handleCheckout = async (paymentMethod: 'Nakit' | 'Kart' | 'Parçalı', cashAmount: number = 0, creditAmount: number = 0) => {
         if (!selectedTable) return;
@@ -370,11 +461,12 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
         }
 
         const selectedTotalAmount = itemsToPay.reduce((sum, item) => {
-            const base = (item.product.price * (item.saleTypeMultiplier || 1)) * item.quantity;
+            const effectivePrice = (item as any).unitPrice ?? item.product.price;
+            const base = (effectivePrice * (item.saleTypeMultiplier || 1)) * item.quantity;
             const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
             return sum + base + extras;
         }, 0);
-        const vatAmount = selectedTotalAmount * 0.1;
+        const vatAmount = 0;
 
         // Apply general adjustments to the current selected payment.
         const appliedDiscount = discount || 0;
@@ -397,18 +489,25 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 serviceFee: appliedServiceFee,
                 status: 'COMPLETED',
                 totalAmount: selectedGrandTotal,
-                mergeSaleIds: activeOrderIds,
+                mergeSaleIds: Array.from(new Set(activeOrderIds)),
                 cashRegisterId: activeCashRegister?.id || null,
                 shiftId: activeShift?.id || null,
                 items: itemsToPay.map(item => {
-                    const base = (item.product.price * (item.saleTypeMultiplier || 1)) * item.quantity;
+                    const effectivePrice = (item as any).unitPrice ?? item.product.price;
+                    const base = (effectivePrice * (item.saleTypeMultiplier || 1)) * item.quantity;
                     const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
                     return {
                         productId: item.product.id,
                         quantity: item.quantity,
-                        unitPrice: item.product.price * (item.saleTypeMultiplier || 1),
+                        unitPrice: effectivePrice * (item.saleTypeMultiplier || 1),
                         total: Number(((base + extras) * 1.1).toFixed(2)),
-                        subItems: item.subItems
+                        subItems: (item.subItems || []).map((sub: any) => ({
+                            productId: sub.productId,
+                            quantity: sub.quantity,
+                            unitPrice: sub.unitPrice,
+                            total: sub.total,
+                            menuGroupId: sub.menuGroupId
+                        }))
                     };
                 })
             };
@@ -459,11 +558,12 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
 
     const subTotal = cart.reduce((sum, item) => {
-        const base = (item.product.price * (item.saleTypeMultiplier || 1)) * item.quantity;
+        const effectivePrice = (item as any).unitPrice ?? item.product.price;
+        const base = (effectivePrice * (item.saleTypeMultiplier || 1)) * item.quantity;
         const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
         return sum + base + extras;
     }, 0);
-    const vatAmount = subTotal * 0.1;
+    const vatAmount = 0;
     const totalBeforeAdjustments = subTotal + vatAmount;
     const grandTotal = Number((totalBeforeAdjustments + serviceFee - discount).toFixed(2));
 
@@ -564,7 +664,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
                         {mounted && (
                             <button
-                                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                                onClick={toggleTheme}
                                 className="w-10 h-10 flex items-center justify-center rounded-2xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 transition-all text-xl"
                                 title={theme === 'dark' ? 'Açık Tema' : 'Koyu Tema'}
                             >
@@ -613,11 +713,13 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                 className={`relative p-6 rounded-[32px] cursor-pointer shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border flex flex-col items-center justify-center text-center gap-2 group 
                                     ${selectedTable?.id === table.id
                                         ? 'ring-4 ring-indigo-500 scale-105 bg-indigo-50/90 dark:bg-indigo-500/30 border-indigo-400/50 dark:border-indigo-400/50'
-                                        : table.status === 'BOŞ'
-                                            ? 'bg-white/40 dark:bg-slate-800/40 border-white/50 dark:border-slate-700/50'
-                                            : table.status === 'REZERVE'
-                                                ? 'bg-amber-100/60 dark:bg-amber-500/20 border-amber-300 dark:border-amber-400/40 shadow-amber-500/10'
-                                                : 'bg-rose-100/80 dark:bg-rose-600/20 border-rose-300/50 dark:border-rose-500/50 shadow-rose-500/20'}`}
+                                        : table.isBillRequested
+                                            ? 'bg-yellow-100 dark:bg-yellow-500/20 border-yellow-400 dark:border-yellow-500/50 shadow-yellow-500/30 animate-[pulse_3s_ease-in-out_infinite]'
+                                            : table.status === 'BOŞ'
+                                                ? 'bg-white/40 dark:bg-slate-800/40 border-white/50 dark:border-slate-700/50'
+                                                : table.status === 'REZERVE'
+                                                    ? 'bg-amber-100/60 dark:bg-amber-500/20 border-amber-300 dark:border-amber-400/40 shadow-amber-500/10'
+                                                    : 'bg-rose-100/80 dark:bg-rose-600/20 border-rose-300/50 dark:border-rose-500/50 shadow-rose-500/20'}`}
                             >
                                 <div className="absolute top-4 right-4 animate-pulse">
                                     <div className={`w-2 h-2 rounded-full ${table.status === 'BOŞ' ? 'bg-emerald-500' : table.status === 'REZERVE' ? 'bg-amber-500' : 'bg-rose-500'}`}></div>
@@ -639,7 +741,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                             <span>{formatTime(table.orderStartTime)}</span>
                                         </div>
                                         <div className="mt-2 text-rose-700 dark:text-rose-300 font-extrabold text-sm drop-shadow-sm">
-                                            ₺{(Number(table.currentTotal || 0) * 1.1).toFixed(2)}
+                                            ₺{Number(table.currentTotal || 0).toFixed(2)}
                                         </div>
                                     </div>
                                 ) : (
@@ -735,8 +837,8 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                             <span className="text-sm text-indigo-500 font-bold ml-1">x{item.quantity}</span>
                                         </span>
                                         <span className="font-bold text-slate-800 dark:text-slate-100 uppercase text-xs">
-                                            ₺{(
-                                                ((item.product.price * (item.saleTypeMultiplier || 1)) * item.quantity) +
+                                            ₺{((
+                                                ((item.unitPrice ?? item.product.price) * (item.saleTypeMultiplier || 1)) * item.quantity) +
                                                 (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0)
                                             ).toFixed(2)}
                                         </span>
@@ -764,10 +866,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                         <span>{t('subtotal') || 'Ara Toplam'}</span>
                         <span>₺{subTotal.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between mb-2 text-slate-500 dark:text-slate-400 text-sm">
-                        <span>KDV (%10)</span>
-                        <span>₺{vatAmount.toFixed(2)}</span>
-                    </div>
+
 
                     <div className="grid grid-cols-2 gap-3 mb-4 mt-2">
                         <div className="flex flex-col gap-1">
@@ -859,30 +958,51 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                             <i className="fat fa-trash mr-1"></i> İptal
                         </button>
                     </div>
-
-                    <button
-                        onClick={() => {
-                            setIsCheckoutOpen(true);
-                            setSelectedPosItems(cart.map(i => i.itemId || i.product.id));
-                        }}
-                        className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold text-lg shadow-lg shadow-blue-500/30 transition-all active:scale-[0.98] disabled:opacity-50 disabled:grayscale"
-                        disabled={cart.length === 0}
-                    >
-                        {t('collectPayment') || 'Ödeme Al'}
-                    </button>
+                    <div className="flex gap-3 w-full">
+                        <button
+                            onClick={() => {
+                                if (allFlatChecks.length === 1) {
+                                    handlePrintBill([allFlatChecks[0].id]);
+                                } else {
+                                    setIsPrintBillModalOpen(true);
+                                    if (activeSubCheckId && activeSubCheckId !== 'ALL') {
+                                        setSelectedPrintCheckIds([activeSubCheckId as number]);
+                                    } else {
+                                        setSelectedPrintCheckIds(allFlatChecks.map(c => c.id));
+                                    }
+                                }
+                            }}
+                            className="w-1/4 py-4 rounded-2xl bg-orange-100 hover:bg-orange-200 dark:bg-orange-600/20 dark:hover:bg-orange-600/30 border border-orange-300 dark:border-orange-500/50 text-orange-600 dark:text-orange-500 font-bold text-xl shadow-lg shadow-orange-500/20 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center shrink-0"
+                            disabled={!selectedTable || allFlatChecks.length === 0}
+                            title="Hesap İste"
+                        >
+                            <i className="fat fa-receipt"></i>
+                        </button>
+                        <button
+                            onClick={() => {
+                                setIsCheckoutOpen(true);
+                                setSelectedPosItems(cart.map(i => i.itemId || i.product.id));
+                            }}
+                            className="w-3/4 py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold text-lg shadow-lg shadow-blue-500/30 transition-all active:scale-[0.98] disabled:opacity-50 disabled:grayscale"
+                            disabled={cart.length === 0}
+                        >
+                            {t('collectPayment') || 'Ödeme Al'}
+                        </button>
+                    </div>
                 </div>
             </div>
 
             {/* Payment Modal */}
             {isCheckoutOpen && !isSplitPaymentOpen && (() => {
                 const selectedTotalAmount = cart.filter(i => selectedPosItems.includes(i.itemId || i.product.id)).reduce((sum, item) => {
-                    const base = (item.product.price * (item.saleTypeMultiplier || 1)) * item.quantity;
+                    const effectivePrice = (item as any).unitPrice ?? item.product.price;
+                    const base = (effectivePrice * (item.saleTypeMultiplier || 1)) * item.quantity;
                     const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
                     return sum + base + extras;
                 }, 0);
                 const appliedDiscount = discount || 0;
                 const appliedServiceFee = serviceFee || 0;
-                const selectedGrandTotal = Number((selectedTotalAmount * 1.1 + appliedServiceFee - appliedDiscount).toFixed(2));
+                const selectedGrandTotal = Number((selectedTotalAmount + appliedServiceFee - appliedDiscount).toFixed(2));
 
                 return (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
@@ -921,8 +1041,8 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                                     </div>
                                                     <span className="font-bold text-slate-800 dark:text-slate-100 text-xs">
                                                         ₺{(
-                                                            (((item.product.price * (item.saleTypeMultiplier || 1)) * item.quantity) +
-                                                            (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0)) * 1.1
+                                                            (((item as any).unitPrice ?? item.product.price) * (item.saleTypeMultiplier || 1)) * item.quantity +
+                                                            (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0)
                                                         ).toFixed(2)}
                                                     </span>
                                                 </div>
@@ -1013,13 +1133,14 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             {
                 isSplitPaymentOpen && (() => {
                     const selectedTotalAmount = cart.filter(i => selectedPosItems.includes(i.itemId || i.product.id)).reduce((sum, item) => {
-                        const base = (item.product.price * (item.saleTypeMultiplier || 1)) * item.quantity;
+                        const effectivePrice = (item as any).unitPrice ?? item.product.price;
+                        const base = (effectivePrice * (item.saleTypeMultiplier || 1)) * item.quantity;
                         const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
                         return sum + base + extras;
                     }, 0);
                     const appliedDiscount = discount || 0;
                     const appliedServiceFee = serviceFee || 0;
-                    const selectedGrandTotal = Number((selectedTotalAmount * 1.1 + appliedServiceFee - appliedDiscount).toFixed(2));
+                    const selectedGrandTotal = Number((selectedTotalAmount + appliedServiceFee - appliedDiscount).toFixed(2));
                     return (
                         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
                             <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-sm shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden border border-white/20 dark:border-slate-700/50 transform transition-all">
@@ -1306,6 +1427,81 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
             </button> */}
+            {/* Print Bill Modal */}
+            {isPrintBillModalOpen && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+                    <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-sm shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden border border-white/20 dark:border-slate-700/50 p-6 flex flex-col max-h-[90vh]">
+                        <div className="text-center mb-6 shrink-0">
+                            <div className="w-14 h-14 bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <i className="fat fa-receipt text-3xl"></i>
+                            </div>
+                            <h2 className="text-xl font-bold text-slate-800 dark:text-white">Hesap Yazdır</h2>
+                            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Yazdırılacak adisyonları seçin.</p>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto mb-4 space-y-2 pr-1 custom-scrollbar">
+                            <div
+                                onClick={() => {
+                                    if (selectedPrintCheckIds.length === allFlatChecks.length) {
+                                        setSelectedPrintCheckIds([]);
+                                    } else {
+                                        setSelectedPrintCheckIds(allFlatChecks.map(c => c.id));
+                                    }
+                                }}
+                                className={`flex justify-between items-center p-3 rounded-2xl cursor-pointer transition-all border ${selectedPrintCheckIds.length === allFlatChecks.length ? 'bg-orange-50/80 border-orange-200 dark:bg-orange-500/20 dark:border-orange-500/30' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-700'}`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-5 h-5 rounded-full flex items-center justify-center border-2 transition-colors ${selectedPrintCheckIds.length === allFlatChecks.length ? 'bg-orange-500 border-orange-500' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800'}`}>
+                                        {selectedPrintCheckIds.length === allFlatChecks.length && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
+                                    </div>
+                                    <span className="font-bold text-slate-800 dark:text-slate-200">Tümü (Tek Fiş)</span>
+                                </div>
+                            </div>
+                            <div className="h-px bg-slate-200 dark:bg-slate-700 my-2"></div>
+                            {allFlatChecks.map((check) => {
+                                const isSelected = selectedPrintCheckIds.includes(check.id);
+                                return (
+                                    <div
+                                        key={check.id}
+                                        onClick={() => {
+                                            if (isSelected) {
+                                                setSelectedPrintCheckIds(prev => prev.filter(id => id !== check.id));
+                                            } else {
+                                                setSelectedPrintCheckIds(prev => [...prev, check.id]);
+                                            }
+                                        }}
+                                        className={`flex justify-between items-center p-3 rounded-2xl cursor-pointer transition-all border ${isSelected ? 'bg-orange-50/80 border-orange-200 dark:bg-orange-500/20 dark:border-orange-500/30' : 'bg-white border-slate-200 dark:bg-slate-800 dark:border-slate-700'}`}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-5 h-5 rounded-md flex items-center justify-center border-2 transition-colors ${isSelected ? 'bg-orange-500 border-orange-500' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800'}`}>
+                                                {isSelected && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
+                                            </div>
+                                            <span className="font-bold text-sm text-slate-700 dark:text-slate-300">{check.subCheckLabel || `Adisyon`}</span>
+                                        </div>
+                                        <span className="text-sm font-bold text-slate-800 dark:text-slate-100">₺{Number(check.totalAmount).toFixed(2)}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <div className="flex gap-3 shrink-0">
+                            <button
+                                onClick={() => setIsPrintBillModalOpen(false)}
+                                className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                            >
+                                İptal
+                            </button>
+                            <button
+                                onClick={handlePrintBill}
+                                disabled={selectedPrintCheckIds.length === 0}
+                                className="flex-[2] py-3 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold shadow-lg shadow-orange-500/30 transition-all disabled:opacity-50 disabled:grayscale flex items-center justify-center gap-2"
+                            >
+                                <i className="fat fa-print"></i> Yazdır
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Transfer Modal */}
             <TransferModal
                 isOpen={isTransferModalOpen}

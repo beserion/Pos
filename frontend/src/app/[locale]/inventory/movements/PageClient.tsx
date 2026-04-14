@@ -29,14 +29,14 @@ export function PageClient() {
         stockCardId: 0,
         movementType: 'MANUAL_IN',
         quantity: '',
-        warehouseId: 0,
+        warehouseId: -1,
         description: ''
     });
 
     const [transferForm, setTransferForm] = useState({
         stockCardId: 0,
-        fromWarehouseId: 0,
-        toWarehouseId: 0,
+        fromWarehouseId: -1,
+        toWarehouseId: -1,
         quantity: '',
         description: ''
     });
@@ -79,7 +79,7 @@ export function PageClient() {
         try {
             setLoading(true);
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
-            
+
             let query = `?limit=${limit}`;
             if (filterStockCard) query += `&stockCardId=${filterStockCard}`;
             if (filterType) query += `&movementType=${filterType}`;
@@ -87,7 +87,7 @@ export function PageClient() {
             const res = await axios.get(`${API_URL}/stock-movements${query}`, {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
-            
+
             setMovements(res.data.data || []);
         } catch (error) {
             console.error('Error fetching movements', error);
@@ -108,14 +108,14 @@ export function PageClient() {
 
         try {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
-            
+
             // Get selected card to find unit
             const card = stockCards.find(c => c.id === manualForm.stockCardId);
-            
+
             const payload = {
                 ...manualForm,
                 quantity: parseFloat(manualForm.quantity),
-                warehouseId: manualForm.warehouseId > 0 ? manualForm.warehouseId : null,
+                warehouseId: manualForm.warehouseId !== -1 ? manualForm.warehouseId : null,
                 unit: card?.baseUnit || 'adet'
             };
 
@@ -137,7 +137,7 @@ export function PageClient() {
         e.preventDefault();
         if (!user?.token) return;
 
-        if (transferForm.stockCardId === 0 || transferForm.fromWarehouseId === 0 || transferForm.toWarehouseId === 0 || !transferForm.quantity || parseFloat(transferForm.quantity) <= 0) {
+        if (transferForm.stockCardId === 0 || transferForm.fromWarehouseId === -1 || transferForm.toWarehouseId === -1 || !transferForm.quantity || parseFloat(transferForm.quantity) <= 0) {
             showSwal({ title: 'Hata', text: 'Tüm alanları eksiksiz bir şekilde doldurunuz.', icon: 'warning' });
             return;
         }
@@ -149,7 +149,7 @@ export function PageClient() {
 
         try {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
-            
+
             const payload = {
                 ...transferForm,
                 quantity: parseFloat(transferForm.quantity)
@@ -227,16 +227,13 @@ export function PageClient() {
                             </h5>
                         </div>
                     </div>
-                    
+
                     <div className="flex gap-3">
                         <button onClick={() => setIsTransferModalOpen(true)} className="px-5 py-3 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-blue-600 dark:text-blue-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-200 dark:hover:border-blue-500/30 transition-all flex items-center gap-2 active:scale-95">
-                            <i className="fat fa-truck-moving text-base"></i> Transfer
+                            <i className="fat fa-truck-moving text-base"></i> Depolar Arası Transfer
                         </button>
-                        <button onClick={() => setIsManualModalOpen(true)} className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white border border-blue-600 font-black text-xs uppercase tracking-widest rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center gap-2 active:scale-95">
-                            <i className="fat fa-plus text-base"></i> Yeni Hareket
-                        </button>
-                        <button onClick={() => router.push(`/${locale}/admin`)} className="px-6 py-3 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-2">
-                            <i className="fat fa-reply"></i> Pano'ya Dön
+                        <button onClick={() => router.push(`/${locale}/inventory/`)} className="px-6 py-3 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-2">
+                            <i className="fat fa-reply"></i> Geri
                         </button>
                     </div>
                 </div>
@@ -247,7 +244,7 @@ export function PageClient() {
                         <i className="fat fa-filter text-slate-400 ml-2"></i>
                         <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Filtreler</span>
                     </div>
-                    
+
                     <div className="relative min-w-[200px] flex-1 md:flex-none">
                         <select value={filterStockCard} onChange={(e) => setFilterStockCard(e.target.value)} className="w-full pl-4 pr-10 py-2.5 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-300 font-bold text-sm focus:border-blue-500 outline-none appearance-none">
                             <option value="">Tüm Stok Kartları</option>
@@ -267,7 +264,7 @@ export function PageClient() {
                         </select>
                         <i className="fat fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] pointer-events-none"></i>
                     </div>
-                    
+
                     <div className="relative min-w-[120px]">
                         <select value={limit} onChange={(e) => setLimit(parseInt(e.target.value))} className="w-full pl-4 pr-10 py-2.5 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-300 font-bold text-sm focus:border-blue-500 outline-none appearance-none">
                             <option value="50">Son 50</option>
@@ -301,7 +298,7 @@ export function PageClient() {
                                     {movements.map(mov => {
                                         const styles = getTypeStyle(mov.movementType);
                                         const isPositive = mov.quantity > 0;
-                                        
+
                                         return (
                                             <tr key={mov.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                                                 <td className="px-6 py-3">
@@ -400,7 +397,7 @@ export function PageClient() {
                                     <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 px-1">Depo (Opsiyonel)</label>
                                         <select value={manualForm.warehouseId} onChange={(e) => setManualForm({ ...manualForm, warehouseId: parseInt(e.target.value) })} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-800 dark:text-white focus:border-blue-500 outline-none">
-                                            <option value={0}>Genel</option>
+                                            <option value={-1}>Genel</option>
                                             {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                                         </select>
                                     </div>
@@ -444,22 +441,44 @@ export function PageClient() {
                                         {stockCards.map(c => <option key={c.id} value={c.id}>{c.name} ({c.baseUnit})</option>)}
                                     </select>
                                 </div>
-                                <div className="grid grid-cols-2 gap-4 items-end">
+                                <div className="grid grid-cols-2 gap-4 items-end relative">
                                     <div>
                                         <label className="block text-[10px] font-black text-rose-500 uppercase tracking-widest mb-1.5 px-1">ÇIKIŞ (Kaynak Depo)</label>
-                                        <select required value={transferForm.fromWarehouseId} onChange={(e) => setTransferForm({ ...transferForm, fromWarehouseId: parseInt(e.target.value) })} className="w-full px-4 py-3 bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-900/50 rounded-xl text-sm font-bold text-rose-900 dark:text-rose-300 focus:border-rose-500 outline-none">
-                                            <option value={0}>Seçiniz...</option>
-                                            {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                                        <select required value={transferForm.fromWarehouseId} onChange={(e) => {
+                                            const newFromId = parseInt(e.target.value);
+                                            setTransferForm(prev => ({
+                                                ...prev,
+                                                fromWarehouseId: newFromId,
+                                                toWarehouseId: prev.toWarehouseId === newFromId ? -1 : prev.toWarehouseId
+                                            }));
+                                        }} className="w-full px-2 py-3 bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-900/50 rounded-xl text-sm font-bold text-rose-900 dark:text-rose-300 focus:border-rose-500 outline-none">
+                                            <option value={-1}>Seçiniz...</option>
+                                            {warehouses.map(w => (
+                                                <option key={w.id} value={w.id} disabled={transferForm.toWarehouseId !== -1 && w.id === transferForm.toWarehouseId}>
+                                                    {w.name} {transferForm.toWarehouseId !== -1 && w.id === transferForm.toWarehouseId ? '(Hedef Seçili)' : ''}
+                                                </option>
+                                            ))}
                                         </select>
                                     </div>
-                                    <div className="absolute left-[calc(50%-12px)] mt-7 z-10 w-6 h-6 rounded-full bg-indigo-500 text-white flex items-center justify-center shadow-md">
+                                    <div className="absolute left-[calc(50%-12px)] mb-2 z-10 w-6 h-6 rounded-full bg-indigo-500 text-white flex items-center justify-center shadow-md pointer-events-none">
                                         <i className="fat fa-arrow-right text-[10px]"></i>
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 px-1 text-right">GİRİŞ (Hedef Depo)</label>
-                                        <select required value={transferForm.toWarehouseId} onChange={(e) => setTransferForm({ ...transferForm, toWarehouseId: parseInt(e.target.value) })} className="w-full px-4 py-3 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-900/50 rounded-xl text-sm font-bold text-emerald-900 dark:text-emerald-300 focus:border-emerald-500 outline-none">
-                                            <option value={0}>Seçiniz...</option>
-                                            {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                                        <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 px- text-right">GİRİŞ (Hedef Depo)</label>
+                                        <select required value={transferForm.toWarehouseId} onChange={(e) => {
+                                            const newToId = parseInt(e.target.value);
+                                            setTransferForm(prev => ({
+                                                ...prev,
+                                                toWarehouseId: newToId,
+                                                fromWarehouseId: prev.fromWarehouseId === newToId ? -1 : prev.fromWarehouseId
+                                            }));
+                                        }} className="w-full px-4 py-3 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-900/50 rounded-xl text-sm font-bold text-emerald-900 dark:text-emerald-300 focus:border-emerald-500 outline-none">
+                                            <option value={-1}>Seçiniz...</option>
+                                            {warehouses.map(w => (
+                                                <option key={w.id} value={w.id} disabled={transferForm.fromWarehouseId !== -1 && w.id === transferForm.fromWarehouseId}>
+                                                    {w.name} {transferForm.fromWarehouseId !== -1 && w.id === transferForm.fromWarehouseId ? '(Kaynak Seçili)' : ''}
+                                                </option>
+                                            ))}
                                         </select>
                                     </div>
                                 </div>

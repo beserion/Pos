@@ -5,12 +5,14 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import { BusinessDayLog } from './business-day-log.entity';
 import { ClosedDayRecord } from './closed-day-record.entity';
 import { ZReport } from './z-report.entity';
 import { Shift } from '../shifts/shift.entity';
+import { Sale } from '../sales/sale.entity';
 import { ParametersService } from '../parameters/parameters.service';
+import { FinanceService } from '../finance/finance.service';
 
 @Injectable()
 export class BusinessDayService {
@@ -25,13 +27,19 @@ export class BusinessDayService {
     private readonly zReportRepo: Repository<ZReport>,
     @InjectRepository(Shift)
     private readonly shiftRepo: Repository<Shift>,
+    @InjectRepository(Sale)
+    private readonly saleRepo: Repository<Sale>,
     private readonly parametersService: ParametersService,
+    private readonly financeService: FinanceService,
     private readonly dataSource: DataSource,
   ) {}
 
-  // ─── Yardımcı: Bugünün gerçek tarihini al (YYYY-MM-DD) ────────
+  // ─── Yardımcı: Bugünün gerçek tarihini al (Yerel YYYY-MM-DD) ────────
   private getRealDate(): string {
-    return new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const offset = now.getTimezoneOffset();
+    const localNow = new Date(now.getTime() - (offset * 60 * 1000));
+    return localNow.toISOString().split('T')[0];
   }
 
   // ─── Yardımcı: İki tarih arasındaki eksik günleri hesapla ─────
@@ -95,9 +103,9 @@ export class BusinessDayService {
       : [];
 
     // Sorun var mı?
-    const hasIssues =
-      needsRollover ||
-      (activeBusinessDate !== realDate && !needsRollover);
+    // Sadece gelecek tarihte ise (hatalı durum) giriş engellenir.
+    // Eğer activeBusinessDate <= realDate ise girişe izin verilir (canAccessSales = true).
+    const hasIssues = activeBusinessDate > realDate;
 
     // Vardiyalı kasiyer sistemi aktif mi?
     const shiftSystemEnabled = (await this.parametersService.getValue('pos', 'shift_system_enabled')) !== 'false';
@@ -176,6 +184,7 @@ export class BusinessDayService {
     userId: number,
     companyId: number = 1,
     note?: string,
+    force: boolean = false,
   ): Promise<{ success: boolean; message: string; newBusinessDate?: string; zReportId?: number }> {
     const realDate = this.getRealDate();
     const now = new Date();
@@ -186,18 +195,29 @@ export class BusinessDayService {
     nextDate.setDate(nextDate.getDate() + 1);
     const nextDateStr = nextDate.toISOString().split('T')[0];
 
-    if (nextDateStr > realDate) {
+    if (nextDateStr > realDate && !force) {
       await this.writeLog({
         companyId,
         userId,
-        actionType: 'END_OF_DAY_BLOCKED',
+        actionType: 'END_OF_DAY_FUTURE_CONFIRM_REQUIRED',
         oldBusinessDate: activeDate,
         newBusinessDate: nextDateStr,
-        note: `Program tarihi gerçek tarihin ilerisine geçirilemez. Gerçek tarih: ${realDate}`,
+        note: `${activeDate} tarihi henüz bitmedi. Onay bekleniyor.`,
       });
       throw new BadRequestException(
-        'Program tarihi gerçek tarihin ilerisine geçirilemez.',
+        `CONFIRM_FUTURE_DATE|${activeDate} tarihi henüz bitmedi. Yine de bir sonraki güne (${nextDateStr}) geçmek istiyor musunuz?`,
       );
+    }
+
+    if (nextDateStr > realDate && force) {
+      // 1 Günden fazla ileriye gitmeyi engelle (Güvenlik)
+      const maxAllowed = new Date(realDate);
+      maxAllowed.setDate(maxAllowed.getDate() + 1);
+      const maxAllowedStr = maxAllowed.toISOString().split('T')[0];
+      
+      if (nextDateStr > maxAllowedStr) {
+        throw new BadRequestException(`Program tarihi gerçek tarihten en fazla 1 gün ileride olabilir. (Maksimum: ${maxAllowedStr})`);
+      }
     }
 
     // ── Koruma 2: 6 saat minimum aralık ──
@@ -274,12 +294,26 @@ export class BusinessDayService {
       openTableCount = Number(tableRes[0]?.cnt || 0);
     } catch {}
 
+    const blockIfTablesOpen = (await this.parametersService.getValue('pos', 'block_eod_if_tables_open')) === 'true';
+    if (blockIfTablesOpen && openTableCount > 0) {
+      throw new BadRequestException(
+        `Açık masalar (ödenmemiş adisyonlar) varken gün sonu yapılamaz. Toplam ${openTableCount} açık masa bulunmaktadır.`,
+      );
+    }
+
+    const autoCloseShifts = (await this.parametersService.getValue('pos', 'auto_close_shifts_on_eod')) !== 'false';
+
     // ── Gün sonu işlemi: Z raporu oluştur (tüm kasalar için toplu) ──
     // Tüm kasaları bul
     const cashRegisters = await this.dataSource.query(
       `SELECT id FROM cash_registers WHERE companyId = @0 AND isActive = 1`,
       [companyId],
     );
+
+    let totalCashAll = 0;
+    let totalCardAll = 0;
+    let totalBankAll = 0;
+    let allShiftIdsForFinance: number[] = [];
 
     let zReportId: number | undefined;
     for (const cr of cashRegisters) {
@@ -301,6 +335,10 @@ export class BusinessDayService {
 
         // Açık vardiyalar varsa otomatik kapat (eğer mandatory değilse buraya geldiyse izin var)
         const openShifts = shifts.filter((s) => s.status === 'OPEN');
+        if (openShifts.length > 0 && !autoCloseShifts) {
+           throw new BadRequestException(`${cr.id} nolu kasada açık vardiya bulunmaktadır. Lütfen önce vardiyayı kapatın.`);
+        }
+
         for (const openShift of openShifts) {
           // Beklenen nakit hesapla
           const expResult = await this.dataSource.query(
@@ -333,6 +371,7 @@ export class BusinessDayService {
           SELECT
             SUM(CASE WHEN paymentMethod IN ('KASA','CASH') THEN CAST(paidAmountCash AS DECIMAL(12,2)) ELSE 0 END) as nakit,
             SUM(CASE WHEN paymentMethod IN ('KREDI_KARTI','CREDIT_CARD','CC') THEN CAST(paidAmountCreditCard AS DECIMAL(12,2)) ELSE 0 END) as krediKarti,
+            SUM(CASE WHEN paymentMethod IN ('BANKA','EFT','HAVALE') THEN CAST(paidAmountBank AS DECIMAL(12,2)) ELSE 0 END) as banka,
             SUM(CASE WHEN paymentMethod = 'CARI' THEN CAST(totalAmount AS DECIMAL(12,2)) ELSE 0 END) as cari,
             SUM(CASE WHEN paymentMethod = 'SPLIT' THEN CAST(paidAmountCash AS DECIMAL(12,2)) ELSE 0 END) as splitNakit,
             SUM(CASE WHEN paymentMethod = 'SPLIT' THEN CAST(paidAmountCreditCard AS DECIMAL(12,2)) ELSE 0 END) as splitKart,
@@ -345,6 +384,10 @@ export class BusinessDayService {
           WHERE shiftId IN (${shiftIdList}) AND status = 'COMPLETED'
         `);
         const t = tahsilatRes[0] || {};
+        totalCashAll += Number(t.nakit || 0) + Number(t.splitNakit || 0);
+        totalCardAll += Number(t.krediKarti || 0) + Number(t.splitKart || 0);
+        totalBankAll += Number(t.banka || 0);
+        allShiftIdsForFinance.push(...shiftIds);
 
         const iptalRes = await this.dataSource.query(`
           SELECT COUNT(*) as iptalAdedi, ISNULL(SUM(CAST(totalAmount AS DECIMAL(12,2))), 0) as iptalToplam
@@ -445,6 +488,51 @@ export class BusinessDayService {
       `, [userId, `Gün sonu alındı. ${activeDate} → ${nextDateStr}`, companyId]);
     } catch {}
 
+    // ── Finansal Kayıtları Güncelle (Manuel Gün Sonu Entegrasyonu) ──
+    try {
+      if (totalCashAll > 0) {
+        await this.financeService.upsertEndOfDay({
+          amount: totalCashAll,
+          description: `Gün Sonu Nakit Tahsilat - ${activeDate}`,
+          category: 'Gün Sonu',
+          paymentMethod: 'KASA',
+          userId,
+        });
+      }
+      if (totalCardAll > 0) {
+        await this.financeService.upsertEndOfDay({
+          amount: totalCardAll,
+          description: `Gün Sonu Kredi Kartı Tahsilat - ${activeDate}`,
+          category: 'Gün Sonu',
+          paymentMethod: 'KREDI_KARTI',
+          userId,
+        });
+      }
+      if (totalBankAll > 0) {
+        await this.financeService.upsertEndOfDay({
+          amount: totalBankAll,
+          description: `Gün Sonu Banka Tahsilat - ${activeDate}`,
+          category: 'Gün Sonu',
+          paymentMethod: 'BANKA',
+          userId,
+        });
+      }
+    } catch (err) {
+      this.logger.error('Finance upsert error during End of Day:', err);
+    }
+
+    // ── Satışları "Kapatıldı" Olarak İşaretle ──
+    if (allShiftIdsForFinance.length > 0) {
+      try {
+        await this.saleRepo.update(
+          { shiftId: In(allShiftIdsForFinance), status: 'COMPLETED' },
+          { isEndOfDayClosed: true }
+        );
+      } catch (err) {
+        this.logger.error('Failed to mark sales as closed:', err);
+      }
+    }
+
     return {
       success: true,
       message: `Gün sonu başarıyla tamamlandı. Yeni çalışma günü: ${nextDateStr}`,
@@ -462,12 +550,24 @@ export class BusinessDayService {
     companyId: number = 1,
   ): Promise<{ success: boolean; message: string; nextDateToProcess?: string }> {
     const realDate = this.getRealDate();
-    const activeDate = await this.getActiveBusinessDate(companyId);
+    let activeDate = await this.getActiveBusinessDate(companyId);
+    if (!activeDate || isNaN(new Date(activeDate).getTime())) {
+      activeDate = realDate;
+    }
+
+    if (!businessDate || isNaN(new Date(businessDate).getTime())) {
+      throw new BadRequestException('Geçersiz veya bozuk bir devir tarihi gönderildi.');
+    }
 
     // Devredilecek tarih aktif program tarihinden bir gün sonrası olmalı
     const expectedNext = new Date(activeDate);
     expectedNext.setDate(expectedNext.getDate() + 1);
     const expectedNextStr = expectedNext.toISOString().split('T')[0];
+
+    // Eğer istenen tarih zaten aktif iş günüyle aynı veya daha eskiyse atla, hataya düşme
+    if (businessDate <= activeDate) {
+      return { success: true, message: 'Bu tarih zaten devredilmiş veya kapanmış, atlanıyor.' };
+    }
 
     if (businessDate !== expectedNextStr) {
       throw new BadRequestException(
@@ -481,15 +581,23 @@ export class BusinessDayService {
     }
 
     // Kapalı gün kaydı oluştur
-    const record = this.closedDayRepo.create({
-      companyId,
-      businessDate,
-      isClosed,
-      note: note || '',
-      rolledOverByUserId: userId,
-      rolledOverAt: new Date(),
-    });
-    await this.closedDayRepo.save(record);
+    try {
+      const existing = await this.closedDayRepo.findOne({ where: { companyId, businessDate } });
+      if (!existing) {
+        const record = this.closedDayRepo.create({
+          companyId,
+          businessDate,
+          isClosed,
+          note: note || '',
+          rolledOverByUserId: userId,
+          rolledOverAt: new Date(),
+        });
+        await this.closedDayRepo.save(record);
+      }
+    } catch (e) {
+      this.logger.error('closedDayRepo save error', e);
+      throw new BadRequestException('Kapalı gün kaydı veritabanına eklenirken bir hata oluştu: ' + e.message);
+    }
 
     // Program tarihini güncelle
     await this.parametersService.upsert('pos', 'active_business_date', businessDate, 'Aktif Program Tarihi', 'text', 'Mevcut çalışma günü tarihi');

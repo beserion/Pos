@@ -5,6 +5,7 @@ import {
   Body,
   UseGuards,
   Request,
+  BadRequestException,
 } from '@nestjs/common';
 import { BusinessDayService } from './business-day.service';
 import { AuthGuard } from '@nestjs/passport';
@@ -24,12 +25,12 @@ export class BusinessDayController {
   /** Gün sonu al — 6 saat kuralı + ileri tarih koruması + vardiya kontrolü */
   @Post('end-of-day')
   async endOfDay(
-    @Body() body: { note?: string },
+    @Body() body: { note?: string; force?: boolean },
     @Request() req: any,
   ) {
     const userId = req.user?.userId || req.user?.sub || req.user?.id;
     const companyId = req.user?.companyId || 1;
-    return this.businessDayService.performEndOfDay(userId, companyId, body.note);
+    return this.businessDayService.performEndOfDay(userId, companyId, body.note, body.force);
   }
 
   /** Kapalı gün devri — tek gün, sıralı */
@@ -40,13 +41,18 @@ export class BusinessDayController {
   ) {
     const userId = req.user?.userId || req.user?.sub || req.user?.id;
     const companyId = req.user?.companyId || 1;
-    return this.businessDayService.rolloverClosedDay(
-      userId,
-      body.businessDate,
-      body.isClosed,
-      body.note,
-      companyId,
-    );
+    try {
+      return await this.businessDayService.rolloverClosedDay(
+        userId,
+        body.businessDate,
+        body.isClosed,
+        body.note,
+        companyId,
+      );
+    } catch (error) {
+      console.error('[BusinessDayController] rolloverClosedDay error:', error);
+      throw new BadRequestException(error.message || 'Kapalı gün devri sırasında beklenmedik 500 hatası.');
+    }
   }
 
   /** Aynı tarihte devam et — sadece yetkili kullanıcı */

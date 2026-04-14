@@ -1,12 +1,13 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useLocale } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { showSwal } from '../../utils/swal';
+import { useAuth } from '@/app/[locale]/AuthContext';
 import { useParameters, invalidateParameterCache } from '../../utils/useParameters';
 
 // ─── Parametre tipleri ────────────────────────────────────────────
-type ParamType = 'text' | 'number' | 'boolean' | 'select' | 'color';
+type ParamType = 'text' | 'number' | 'boolean' | 'select' | 'color' | 'date';
 
 interface Param {
     key: string;
@@ -39,26 +40,30 @@ const defaultModules: Module[] = [
         params: [
             { key: 'default_payment_method', label: 'Varsayılan Ödeme Yöntemi', type: 'select', value: 'KASA', options: ['KASA', 'KREDI_KARTI', 'HAVALE'] },
             { key: 'service_fee_rate', label: 'Servis Ücreti (%)', description: 'Toplam tutara eklenen servis bedeli', type: 'number', value: 10, unit: '%' },
-            { key: 'tax_rate', label: 'KDV Oranı (%)', type: 'number', value: 8, unit: '%' },
+            { key: 'available_tax_rates', label: 'Geçerli KDV Oranları', description: 'Virgülle ayırarak giriniz (Örn: 0,1,10,20)', type: 'text', value: '0,1,10,20' },
             { key: 'allow_discount', label: 'İndirime İzin Ver', type: 'boolean', value: true },
             { key: 'max_discount_rate', label: 'Maksimum İndirim (%)', type: 'number', value: 20, unit: '%' },
             { key: 'receipt_footer', label: 'Fiş Alt Yazısı', type: 'text', value: 'Teşekkür ederiz! Tekrar bekleriz.' },
             { key: 'screen_timeout', label: 'Ekran Zaman Aşımı', description: 'Belirlenen süre hareketsizlik sonrası şifre ekranına döner. 0 = kapalı', type: 'number', value: 180, unit: 'sn' },
             // ── İş Günü Yönetimi ──
+            { key: 'active_business_date', label: 'Program Tarihi (İş Günü)', description: 'Mevcut iş günü. DİKKAT: Sadece istisnai durumlarda değiştirin, gün bütünlüğünü ve Z-Raporunu etkileyebilir!', type: 'date', value: '' },
             { key: 'shift_system_enabled', label: 'Vardiyalı Kasiyer Sistemi', description: 'Vardiya açma/kapama zorunluluğu. Kapatılırsa vardiya uyarıları devre dışı kalır.', type: 'boolean', value: true },
             { key: 'shift_closure_mode', label: 'Gün Sonu Vardiya Kontrol Modu', description: 'Gün sonu öncesi açık vardiya kontrolü', type: 'select', value: 'warn_only', options: ['warn_only', 'authorized_approval', 'mandatory_close'], optionLabels: { 'warn_only': 'Sadece Uyarı Ver', 'authorized_approval': 'Yetkili Onayıyla Devam', 'mandatory_close': 'Zorunlu Vardiya Kapatma' } },
             { key: 'z_report_print_mode', label: 'Z Raporu Yazdırma Modu', description: 'Gün sonu sonrası Z raporu otomatik yazdırılsın mı?', type: 'select', value: 'auto_print', options: ['auto_print', 'manual_print', 'disabled'], optionLabels: { 'auto_print': 'Otomatik Yazdır', 'manual_print': 'Manuel Yazdır', 'disabled': 'Yazdırma Kapalı' } },
             { key: 'end_of_day_min_hours', label: 'Gün Sonu Min. Saat Aralığı', description: 'İki gün sonu arasında minimum geçmesi gereken saat', type: 'number', value: 6, unit: 'saat' },
+            { key: 'block_eod_if_tables_open', label: 'Açık Masa Varken Gün Sonunu Engelle', description: 'Eğer açık (ödenmemiş) masa varsa gün sonu alınmasını engeller.', type: 'boolean', value: false },
+            { key: 'auto_close_shifts_on_eod', label: 'Gün Sonunda Vardiyaları Otomatik Kapat', description: 'Gün sonu alındığında hala açık olan vardiyalar otomatik olarak beklenen tutar ile kapatılsın mı?', type: 'boolean', value: true },
         ]
     },
     {
         id: 'half_double', icon: 'fa-glass-half', color: 'text-orange-500', bgGradient: 'from-orange-500/10 to-orange-500/0',
-        borderColor: 'border-orange-500/30', title: 'Yarım / Duble Parametreleri', subtitle: 'Yarım ve duble satış tipi katsayı ayarları',
+        borderColor: 'border-orange-500/30', title: 'Ürün', subtitle: 'Ürün parametre ve ayarları',
         params: [
             { key: 'half_price_multiplier', label: 'Yarım Fiyat Katsayısı', description: 'Ürün fiyatı bu katsayı ile çarpılır (örn: 0.50 = yarı fiyat)', type: 'number', value: 0.50 },
             { key: 'double_price_multiplier', label: 'Duble Fiyat Katsayısı', description: 'Ürün fiyatı bu katsayı ile çarpılır (örn: 1.70)', type: 'number', value: 1.70 },
             { key: 'half_recipe_multiplier', label: 'Yarım Reçete Katsayısı', description: 'Stok düşümü bu katsayı ile çarpılır', type: 'number', value: 0.50 },
             { key: 'double_recipe_multiplier', label: 'Duble Reçete Katsayısı', description: 'Stok düşümü bu katsayı ile çarpılır', type: 'number', value: 2.00 },
+            { key: 'variant_system_enabled', label: 'Varyant Sistemi', description: 'Ürünlerde varyant ekleme sekmesini aktif veya pasif yapar.', type: 'boolean', value: true },
         ]
     },
     {
@@ -163,30 +168,58 @@ const defaultModules: Module[] = [
 export function PageClient() {
     const router = useRouter();
     const locale = useLocale();
+    const tAdmin = useTranslations('Admin');
+    const { user, loading: authLoading, hasPermission } = useAuth();
+
     const [activeModule, setActiveModule] = useState<string>('pos');
     const [searchQuery, setSearchQuery] = useState('');
     const [modules, setModules] = useState<Module[]>(defaultModules);
     const [saved, setSaved] = useState(false);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true); // Başlangıçta true
     const [isSaving, setIsSaving] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
 
-    const currentModule = modules.find(m => m.id === activeModule)!;
+    const currentModule = modules.find(m => m.id === activeModule) || modules[0] || defaultModules[0];
 
-    const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')));
+    const getApiUrl = () => {
+        if (typeof window === 'undefined') return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+        const hostname = window.location.hostname;
+        if (hostname === 'localhost' || hostname === '127.0.0.1' || /^192\.168\./.test(hostname) || /^10\./.test(hostname)) {
+            return `http://${hostname}:3050`;
+        }
+        return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+    };
+
+    const API_URL = getApiUrl();
+
+    // Yetki Kontrolü
+    useEffect(() => {
+        if (!authLoading && !user) {
+            router.push(`/${locale}/login`);
+        } else if (!authLoading && !hasPermission('SYSTEM:VIEW')) {
+            router.push(`/${locale}/dashboard`);
+        }
+    }, [user, authLoading, hasPermission, router, locale]);
 
     // Sayfa açılışında tüm parametreleri çek
     useEffect(() => {
         const fetchAll = async () => {
+            if (!user) return;
             setLoading(true);
             try {
                 const token = localStorage.getItem('token');
                 const res = await fetch(`${API_URL}/parameters`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
-                if (!res.ok) return;
-                const data: { module: string; key: string; value: string; type: string }[] = await res.json();
-                if (data.length === 0) return;
+                if (!res.ok) {
+                    setLoading(false);
+                    return;
+                }
+                const data: any[] = await res.json();
+                if (data.length === 0) {
+                    setLoading(false);
+                    return;
+                }
 
                 setModules(prev => prev.map(mod => ({
                     ...mod,
@@ -194,19 +227,21 @@ export function PageClient() {
                         const found = data.find(d => d.module === mod.id && d.key === p.key);
                         if (!found) return p;
                         let val: any = found.value;
-                        if (p.type === 'boolean') val = found.value === 'true';
+                        if (p.type === 'boolean') val = found.value === 'true' || found.value === true;
                         if (p.type === 'number') val = Number(found.value);
                         return { ...p, value: val };
                     })
                 })));
-            } catch (_) {
-                // API erişilemiyorsa defaults ile devam et
+            } catch (err) {
+                console.error("[Parameters] Fetch error:", err);
             } finally {
                 setLoading(false);
             }
         };
-        fetchAll();
-    }, []);
+        if (!authLoading && user) {
+            fetchAll();
+        }
+    }, [authLoading, user, API_URL]);
 
     const updateParam = (moduleId: string, key: string, value: any) => {
         setIsDirty(true);
@@ -232,24 +267,26 @@ export function PageClient() {
         setIsSaving(true);
 
         try {
-            // Her modülü bağımsız, paralel olarak kaydet
-            await Promise.all(
-                modules.map(mod => {
-                    const items = mod.params.map(p => ({
-                        module: mod.id,
-                        key: p.key,
-                        value: String(p.value),
-                        label: p.label,
-                        type: p.type,
-                        description: p.description,
-                    }));
-                    return fetch(`${API_URL}/parameters/bulk`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                        body: JSON.stringify({ items }),
-                    }).then(res => { if (!res.ok) throw new Error(`${mod.title} kaydedilemedi`); });
-                })
+            // Tüm modüllerdeki tüm parametreleri tek bir dizide topla
+            const allItems = modules.flatMap(mod =>
+                mod.params.map(p => ({
+                    module: mod.id,
+                    key: p.key,
+                    value: String(p.value),
+                    label: p.label,
+                    type: p.type,
+                    description: p.description,
+                }))
             );
+
+            // Tek bir toplu (bulk) istek gönder
+            const res = await fetch(`${API_URL}/parameters/bulk`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ items: allItems }),
+            });
+
+            if (!res.ok) throw new Error('Parametreler kaydedilemedi');
 
             invalidateParameterCache();
             setIsDirty(false);
@@ -298,6 +335,8 @@ export function PageClient() {
         switch (param.type) {
             case 'text':
                 return <input type="text" value={param.value} onChange={e => updateParam(mod.id, param.key, e.target.value)} className={`${baseClass} w-full`} placeholder={param.label} />;
+            case 'date':
+                return <input type="date" value={param.value || ''} onChange={e => updateParam(mod.id, param.key, e.target.value)} className={`${baseClass} w-48`} />;
             case 'number':
                 return (
                     <div className="flex items-center gap-2">
@@ -326,17 +365,28 @@ export function PageClient() {
     };
 
     // ─── Arama Filtreleme Mantığı ──────────────────────────────
-    const filteredResults = searchQuery.trim() !== '' 
-        ? modules.flatMap(mod => 
+    const filteredResults = searchQuery.trim() !== ''
+        ? modules.flatMap(mod =>
             mod.params
-                .filter(p => 
-                    p.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    p.key.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                .filter(p =>
+                    (p.label?.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                    (p.key?.toLowerCase().includes(searchQuery.toLowerCase())) ||
                     (p.description?.toLowerCase().includes(searchQuery.toLowerCase()))
                 )
                 .map(p => ({ ...p, moduleTitle: mod.title, moduleIcon: mod.icon, moduleColor: mod.color, moduleId: mod.id }))
-          )
+        )
         : [];
+
+    if (authLoading || (loading && modules === defaultModules && !user)) {
+        return (
+            <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                    <i className="fat fa-spinner-third animate-spin text-4xl text-violet-500"></i>
+                    <p className="text-slate-400 font-bold text-sm">Parametreler Yükleniyor...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans transition-colors duration-300">
@@ -348,7 +398,7 @@ export function PageClient() {
                         <i className="fat fa-spinner-third animate-spin text-5xl text-violet-500"></i>
                         <div className="text-center">
                             <p className="font-black text-slate-800 dark:text-white text-lg">Kaydediliyor</p>
-                            <p className="text-sm text-slate-400 mt-1">{modules.length} modül paralel olarak veritabanına yazılıyor...</p>
+                            <p className="text-sm text-slate-400 mt-1">Tüm parametreler güvenli bir şekilde tek seferde veritabanına yazılıyor...</p>
                         </div>
                         <div className="flex gap-1 mt-1">
                             {modules.map((m, i) => (
@@ -412,15 +462,15 @@ export function PageClient() {
                             <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400">Arama</p>
                             <div className="relative group">
                                 <i className={`fat fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs transition-colors duration-200 ${searchQuery ? 'text-indigo-500' : 'text-slate-400'}`}></i>
-                                <input 
-                                    type="text" 
+                                <input
+                                    type="text"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     placeholder="Parametre ara..."
                                     className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all placeholder:text-slate-400 dark:text-white"
                                 />
                                 {searchQuery && (
-                                    <button 
+                                    <button
                                         onClick={() => setSearchQuery('')}
                                         className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
                                     >
@@ -567,7 +617,7 @@ export function PageClient() {
                                         </div>
                                         <h3 className="text-lg font-bold text-slate-700 dark:text-white">Sonuç Bulunamadı</h3>
                                         <p className="text-sm text-slate-400 mt-2 max-w-xs">Aradığınız kriterlere uygun herhangi bir parametre mevcut değil. Lütfen başka bir anahtar kelime deneyin.</p>
-                                        <button 
+                                        <button
                                             onClick={() => setSearchQuery('')}
                                             className="mt-6 text-indigo-500 font-bold text-sm hover:underline"
                                         >

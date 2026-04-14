@@ -1,16 +1,89 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../AuthContext';
 import { useRouter } from 'next/navigation';
 import { showSwal, toastSwal } from '../utils/swal';
 import { useLocale, useTranslations } from 'next-intl';
 import Cookies from 'js-cookie';
-import { useTheme } from 'next-themes';
+import { useThemeTransition } from '@/hooks/useThemeTransition';
 import { useParameters } from '../utils/useParameters';
 import TransferModal from './TransferModal';
 import SetMenuSelectionModal from './SetMenuSelectionModal';
+import { io, Socket } from 'socket.io-client';
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    MouseSensor,
+    TouchSensor,
+    useSensor,
+    useSensors,
+    DragEndEvent,
+    DragStartEvent,
+    DragOverlay,
+    defaultDropAnimationSideEffects,
+} from '@dnd-kit/core';
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    rectSortingStrategy,
+    useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
+function SortableProductCard({ product, onClick, isDesignMode }: { product: Product, onClick: () => void, isDesignMode: boolean }) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+        id: product.id,
+        disabled: !isDesignMode,
+        transition: {
+            duration: 250,
+            easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
+        }
+    });
 
+    const style = {
+        transform: CSS.Translate.toString(transform),
+        transition,
+        opacity: isDragging ? 0.3 : 1,
+    };
+
+    return (
+        <button
+            ref={setNodeRef}
+            style={style}
+            {...(isDesignMode ? { ...attributes, ...listeners } : {})}
+            onClick={() => { if (!isDesignMode) onClick(); }}
+            className={`relative h-32 bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-md border overflow-hidden group ${!isDesignMode ? 'transition-all duration-300 border-slate-100 dark:border-slate-700 active:scale-95' : 'transition-colors duration-200 cursor-grab active:cursor-grabbing ring-2 ring-indigo-500/50 border-indigo-500/30'} flex justify-center w-full`}
+        >
+            <div className={`absolute inset-0 bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center transition-transform duration-500 group-hover:scale-105 pointer-events-none`}>
+                {product.imageUrl ? (
+                    <img
+                        src={product.imageUrl.startsWith('http') || product.imageUrl.startsWith('data:') || product.imageUrl.startsWith('/') ? product.imageUrl : `/uploads/products/${product.imageUrl}`}
+                        alt={product.name}
+                        className="w-full h-full object-cover"
+                    />
+                ) : (
+                    <span className="text-3xl mb-1 opacity-50 transition-opacity">
+                        {(product.linkedStockCard?.category || product.category) === 'Kahveler' ? '☕' : (product.linkedStockCard?.category || product.category) === 'Tatlılar' ? '🍰' : '🍹'}
+                    </span>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/30 to-transparent"></div>
+            </div>
+
+            <div className="absolute bottom-0 left-0 right-0 p-1.5 flex flex-col items-center text-center justify-end z-10 pointer-events-none">
+                <span className="font-bold text-white text-[10px] leading-tight mb-0 drop-shadow-md line-clamp-2">{product.name}</span>
+                <span className="font-extrabold text-white bg-emerald-600/90 backdrop-blur-sm px-2 py-0.5 rounded-full text-[9px] shadow-sm mt-0.5 border border-emerald-400/30">₺{product.price}</span>
+            </div>
+
+            {product.isSet && (
+                <div className="absolute top-2 right-2 bg-indigo-500/80 backdrop-blur-md px-2 py-1 rounded-full border border-indigo-400/50 shadow-sm flex items-center justify-center pointer-events-none">
+                    <span className="text-[9px] font-black text-white px-0.5">MENÜ</span>
+                </div>
+            )}
+        </button>
+    );
+}
 interface Modifier {
     id: number;
     name: string;
@@ -26,6 +99,14 @@ interface Product {
     printerId?: number;
     modifiers?: Modifier[];
     isSet?: boolean;
+    productTypeId?: number;
+    stockGroup?: string;
+    stockGroupId?: number;
+    sku?: string;
+    linkedStockCard?: {
+        stockGroup?: string;
+        category?: string;
+    };
     setMenu?: {
         setType: string;
         groups: {
@@ -40,15 +121,17 @@ interface Product {
             }[];
         }[];
     };
+    variations?: any[];
 }
-interface OrderItem { product: Product; quantity: number; note?: string; isWaiting?: boolean; subItems?: any[]; extraPrice?: number; uniqueId?: string; saleType?: 'STANDARD' | 'HALF' | 'DOUBLE'; saleTypeMultiplier?: number; }
+interface ProductType { id: number; name: string; }
+interface OrderItem { product: Product; quantity: number; note?: string; isWaiting?: boolean; subItems?: any[]; extraPrice?: number; uniqueId?: string; saleType?: 'STANDARD' | 'HALF' | 'DOUBLE'; saleTypeMultiplier?: number; variationId?: number; variationName?: string; }
 interface ExistingOrder {
     id: number;
     totalAmount: number;
     items: { id: number; product: { id: number; name: string; price: number; isSet?: boolean }; quantity: number; unitPrice: number; isPaid: boolean; isWaiting: boolean; isMarshed: boolean; parentItemId?: number; }[];
 }
 interface Zone { id: number; name: string; }
-interface Table { id: number; name: string; status: string; waiterName?: string; orderStartTime?: string; currentTotal?: number; zone: { id: number } }
+interface Table { id: number; name: string; status: string; waiterName?: string; orderStartTime?: string; currentTotal?: number; isBillRequested?: boolean; zone: { id: number } }
 
 export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => void }) {
     const { user, loginPinOnly, logout, loading } = useAuth();
@@ -56,28 +139,42 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const locale = useLocale();
     const t = useTranslations('Admin');
     const tc = useTranslations('Common');
-    const { theme, setTheme } = useTheme();
+    const { theme, toggleTheme, setTheme } = useThemeTransition();
     const [mounted, setMounted] = useState(false);
+
+    const [isDesignMode, setIsDesignMode] = useState(false);
+    const [activeDragItem, setActiveDragItem] = useState<Product | null>(null);
 
     const [activeTab, setActiveTab] = useState<'tables' | 'menu'>('tables');
     const [products, setProducts] = useState<Product[]>([]);
     const [tables, setTables] = useState<Table[]>([]);
     const [zones, setZones] = useState<Zone[]>([]);
     const [departments, setDepartments] = useState<any[]>([]);
+    const [parentGroups, setParentGroups] = useState<any[]>([]);
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
     const [selectedZone, setSelectedZone] = useState<number | null>(null);
     const [cart, setCart] = useState<OrderItem[]>([]);
     const [activeSaleType, setActiveSaleType] = useState<'STANDARD' | 'HALF' | 'DOUBLE'>('STANDARD');
     const [existingOrders, setExistingOrders] = useState<ExistingOrder[]>([]);
-    const [selectedCategory, setSelectedCategory] = useState<string>('Tümü');
     const [searchQuery, setSearchQuery] = useState('');
     const [dataLoading, setDataLoading] = useState(true);
+
+    const [productTypes, setProductTypes] = useState<ProductType[]>([]);
+    const [selectedProductTypeId, setSelectedProductTypeId] = useState<number | 'all'>('all');
+    const [selectedParentGroupId, setSelectedParentGroupId] = useState<number | 'all' | 'unassigned' | null>(null);
+    const [selectedDepartmentId, setSelectedDepartmentId] = useState<number | 'all' | null>(null);
 
     // --- Ekstra Popup State ---
     const [extraPopupOpen, setExtraPopupOpen] = useState(false);
     const [extraPopupProducts, setExtraPopupProducts] = useState<Product[]>([]);
     const [extraPopupParentProduct, setExtraPopupParentProduct] = useState<Product | null>(null);
     const [pendingExtraCartItem, setPendingExtraCartItem] = useState<OrderItem | null>(null);
+
+    // --- Variation Modal State ---
+    const [isVariationModalOpen, setIsVariationModalOpen] = useState(false);
+    const [selectedProductForVariation, setSelectedProductForVariation] = useState<Product | null>(null);
+    const [pendingAddToCartArgs, setPendingAddToCartArgs] = useState<{ note?: string; skipExtraCheck?: boolean }>({});
+
 
 
 
@@ -105,6 +202,8 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [selectedSetMenuProduct, setSelectedSetMenuProduct] = useState<Product | null>(null);
     const [isSetMenuModalOpen, setIsSetMenuModalOpen] = useState(false);
 
+    const [isBillRequestedAlertOpen, setIsBillRequestedAlertOpen] = useState(false);
+
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
     const { params } = useParameters();
 
@@ -112,16 +211,20 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         try {
             const token = Cookies.get('token') || localStorage.getItem('token');
             if (!token) return;
-            const [productsRes, tablesRes, zonesRes, depsRes] = await Promise.all([
+            const [productsRes, tablesRes, zonesRes, depsRes, typesRes, pGroupsRes] = await Promise.all([
                 fetch(`${API_URL}/products`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
                 fetch(`${API_URL}/tables`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
                 fetch(`${API_URL}/zones`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-                fetch(`${API_URL}/departments`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => [])
+                fetch(`${API_URL}/departments`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => []),
+                fetch(`${API_URL}/product-types`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => []),
+                fetch(`${API_URL}/parent-groups`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => [])
             ]);
             setProducts(Array.isArray(productsRes) ? productsRes : []);
             setTables(Array.isArray(tablesRes) ? tablesRes : []);
             setZones(Array.isArray(zonesRes) ? zonesRes : []);
             setDepartments(Array.isArray(depsRes) ? depsRes : []);
+            setProductTypes(Array.isArray(typesRes) ? typesRes : []);
+            setParentGroups(Array.isArray(pGroupsRes) ? pGroupsRes : []);
             if (Array.isArray(zonesRes) && zonesRes.length > 0) setSelectedZone(zonesRes[0].id);
         } catch (error) {
             console.error('Error fetching POS data:', error);
@@ -141,18 +244,79 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         }
     }, [user, loading]);
 
+    // ── WebSocket: Garson veya başka kaynaktan gelen anlık güncellemeler ──
+    useEffect(() => {
+        const socket: Socket = io(API_URL, { transports: ['websocket'] });
+        socket.on('salesUpdate', () => { fetchData(); });
+        socket.on('newOrder', () => { fetchData(); });
+        socket.on('orderUpdated', () => { fetchData(); });
+        return () => { socket.disconnect(); };
+    }, [API_URL, fetchData]);
+
+    const sensors = useSensors(
+        useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+        useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    );
+
+    const handleDragStart = (event: DragStartEvent) => {
+        const { active } = event;
+        const card = products.find(c => c.id === active.id);
+        if (card) setActiveDragItem(card);
+    };
+
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        setActiveDragItem(null);
+        if (over && active.id !== over.id) {
+            setProducts((items) => {
+                const oldIndex = items.findIndex(i => i.id === active.id);
+                const newIndex = items.findIndex(i => i.id === over.id);
+                return arrayMove(items, oldIndex, newIndex);
+            });
+        }
+    };
+
     const formatTime = (dateStr?: string) => {
         if (!dateStr) return '';
         const date = new Date(dateStr);
         return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
     };
 
-    const categories = ['Tümü', ...Array.from(new Set(products.map(p => p.category)))];
+    const productTypeOptions = [{ id: 'all', name: 'Tümü' }, ...productTypes];
+
+    const filteredProducts = products.filter(p => {
+        const matchesType = selectedProductTypeId === 'all' || p.productTypeId === selectedProductTypeId;
+
+        // Arama yapılıyorsa hiyerarşiyi baypas et
+        if (searchQuery.trim() !== '') {
+            return matchesType && p.name.toLowerCase().includes(searchQuery.toLowerCase());
+        }
+
+        // Kategori seçilmediyse: Sadece kategorisi olmayan ürünleri göster
+        if (!selectedDepartmentId) {
+            const hasNoCategory = !p.category || p.category.trim() === '' || p.category === 'Diğer';
+            return matchesType && hasNoCategory;
+        }
+
+        if (selectedDepartmentId === 'all') return matchesType;
+
+        const dept = departments.find(d => d.id === selectedDepartmentId);
+        if (!dept) return false;
+
+        const matchesCategory = p.category === dept.name || (!p.category && dept.name === 'Diğer');
+        return matchesType && matchesCategory;
+    });
 
     const handleTableClick = async (table: Table) => {
         setSelectedTable(table);
         setActiveTab('menu');
         setCart([]);
+
+        if (table.isBillRequested) {
+            // Keep the tab 'menu' but don't reset cart/subchecks yet? 
+            // Actually, we should still fetch sub-checks to show the current total if needed.
+        }
 
         if (table.status === 'DOLU' || table.status === 'REZERVE' || table.currentTotal) {
             try {
@@ -174,7 +338,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                     setAllFlatChecks(flat);
 
                     if (flat.length > 0) {
-                        setActiveSubCheckId('ALL');
+                        setActiveSubCheckId(flat[0].id);
                         setExistingOrders(flat);
                     } else {
                         setAllFlatChecks([]);
@@ -199,7 +363,35 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         }
     };
 
-    const addToCart = (product: Product, note?: string, skipExtraCheck?: boolean) => {
+    const reopenTable = async () => {
+        if (!selectedTable) return;
+        try {
+            const token = localStorage.getItem('token') || (user as any)?.token;
+            const res = await fetch(`${API_URL}/tables/${selectedTable.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ isBillRequested: false })
+            });
+
+            if (res.ok) {
+                // Proced with normal flow
+                const updatedTable = { ...selectedTable, isBillRequested: false };
+                setSelectedTable(updatedTable);
+                setTables(prev => prev.map(t => t.id === updatedTable.id ? updatedTable : t));
+            }
+        } catch (err) {
+            console.error("Failed to reopen table", err);
+        }
+    };
+
+    const addToCart = (product: Product, note?: string, skipExtraCheck?: boolean, forceVariationId?: number) => {
+        if (!forceVariationId && product.variations && product.variations.filter(v => v.isActive !== false).length > 0) {
+            setSelectedProductForVariation(product);
+            setPendingAddToCartArgs({ note, skipExtraCheck });
+            setIsVariationModalOpen(true);
+            return;
+        }
+
         if (product.isSet && product.setMenu?.setType !== 'FIX') {
             setSelectedSetMenuProduct(product);
             setIsSetMenuModalOpen(true);
@@ -208,7 +400,21 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
         const m = activeSaleType === 'HALF' ? (params.half_price_multiplier || 0.5) : activeSaleType === 'DOUBLE' ? (params.double_price_multiplier || 1.7) : 1.0;
 
-        const newItem: OrderItem = { product, quantity: 1, note, isWaiting: false, saleType: activeSaleType, saleTypeMultiplier: m };
+        let extraPriceFromVariation = 0;
+        let vName: string | undefined;
+        let vId: number | undefined;
+        if (forceVariationId && product.variations) {
+            const varItem = product.variations.find(v => v.id === forceVariationId);
+            if (varItem) {
+                vId = varItem.id;
+                vName = varItem.variationName;
+                if (varItem.fixedPrice !== null && varItem.fixedPrice !== undefined) {
+                    extraPriceFromVariation = varItem.fixedPrice - product.price;
+                }
+            }
+        }
+
+        const newItem: OrderItem = { product, quantity: 1, note, isWaiting: false, saleType: activeSaleType, saleTypeMultiplier: m, variationId: vId, variationName: vName, extraPrice: extraPriceFromVariation };
 
         // Ekstra popup kontrolü
         if (!skipExtraCheck) {
@@ -242,9 +448,9 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         }
 
         setCart(prev => {
-            const existing = prev.find(item => item.product.id === product.id && item.note === note && item.saleType === activeSaleType && !item.uniqueId);
+            const existing = prev.find(item => item.product.id === product.id && item.note === note && item.saleType === activeSaleType && item.variationId === vId && !item.uniqueId);
             if (existing) {
-                return prev.map(item => (item.product.id === product.id && item.note === note && item.saleType === activeSaleType && !item.uniqueId) ? { ...item, quantity: item.quantity + 1 } : item);
+                return prev.map(item => (item.product.id === product.id && item.note === note && item.saleType === activeSaleType && item.variationId === vId && !item.uniqueId) ? { ...item, quantity: item.quantity + 1 } : item);
             }
             return [...prev, newItem];
         });
@@ -291,16 +497,16 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                 if (existing && existing.quantity === 1) return prev.filter(i => i.uniqueId !== itemToRemove.uniqueId);
                 return prev.map(item => item.uniqueId === itemToRemove.uniqueId ? { ...item, quantity: item.quantity - 1 } : item);
             }
-            const existing = prev.find(item => item.product.id === itemToRemove.product.id && item.note === itemToRemove.note && item.saleType === itemToRemove.saleType && !item.uniqueId);
-            if (existing && existing.quantity === 1) return prev.filter(i => !(i.product.id === itemToRemove.product.id && i.note === itemToRemove.note && i.saleType === itemToRemove.saleType && !i.uniqueId));
-            return prev.map(item => (item.product.id === itemToRemove.product.id && item.note === itemToRemove.note && item.saleType === itemToRemove.saleType && !item.uniqueId) ? { ...item, quantity: item.quantity - 1 } : item);
+            const existing = prev.find(item => item.product.id === itemToRemove.product.id && item.note === itemToRemove.note && item.saleType === itemToRemove.saleType && item.variationId === itemToRemove.variationId && !item.uniqueId);
+            if (existing && existing.quantity === 1) return prev.filter(i => !(i.product.id === itemToRemove.product.id && i.note === itemToRemove.note && i.saleType === itemToRemove.saleType && i.variationId === itemToRemove.variationId && !i.uniqueId));
+            return prev.map(item => (item.product.id === itemToRemove.product.id && item.note === itemToRemove.note && item.saleType === itemToRemove.saleType && item.variationId === itemToRemove.variationId && !item.uniqueId) ? { ...item, quantity: item.quantity - 1 } : item);
         });
     };
 
     const removeEntireItem = (itemToRemove: OrderItem) => {
         setCart(prev => {
             if (itemToRemove.uniqueId) return prev.filter(i => i.uniqueId !== itemToRemove.uniqueId);
-            return prev.filter(i => !(i.product.id === itemToRemove.product.id && i.note === itemToRemove.note && i.saleType === itemToRemove.saleType && !i.uniqueId));
+            return prev.filter(i => !(i.product.id === itemToRemove.product.id && i.note === itemToRemove.note && i.saleType === itemToRemove.saleType && i.variationId === itemToRemove.variationId && !i.uniqueId));
         });
     };
 
@@ -311,13 +517,13 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         if (noteModalItem.uniqueId) {
             updatedCart = cart.filter(i => i.uniqueId !== noteModalItem.uniqueId);
         } else {
-            updatedCart = cart.filter(i => !(i.product.id === noteModalItem.product.id && i.note === noteModalItem.note && i.saleType === noteModalItem.saleType && !i.uniqueId));
+            updatedCart = cart.filter(i => !(i.product.id === noteModalItem.product.id && i.note === noteModalItem.note && i.saleType === noteModalItem.saleType && i.variationId === noteModalItem.variationId && !i.uniqueId));
         }
 
         if (noteModalItem.uniqueId) {
             setCart([...updatedCart, { ...noteModalItem, note: tempNote.trim() || undefined }]);
         } else {
-            const existingWithNewNote = updatedCart.find(i => i.product.id === noteModalItem.product.id && i.note === tempNote.trim() && i.saleType === noteModalItem.saleType && !i.uniqueId);
+            const existingWithNewNote = updatedCart.find(i => i.product.id === noteModalItem.product.id && i.note === tempNote.trim() && i.saleType === noteModalItem.saleType && i.variationId === noteModalItem.variationId && !i.uniqueId);
             if (existingWithNewNote) {
                 existingWithNewNote.quantity += noteModalItem.quantity;
                 setCart([...updatedCart]);
@@ -351,7 +557,9 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                         isWaiting: params.mars_enabled ? (item.isWaiting || false) : false,
                         subItems: item.subItems,
                         saleType: item.saleType,
-                        saleTypeMultiplier: item.saleTypeMultiplier
+                        saleTypeMultiplier: item.saleTypeMultiplier,
+                        variationId: item.variationId,
+                        variationName: item.variationName
                     }))
                 };
                 orderRes = await fetch(`${API_URL}/sales/${activeSubCheckId}/items`, {
@@ -377,7 +585,9 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                         isWaiting: params.mars_enabled ? (item.isWaiting || false) : false,
                         subItems: item.subItems,
                         saleType: item.saleType,
-                        saleTypeMultiplier: item.saleTypeMultiplier
+                        saleTypeMultiplier: item.saleTypeMultiplier,
+                        variationId: item.variationId,
+                        variationName: item.variationName
                     }))
                 };
                 orderRes = await fetch(`${API_URL}/sales`, {
@@ -404,7 +614,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                     receiptNumber: `SİP-${orderData?.id || '00'}`,
                     date: new Date(),
                     items: kitchenItems.map(item => ({
-                        name: item.product.name,
+                        name: item.product.name + (item.variationName ? ` (${item.variationName})` : ''),
                         quantity: item.quantity,
                         printerId: item.product.printerId,
                         productId: item.product.id,
@@ -444,11 +654,6 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         }
     };
 
-    const filteredProducts = products.filter(p => {
-        const matchesCategory = selectedCategory === 'Tümü' || p.category === selectedCategory;
-        const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
-        return matchesCategory && matchesSearch;
-    });
     const cartTotal = cart.reduce((sum, item) => {
         const base = ((item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1)) * item.quantity;
         const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
@@ -592,12 +797,8 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         } catch (e) {
             showSwal({ title: 'Hata', text: 'Sistem hatası oluştu.', icon: 'error' });
         }
-    };
-
-
-
-    if (loading || !user) return null;
-
+    };    // Auth ve data yüklenirken erken dönmeyip (return null YERINE), UI'ı çizip loading overlay göstereceğiz.
+    
     return (
         <div className="flex h-screen bg-slate-50 dark:bg-slate-800 font-sans overflow-hidden transition-colors duration-300 relative">
             {/* Dekoratif Glassmorphism Arka Planlar */}
@@ -605,238 +806,496 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             <div className="absolute bottom-[20%] left-[20%] w-[40%] h-[40%] rounded-full bg-teal-500/10 dark:bg-teal-600/10 blur-[100px] z-0 pointer-events-none transition-colors duration-500"></div>
 
             <div className="flex-1 flex flex-col p-6 overflow-hidden w-full md:w-auto relative z-10 transition-all">
-                <div className="mb-6 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
-                            <i className="fat fa-utensils text-2xl"></i>
-                        </div>
-                        <div>
-                            <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 leading-tight">
-                                Sipariş Ekranı{selectedTable ? ` — ${selectedTable.name}` : ''}
-                            </h1>
-
-                        </div>
+                {/* Safe Loading Overlay */}
+                {(dataLoading || loading || !user) && (
+                    <div className="absolute inset-0 z-50 bg-slate-50/80 dark:bg-slate-800/80 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-none">
+                        <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-emerald-500 mb-4"></div>
+                        <p className="text-emerald-600 dark:text-emerald-400 font-black text-sm uppercase tracking-widest animate-pulse">Menü Yükleniyor...</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                        {activeTab === 'menu' && (
-                            <div className="relative min-w-[250px]">
-                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                    <i className="fat fa-search text-slate-400"></i>
-                                </div>
-                                <input
-                                    type="text"
-                                    placeholder="Ürün Ara..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="block w-full pl-10 pr-4 py-2 border border-slate-200 dark:border-slate-700 rounded-full bg-white/60 dark:bg-slate-800/60 backdrop-blur-md text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all font-bold shadow-sm text-sm"
-                                />
-                                {searchQuery && (
-                                    <button
-                                        onClick={() => setSearchQuery('')}
-                                        className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-rose-500 transition-colors"
-                                    >
-                                        <i className="fat fa-circle-xmark"></i>
-                                    </button>
-                                )}
-                            </div>
-                        )}
-                        {activeTab === 'menu' && (
+                )}
+
+                {selectedTable?.isBillRequested ? (
+                    <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+                        <div className="w-32 h-32 bg-amber-100 dark:bg-amber-500/10 rounded-full flex items-center justify-center mb-8 animate-pulse shadow-xl shadow-amber-500/20">
+                            <i className="fat fa-receipt text-5xl text-amber-600 dark:text-amber-400"></i>
+                        </div>
+                        <h2 className="text-4xl font-black text-slate-800 dark:text-white mb-4 tracking-tight uppercase">Hesap İstendi</h2>
+                        <p className="text-lg text-slate-500 dark:text-slate-400 font-bold max-w-md mb-12 leading-relaxed">
+                            Bu masanın adisyonu istenmiş durumda. Yeni sipariş girişi yapmak için masayı tekrar açmanız gerekir.
+                        </p>
+
+                        <div className="flex flex-col sm:flex-row gap-4 w-full max-w-lg">
+                            <button
+                                onClick={reopenTable}
+                                className="flex-1 py-5 rounded-3xl bg-gradient-to-r from-amber-500 to-orange-600 text-white font-black text-lg uppercase tracking-widest shadow-2xl shadow-amber-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+                            >
+                                <i className="fat fa-unlock text-2xl"></i> Masayı Geri Aç
+                            </button>
                             <button
                                 onClick={() => { setActiveTab('tables'); setSelectedTable(null); }}
-                                className="text-slate-500 hover:text-emerald-600 flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-colors bg-white/60 dark:bg-slate-800/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/50 dark:border-slate-700/50 shadow-sm">
-                                <i className="fat fa-reply"></i> MASALAR
-                            </button>
-                        )}
-
-
-
-
-                        <button
-                            onClick={onSwitchToPos}
-                            className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-all bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 backdrop-blur-md px-5 py-2.5 rounded-full border border-indigo-500/20 shadow-sm active:scale-95">
-                            <i className="fat fa-cash-register text-indigo-500"></i> Kasa
-                        </button>
-
-                        <button onClick={() => router.push(`/${locale}/dashboard`)} className="px-6 py-3 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black text-xs uppercase tracking-widest border border-slate-200 dark:border-slate-700 transition flex items-center gap-2">
-                            <i className="fat fa-home"></i> Ana Menü
-                        </button>
-
-                        {mounted && (
-                            <button
-                                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                                className="w-10 h-10 flex items-center justify-center rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all text-xl"
-                                title={theme === 'dark' ? 'Açık Tema' : 'Koyu Tema'}
+                                className="flex-1 py-5 rounded-3xl bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-black text-lg uppercase tracking-widest border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all hover:shadow-lg"
                             >
-                                <i className={`fat ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-emerald-500`}></i>
+                                Masalara Dön
                             </button>
-                        )}
-                        {/* {mounted && (
+                        </div>
+                    </div>
+                ) : (
+                    <>
+
+                        <div className="mb-6 flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
+                                    <i className="fat fa-utensils text-2xl"></i>
+                                </div>
+                                <div>
+                                    <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 leading-tight">
+                                        Sipariş Ekranı{selectedTable ? ` — ${selectedTable.name}` : ''}
+                                    </h1>
+
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                {activeTab === 'menu' && (
+                                    <div className="relative min-w-[250px]">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                            <i className="fat fa-search text-slate-400"></i>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            placeholder="Ürün Ara..."
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            className="block w-full pl-10 pr-4 py-2 border border-slate-200 dark:border-slate-700 rounded-full bg-white/60 dark:bg-slate-800/60 backdrop-blur-md text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all font-bold shadow-sm text-sm"
+                                        />
+                                        {searchQuery && (
+                                            <button
+                                                onClick={() => setSearchQuery('')}
+                                                className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-rose-500 transition-colors"
+                                            >
+                                                <i className="fat fa-circle-xmark"></i>
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                                {activeTab === 'menu' && (
+                                    <button
+                                        onClick={() => { setActiveTab('tables'); setSelectedTable(null); }}
+                                        className="text-slate-500 hover:text-emerald-600 flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-colors bg-white/60 dark:bg-slate-800/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/50 dark:border-slate-700/50 shadow-sm">
+                                        <i className="fat fa-reply"></i> MASALAR
+                                    </button>
+                                )}
+
+
+
+
+                                <button
+                                    onClick={onSwitchToPos}
+                                    className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-all bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 backdrop-blur-md px-5 py-2.5 rounded-full border border-indigo-500/20 shadow-sm active:scale-95">
+                                    <i className="fat fa-cash-register text-indigo-500"></i> Kasa
+                                </button>
+
+                                <button onClick={() => router.push(`/${locale}/dashboard`)} className="px-6 py-3 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black text-xs uppercase tracking-widest border border-slate-200 dark:border-slate-700 transition flex items-center gap-2">
+                                    <i className="fat fa-home"></i> Ana Menü
+                                </button>
+
+                                {mounted && (
+                                    <button
+                                        onClick={toggleTheme}
+                                        className="w-10 h-10 flex items-center justify-center rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all text-xl"
+                                        title={theme === 'dark' ? 'Açık Tema' : 'Koyu Tema'}
+                                    >
+                                        <i className={`fat ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-emerald-500`}></i>
+                                    </button>
+                                )}
+                                {/* {mounted && (
                             <button
-                                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                                onClick={toggleTheme}
                                 className="w-10 h-10 flex items-center justify-center rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-white/10 dark:border-white/5 transition-all text-xl"
                                 title={theme === 'dark' ? 'Açık Tema' : 'Koyu Tema'}
                             >
                                 {theme === 'dark' ? '☀️' : '🌙'}
                             </button>
                         )} */}
-                    </div>
-                </div>
-
-                {activeTab === 'tables' ? (
-                    <>
-                        {/* Zone Seçimi */}
-                        <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-none">
-                            {Array.isArray(zones) && zones.map(z => (
-                                <button
-                                    key={z.id}
-                                    onClick={() => setSelectedZone(z.id)}
-                                    className={`px-5 py-2.5 rounded-full font-bold whitespace-nowrap transition-all shadow-sm ${selectedZone === z.id ? 'bg-emerald-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}`}
-                                >
-                                    {z.name}
-                                </button>
-                            ))}
+                            </div>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-150px)]">
-                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                                {Array.isArray(tables) && tables.filter(t => t.zone?.id === selectedZone).map(table => (
-                                    <div
-                                        key={table.id}
-                                        onClick={() => handleTableClick(table)}
-                                        className={`relative p-6 rounded-[32px] cursor-pointer shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border flex flex-col items-center justify-center text-center gap-2 group ${selectedTable?.id === table.id ? 'ring-4 ring-emerald-500 scale-105 ' : ''}${table.status === 'BOŞ' ? 'bg-white/60 dark:bg-slate-800/60 border-white dark:border-slate-700' :
-                                            table.status === 'REZERVE' ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30' :
-                                                'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30'}`}
-                                    >
-                                        <div className="absolute top-4 right-4 animate-pulse">
-                                            <div className={`w-2 h-2 rounded-full ${table.status === 'BOŞ' ? 'bg-emerald-500' : table.status === 'REZERVE' ? 'bg-amber-500' : 'bg-rose-500'}`}></div>
-                                        </div>
-
+                        {activeTab === 'tables' ? (
+                            <>
+                                {/* Zone Seçimi */}
+                                <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-none">
+                                    {Array.isArray(zones) && zones.map(z => (
                                         <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (table.status !== 'DOLU') {
-                                                    toastSwal({ icon: 'warning', title: 'Boş masa transfer edilemez!' });
-                                                    return;
-                                                }
-                                                setTransferSourceTableId(table.id);
-                                                setTransferSourceTableName(table.name);
-                                                setTransferMode('TABLE_TRANSFER');
-                                                setTransferSelectedItemIds([]);
-                                                setIsTransferModalOpen(true);
-                                            }}
-                                            className="absolute top-3 left-3 w-8 h-8 flex items-center justify-center rounded-xl bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-500/30 transition-all opacity-70 hover:opacity-100"
-                                            title="Masa Transfer"
+                                            key={z.id}
+                                            onClick={() => setSelectedZone(z.id)}
+                                            className={`px-5 py-2.5 rounded-full font-bold whitespace-nowrap transition-all shadow-sm ${selectedZone === z.id ? 'bg-emerald-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}`}
                                         >
-                                            <i className="fat fa-arrow-right-arrow-left text-xs"></i>
+                                            {z.name}
                                         </button>
+                                    ))}
+                                </div>
 
-                                        <span className="text-4xl mb-1 group-hover:scale-110 transition-transform">
-                                            {table.status === 'BOŞ' ? '🪑' : table.status === 'REZERVE' ? '📅' : '🍽️'}
-                                        </span>
-                                        <span className="font-extrabold text-slate-800 dark:text-white uppercase tracking-tighter text-lg">{table.name}</span>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-150px)]">
+                                    {(() => {
+                                        const zoneTables = Array.isArray(tables) ? tables.filter(t => t.zone?.id === selectedZone) : [];
+                                        let effectiveCols = 4;
+                                        if (zoneTables.length > 15) effectiveCols = 10;
+                                        else if (zoneTables.length >= 5) effectiveCols = 7;
+                                        else effectiveCols = 4;
 
-                                        {table.status === 'DOLU' ? (
-                                            <div className="flex flex-col items-center gap-1 mt-1 border-t border-rose-200 dark:border-rose-500/20 pt-3 w-full">
-                                                <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">
-                                                    <span className="opacity-70">👤</span>
-                                                    <span>{table.waiterName || 'POS / Garson'}</span>
+                                        return (
+                                            <div
+                                                className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-none gap-4"
+                                                style={{
+                                                    gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth >= 1024
+                                                        ? `repeat(${effectiveCols}, minmax(0, 1fr))`
+                                                        : undefined
+                                                }}
+                                            >
+                                                {zoneTables.map(table => (
+                                            <div
+                                                key={table.id}
+                                                onClick={() => handleTableClick(table)}
+                                                className={`relative p-3 rounded-2xl cursor-pointer shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border flex flex-col items-center justify-center text-center gap-1 group ${selectedTable?.id === table.id ? 'ring-4 ring-emerald-500 scale-105 ' : ''}${table.isBillRequested
+                                                    ? 'bg-yellow-100 dark:bg-yellow-500/20 border-yellow-400 dark:border-yellow-500/50 shadow-yellow-500/30 animate-[pulse_3s_ease-in-out_infinite]'
+                                                    : table.status === 'BOŞ' ? 'bg-white/60 dark:bg-slate-800/60 border-white dark:border-slate-700' :
+                                                        table.status === 'REZERVE' ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30' :
+                                                            'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30'}`}
+                                            >
+                                                <div className="absolute top-4 right-4 animate-pulse">
+                                                    <div className={`w-2 h-2 rounded-full ${table.status === 'BOŞ' ? 'bg-emerald-500' : table.status === 'REZERVE' ? 'bg-amber-500' : 'bg-rose-500'}`}></div>
                                                 </div>
-                                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
-                                                    <span className="opacity-70">🕒</span>
-                                                    <span>{formatTime(table.orderStartTime)}</span>
-                                                </div>
-                                                <div className="mt-2 text-rose-700 dark:text-rose-300 font-extrabold text-sm drop-shadow-sm">
-                                                    ₺{(Number(table.currentTotal || 0) * 1.1).toFixed(2)}
-                                                </div>
+
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (table.status !== 'DOLU') {
+                                                            toastSwal({ icon: 'warning', title: 'Boş masa transfer edilemez!' });
+                                                            return;
+                                                        }
+                                                        setTransferSourceTableId(table.id);
+                                                        setTransferSourceTableName(table.name);
+                                                        setTransferMode('TABLE_TRANSFER');
+                                                        setTransferSelectedItemIds([]);
+                                                        setIsTransferModalOpen(true);
+                                                    }}
+                                                    className="absolute top-3 left-3 w-8 h-8 flex items-center justify-center rounded-xl bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-500/30 transition-all opacity-70 hover:opacity-100"
+                                                    title="Masa Transfer"
+                                                >
+                                                    <i className="fat fa-arrow-right-arrow-left text-xs"></i>
+                                                </button>
+
+                                                <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">
+                                                    {table.status === 'BOŞ' ? '🪑' : table.status === 'REZERVE' ? '📅' : '🍽️'}
+                                                </span>
+                                                <span className="font-extrabold text-slate-800 dark:text-white uppercase tracking-tighter text-sm">{table.name}</span>
+
+                                                {table.status === 'DOLU' ? (
+                                                    <div className="flex flex-col items-center gap-1 mt-1 border-t border-rose-200 dark:border-rose-500/20 pt-3 w-full">
+                                                        <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">
+                                                            <span className="opacity-70">👤</span>
+                                                            <span>{table.waiterName || 'POS / Garson'}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                                                            <span className="opacity-70">🕒</span>
+                                                            <span>{formatTime(table.orderStartTime)}</span>
+                                                        </div>
+                                                        <div className="mt-2 text-rose-700 dark:text-rose-300 font-extrabold text-sm drop-shadow-sm">
+                                                            ₺{Number(table.currentTotal || 0).toFixed(2)}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-col items-center gap-1 mt-1 opacity-40">
+                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('emptyTable') || 'BOŞ MASA'}</span>
+                                                    </div>
+                                                )}
+
+                                                <span className={`text-[9px] font-black px-3 py-1 rounded-full mt-2 uppercase tracking-tighter ${table.status === 'BOŞ' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' :
+                                                    table.status === 'REZERVE' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' :
+                                                        'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'}`}>
+                                                    {table.status}
+                                                </span>
                                             </div>
-                                        ) : (
-                                            <div className="flex flex-col items-center gap-1 mt-1 opacity-40">
-                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('emptyTable') || 'BOŞ MASA'}</span>
+                                        ))}
                                             </div>
-                                        )}
+                                        );
+                                    })()}
+                                </div>
+                            </>
+                        ) : (
+                            <div className="h-full flex flex-col">
 
-                                        <span className={`text-[9px] font-black px-3 py-1 rounded-full mt-2 uppercase tracking-tighter ${table.status === 'BOŞ' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' :
-                                            table.status === 'REZERVE' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' :
-                                                'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'}`}>
-                                            {table.status}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </>
-                ) : (
-                    <div className="h-full flex flex-col">
-
-                        <div className="flex flex-col md:flex-row items-center gap-4 mb-4">
-                            <div className="flex-1 flex gap-2 overflow-x-auto pb-0 scrollbar-none">
-                                {categories.map(c => (
-                                    <button
-                                        key={c}
-                                        onClick={() => setSelectedCategory(c)}
-                                        className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-all shadow-sm border ${selectedCategory === c ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'}`}
-                                    >
-                                        {c}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="shrink-0 flex gap-1 p-1 bg-white/50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                                <button
-                                    onClick={() => setActiveSaleType('HALF')}
-                                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${activeSaleType === 'HALF' ? 'bg-orange-500 text-white shadow-md shadow-orange-500/30' : 'bg-transparent text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
-                                >
-                                    <i className="fat fa-glass-half"></i> Yarım
-                                </button>
-                                <button
-                                    onClick={() => setActiveSaleType('STANDARD')}
-                                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${activeSaleType === 'STANDARD' ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30' : 'bg-transparent text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
-                                >
-                                    <i className="fat fa-check"></i> Standart
-                                </button>
-                                <button
-                                    onClick={() => setActiveSaleType('DOUBLE')}
-                                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${activeSaleType === 'DOUBLE' ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/30' : 'bg-transparent text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
-                                >
-                                    <i className="fat fa-glass-water"></i> Duble
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-180px)]">
-                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-                                {filteredProducts.map(p => (
-                                    <button
-                                        key={p.id}
-                                        onClick={() => addToCart(p)}
-                                        className="relative h-40 bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 dark:border-slate-700 overflow-hidden active:scale-95 transition-all group"
-                                    >
-                                        <div className="absolute inset-0 bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center transition-transform duration-500 group-hover:scale-105">
-                                            {p.imageUrl ? (
-                                                <img
-                                                    src={p.imageUrl.startsWith('http') || p.imageUrl.startsWith('data:') || p.imageUrl.startsWith('/')
-                                                        ? p.imageUrl
-                                                        : `/uploads/products/${p.imageUrl}`
-                                                    }
-                                                    alt={p.name}
-                                                    className="w-full h-full object-cover"
-                                                />
+                                <div className="flex flex-col gap-1.5 mb-3">
+                                    {/* Satır 1: Ürün Cinsleri ve Aksiyon Butonları (Sola ve Sağa Hizalı) */}
+                                    <div className="flex items-center justify-between gap-2 w-full">
+                                        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none flex-1">
+                                            {productTypeOptions.map(t => (
+                                                <button
+                                                    key={t.id}
+                                                    onClick={() => {
+                                                        setSelectedProductTypeId(t.id as any);
+                                                        setSelectedParentGroupId(null);
+                                                        setSelectedDepartmentId(null);
+                                                    }}
+                                                    className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all whitespace-nowrap shrink-0 ${selectedProductTypeId === t.id
+                                                        ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/25 scale-[1.02]'
+                                                        : 'bg-white/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-slate-700/80 hover:border-indigo-400/50 hover:text-indigo-500 dark:hover:text-indigo-400 hover:shadow-sm'
+                                                        }`}
+                                                >
+                                                    {t.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {/* Aksiyon Butonları (sağ) */}
+                                        <div className="shrink-0 flex items-center gap-1 px-1.5 py-1 bg-white/40 dark:bg-slate-800/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60 mb-1">
+                                            {isDesignMode ? (
+                                                <button
+                                                    onClick={async () => {
+                                                        const newOrder = filteredProducts.map((p, i) => ({ id: p.id, orderIndex: i }));
+                                                        const token = localStorage.getItem('token') || Cookies.get('token');
+                                                        try {
+                                                            const res = await fetch(`${API_URL}/products/reorder`, {
+                                                                method: 'PUT',
+                                                                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                                                body: JSON.stringify({ items: newOrder })
+                                                            });
+                                                            if (res.ok) {
+                                                                toastSwal({ icon: 'success', title: 'Tasarım Kaydedildi' });
+                                                            } else {
+                                                                throw new Error('Hata');
+                                                            }
+                                                        } catch (e) {
+                                                            toastSwal({ icon: 'error', title: 'Hata', text: 'Sıra kaydedilemedi.' });
+                                                        }
+                                                        setIsDesignMode(false);
+                                                    }}
+                                                    className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 bg-indigo-500 text-white shadow-md shadow-indigo-500/30 animate-pulse"
+                                                >
+                                                    <i className="fat fa-save"></i> Kaydet
+                                                </button>
                                             ) : (
-                                                <span className="text-3xl mb-1 opacity-50 transition-opacity">
-                                                    {p.category === 'Kahveler' ? '☕' : p.category === 'Tatlılar' ? '🍰' : '🍹'}
+                                                <button
+                                                    onClick={() => setIsDesignMode(true)}
+                                                    className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/10"
+                                                    title="Tasarım Modu"
+                                                >
+                                                    <i className="fat fa-pen-ruler"></i>
+                                                </button>
+                                            )}
+                                            <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 shrink-0" />
+                                            <button
+                                                onClick={() => setActiveSaleType('HALF')}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 ${activeSaleType === 'HALF' ? 'bg-orange-500 text-white shadow-sm shadow-orange-500/25' : 'text-slate-400 hover:text-orange-500 hover:bg-orange-500/10'}`}
+                                            >
+                                                <i className="fat fa-glass-half"></i> Yarım
+                                            </button>
+                                            <button
+                                                onClick={() => setActiveSaleType('STANDARD')}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 ${activeSaleType === 'STANDARD' ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/25' : 'text-slate-400 hover:text-emerald-500 hover:bg-emerald-500/10'}`}
+                                            >
+                                                <i className="fat fa-check"></i> Std
+                                            </button>
+                                            <button
+                                                onClick={() => setActiveSaleType('DOUBLE')}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 ${activeSaleType === 'DOUBLE' ? 'bg-violet-500 text-white shadow-sm shadow-violet-500/25' : 'text-slate-400 hover:text-violet-500 hover:bg-violet-500/10'}`}
+                                            >
+                                                <i className="fat fa-glass-water"></i> Duble
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Satır 2: Aksiyon Butonları + Dinamik Alt Filtreler — aynı satırda */}
+                                    <div className="flex items-center gap-2">
+                                        {/* Dinamik Alt Filtreler (sol) -> Breadcrumb'a Dönüştü */}
+                                        <div className="flex-1 flex items-center gap-1.5 overflow-x-auto scrollbar-none min-h-[32px]">
+                                            {(selectedParentGroupId || selectedDepartmentId) && !searchQuery ? (
+                                                <>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (selectedDepartmentId) {
+                                                                setSelectedDepartmentId(null);
+                                                            } else {
+                                                                setSelectedParentGroupId(null);
+                                                            }
+                                                        }}
+                                                        className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-[10px] font-bold uppercase transition-all flex items-center gap-1.5 shrink-0"
+                                                    >
+                                                        <i className="fat fa-arrow-left"></i> Geri
+                                                    </button>
+                                                    <div className="flex items-center gap-1.5 p-1 bg-white/40 dark:bg-slate-800/40 rounded-xl border border-slate-200/60 dark:border-slate-700/60 shrink-0">
+                                                        {selectedParentGroupId && (
+                                                            <span
+                                                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-tight shadow-sm flex items-center gap-1.5 ${!selectedDepartmentId ? 'bg-indigo-500 text-white shadow-indigo-500/25' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-300 dark:hover:bg-slate-600'}`}
+                                                                onClick={() => setSelectedDepartmentId(null)}
+                                                            >
+                                                                <i className="fat fa-folder-tree"></i>
+                                                                {parentGroups.find(pg => pg.id === selectedParentGroupId)?.name || 'Üst Grup'}
+                                                            </span>
+                                                        )}
+                                                        {selectedDepartmentId && (
+                                                            <>
+                                                                <i className="fat fa-angle-right text-slate-400 text-[10px]"></i>
+                                                                <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-tight bg-emerald-500 text-white shadow-sm shadow-emerald-500/25 flex items-center gap-1.5">
+                                                                    <i className="fat fa-tags"></i>
+                                                                    {departments.find(d => d.id === selectedDepartmentId)?.name || 'Kategori'}
+                                                                    <button onClick={() => setSelectedDepartmentId(null)} className="ml-1 opacity-70 hover:opacity-100"><i className="fat fa-xmark"></i></button>
+                                                                </span>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">
+                                                    {searchQuery ? `"${searchQuery}" için sonuçlar` : ''}
                                                 </span>
                                             )}
-                                            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/30 to-transparent"></div>
                                         </div>
 
-                                        <div className="absolute bottom-0 left-0 right-0 p-2 flex flex-col items-center text-center justify-end z-10">
-                                            <span className="font-bold text-white text-xs leading-tight mb-0.5 drop-shadow-md line-clamp-2">{p.name}</span>
-                                            <span className="font-extrabold text-white bg-emerald-600/90 backdrop-blur-sm px-2 py-0.5 rounded-full text-[10px] shadow-sm mt-1 border border-emerald-400/30">₺{p.price}</span>
-                                        </div>
-                                    </button>
-                                ))}
+
+                                    </div>
+                                </div>
+
+                                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-280px)]">
+                                    {!selectedDepartmentId && !searchQuery ? (
+                                        <>
+                                            <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-4 mb-6 mt-2 p-2">
+                                                {/* SEVİYE 1: Üst Gruplar ve Bağımsız Kategoriler */}
+                                                {!selectedParentGroupId && (
+                                                    <>
+                                                        {parentGroups.filter(pg => {
+                                                            if (selectedProductTypeId === 'all') return true;
+                                                            const pgDepts = departments.filter(d => d.parentGroupId === pg.id);
+                                                            return products.some(p => p.productTypeId === selectedProductTypeId && pgDepts.some(d => d.name === p.category));
+                                                        }).map(pg => (
+                                                            <button
+                                                                key={`pg-${pg.id}`}
+                                                                onClick={() => setSelectedParentGroupId(pg.id)}
+                                                                className="group relative flex flex-col items-center justify-center p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-indigo-400 hover:-translate-y-1 transition-all duration-300"
+                                                            >
+                                                                <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
+                                                                    <i className="fat fa-folder-tree text-lg text-indigo-500"></i>
+                                                                </div>
+                                                                <span className="text-[10px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{pg.name}</span>
+                                                            </button>
+                                                        ))}
+                                                        {departments.filter(d => !d.parentGroupId).filter(d => {
+                                                            if (selectedProductTypeId === 'all') return true;
+                                                            return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
+                                                        }).map(d => (
+                                                            <button
+                                                                key={`dept-${d.id}`}
+                                                                onClick={() => setSelectedDepartmentId(d.id)}
+                                                                className="group relative flex flex-col items-center justify-center p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-400 hover:-translate-y-1 transition-all duration-300"
+                                                            >
+                                                                <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
+                                                                    <i className="fat fa-tags text-lg text-emerald-500"></i>
+                                                                </div>
+                                                                <span className="text-[10px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
+                                                            </button>
+                                                        ))}
+                                                    </>
+                                                )}
+
+                                                {/* SEVİYE 2: Seçili Üst Gruba Bağlı Kategoriler */}
+                                                {selectedParentGroupId && departments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
+                                                    if (selectedProductTypeId === 'all') return true;
+                                                    return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
+                                                }).map(d => (
+                                                    <button
+                                                        key={`dept-sub-${d.id}`}
+                                                        onClick={() => setSelectedDepartmentId(d.id)}
+                                                        className="group relative flex flex-col items-center justify-center p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-400 hover:-translate-y-1 transition-all duration-300"
+                                                    >
+                                                        <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
+                                                            <i className="fat fa-tags text-lg text-emerald-500"></i>
+                                                        </div>
+                                                        <span className="text-[10px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            {/* Kategorisi olmayan ürünleri doğrudan göster */}
+                                            {filteredProducts.length > 0 && (
+                                                <div className="space-y-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Kategorisiz Ürünler</span>
+                                                        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
+                                                    </div>
+                                                    <DndContext
+                                                        sensors={sensors}
+                                                        collisionDetection={closestCenter}
+                                                        onDragStart={handleDragStart}
+                                                        onDragEnd={handleDragEnd}
+                                                        onDragCancel={() => setActiveDragItem(null)}
+                                                    >
+                                                        <SortableContext items={filteredProducts.map(p => p.id)} strategy={rectSortingStrategy}>
+                                                            <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-4 mb-6 relative p-2">
+                                                                {filteredProducts.map(p => (
+                                                                    <SortableProductCard
+                                                                        key={p.id}
+                                                                        product={p}
+                                                                        onClick={() => addToCart(p)}
+                                                                        isDesignMode={isDesignMode}
+                                                                    />
+                                                                ))}
+                                                            </div>
+                                                        </SortableContext>
+                                                        <DragOverlay dropAnimation={{
+                                                            duration: 300,
+                                                            easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+                                                            sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.4' } } })
+                                                        }}>
+                                                            {activeDragItem ? (
+                                                                <SortableProductCard
+                                                                    product={activeDragItem}
+                                                                    onClick={() => { }}
+                                                                    isDesignMode={true}
+                                                                />
+                                                            ) : null}
+                                                        </DragOverlay>
+                                                    </DndContext>
+                                                </div>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <DndContext
+                                            sensors={sensors}
+                                            collisionDetection={closestCenter}
+                                            onDragStart={handleDragStart}
+                                            onDragEnd={handleDragEnd}
+                                            onDragCancel={() => setActiveDragItem(null)}
+                                        >
+                                            <SortableContext items={filteredProducts.map(p => p.id)} strategy={rectSortingStrategy}>
+                                                <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-4 mb-6 relative p-2">
+                                                    {filteredProducts.map(p => (
+                                                        <SortableProductCard
+                                                            key={p.id}
+                                                            product={p}
+                                                            onClick={() => addToCart(p)}
+                                                            isDesignMode={isDesignMode}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </SortableContext>
+                                            <DragOverlay dropAnimation={{
+                                                duration: 300,
+                                                easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+                                                sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.4' } } })
+                                            }}>
+                                                {activeDragItem ? (
+                                                    <SortableProductCard
+                                                        product={activeDragItem}
+                                                        onClick={() => { }}
+                                                        isDesignMode={true}
+                                                    />
+                                                ) : null}
+                                            </DragOverlay>
+                                        </DndContext>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    </div>
+                        )}
+                    </>
                 )}
             </div>
 
@@ -1015,14 +1474,17 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                             cart.map((item, index) => (
                                 <div key={`new-${index}`} className="flex flex-col gap-2 p-3 bg-white/50 dark:bg-slate-800/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
                                     <div className="flex justify-between items-start">
-                                        <span className="block font-medium text-slate-800 dark:text-slate-200">
-                                            {item.product.name}
-                                            {item.saleType && item.saleType !== 'STANDARD' && (
-                                                <span className={`text-[10px] ml-1 px-2 py-0.5 rounded-full inline-block font-bold border opacity-90 ${item.saleType === 'HALF' ? 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/20 dark:text-orange-400' : 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-400'}`}>
-                                                    {item.saleType === 'HALF' ? 'YARIM' : 'DUBLE'}
-                                                </span>
-                                            )}
-                                            {existingOrders.length > 0 && <span className="text-[10px] ml-1 bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full animate-pulse border border-teal-200 inline-block">Yeni Eklendi</span>}
+                                        <span className="block font-medium text-slate-800 dark:text-slate-200 flex flex-col">
+                                            <span className="flex items-center">
+                                                {item.product.name}
+                                                {item.saleType && item.saleType !== 'STANDARD' && (
+                                                    <span className={`text-[10px] ml-1 px-2 py-0.5 rounded-full inline-block font-bold border opacity-90 ${item.saleType === 'HALF' ? 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/20 dark:text-orange-400' : 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-400'}`}>
+                                                        {item.saleType === 'HALF' ? 'YARIM' : 'DUBLE'}
+                                                    </span>
+                                                )}
+                                                {existingOrders.length > 0 && <span className="text-[10px] ml-1 bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full animate-pulse border border-teal-200 inline-block">Yeni Eklendi</span>}
+                                            </span>
+                                            {item.variationName && <span className="text-[11px] text-indigo-500 font-bold tracking-widest mt-0.5">{item.variationName}</span>}
                                         </span>
                                         <span className="font-bold text-slate-800 dark:text-slate-100">₺{(((item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1)) * item.quantity).toFixed(2)}</span>
                                     </div>
@@ -1079,7 +1541,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                             <div className="flex items-center gap-3 bg-slate-100 dark:bg-slate-700/50 rounded-lg p-1">
                                                 <button onClick={() => removeFromCart(item)} className="w-7 h-7 flex items-center justify-center text-red-500 font-bold hover:bg-white dark:hover:bg-slate-600 rounded-md transition-colors">-</button>
                                                 <span className="font-bold text-sm min-w-[1rem] text-center dark:text-white">{item.quantity}</span>
-                                                <button onClick={() => addToCart(item.product, item.note, true)} className="w-7 h-7 flex items-center justify-center text-emerald-500 font-bold hover:bg-white dark:hover:bg-slate-600 rounded-md transition-colors">+</button>
+                                                <button onClick={() => addToCart(item.product, item.note, true, item.variationId)} className="w-7 h-7 flex items-center justify-center text-emerald-500 font-bold hover:bg-white dark:hover:bg-slate-600 rounded-md transition-colors">+</button>
                                             </div>
                                             {/* Manuel Ekstra Butonu: autoOpenExtraPopup false olduğunda görünür */}
                                             {(() => {
@@ -1280,7 +1742,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                             className={`p-4 rounded-2xl border-2 text-left transition-all active:scale-95 ${alreadyAdded
                                                 ? 'border-amber-400 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/50'
                                                 : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-amber-300 dark:hover:border-amber-500/40 hover:bg-amber-50/50 dark:hover:bg-amber-500/5'
-                                            }`}
+                                                }`}
                                         >
                                             <div className="flex items-start justify-between gap-2">
                                                 <span className="font-bold text-sm text-slate-800 dark:text-white leading-tight">{ep.name}</span>
@@ -1362,6 +1824,46 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                     </div>
                 </div>
             )}
+            {isVariationModalOpen && selectedProductForVariation && (
+                <div className="fixed inset-0 z-[140] flex items-end sm:items-center justify-center p-4 bg-slate-900/70 backdrop-blur-lg">
+                    <div className="bg-white dark:bg-slate-800 rounded-[32px] w-full max-w-md shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 animate-in slide-in-from-bottom-4 duration-300">
+                        <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-700 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-2xl bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                                        <i className="fat fa-ruler text-white text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-base font-black text-slate-800 dark:text-white uppercase tracking-tight">{selectedProductForVariation.name}</h3>
+                                        <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Boyut / Porsiyon Seç</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setIsVariationModalOpen(false)} className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/60 dark:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-white border border-slate-200 dark:border-slate-600 transition-all text-sm font-bold">&times;</button>
+                            </div>
+                        </div>
+                        <div className="p-6">
+                            <div className="grid grid-cols-2 gap-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                                {selectedProductForVariation.variations?.filter(v => v.isActive !== false).map((v: any) => (
+                                    <button
+                                        key={v.id}
+                                        onClick={() => {
+                                            setIsVariationModalOpen(false);
+                                            addToCart(selectedProductForVariation, pendingAddToCartArgs.note, pendingAddToCartArgs.skipExtraCheck, v.id);
+                                        }}
+                                        className="p-4 flex flex-col justify-between rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-indigo-400 dark:hover:border-indigo-500/50 hover:bg-indigo-50/50 dark:hover:bg-indigo-500/5 active:scale-95 transition-all"
+                                    >
+                                        <span className="font-bold text-sm text-slate-800 dark:text-white leading-tight mb-2">{v.variationName}</span>
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-500/20 px-2 py-0.5 rounded-full mt-auto self-start">
+                                            {v.fixedPrice !== null && v.fixedPrice !== undefined ? `₺${v.fixedPrice}` : `₺${selectedProductForVariation.price} (Baz)`}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Transfer Modal */}
             <TransferModal
                 isOpen={isTransferModalOpen}

@@ -111,72 +111,6 @@ export function PageClient() {
         };
     }, [fetchSales]);
 
-    const handleEndOfDay = async () => {
-        const result = await showSwal({
-            title: 'Gün Sonu Al',
-            html: '<div class="text-left py-2">' +
-                '<p class="text-sm text-slate-500 mb-2">Bugünkü <b>Tamamlanmış</b> satışlarınızın nakit ve kart dökümleri ayrılarak kasaya işlenecektir.</p>' +
-                '<p class="text-xs font-bold text-rose-500 border-l-2 border-rose-500 pl-2 bg-rose-50 dark:bg-rose-500/10 py-1 uppercase">Bu işlem geri alınamaz.</p>' +
-                '</div>',
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonText: 'Evet, Gün Sonunu Al',
-            cancelButtonText: 'İptal',
-            confirmButtonColor: '#4f46e5',
-        });
-
-        if (result.isConfirmed) {
-            try {
-                const token = Cookies.get('token');
-                const res = await axios.post(API_URL + '/sales/end-of-day',
-                    { userId: user?.id },
-                    { headers: { Authorization: 'Bearer ' + token } }
-                );
-
-                const { cashTotal, cardTotal, bankTotal, grandTotal, date } = res.data;
-
-                if (grandTotal === 0) {
-                    toastSwal({ icon: 'info', title: 'Kapatılacak satış bulunamadı.' });
-                    return;
-                }
-
-                await showSwal({
-                    title: 'Gün Sonu Raporu',
-                    html: '<div class="text-left w-full space-y-3">' +
-                        '<div class="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">' +
-                        '<div class="flex justify-between items-center mb-1">' +
-                        '<div class="text-xs font-bold text-slate-400 uppercase tracking-widest">Tarih</div>' +
-                        '<div class="text-sm font-black text-slate-700 dark:text-slate-200">' + date + '</div>' +
-                        '</div></div>' +
-                        '<div class="grid grid-cols-2 gap-3">' +
-                        '<div class="p-4 bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl border border-emerald-100 dark:border-emerald-500/20">' +
-                        '<div class="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-1">Nakit</div>' +
-                        '<div class="text-xl font-black text-emerald-700 dark:text-emerald-300">₺' + cashTotal + '</div>' +
-                        '</div>' +
-                        '<div class="p-4 bg-indigo-50 dark:bg-indigo-500/10 rounded-2xl border border-indigo-100 dark:border-indigo-500/20">' +
-                        '<div class="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">Kart</div>' +
-                        '<div class="text-xl font-black text-indigo-700 dark:text-indigo-300">₺' + cardTotal + '</div>' +
-                        '</div></div>' +
-                        (bankTotal > 0 ?
-                            '<div class="p-4 bg-blue-50 dark:bg-blue-500/10 rounded-2xl border border-blue-100 dark:border-blue-500/20">' +
-                            '<div class="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest mb-1">Banka</div>' +
-                            '<div class="text-xl font-black text-blue-700 dark:text-blue-300">₺' + bankTotal + '</div>' +
-                            '</div>' : '') +
-                        '<div class="p-5 bg-slate-900 rounded-[28px] text-center shadow-xl">' +
-                        '<div class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Toplam Gün Sonu</div>' +
-                        '<div class="text-3xl font-black text-white">₺' + grandTotal + '</div>' +
-                        '</div></div>',
-                    icon: 'success',
-                });
-
-                fetchSales();
-            } catch (error) {
-                console.error('Error in End of Day:', error);
-                showSwal({ icon: 'error', title: 'Hata', text: 'Gün sonu işlemi tamamlanamadı.' });
-            }
-        }
-    };
-
     useEffect(() => {
         fetchInitialData();
     }, []);
@@ -358,12 +292,7 @@ export function PageClient() {
                         </div>
                     </div>
                     <div className="flex gap-3">
-                        <button onClick={() => router.push(`/${locale}/waiter`)} className="px-6 py-3 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 text-orange-600 dark:text-orange-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-orange-100 dark:hover:bg-orange-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
-                            <i className="fat fa-plus-circle text-lg"></i> {t('newOrder')}
-                        </button>
-                        <button onClick={handleEndOfDay} className="px-6 py-3 bg-gradient-to-r from-slate-900 to-slate-800 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl hover:shadow-indigo-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95 border border-slate-700">
-                            <i className="fat fa-moon-stars text-lg text-indigo-400"></i> Gün Sonu Al
-                        </button>
+
                         <button onClick={() => router.push(`/${locale}/admin`)} className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center gap-2">
                             <i className="fat fa-reply"></i> Geri Dön
                         </button>

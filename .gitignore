@@ -7,7 +7,9 @@ PROMPTS/*
 # Testing
 coverage/
 frontend/update-ip.js
+bossposnetx
 # Production
+posnetx-waiter
 build/
 dist/
 .next/
@@ -29,7 +31,7 @@ frontend/update-ip.js
 # Misc
 .DS_Store
 *.pem
-
+PosnetxPanel/
 # Debug
 npm-debug.log*
 yarn-debug.log*

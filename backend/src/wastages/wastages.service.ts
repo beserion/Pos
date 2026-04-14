@@ -14,7 +14,7 @@ export class WastagesService {
 
   async findAll(): Promise<Wastage[]> {
     return await this.wastageRepository.find({
-      relations: ['product', 'recordedBy'],
+      relations: ['stockCard', 'recordedBy'],
       order: { createdAt: 'DESC' },
     });
   }
@@ -22,7 +22,7 @@ export class WastagesService {
   async findOne(id: number): Promise<Wastage> {
     const wastage = await this.wastageRepository.findOne({
       where: { id },
-      relations: ['product', 'recordedBy'],
+      relations: ['stockCard', 'recordedBy'],
     });
     if (!wastage) {
       throw new NotFoundException(`Wastage record with ID ${id} not found`);
@@ -45,9 +45,9 @@ export class WastagesService {
     const saved = await this.wastageRepository.save(newWastage);
 
     // Deduct stock for the wasted product
-    if (wastageData.productId && wastageData.quantity) {
+    if (wastageData.stockCardId && wastageData.quantity) {
       await this.stocksService.deductStock(
-        wastageData.productId,
+        wastageData.stockCardId,
         Number(wastageData.quantity),
       );
     }
@@ -66,7 +66,7 @@ export class WastagesService {
   }> {
     let query = this.wastageRepository
       .createQueryBuilder('w')
-      .leftJoinAndSelect('w.product', 'product');
+      .leftJoinAndSelect('w.stockCard', 'stockCard');
 
     if (startDate && endDate) {
       query = query.where('w.createdAt BETWEEN :startDate AND :endDate', {
@@ -88,14 +88,14 @@ export class WastagesService {
 
     for (const w of wastages) {
       const qty = Number(w.quantity);
-      const cost = qty * Number(w.product?.costPrice || 0);
+      const cost = qty * Number(w.stockCard?.costPerBaseUnit || 0);
       totalCostLoss += cost;
 
-      // Group by product
-      const prodKey = w.productId;
+      // Group by stockCard
+      const prodKey = w.stockCardId;
       if (!productMap.has(prodKey)) {
         productMap.set(prodKey, {
-          productName: w.product?.name || '',
+          productName: w.stockCard?.name || '',
           totalQty: 0,
           totalCost: 0,
         });
@@ -118,7 +118,7 @@ export class WastagesService {
       totalWastages,
       totalCostLoss: Math.round(totalCostLoss * 100) / 100,
       byProduct: Array.from(productMap.entries()).map(([id, data]) => ({
-        productId: id,
+        stockCardId: id,
         ...data,
       })),
       byReason: Array.from(reasonMap.entries()).map(([reason, data]) => ({

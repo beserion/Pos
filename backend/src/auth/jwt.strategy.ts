@@ -2,10 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
+import { UsersService } from '../users/users.service';
+import { LicenseService } from '../license/license.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private usersService: UsersService,
+    private licenseService: LicenseService,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -17,11 +23,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
+    // Fetch latest user data from DB to ensure real-time permission/license checks
+    const user = await this.usersService.findOne(payload.sub);
+    const licenseModules = await this.licenseService.getLocalModules();
+    
+    // Combine features from old Firm struct and new SystemLicense modules
+    const firmFeatures = user?.firm?.activeFeatures || [];
+    const combinedFeatures = Array.from(new Set([...firmFeatures, ...licenseModules]));
+
     return {
-      userId: payload.sub,
-      username: payload.username,
-      role: payload.role,
-      cashRegisterId: payload.cashRegisterId || null,
+      userId: user.id,
+      username: user.email,
+      role: user.role?.name,
+      cashRegisterId: user.cashRegisterId || null,
+      firm: user.firm, // Now contains activeFeatures from DB
+      activeFeatures: combinedFeatures, // Merged offline panels
     };
   }
 }

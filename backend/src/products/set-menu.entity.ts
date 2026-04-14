@@ -24,6 +24,9 @@ export class SetMenu {
   @Column({ type: 'varchar', length: 20, default: 'FIX' })
   setType: string; // 'FIX', 'CHOICE', 'BUNDLE'
 
+  @Column({ type: 'float', nullable: true })
+  bundleEntitlementLimit: number; // If BUNDLE, total entitlement score
+
   @Column({ default: true })
   isActive: boolean;
 

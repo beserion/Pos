@@ -4,6 +4,7 @@ import { StockMovement } from './stock-movement.entity';
 import { StockMovementsService } from './stock-movements.service';
 import { StockMovementsController } from './stock-movements.controller';
 import { StockCardsModule } from '../stock-cards/stock-cards.module';
+import { StocksModule } from '../stocks/stocks.module';
 import { RecipesModule } from '../recipes/recipes.module';
 import { ParametersModule } from '../parameters/parameters.module';
 import { Product } from '../products/product.entity';
@@ -12,6 +13,7 @@ import { Product } from '../products/product.entity';
   imports: [
     TypeOrmModule.forFeature([StockMovement, Product]),
     StockCardsModule,
+    StocksModule,
     forwardRef(() => RecipesModule),
     ParametersModule,
   ],

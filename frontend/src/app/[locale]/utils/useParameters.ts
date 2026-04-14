@@ -8,10 +8,12 @@ export interface AppParameters {
   default_payment_method: string;
   service_fee_rate: number;
   tax_rate: number;
+  available_tax_rates: string;
   allow_discount: boolean;
   max_discount_rate: number;
   receipt_footer: string;
   screen_timeout: number;  // dakika cinsinden — 0 = devre dışı
+  shift_system_enabled: boolean;
 
   // Mutfak
   warning_time: number;
@@ -68,10 +70,12 @@ export const DEFAULT_PARAMS: AppParameters = {
   default_payment_method: 'KASA',
   service_fee_rate: 10,
   tax_rate: 8,
+  available_tax_rates: '20,0,1,10',
   allow_discount: true,
   max_discount_rate: 20,
   receipt_footer: 'Teşekkür ederiz! Tekrar bekleriz.',
   screen_timeout: 180,  // 180 saniye varsayılan (3 dakika)
+  shift_system_enabled: true,
 
   warning_time: 10,
   critical_time: 20,

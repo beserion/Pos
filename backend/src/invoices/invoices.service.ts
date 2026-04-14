@@ -7,7 +7,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Invoice } from './invoice.entity';
 import { InvoiceItem } from './invoice-item.entity';
-import { StocksService } from '../stocks/stocks.service';
+import { StockMovementsService } from '../stock-movements/stock-movements.service';
+import { FinanceService } from '../finance/finance.service';
 
 @Injectable()
 export class InvoicesService {
@@ -16,12 +17,9 @@ export class InvoicesService {
     private invoiceRepository: Repository<Invoice>,
     @InjectRepository(InvoiceItem)
     private invoiceItemRepository: Repository<InvoiceItem>,
-    private readonly stocksService: StocksService,
+    private readonly stockMovementsService: StockMovementsService,
+    private readonly financeService: FinanceService,
   ) {}
-
-  // onModuleInit kaldırıldı: Önceden her yeniden başlatılmada otomatik seed çalışıyordu
-  // ve invoices tablosuna saleId olmadan yazdığı için 'Cannot insert NULL into saleId' hatasına yol açıyordu.
-  // seedTestData() manuel olarak çağrılabilir, otomatik çalışıtmayacak.
 
   async findAll(
     page: number = 1,
@@ -34,7 +32,7 @@ export class InvoicesService {
   ): Promise<{ data: Invoice[]; total: number; lastPage: number; stats: any }> {
     const query = this.invoiceRepository.createQueryBuilder('invoice')
       .leftJoinAndSelect('invoice.items', 'items')
-      .leftJoinAndSelect('items.product', 'product')
+      .leftJoinAndSelect('items.stockCard', 'stockCard')
       .leftJoinAndSelect('invoice.partner', 'partner')
       .orderBy('invoice.issueDate', 'DESC')
       .addOrderBy('invoice.createdAt', 'DESC');
@@ -88,11 +86,12 @@ export class InvoicesService {
     };
 
     statsRaw.forEach(row => {
-      if (row.invoicetype === 'PURCHASE' || row.invoiceType === 'PURCHASE') {
+      const typeKey = row.invoicetype || row.invoiceType;
+      if (typeKey === 'PURCHASE') {
         stats.purchaseTotal = Number(row.totalamount || row.totalAmount || 0);
         stats.purchaseCount = Number(row.count || 0);
         stats.purchaseVat = Number(row.totaltax || row.totalTax || 0);
-      } else if (row.invoicetype === 'SALE' || row.invoiceType === 'SALE') {
+      } else if (typeKey === 'SALE') {
         stats.saleTotal = Number(row.totalamount || row.totalAmount || 0);
         stats.saleCount = Number(row.count || 0);
         stats.saleVat = Number(row.totaltax || row.totalTax || 0);
@@ -110,7 +109,7 @@ export class InvoicesService {
   async findOne(id: number): Promise<Invoice> {
     const invoice = await this.invoiceRepository.findOne({
       where: { id },
-      relations: ['items', 'items.product', 'partner'],
+      relations: ['items', 'items.stockCard', 'partner'],
     });
     if (!invoice) {
       throw new NotFoundException(`Invoice with ID ${id} not found`);
@@ -118,9 +117,6 @@ export class InvoicesService {
     return invoice;
   }
 
-  /**
-   * Create invoice with items. For PURCHASE invoices, auto-add stock.
-   */
   async create(data: {
     invoiceNumber: string;
     invoiceType?: string;
@@ -133,8 +129,8 @@ export class InvoicesService {
     warehouseLocation?: string;
     discountRate?: number;
     items: {
-      productId: number;
-      productName?: string;
+      stockCardId: number;
+      stockCardName?: string;
       quantity: number;
       unit?: string;
       unitPrice: number;
@@ -147,8 +143,6 @@ export class InvoicesService {
     }
 
     let subtotal = 0;
-
-    // Calculate subtotal first to derive correct line discounts
     for (const item of data.items) {
       subtotal += Number(item.quantity) * Number(item.unitPrice);
     }
@@ -172,8 +166,8 @@ export class InvoicesService {
       totalVat += vatAmount;
 
       const entity = this.invoiceItemRepository.create({
-        productId: item.productId,
-        productName: item.productName || '',
+        stockCardId: item.stockCardId,
+        stockCardName: item.stockCardName || '',
         quantity: q,
         unit: item.unit || 'adet',
         unitPrice: p,
@@ -211,34 +205,118 @@ export class InvoicesService {
     const saved = await this.invoiceRepository.save(invoice);
     const savedInvoice = Array.isArray(saved) ? saved[0] : saved;
 
-    // Auto process stock for invoices
     const invoiceType = data.invoiceType || 'PURCHASE';
     if (invoiceType === 'PURCHASE' || invoiceType === 'SALE') {
       for (const item of data.items) {
-        if (item.productId) {
-          if (invoiceType === 'PURCHASE') {
-            await this.stocksService.addStock(
-              item.productId,
-              Number(item.quantity),
-              data.warehouseLocation || 'default',
-            );
-          } else {
-            await this.stocksService.deductStock(
-              item.productId,
-              Number(item.quantity),
-              data.warehouseLocation || 'default',
-            );
-          }
+        if (item.stockCardId) {
+          await this.stockMovementsService.createMovement({
+            stockCardId: item.stockCardId,
+            movementType: invoiceType === 'PURCHASE' ? 'purchase' : 'direct_sale_consumption',
+            quantity: invoiceType === 'PURCHASE' ? Number(item.quantity) : -Number(item.quantity),
+            unit: item.unit || 'adet',
+            unitCost: Number(item.unitPrice),
+            sourceType: 'INVOICE',
+            sourceId: savedInvoice.id,
+            documentNo: savedInvoice.invoiceNumber,
+            description: `${invoiceType === 'PURCHASE' ? 'Alış' : 'Satış'} Faturası: ${savedInvoice.invoiceNumber}`,
+          });
         }
+      }
+
+      // Add Finance Transaction for Partner Account
+      if (savedInvoice.partnerId) {
+        await this.financeService.create({
+          partnerId: savedInvoice.partnerId,
+          amount: savedInvoice.grandTotal,
+          type: invoiceType === 'PURCHASE' ? 'EXPENSE' : 'INCOME',
+          category: invoiceType === 'PURCHASE' ? 'Alış Faturası' : 'Satış faturası',
+          description: `${invoiceType === 'PURCHASE' ? 'Alış' : 'Satış'} Faturası: ${savedInvoice.invoiceNumber}`,
+          paymentMethod: savedInvoice.paymentMethod || 'CASH',
+          sourceType: 'INVOICE',
+          sourceId: savedInvoice.id,
+          createdAt: savedInvoice.issueDate || new Date(),
+        });
       }
     }
 
     return this.findOne(savedInvoice.id);
   }
 
-  /**
-   * Full update: reverse old stock, delete old items, recalculate, save new items, apply new stock.
-   */
+  async seedTestData() {
+    const manager = this.invoiceRepository.manager;
+    const partners = await manager.query(`SELECT TOP 1 id FROM partner WHERE isDeleted = 0 OR isDeleted IS NULL`);
+    const partnerId = partners && partners.length > 0 ? partners[0].id : null;
+
+    const cards = await manager.query(`SELECT TOP 2 id, costPrice FROM stock_cards WHERE isDeleted = 0 OR isDeleted IS NULL`);
+    if (!cards || cards.length === 0) {
+      return { success: false, msg: 'Stok kartı bulunamadı. Test verisi için stok kartı ekleyin.' };
+    }
+
+    const testId = Math.floor(Math.random() * 10000);
+    const invoice = this.invoiceRepository.create({
+      invoiceNumber: `INV-TEST-${testId}`,
+      invoiceType: 'PURCHASE',
+      partnerId: partnerId,
+      issueDate: new Date() as any,
+      status: 'ISSUED',
+      paymentMethod: 'CASH',
+      description: 'Sistem tarafından test amaçlı eklenmiş fatura.',
+      warehouseLocation: 'Merkez',
+      subtotal: 0,
+      taxAmount: 0,
+      totalAmount: 0,
+      discountRate: 0,
+      discountAmount: 0,
+      grandTotal: 0,
+    });
+
+    const savedInvoice = await this.invoiceRepository.save(invoice);
+    let subtotal = 0;
+    let taxAmount = 0;
+    
+    for (const c of cards) {
+      const q = Math.ceil(Math.random() * 10) + 1;
+      const price = parseFloat(c.costPrice) || 100;
+      const vat = 20;
+
+      const item = this.invoiceItemRepository.create({
+        invoiceId: savedInvoice.id,
+        stockCardId: c.id,
+        stockCardName: 'Test Ürün',
+        quantity: q,
+        unitPrice: price,
+        vatRate: vat,
+        unit: 'adet',
+        lineTotal: q * price * (1 + vat / 100)
+      });
+      await this.invoiceItemRepository.save(item);
+      
+      subtotal += q * price;
+      taxAmount += (q * price * vat) / 100;
+      
+      await this.stockMovementsService.createMovement({
+        stockCardId: c.id,
+        movementType: 'purchase',
+        quantity: Number(q),
+        unit: 'adet',
+        unitCost: price,
+        sourceType: 'INVOICE',
+        sourceId: savedInvoice.id,
+        documentNo: savedInvoice.invoiceNumber,
+        description: 'Test faturası girişi',
+      });
+    }
+
+    savedInvoice.subtotal = subtotal;
+    savedInvoice.totalAmount = subtotal;
+    savedInvoice.taxAmount = taxAmount;
+    savedInvoice.grandTotal = subtotal + taxAmount;
+    
+    await this.invoiceRepository.save(savedInvoice);
+
+    return { success: true, msg: 'Test faturası ve stok girişleri eklendi!', id: savedInvoice.id };
+  }
+
   async updateFull(id: number, data: {
     invoiceNumber?: string;
     invoiceType?: string;
@@ -251,8 +329,8 @@ export class InvoicesService {
     warehouseLocation?: string;
     discountRate?: number;
     items?: {
-      productId: number;
-      productName?: string;
+      stockCardId: number;
+      stockCardName?: string;
       quantity: number;
       unit?: string;
       unitPrice: number;
@@ -262,48 +340,22 @@ export class InvoicesService {
   }): Promise<Invoice> {
     const existing = await this.findOne(id);
 
-    // 1) Reverse old stock
     if (existing.status !== 'CANCELLED') {
-      for (const item of existing.items || []) {
-        if (item.productId) {
-          try {
-            if (existing.invoiceType === 'PURCHASE') {
-              await this.stocksService.deductStock(
-                item.productId,
-                Number(item.quantity),
-                existing.warehouseLocation || 'default',
-              );
-            } else if (existing.invoiceType === 'SALE') {
-              await this.stocksService.addStock(
-                item.productId,
-                Number(item.quantity),
-                existing.warehouseLocation || 'default',
-              );
-            }
-          } catch (e) {
-            console.error('Error revering stock on update:', e);
-          }
-        }
-      }
+      await this.stockMovementsService.deleteMovementsBySource('INVOICE', id);
     }
 
-    // 2) Delete old items
     if (existing.items && existing.items.length > 0) {
       await this.invoiceItemRepository.delete({ invoiceId: id });
     }
 
-    // 3) Recalculate from new items
     const items = data.items || [];
     let subtotal = 0;
-    
-    // First pass
     for (const item of items) {
       subtotal += (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
     }
 
     const discountRate = Number(data.discountRate || 0);
     const discountAmount = subtotal * (discountRate / 100);
-
     let totalVat = 0;
     const itemEntities: InvoiceItem[] = [];
 
@@ -322,8 +374,8 @@ export class InvoicesService {
 
       const entity = this.invoiceItemRepository.create({
         invoiceId: id,
-        productId: item.productId,
-        productName: item.productName || '',
+        stockCardId: item.stockCardId,
+        stockCardName: item.stockCardName || '',
         quantity: q,
         unit: item.unit || 'adet',
         unitPrice: p,
@@ -339,20 +391,14 @@ export class InvoicesService {
     const totalBeforeDiscount = subtotal + totalVat;
     const grandTotal = subtotal - discountAmount + totalVat;
 
-    // 4) Update invoice header fields
     existing.invoiceNumber = data.invoiceNumber || existing.invoiceNumber;
     existing.invoiceType = data.invoiceType || existing.invoiceType;
     existing.partnerId = data.partnerId && data.partnerId !== 0 ? data.partnerId : null;
     existing.description = data.description ?? existing.description;
     
-    if (data.issueDate) {
-      existing.issueDate = new Date(data.issueDate);
-    }
-    if (data.dueDate) {
-      existing.dueDate = new Date(data.dueDate);
-    } else {
-      existing.dueDate = null;
-    }
+    if (data.issueDate) existing.issueDate = new Date(data.issueDate);
+    if (data.dueDate) existing.dueDate = new Date(data.dueDate);
+    else existing.dueDate = null;
 
     existing.status = data.status || existing.status;
     existing.paymentMethod = data.paymentMethod || existing.paymentMethod;
@@ -364,37 +410,43 @@ export class InvoicesService {
     existing.discountAmount = Math.round(discountAmount * 100) / 100;
     existing.grandTotal = Math.round(grandTotal * 100) / 100;
 
-    // 5) Save Header
     await this.invoiceRepository.save(existing);
+    if (itemEntities.length > 0) await this.invoiceItemRepository.save(itemEntities);
 
-    // 6) Save new items
-    if (itemEntities.length > 0) {
-      await this.invoiceItemRepository.save(itemEntities);
-    }
+    // Delete existing Finance Transaction and recreate it via service method
+    await this.financeService.removeBySource('INVOICE', id);
 
-    // 7) Re-apply stock
     const newType = existing.invoiceType;
     if (existing.status !== 'CANCELLED') {
       for (const item of items) {
-        if (item.productId) {
-          try {
-            if (newType === 'PURCHASE') {
-              await this.stocksService.addStock(
-                item.productId,
-                Number(item.quantity),
-                existing.warehouseLocation || 'default',
-              );
-            } else if (newType === 'SALE') {
-              await this.stocksService.deductStock(
-                item.productId,
-                Number(item.quantity),
-                existing.warehouseLocation || 'default',
-              );
-            }
-          } catch (e) {
-            console.error('Error applying stock on update:', e);
-          }
+        if (item.stockCardId) {
+          await this.stockMovementsService.createMovement({
+            stockCardId: item.stockCardId,
+            movementType: newType === 'PURCHASE' ? 'purchase' : 'direct_sale_consumption',
+            quantity: newType === 'PURCHASE' ? Number(item.quantity) : -Number(item.quantity),
+            unit: item.unit || 'adet',
+            unitCost: Number(item.unitPrice),
+            sourceType: 'INVOICE',
+            sourceId: existing.id,
+            documentNo: existing.invoiceNumber,
+            description: `Fatura Güncelleme (${newType === 'PURCHASE' ? 'Alış' : 'Satış'}): ${existing.invoiceNumber}`,
+          });
         }
+      }
+
+      // Recreate Finance Transaction
+      if (existing.partnerId) {
+        await this.financeService.create({
+          partnerId: existing.partnerId,
+          amount: existing.grandTotal,
+          type: newType === 'PURCHASE' ? 'EXPENSE' : 'INCOME',
+          category: newType === 'PURCHASE' ? 'Alış Faturası' : 'Satış faturası',
+          description: `${newType === 'PURCHASE' ? 'Alış' : 'Satış'} Faturası: ${existing.invoiceNumber} (Güncelleme)`,
+          paymentMethod: existing.paymentMethod || 'CASH',
+          sourceType: 'INVOICE',
+          sourceId: existing.id,
+          createdAt: existing.issueDate || new Date(),
+        });
       }
     }
 
@@ -407,65 +459,57 @@ export class InvoicesService {
     invoice.status = status;
     await this.invoiceRepository.save(invoice);
 
-    // If cancelling an active invoice, revert stocks
     if (oldStatus !== 'CANCELLED' && status === 'CANCELLED') {
+      await this.stockMovementsService.deleteMovementsBySource('INVOICE', id);
+      await this.financeService.removeBySource('INVOICE', id);
+    } else if (oldStatus === 'CANCELLED' && status !== 'CANCELLED') {
       for (const item of invoice.items || []) {
-        if (item.productId) {
-          if (invoice.invoiceType === 'PURCHASE') {
-            await this.stocksService.deductStock(item.productId, Number(item.quantity), invoice.warehouseLocation || 'default');
-          } else if (invoice.invoiceType === 'SALE') {
-            await this.stocksService.addStock(item.productId, Number(item.quantity), invoice.warehouseLocation || 'default');
-          }
+        if (item.stockCardId) {
+          await this.stockMovementsService.createMovement({
+            stockCardId: item.stockCardId,
+            movementType: invoice.invoiceType === 'PURCHASE' ? 'purchase' : 'direct_sale_consumption',
+            quantity: invoice.invoiceType === 'PURCHASE' ? Number(item.quantity) : -Number(item.quantity),
+            unit: item.unit || 'adet',
+            unitCost: Number(item.unitPrice),
+            sourceType: 'INVOICE',
+            sourceId: invoice.id,
+            documentNo: invoice.invoiceNumber,
+            description: `Fatura İptal Geri Alma (${invoice.invoiceType === 'PURCHASE' ? 'Alış' : 'Satış'}): ${invoice.invoiceNumber}`,
+          });
         }
       }
-    }
-    // If activating a cancelled invoice, re-apply stocks
-    else if (oldStatus === 'CANCELLED' && status !== 'CANCELLED') {
-      for (const item of invoice.items || []) {
-        if (item.productId) {
-          if (invoice.invoiceType === 'PURCHASE') {
-            await this.stocksService.addStock(item.productId, Number(item.quantity), invoice.warehouseLocation || 'default');
-          } else if (invoice.invoiceType === 'SALE') {
-            await this.stocksService.deductStock(item.productId, Number(item.quantity), invoice.warehouseLocation || 'default');
-          }
-        }
-      }
-    }
 
+      // Restore Finance Transaction
+      if (invoice.partnerId) {
+        await this.financeService.create({
+          partnerId: invoice.partnerId,
+          amount: invoice.grandTotal,
+          type: invoice.invoiceType === 'PURCHASE' ? 'EXPENSE' : 'INCOME',
+          category: invoice.invoiceType === 'PURCHASE' ? 'Alış Faturası' : 'Satış faturası',
+          description: `${invoice.invoiceType === 'PURCHASE' ? 'Alış' : 'Satış'} Faturası: ${invoice.invoiceNumber} (İptal Geri Alındı)`,
+          paymentMethod: invoice.paymentMethod || 'CASH',
+          sourceType: 'INVOICE',
+          sourceId: invoice.id,
+          createdAt: invoice.issueDate || new Date(),
+        });
+      }
+    }
     return this.findOne(id);
   }
 
   async remove(id: number): Promise<void> {
     const invoice = await this.findOne(id);
-
-    // If it was active, reverse stock
     if (invoice.status !== 'CANCELLED') {
-      for (const item of invoice.items || []) {
-        if (item.productId) {
-          if (invoice.invoiceType === 'PURCHASE') {
-            await this.stocksService.deductStock(
-              item.productId,
-              Number(item.quantity),
-              invoice.warehouseLocation || 'default',
-            );
-          } else if (invoice.invoiceType === 'SALE') {
-            await this.stocksService.addStock(
-              item.productId,
-              Number(item.quantity),
-              invoice.warehouseLocation || 'default',
-            );
-          }
-        }
-      }
+      await this.stockMovementsService.deleteMovementsBySource('INVOICE', id);
+      await this.financeService.removeBySource('INVOICE', id);
     }
-
     await this.invoiceRepository.delete(id);
   }
 
   async findByPartner(partnerId: number): Promise<Invoice[]> {
     return await this.invoiceRepository.find({
       where: { partnerId },
-      relations: ['items', 'items.product', 'partner'],
+      relations: ['items', 'items.stockCard', 'partner'],
       order: { createdAt: 'DESC' },
     });
   }
@@ -473,7 +517,6 @@ export class InvoicesService {
   async generateInvoiceNumber(): Promise<string> {
     const year = new Date().getFullYear();
     const prefix = `INV-${year}-`;
-
     const lastInvoice = await this.invoiceRepository
       .createQueryBuilder('invoice')
       .where('invoice.invoiceNumber LIKE :prefix', { prefix: `${prefix}%` })
@@ -482,107 +525,9 @@ export class InvoicesService {
 
     let nextNum = 1;
     if (lastInvoice) {
-      const lastNum = parseInt(
-        lastInvoice.invoiceNumber.replace(prefix, ''),
-        10,
-      );
+      const lastNum = parseInt(lastInvoice.invoiceNumber.replace(prefix, ''), 10);
       if (!isNaN(lastNum)) nextNum = lastNum + 1;
     }
-
     return `${prefix}${String(nextNum).padStart(5, '0')}`;
-  }
-
-  async seedTestData() {
-    const manager = this.invoiceRepository.manager;
-    // Query 1 valid partner
-    const partners = await manager.query(`SELECT TOP 1 id FROM partner WHERE isDeleted = 0 OR isDeleted IS NULL`);
-    const partnerId = partners && partners.length > 0 ? partners[0].id : null;
-
-    // Query 2 valid products
-    const products = await manager.query(`SELECT TOP 2 id, price, vatRate FROM product WHERE isDeleted = 0 OR isDeleted IS NULL AND price IS NOT NULL`);
-    if (!products || products.length === 0) {
-      return { success: false, msg: 'Ürün bulunamadı. Test verisi için ürün ekleyin.' };
-    }
-
-    const testId = Math.floor(Math.random() * 10000);
-    
-    // Create an Invoice
-    const invoice = this.invoiceRepository.create({
-      invoiceNumber: `INV-TEST-${testId}`,
-      invoiceType: 'PURCHASE',
-      partnerId: partnerId,
-      issueDate: new Date(),
-      status: 'ISSUED',
-      paymentMethod: 'CASH',
-      description: 'Sistem tarafından test amaçlı eklenmiş fatura (ve kalemleri).',
-      warehouseLocation: 'Merkez',
-      subtotal: 0,
-      taxAmount: 0,
-      totalAmount: 0,
-      discountRate: 0,
-      discountAmount: 0,
-      grandTotal: 0,
-    });
-
-    const savedInvoice = await this.invoiceRepository.save(invoice);
-
-    // Create Items
-    let subtotal = 0;
-    let taxAmount = 0;
-    
-    for (const p of products) {
-      const q = Math.ceil(Math.random() * 10) + 1;
-      const price = parseFloat(p.price) || 100;
-      const vat = parseFloat(p.vatRate) || 20;
-
-      const item = this.invoiceItemRepository.create({
-        invoiceId: savedInvoice.id,
-        productId: p.id,
-        quantity: q,
-        unitPrice: price,
-        vatRate: vat,
-        unit: 'adet',
-        lineTotal: q * price * (1 + vat / 100)
-      });
-      await this.invoiceItemRepository.save(item);
-      
-      subtotal += q * price;
-      taxAmount += (q * price * vat) / 100;
-      
-      // Affect Stock
-      await this.stocksService.addStock(p.id, Number(q), 'Merkez');
-    }
-
-    savedInvoice.subtotal = subtotal;
-    savedInvoice.totalAmount = subtotal;
-    savedInvoice.taxAmount = taxAmount;
-    savedInvoice.grandTotal = subtotal + taxAmount;
-    
-    await this.invoiceRepository.save(savedInvoice);
-
-    // Also seed 10 reservations for frontend test:
-    try {
-      for (let i = 1; i <= 10; i++) {
-        const rDate = new Date();
-        rDate.setDate(rDate.getDate() + Math.floor(i / 2));
-        rDate.setHours(18 + (i % 4), 0, 0, 0);
-        const formattedDate = rDate.toISOString().slice(0, 19).replace('T', ' ');
-
-        const statuses = ['PENDING', 'CONFIRMED', 'CANCELLED', 'ARRIVED'];
-        const randomStatus = statuses[i % 4];
-
-        await manager.query(`
-            INSERT INTO reservations (
-                customerName, customerPhone, reservationTime, guestCount, notes, status, createdAt, updatedAt
-            ) VALUES (
-                'Örnek Müşteri ${i}', '+9055500011${String(i).padStart(2, '0')}', '${formattedDate}', ${(i % 5) + 2}, 'Otomatik oluşturulmuş test rezervasyonu', '${randomStatus}', GETDATE(), GETDATE()
-            )
-        `);
-      }
-    } catch (e) {
-      console.error('Reservation seed error', e);
-    }
-
-    return { success: true, msg: 'Test faturası, kalemleri ve 10 örnek rezervasyon başarıyla eklendi!', id: savedInvoice.id };
   }
 }

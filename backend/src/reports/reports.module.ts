@@ -15,10 +15,14 @@ import { CashRegister } from '../cash-registers/cash-register.entity';
 import { Table } from '../tables/table.entity';
 import { ParametersModule } from '../parameters/parameters.module';
 
+import { Sale } from '../sales/sale.entity';
+import { FinanceModule } from '../finance/finance.module';
+
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ZReport, AuditLog, BusinessDayLog, ClosedDayRecord, Shift, CashRegister, Table]),
+    TypeOrmModule.forFeature([ZReport, AuditLog, BusinessDayLog, ClosedDayRecord, Shift, CashRegister, Table, Sale]),
     ParametersModule,
+    FinanceModule,
   ],
   controllers: [ReportsController, BusinessDayController],
   providers: [ReportsService, ZReportsService, AuditLogService, BusinessDayService],

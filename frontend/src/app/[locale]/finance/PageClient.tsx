@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../AuthContext';
+import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import Cookies from 'js-cookie';
@@ -29,11 +30,12 @@ interface Summary {
 }
 
 export function PageClient() {
-    const { user, loading } = useAuth();
+    const { user, loading, hasFeature } = useAuth();
     const router = useRouter();
     const locale = useLocale();
     const tCommon = useTranslations('Common');
     const tFinance = useTranslations('Finance');
+    
     const API_URL = (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
 
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -104,8 +106,8 @@ export function PageClient() {
 
     useEffect(() => {
         if (!loading && !user) router.push(`/${locale}/login`);
-        if (user) fetchData();
-    }, [user, loading, router, locale, page, limit, search, startDate, endDate, typeFilter, methodFilter]);
+        if (user && hasFeature('finance_system')) fetchData();
+    }, [user, loading, router, locale, page, limit, search, startDate, endDate, typeFilter, methodFilter, hasFeature]);
 
     const handleSearchChange = (val: string) => {
         setSearch(val);
@@ -179,6 +181,14 @@ export function PageClient() {
     };
 
     if (loading || !user) return null;
+
+    if (user && !hasFeature('finance_system')) {
+        return (
+            <div className="h-screen bg-slate-50 dark:bg-slate-900 flex flex-col">
+                <PremiumModuleLocked moduleName="Finans Yönetim Sistemi" featureKey="finance_system" />
+            </div>
+        );
+    }
 
     const methodLabel = (m: string) => m === 'KASA' ? 'Kasa' : m === 'BANKA' ? 'Banka' : 'Kredi Kartı';
     const methodIcon = (m: string) => m === 'KASA' ? 'fa-cash-register' : m === 'BANKA' ? 'fa-building-columns' : 'fa-credit-card';

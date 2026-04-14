@@ -6,7 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
 import { Stock } from './stock.entity';
-import { Product } from '../products/product.entity';
+import { StockCard } from '../stock-cards/stock-card.entity';
 import { AlertsService } from '../alerts/alerts.service';
 
 @Injectable()
@@ -14,8 +14,8 @@ export class StocksService {
   constructor(
     @InjectRepository(Stock)
     private stockRepository: Repository<Stock>,
-    @InjectRepository(Product)
-    private productRepository: Repository<Product>,
+    @InjectRepository(StockCard)
+    private stockCardRepository: Repository<StockCard>,
     private alertsService: AlertsService,
   ) {}
 
@@ -27,11 +27,11 @@ export class StocksService {
   ): Promise<{ data: Stock[]; total: number; lastPage: number; stats: any }> {
     const query = this.stockRepository
       .createQueryBuilder('stock')
-      .leftJoinAndSelect('stock.product', 'product');
+      .leftJoinAndSelect('stock.stockCard', 'stockCard');
 
     if (search) {
       query.andWhere(
-        '(product.name LIKE :search OR product.sku LIKE :search OR stock.location LIKE :search)',
+        '(stockCard.name LIKE :search OR stockCard.sku LIKE :search OR stock.location LIKE :search)',
         { search: `%${search}%` },
       );
     }
@@ -45,23 +45,21 @@ export class StocksService {
       .take(limit)
       .getManyAndCount();
 
-    // Stats calculation (requires looking at all active products/stocks)
-    // For large datasets, this might need optimization or a separate query, 
-    // but for now we follow the existing pattern in checkLowStock logic.
-    const allProducts = await this.productRepository.find({
+    // Stats calculation (using StockCard data)
+    const allStockCards = await this.stockCardRepository.find({
       where: { isActive: true },
       relations: ['stocks'],
     });
 
-    let totalProducts = 0;
+    let totalCards = 0;
     let warningCount = 0;
     let emptyCount = 0;
 
-    for (const prod of allProducts) {
-      totalProducts++;
-      const minLevel = Number(prod.minStockLevel || 5);
-      const totalStock = (prod.stocks || []).reduce(
-        (sum, s) => sum + Number(s.quantity),
+    for (const card of allStockCards) {
+      totalCards++;
+      const minLevel = Number(card.minStockLevel || 5);
+      const totalStock = (card.stocks || []).reduce(
+        (sum: number, s: Stock) => sum + Number(s.quantity),
         0,
       );
 
@@ -77,7 +75,7 @@ export class StocksService {
       total,
       lastPage: Math.ceil(total / limit),
       stats: {
-        total: totalProducts,
+        total: totalCards,
         warning: warningCount,
         empty: emptyCount,
       },
@@ -87,7 +85,7 @@ export class StocksService {
   async findOne(id: number): Promise<Stock> {
     const stock = await this.stockRepository.findOne({
       where: { id },
-      relations: ['product'],
+      relations: ['stockCard'],
     });
     if (!stock) {
       throw new NotFoundException(`Stock with ID ${id} not found`);
@@ -95,11 +93,11 @@ export class StocksService {
     return stock;
   }
 
-  async create(stockData: Partial<Stock> & { productId?: number }): Promise<Stock> {
+  async create(stockData: Partial<Stock> & { stockCardId?: number }): Promise<Stock> {
     const newStock = this.stockRepository.create();
     Object.assign(newStock, stockData);
-    if (stockData.productId) {
-      newStock.product = { id: stockData.productId } as Product;
+    if (stockData.stockCardId) {
+      newStock.stockCard = { id: stockData.stockCardId } as StockCard;
     }
     
     if ('expirationDate' in stockData) {
@@ -118,18 +116,18 @@ export class StocksService {
     return await this.stockRepository.save(newStock);
   }
 
-  async update(id: number, updateData: Partial<Stock> & { productId?: number }): Promise<Stock> {
+  async update(id: number, updateData: Partial<Stock> & { stockCardId?: number }): Promise<Stock> {
     const stock = await this.findOne(id);
     
     // Güvenli assign
     for (const [key, val] of Object.entries(updateData)) {
-       if (key !== 'productId' && key !== 'product' && key !== 'expirationDate') {
+       if (key !== 'stockCardId' && key !== 'stockCard' && key !== 'expirationDate') {
           (stock as any)[key] = val;
        }
     }
 
-    if (updateData.productId) {
-      stock.product = { id: updateData.productId } as Product;
+    if (updateData.stockCardId) {
+      stock.stockCard = { id: updateData.stockCardId } as StockCard;
     }
     
     if ('expirationDate' in updateData) {
@@ -150,13 +148,16 @@ export class StocksService {
     
     // Trigger STOCK_LOW alert if needed
     try {
-      const allProductStocks = await this.stockRepository.find({ where: { product: { id: saved.product?.id || updateData.productId } } });
-      const totalStock = allProductStocks.reduce((sum: number, s: any) => sum + Number(s.quantity), 0);
-      this.alertsService.trigger('STOCK_LOW', {
-        relatedId: saved.product?.id,
-        numericValue: totalStock,
-        description: `Stok miktarı ${totalStock} seviyesine güncellendi!`,
-      }).catch(() => {});
+      const cardId = saved.stockCard?.id || updateData.stockCardId;
+      if (cardId) {
+        const allCardStocks = await this.stockRepository.find({ where: { stockCard: { id: cardId } } });
+        const totalStock = allCardStocks.reduce((sum: number, s: Stock) => sum + Number(s.quantity), 0);
+        this.alertsService.trigger('STOCK_LOW', {
+          relatedId: cardId,
+          numericValue: totalStock,
+          description: `Stok miktarı ${totalStock} seviyesine güncellendi!`,
+        }).catch(() => {});
+      }
     } catch(e) { console.error('Alert error', e); }
 
     return saved;
@@ -168,16 +169,16 @@ export class StocksService {
   }
 
   /**
-   * Deduct stock quantity for a given product. Finds the first available stock record and reduces it.
+   * Deduct stock quantity for a given stock card. Finds the first available stock record and reduces it.
    */
   async deductStock(
-    productId: number,
+    stockCardId: number,
     quantity: number,
     location?: string,
     manager?: any,
   ): Promise<void> {
     const repo = manager ? manager.getRepository(Stock) : this.stockRepository;
-    const where: any = { product: { id: productId } };
+    const where: any = { stockCard: { id: stockCardId } };
     if (location) where.location = location;
 
     const stocks = await repo.find({
@@ -188,7 +189,7 @@ export class StocksService {
     if (stocks.length === 0) {
       // No stock record found — create one with negative value as a warning
       const newStock = repo.create({
-        product: { id: productId } as any,
+        stockCard: { id: stockCardId } as any,
         quantity: -quantity,
         location: location || 'default',
       });
@@ -214,30 +215,30 @@ export class StocksService {
 
     // Trigger STOCK_LOW alert if needed
     try {
-      const allProductStocks = await repo.find({ where: { product: { id: productId } } });
-      const totalStock = allProductStocks.reduce((sum: number, s: any) => sum + Number(s.quantity), 0);
-      const productRepo = manager ? manager.getRepository(Product) : this.productRepository;
-      const product = await productRepo.findOne({ where: { id: productId } });
+      const allCardStocks = await repo.find({ where: { stockCard: { id: stockCardId } } });
+      const totalStock = allCardStocks.reduce((sum: number, s: Stock) => sum + Number(s.quantity), 0);
+      const cardRepo = manager ? manager.getRepository(StockCard) : this.stockCardRepository;
+      const card = await cardRepo.findOne({ where: { id: stockCardId } });
       
       this.alertsService.trigger('STOCK_LOW', {
-        relatedId: productId,
+        relatedId: stockCardId,
         numericValue: totalStock,
-        description: `${product?.name || `Ürün #${productId}`} stok miktarı ${totalStock} adet/birim seviyesine düştü!`,
+        description: `${card?.name || `Stok Kartı #${stockCardId}`} stok miktarı ${totalStock} adet/birim seviyesine düştü!`,
       }).catch(() => {});
     } catch(e) { console.error('Alert error', e); }
   }
 
   /**
-   * Add stock quantity for a given product (e.g., when receiving a purchase order).
+   * Add stock quantity for a given stock card (e.g., when receiving a purchase order).
    */
   async addStock(
-    productId: number,
+    stockCardId: number,
     quantity: number,
     location?: string,
     manager?: any,
   ): Promise<void> {
     const repo = manager ? manager.getRepository(Stock) : this.stockRepository;
-    const where: any = { product: { id: productId } };
+    const where: any = { stockCard: { id: stockCardId } };
     if (location) where.location = location;
 
     const stock = await repo.findOne({ where });
@@ -247,7 +248,7 @@ export class StocksService {
       await repo.save(stock);
     } else {
       const newStock = repo.create({
-        product: { id: productId } as any,
+        stockCard: { id: stockCardId } as any,
         quantity,
         location: location || 'default',
       });
@@ -256,63 +257,63 @@ export class StocksService {
 
     // Trigger STOCK_LOW alert if needed
     try {
-      const allProductStocks = await repo.find({ where: { product: { id: productId } } });
-      const totalStock = allProductStocks.reduce((sum: number, s: any) => sum + Number(s.quantity), 0);
-      const productRepo = manager ? manager.getRepository(Product) : this.productRepository;
-      const product = await productRepo.findOne({ where: { id: productId } });
+      const allCardStocks = await repo.find({ where: { stockCard: { id: stockCardId } } });
+      const totalStock = allCardStocks.reduce((sum: number, s: Stock) => sum + Number(s.quantity), 0);
+      const cardRepo = manager ? manager.getRepository(StockCard) : this.stockCardRepository;
+      const card = await cardRepo.findOne({ where: { id: stockCardId } });
       
       this.alertsService.trigger('STOCK_LOW', {
-        relatedId: productId,
+        relatedId: stockCardId,
         numericValue: totalStock,
-        description: `${product?.name || `Ürün #${productId}`} stok miktarı ${totalStock} adet/birim seviyesinde!`,
+        description: `${card?.name || `Stok Kartı #${stockCardId}`} stok miktarı ${totalStock} adet/birim seviyesinde!`,
       }).catch(() => {});
     } catch(e) { console.error('Alert error', e); }
   }
 
   /**
-   * Check for products whose total stock is below their minStockLevel.
+   * Check for stock cards whose total stock is below their minStockLevel.
    */
   async checkLowStock(): Promise<
     {
-      productId: number;
-      productName: string;
+      stockCardId: number;
+      stockCardName: string;
       currentStock: number;
       minStockLevel: number;
       costPrice: number;
       unit: string;
     }[]
   > {
-    const products = await this.productRepository.find({
+    const cards = await this.stockCardRepository.find({
       where: { isActive: true },
       relations: ['stocks'],
     });
 
     const lowStockItems: {
-      productId: number;
-      productName: string;
+      stockCardId: number;
+      stockCardName: string;
       currentStock: number;
       minStockLevel: number;
       costPrice: number;
       unit: string;
     }[] = [];
 
-    for (const product of products) {
-      const minLevel = Number(product.minStockLevel || 0);
-      if (minLevel <= 0) continue; // Skip products without minStockLevel set
+    for (const card of cards) {
+      const minLevel = Number(card.minStockLevel || 0);
+      if (minLevel <= 0) continue; // Skip cards without minStockLevel set
 
-      const totalStock = (product.stocks || []).reduce(
-        (sum, s) => sum + Number(s.quantity),
+      const totalStock = (card.stocks || []).reduce(
+        (sum: number, s: Stock) => sum + Number(s.quantity),
         0,
       );
 
       if (totalStock < minLevel) {
         lowStockItems.push({
-          productId: product.id,
-          productName: product.name,
+          stockCardId: card.id,
+          stockCardName: card.name,
           currentStock: totalStock,
           minStockLevel: minLevel,
-          costPrice: Number(product.costPrice || 0),
-          unit: product.unit || 'adet',
+          costPrice: Number(card.costPerBaseUnit || 0),
+          unit: card.baseUnit || 'adet',
         });
       }
     }

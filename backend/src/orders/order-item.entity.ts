@@ -6,7 +6,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Order } from './order.entity';
-import { Product } from '../products/product.entity';
+import { StockCard } from '../stock-cards/stock-card.entity';
 
 @Entity('order_items')
 export class OrderItem {
@@ -17,12 +17,12 @@ export class OrderItem {
   @JoinColumn({ name: 'orderId' })
   order: Order;
 
-  @ManyToOne(() => Product)
-  @JoinColumn({ name: 'productId' })
-  product: Product;
+  @ManyToOne(() => StockCard)
+  @JoinColumn({ name: 'stockCardId' })
+  stockCard: StockCard;
 
   @Column({ nullable: true , default: 0 })
-  productId: number;
+  stockCardId: number;
 
   @Column('decimal', { precision: 10, scale: 2 , default: 0 })
   quantity: number;
