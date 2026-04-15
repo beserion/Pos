@@ -9,13 +9,10 @@ import {
   JoinColumn,
 } from 'typeorm';
 import type { Warehouse } from '../warehouses/warehouse.entity';
-<<<<<<< HEAD
 import type { Partner } from '../partners/partner.entity';
 import type { OutputProfile } from '../output-profiles/output-profile.entity';
-=======
 import type { Stock } from '../stocks/stock.entity';
 import type { StockGroup } from '../stock-groups/stock-group.entity';
->>>>>>> upstream/server
 
 @Entity('stock_cards')
 export class StockCard {
@@ -33,24 +30,23 @@ export class StockCard {
   barcode: string;
 
   @Column({ nullable: true })
-  sku: string; // Referans kodu
+  sku: string; // SKU / Referans kodu
 
-<<<<<<< HEAD
   @Column({ default: true })
   isActive: boolean;
 
   // ─── Stok Doğası / Sınıfı (§3) ───────────────────────
   // raw_material | traded_good | semi_finished | consumable | packaging
-  @Column({ default: 'traded_good' })
+  @Column({
+    type: 'nvarchar',
+    length: 50,
+    default: 'traded_good',
+  })
   stockNature: string;
 
   // ─── Sınıflama (§8) ──────────────────────────────────
   @Column({ nullable: true })
   stockGroup: string; // Eski: category
-=======
-  @Column({ nullable: true })
-  stockGroup: string;
->>>>>>> upstream/server
 
   @Column({ nullable: true })
   stockSubgroup: string;
@@ -58,10 +54,17 @@ export class StockCard {
   @Column({ nullable: true })
   brand: string;
 
-<<<<<<< HEAD
+  @Column({ nullable: true })
+  stockGroupId: number;
+
+  @ManyToOne('StockGroup', (group: StockGroup) => group.stockCards, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'stockGroupId' })
+  stockGroupRelation: any;
+
   // ─── Birimler (§8) ───────────────────────────────────
-=======
->>>>>>> upstream/server
   @Column({ default: 'adet' })
   baseUnit: string;
 
@@ -82,7 +85,7 @@ export class StockCard {
   @JoinColumn({ name: 'primaryVendorId' })
   primaryVendor: Partner;
 
-  @Column('decimal', { precision: 5, scale: 2, default: 0 })
+  @Column('decimal', { precision: 10, scale: 2, default: 0 })
   purchaseVat: number;
 
   @Column('decimal', { precision: 12, scale: 4, default: 0 })
@@ -105,42 +108,10 @@ export class StockCard {
   currentStock: number;
 
   @Column('decimal', { precision: 10, scale: 2, default: 0 })
-<<<<<<< HEAD
-  criticalStock: number;
-=======
-  minStockLevel: number; // critical_stock
-
-  @Column('decimal', { precision: 10, scale: 2, default: 0 })
-  maxStockLevel: number;
->>>>>>> upstream/server
-
-  @Column('decimal', { precision: 10, scale: 2, default: 0 })
   minStock: number; // Eski: minStockLevel
 
   @Column('decimal', { precision: 10, scale: 2, default: 0 })
   maxStock: number;
-
-  @Column({
-    type: 'nvarchar',
-    length: 50,
-    default: 'traded_good',
-  })
-  stockNature: string; // raw_material, traded_good, semi_finished, consumable, packaging
-
-  @Column({ nullable: true })
-  primaryVendor: string;
-
-  @Column('decimal', { precision: 10, scale: 2, default: 0 })
-  purchaseVat: number;
-
-  @Column('decimal', { precision: 12, scale: 4, default: 0 })
-  lastPurchasePrice: number;
-
-  @Column('decimal', { precision: 12, scale: 4, default: 0 })
-  averageCost: number;
-
-  @Column({ nullable: true })
-  sku: string; // SKU / Referans kodu
 
   @Column({ nullable: true })
   warehouseId: number;
@@ -150,18 +121,14 @@ export class StockCard {
   warehouse: Warehouse;
 
   @Column({ nullable: true })
-<<<<<<< HEAD
   shelf: string; // Raf bilgisi
 
   // ─── Yazıcı Yönlendirme (§6 seviye 4) ───────────────
   @Column({ nullable: true })
-=======
->>>>>>> upstream/server
   outputProfileId: number;
 
   @ManyToOne('OutputProfile', { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'outputProfileId' })
-<<<<<<< HEAD
   outputProfile: OutputProfile;
 
   // ─── Opsiyonel İleri Alanlar (§8) ────────────────────
@@ -178,20 +145,6 @@ export class StockCard {
   serialTracking: boolean;
 
   // ─── Notlar ──────────────────────────────────────────
-=======
-  outputProfile: any;
-
-  @Column({ nullable: true })
-  stockGroupId: number;
-
-  @ManyToOne('StockGroup', (group: any) => group.stockCards, {
-    nullable: true,
-    onDelete: 'SET NULL',
-  })
-  @JoinColumn({ name: 'stockGroupId' })
-  stockGroupRelation: any;
-
->>>>>>> upstream/server
   @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
   note: string;
 

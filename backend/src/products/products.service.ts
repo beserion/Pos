@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-=======
 import { Injectable, NotFoundException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
->>>>>>> upstream/server
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product } from './product.entity';
@@ -22,14 +18,11 @@ export class ProductsService {
         private recipeRepository: Repository<Recipe>,
         @InjectRepository(Modifier)
         private modifierRepository: Repository<Modifier>,
-<<<<<<< HEAD
         @InjectRepository(RecipeHeader)
         private recipeHeaderRepository: Repository<RecipeHeader>,
         private parametersService: ParametersService,
-=======
         @InjectRepository(ProductTransaction)
         private transactionRepository: Repository<ProductTransaction>,
->>>>>>> upstream/server
     ) { }
 
     async countProducts(): Promise<number> {
@@ -38,16 +31,12 @@ export class ProductsService {
 
     async findAll(): Promise<Product[]> {
         const products = await this.productRepository.find({
-<<<<<<< HEAD
             relations: [
-                'recipes', 'printer', 'productType', 'outputProfile',
+                'recipes', 'variations', 'printer', 'productType', 'outputProfile',
                 'setMenu', 'setMenu.groups', 'setMenu.groups.items',
-                'linkedStockCard',
+                'linkedStockCard', 'linkedStockCard.stockGroupRelation'
             ],
-=======
-            relations: ['recipes', 'variations', 'printer', 'productType', 'outputProfile', 'setMenu', 'setMenu.groups', 'setMenu.groups.items', 'linkedStockCard', 'linkedStockCard.stockGroupRelation'],
             order: { orderIndex: 'ASC', id: 'ASC' }
->>>>>>> upstream/server
         });
 
         if (products.length > 0) {
@@ -76,26 +65,23 @@ export class ProductsService {
         // Exclude products where isIngredient = true (handle NULL as non-ingredient)
         return await this.productRepository
             .createQueryBuilder('p')
-<<<<<<< HEAD
+            .leftJoinAndSelect('p.variations', 'v')
+            .leftJoinAndSelect('p.linkedStockCard', 'sc')
             .select([
-                'p.id', 'p.name', 'p.price', 'p.productGroup', 'p.imageUrl',
+                'p.id', 'p.name', 'p.price', 'p.productGroup', 'p.category', 'p.imageUrl',
                 'p.isQuickSale', 'p.sku', 'p.productTypeId', 'p.printerId',
                 'p.inventoryLinkType', 'p.posVisible', 'p.posName',
                 'p.buttonOrder', 'p.buttonColor', 'p.vatRate',
                 'p.openPriceEnabled', 'p.discountAllowed', 'p.compAllowed',
+                'p.orderIndex', 'p.stockGroup', 'p.stockGroupId',
+                'v.id', 'v.variationName', 'v.fixedPrice', 'v.priceFactor', 'v.isActive',
+                'sc.id', 'sc.stockGroup', 'sc.category'
             ])
             .where('(p.isIngredient IS NULL OR p.isIngredient = :val)', { val: false })
             .andWhere('p.isActive = :active', { active: true })
-            .orderBy('p.buttonOrder', 'ASC')
-            .addOrderBy('p.name', 'ASC')
-=======
-            .leftJoinAndSelect('p.variations', 'v')
-            .leftJoinAndSelect('p.linkedStockCard', 'sc')
-            .select(['p.id', 'p.name', 'p.price', 'p.category', 'p.imageUrl', 'p.isQuickSale', 'p.sku', 'p.productTypeId', 'p.printerId', 'p.orderIndex', 'p.stockGroup', 'p.stockGroupId', 'v.id', 'v.variationName', 'v.fixedPrice', 'v.priceFactor', 'v.inventoryLinkType', 'v.isActive', 'sc.id', 'sc.stockGroup', 'sc.category'])
-            .where('p.isIngredient IS NULL OR p.isIngredient = :val', { val: false })
             .orderBy('p.orderIndex', 'ASC')
+            .addOrderBy('p.buttonOrder', 'ASC')
             .addOrderBy('p.id', 'ASC')
->>>>>>> upstream/server
             .getMany();
     }
 

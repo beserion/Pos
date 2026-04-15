@@ -17,13 +17,10 @@ import { User } from '../users/user.entity';
 import { KitchenGateway } from '../orders/kitchen.gateway';
 import { AlertsModule } from '../alerts/alerts.module';
 import { StockMovementsModule } from '../stock-movements/stock-movements.module';
-<<<<<<< HEAD
 import { ProductTransactionsService } from './product-transactions.service';
 import { ProductTransactionsController } from './product-transactions.controller';
 import { Product } from '../products/product.entity';
-=======
 import { ProductsModule } from '../products/products.module';
->>>>>>> upstream/server
 
 @Module({
   imports: [

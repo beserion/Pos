@@ -5,11 +5,8 @@ import { StockMovement } from './stock-movement.entity';
 import { StockCardsService } from '../stock-cards/stock-cards.service';
 import { RecipesService } from '../recipes/recipes.service';
 import { ParametersService } from '../parameters/parameters.service';
-<<<<<<< HEAD
 import { Product } from '../products/product.entity';
-=======
 import { StocksService } from '../stocks/stocks.service';
->>>>>>> upstream/server
 
 @Injectable()
 export class StockMovementsService {
@@ -38,27 +35,18 @@ export class StockMovementsService {
     unit?: string;
     unitCost?: number;
     warehouseId?: number;
-<<<<<<< HEAD
-    referenceType?: string;
-    referenceId?: number;
-    sourceType?: string;
-    sourceId?: number;
-=======
     businessDate?: Date;
     documentType?: string;
     documentNo?: string;
     sourceType?: string;
     sourceId?: number;
+    referenceType?: string;
+    referenceId?: number;
     approveUserId?: number;
     reasonCode?: string;
->>>>>>> upstream/server
     description?: string;
     note?: string;
     userId?: number;
-    businessDate?: Date;
-    documentType?: string;
-    documentNo?: string;
-    reasonCode?: string;
   }, manager?: any): Promise<StockMovement> {
     const repo = manager ? manager.getRepository(StockMovement) : this.movementRepository;
 
@@ -96,33 +84,17 @@ export class StockMovementsService {
       unit: data.unit || card.baseUnit,
       unitCost,
       totalCost,
-<<<<<<< HEAD
       warehouseId: data.warehouseId || card.warehouseId,
-      // Kaynak izleme: yeni alan + geriye uyumluluk
+      documentType: data.documentType,
+      documentNo: data.documentNo,
       sourceType: data.sourceType || data.referenceType,
       sourceId: data.sourceId || data.referenceId,
       referenceType: data.referenceType || data.sourceType,
       referenceId: data.referenceId || data.sourceId,
-      // Belge
-      documentType: data.documentType,
-      documentNo: data.documentNo,
-      businessDate: data.businessDate,
-      // Not/açıklama
-      note: data.note || data.description,
-      description: data.description || data.note,
-      reasonCode: data.reasonCode,
-=======
-      qtyBefore,
-      stockAfter: newStockLevel,
-      warehouseId: data.warehouseId || card.warehouseId,
-      documentType: data.documentType,
-      documentNo: data.documentNo,
-      sourceType: data.sourceType,
-      sourceId: data.sourceId,
       approveUserId: data.approveUserId,
       reasonCode: data.reasonCode,
-      description: data.description,
->>>>>>> upstream/server
+      note: data.note || data.description,
+      description: data.description || data.note,
       userId: data.userId,
     });
 
@@ -248,18 +220,7 @@ export class StockMovementsService {
         sourceType,
         sourceId,
         warehouseId,
-        description: `Reçete tüketimi (Varyant): ${header.name || `RecipeHeader #${recipeHeaderId}`}`,
-        userId,
-      }, manager);
-
-      movements.push(movement);
-    }
-
-    return movements;
-  }
-
-<<<<<<< HEAD
-  // ─── Direct Stock Consumption (§12.2) ────────────────
+        descriptio  // ─── Direct Stock Consumption (§12.2) ────────────────
 
   /**
    * Direct stock ürün satışında bağlı stoktan doğrudan düşüm.
@@ -298,43 +259,8 @@ export class StockMovementsService {
   }
 
   /**
-   * Reverse direct stock consumption (for cancellations/refunds).
-   */
-  async createDirectStockReverse(
-    productId: number,
-    saleQuantity: number,
-    saleTypeMultiplier: number = 1,
-    referenceType: string = 'SALE',
-    referenceId?: number,
-    userId?: number,
-    manager?: any,
-  ): Promise<StockMovement | null> {
-    const restoreParam = await this.parametersService.getValue('inventory', 'stock_restore_on_cancel');
-    if (restoreParam === 'false') return null;
-
-    const product = await this.productRepository.findOne({ where: { id: productId } });
-    if (!product || product.inventoryLinkType !== 'direct_stock' || !product.linkedStockCardId) {
-      return null;
-    }
-
-    const restoreQty = Number(product.directStockQty || 1) * saleQuantity * saleTypeMultiplier;
-    if (restoreQty <= 0) return null;
-
-    return this.createMovement({
-      stockCardId: product.linkedStockCardId,
-      movementType: 'DIRECT_SALE_REVERSE',
-      quantity: restoreQty, // Positive = stock in
-      unit: product.directStockUnit || 'adet',
-      referenceType,
-      referenceId,
-      sourceType: 'SALE',
-      sourceId: referenceId,
-      description: `Direkt satış iade: ${product.name}`,
-      userId,
-    }, manager);
-=======
-  /**
-   * Reverse consumption (for cancellations/refunds).
+   * Robust reverse consumption (for cancellations/refunds).
+   * Handles direct stock, variations, and recipes.
    */
   async createReverseConsumption(
     productId: number,
@@ -352,32 +278,35 @@ export class StockMovementsService {
     );
     if (restoreParam === 'false') return [];
 
-    const product = await manager.query(`SELECT inventoryLinkType, linkedStockItemId, directStockQty, directStockUnit FROM products WHERE id = ${productId}`);
-    if (!product || product.length === 0) return [];
+    const productResults = await manager.query(`SELECT inventoryLinkType, linkedStockCardId, directStockQty, directStockUnit FROM products WHERE id = ${productId}`);
+    if (!productResults || productResults.length === 0) return [];
+    const product = productResults[0];
 
     let variation = null;
     if (variationId) {
-      const variations = await manager.query(`SELECT inventoryLinkType, linkedStockItemId, directStockQty, directStockUnit, recipeHeaderId FROM product_variations WHERE id = ${variationId}`);
+      const variations = await manager.query(`SELECT inventoryLinkType, linkedStockCardId, directStockQty, directStockUnit, recipeHeaderId FROM product_variations WHERE id = ${variationId}`);
       variation = variations?.[0] || null;
     }
 
-    const linkType = variation?.inventoryLinkType || product[0].inventoryLinkType;
+    const linkType = variation?.inventoryLinkType || product.inventoryLinkType;
 
     if (linkType === 'direct_stock') {
-      const stockItemId = variation?.linkedStockItemId || product[0].linkedStockItemId;
-      const stockQty = variation?.directStockQty || product[0].directStockQty;
-      const stockUnit = variation?.directStockUnit || product[0].directStockUnit;
+      const stockCardId = variation?.linkedStockCardId || product.linkedStockCardId;
+      const stockQty = variation?.directStockQty || product.directStockQty;
+      const stockUnit = variation?.directStockUnit || product.directStockUnit;
 
-      if (stockItemId && stockQty) {
-        const restoreQty = Number(stockQty) * saleQuantity;
+      if (stockCardId && stockQty) {
+        const restoreQty = Number(stockQty) * saleQuantity * saleTypeMultiplier;
         const movement = await this.createMovement({
-          stockCardId: stockItemId,
+          stockCardId,
           movementType: 'return_in', 
           quantity: restoreQty,
           qtyIn: restoreQty,
           unit: stockUnit,
           sourceType,
           sourceId,
+          referenceType: sourceType,
+          referenceId: sourceId,
           description: `Satış iptal iadesi (Direkt Stok)`,
           userId,
         }, manager);
@@ -410,6 +339,8 @@ export class StockMovementsService {
           unit: line.unit,
           sourceType,
           sourceId,
+          referenceType: sourceType,
+          referenceId: sourceId,
           description: `Satış iptal iadesi (Reçete): ${recipe.product?.name || `Ürün #${productId}`}`,
           userId,
         }, manager);
@@ -419,7 +350,6 @@ export class StockMovementsService {
     }
 
     return [];
->>>>>>> upstream/server
   }
 
   // ─── Manual & Transfer ───────────────────────────────
@@ -441,10 +371,7 @@ export class StockMovementsService {
     return this.createMovement({
       ...data,
       quantity: qty,
-<<<<<<< HEAD
       referenceType: 'MANUAL',
-=======
->>>>>>> upstream/server
       sourceType: 'MANUAL',
     });
   }

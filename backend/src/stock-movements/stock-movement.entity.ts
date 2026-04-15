@@ -32,27 +32,14 @@ export class StockMovement {
   stockCard: StockCard;
 
   @Column({ type: 'date', nullable: true })
-  businessDate: Date;
+  businessDate: Date; // İş günü tarihi
 
   @Column()
   movementType: string;
-<<<<<<< HEAD
-=======
-  // opening_balance, purchase, goods_receipt, count_adjustment, 
-  // recipe_consumption, direct_sale_consumption, waste, spoilage, 
-  // transfer_out, transfer_in, return_in, return_out, manual_adjustment
-
-  @Column('decimal', { precision: 12, scale: 4, default: 0 })
-  qtyIn: number;
-
-  @Column('decimal', { precision: 12, scale: 4, default: 0 })
-  qtyOut: number;
->>>>>>> upstream/server
 
   // ─── Miktar Alanları (§15) ───────────────────────────
-  @Column('decimal', { precision: 12, scale: 4 })
-<<<<<<< HEAD
-  quantity: number; // Mevcut: +/- toplam miktar
+  @Column('decimal', { precision: 12, scale: 4, default: 0 })
+  quantity: number; // Net miktar (in - out)
 
   @Column('decimal', { precision: 12, scale: 4, default: 0 })
   qtyIn: number; // Giriş miktarı (pozitif)
@@ -65,9 +52,6 @@ export class StockMovement {
 
   @Column('decimal', { precision: 12, scale: 4, default: 0 })
   stockAfter: number; // qtyAfter: hareket sonrası bakiye
-=======
-  quantity: number; // Net miktar (in - out)
->>>>>>> upstream/server
 
   @Column({ default: 'adet' })
   unit: string;
@@ -78,18 +62,6 @@ export class StockMovement {
 
   @Column('decimal', { precision: 12, scale: 4, default: 0 })
   totalCost: number;
-
-<<<<<<< HEAD
-  // ─── Tarih (§15) ────────────────────────────────────
-  @Column({ type: 'date', nullable: true })
-  businessDate: Date; // İş günü tarihi
-=======
-  @Column('decimal', { precision: 12, scale: 4, default: 0 })
-  qtyBefore: number;
-
-  @Column('decimal', { precision: 12, scale: 4, default: 0 })
-  stockAfter: number; // qty_after
->>>>>>> upstream/server
 
   // ─── Depo ───────────────────────────────────────────
   @Column({ nullable: true })
@@ -108,52 +80,27 @@ export class StockMovement {
 
   // ─── Kaynak İzleme (§15, §16 cross-reference) ──────
   @Column({ nullable: true })
-  sourceType: string; // Eski: referenceType → SALE, INVOICE, COUNT, MANUAL, PRODUCT_TRANSACTION
+  sourceType: string; // SALE, INVOICE, COUNT, MANUAL, PRODUCT_TRANSACTION
 
   @Column({ nullable: true })
-  sourceId: number; // Eski: referenceId
+  sourceId: number; // referenceId
 
-  // Geriye uyumluluk alias'lar
-  @Column({ nullable: true })
-  documentType: string;
-
-  @Column({ nullable: true })
-  documentNo: string;
-
-<<<<<<< HEAD
   // ─── Kullanıcı (§15) ───────────────────────────────
-=======
-  @Column({ nullable: true })
-  sourceType: string;
-
-  @Column({ nullable: true })
-  sourceId: number;
-
->>>>>>> upstream/server
   @Column({ nullable: true })
   userId: number;
 
   @Column({ nullable: true })
-<<<<<<< HEAD
   approveUserId: number; // Onaylayan kullanıcı
 
   // ─── Sebep / Not (§15) ─────────────────────────────
-=======
-  approveUserId: number;
-
->>>>>>> upstream/server
   @Column({ nullable: true })
   reasonCode: string;
 
   @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
-<<<<<<< HEAD
   note: string;
 
   @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
-  description: string; // Eski alan, note ile aynı amaca hizmet
-=======
-  description: string; // note
->>>>>>> upstream/server
+  description: string; // Geriye uyumluluk için
 
   @CreateDateColumn()
   createdAt: Date;

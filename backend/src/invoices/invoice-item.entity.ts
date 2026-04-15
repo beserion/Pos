@@ -6,12 +6,8 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Invoice } from './invoice.entity';
-<<<<<<< HEAD
 import { Product } from '../products/product.entity';
-import type { StockCard } from '../stock-cards/stock-card.entity';
-=======
 import { StockCard } from '../stock-cards/stock-card.entity';
->>>>>>> upstream/server
 
 /**
  * Fatura Kalemi (§11)
@@ -33,17 +29,16 @@ export class InvoiceItem {
   @Column({ default: 0 })
   invoiceId: number;
 
-<<<<<<< HEAD
   // ─── Stok Kartı Bağı (§11 - YENİ, ANA BAĞ) ────────
   @Column({ nullable: true })
   stockCardId: number;
 
-  @ManyToOne('StockCard', { nullable: true, onDelete: 'SET NULL' })
+  @ManyToOne(() => StockCard, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'stockCardId' })
   stockCard: StockCard;
 
   @Column({ nullable: true })
-  stockCardName: string; // Snapshot
+  stockCardName: string; // Snapshot of name at time of invoice
 
   // ─── Ürün Bağı (ESKİ, geriye uyumluluk) ─────────────
   /** @deprecated stockCardId kullanın */
@@ -53,17 +48,6 @@ export class InvoiceItem {
 
   @Column({ nullable: true, default: 0 })
   productId: number;
-=======
-  @ManyToOne(() => StockCard, { nullable: true, onDelete: 'SET NULL' })
-  @JoinColumn({ name: 'stockCardId' })
-  stockCard: StockCard;
->>>>>>> upstream/server
-
-  @Column({ nullable: true })
-  stockCardId: number;
-
-  @Column({ nullable: true })
-  stockCardName: string; // Snapshot of name at time of invoice
 
   // ─── Miktar / Fiyat ─────────────────────────────────
   @Column('decimal', { precision: 10, scale: 2, default: 1 })

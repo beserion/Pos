@@ -12,24 +12,25 @@ import { VariationGroup } from './variation-group.entity';
 import { ParametersModule } from '../parameters/parameters.module';
 
 import { ProductTransaction } from './product-transaction.entity';
+import { SetMenu } from './set-menu.entity';
+import { SetGroup } from './set-group.entity';
+import { SetGroupItem } from './set-group-item.entity';
 
 import { ProductsPublicController } from './products-public.controller';
+import { SetMenusController } from './set-menus.controller';
 
 @Module({
-<<<<<<< HEAD
   imports: [
     TypeOrmModule.forFeature([
       Product, Recipe, Modifier, RecipeHeader,
-      ProductVariation, VariationGroup,
+      ProductVariation, VariationGroup, ProductTransaction,
+      SetMenu, SetGroup, SetGroupItem
     ]),
     SecurityModule,
     ParametersModule,
   ],
-=======
-  imports: [TypeOrmModule.forFeature([Product, Recipe, Modifier, ProductTransaction]), SecurityModule],
->>>>>>> upstream/server
   providers: [ProductsService],
-  controllers: [ProductsController, ProductsPublicController],
+  controllers: [ProductsController, ProductsPublicController, SetMenusController],
   exports: [ProductsService],
 })
 export class ProductsModule { }
