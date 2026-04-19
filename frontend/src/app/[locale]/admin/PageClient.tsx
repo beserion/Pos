@@ -20,7 +20,6 @@ export function PageClient() {
     const sections = [
         // { key: 'FINANCE', title: tAdmin('companyAccounts'), subtitle: tAdmin('companyAccountsDesc'), path: `/${locale}/finance/accounts`, icon: 'fa-building-columns', color: 'text-blue-500' },
         { key: 'CARI', title: tAdmin('cari'), subtitle: tAdmin('cariDesc'), path: `/${locale}/cari`, icon: 'fa-users', color: 'text-indigo-500' },
-        { key: 'EMPLOYEES', title: tAdmin('employees'), subtitle: tAdmin('employeesDesc'), path: `/${locale}/admin/employees`, icon: 'fa-users-gear', color: 'text-emerald-500' },
         { key: 'USERS', title: tAdmin('users'), subtitle: tAdmin('usersDesc'), path: `/${locale}/admin/users`, icon: 'fa-user-shield', color: 'text-cyan-500' },
         { key: 'ROLES', title: tAdmin('roles'), subtitle: tAdmin('rolesDesc'), path: `/${locale}/admin/roles`, icon: 'fa-user-tag', color: 'text-pink-500' },
         { key: 'SYSTEM', title: 'Yetki Kalemleri', subtitle: 'Modül ve aksiyon tanımlarını yönet', path: `/${locale}/admin/permissions`, icon: 'fa-shield-check', color: 'text-violet-500' },
@@ -50,7 +49,7 @@ export function PageClient() {
     const filteredSections = sections.filter(sec => {
         const matchesPermission = hasPermission(`${sec.key}:VIEW`);
         const matchesFeature = sec.featureKey ? hasFeature(sec.featureKey) : true;
-        
+
         const query = searchQuery.toLowerCase();
         const matchesSearch = !searchQuery ||
             (sec.title?.toLowerCase().includes(query)) ||

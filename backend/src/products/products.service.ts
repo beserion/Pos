@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { Product } from './product.entity';
 import { Recipe } from '../recipes/recipe.entity';
 import { Modifier } from '../modifiers/modifier.entity';
+import { RecipeHeader } from '../recipes/recipe-header.entity';
+import { ParametersService } from '../parameters/parameters.service';
 
 import { ProductTransaction } from './product-transaction.entity';
 
@@ -16,6 +18,9 @@ export class ProductsService {
         private recipeRepository: Repository<Recipe>,
         @InjectRepository(Modifier)
         private modifierRepository: Repository<Modifier>,
+        @InjectRepository(RecipeHeader)
+        private recipeHeaderRepository: Repository<RecipeHeader>,
+        private parametersService: ParametersService,
         @InjectRepository(ProductTransaction)
         private transactionRepository: Repository<ProductTransaction>,
     ) { }
@@ -26,7 +31,11 @@ export class ProductsService {
 
     async findAll(): Promise<Product[]> {
         const products = await this.productRepository.find({
-            relations: ['recipes', 'variations', 'printer', 'productType', 'outputProfile', 'setMenu', 'setMenu.groups', 'setMenu.groups.items', 'linkedStockCard', 'linkedStockCard.stockGroupRelation'],
+            relations: [
+                'recipes', 'variations', 'printer', 'productType', 'outputProfile',
+                'setMenu', 'setMenu.groups', 'setMenu.groups.items',
+                'linkedStockCard', 'linkedStockCard.stockGroupRelation'
+            ],
             order: { orderIndex: 'ASC', id: 'ASC' }
         });
 
@@ -52,15 +61,26 @@ export class ProductsService {
     }
 
     async findAllQuickSale(): Promise<Product[]> {
-        // Fast, lightweight fetch without joining recipes, modifiers, or printers.
+        // Fast, lightweight fetch for POS screen
         // Exclude products where isIngredient = true (handle NULL as non-ingredient)
         return await this.productRepository
             .createQueryBuilder('p')
             .leftJoinAndSelect('p.variations', 'v')
             .leftJoinAndSelect('p.linkedStockCard', 'sc')
-            .select(['p.id', 'p.name', 'p.price', 'p.category', 'p.imageUrl', 'p.isQuickSale', 'p.sku', 'p.productTypeId', 'p.printerId', 'p.orderIndex', 'p.stockGroup', 'p.stockGroupId', 'v.id', 'v.variationName', 'v.fixedPrice', 'v.priceFactor', 'v.inventoryLinkType', 'v.isActive', 'sc.id', 'sc.stockGroup', 'sc.category'])
-            .where('p.isIngredient IS NULL OR p.isIngredient = :val', { val: false })
+            .select([
+                'p.id', 'p.name', 'p.price', 'p.productGroup', 'p.category', 'p.imageUrl',
+                'p.isQuickSale', 'p.sku', 'p.productTypeId', 'p.printerId',
+                'p.inventoryLinkType', 'p.posVisible', 'p.posName',
+                'p.buttonOrder', 'p.buttonColor', 'p.vatRate',
+                'p.openPriceEnabled', 'p.discountAllowed', 'p.compAllowed',
+                'p.orderIndex', 'p.stockGroup', 'p.stockGroupId',
+                'v.id', 'v.variationName', 'v.fixedPrice', 'v.priceFactor', 'v.isActive',
+                'sc.id', 'sc.stockGroup', 'sc.category'
+            ])
+            .where('(p.isIngredient IS NULL OR p.isIngredient = :val)', { val: false })
+            .andWhere('p.isActive = :active', { active: true })
             .orderBy('p.orderIndex', 'ASC')
+            .addOrderBy('p.buttonOrder', 'ASC')
             .addOrderBy('p.id', 'ASC')
             .getMany();
     }
@@ -68,7 +88,11 @@ export class ProductsService {
     async findOne(id: number): Promise<Product> {
         const product = await this.productRepository.findOne({
             where: { id },
-            relations: ['recipes', 'printer', 'productType', 'outputProfile', 'setMenu', 'setMenu.groups', 'setMenu.groups.items'],
+            relations: [
+                'recipes', 'printer', 'productType', 'outputProfile',
+                'setMenu', 'setMenu.groups', 'setMenu.groups.items',
+                'linkedStockCard',
+            ],
         });
         if (!product) {
             throw new NotFoundException(`Product with ID ${id} not found`);
@@ -89,6 +113,48 @@ export class ProductsService {
             updatedAt: m.updatedAt
         }));
         return product;
+    }
+
+    // ─── Ürün Aktif Etme Validasyonu (§10) ──────────────
+    async validateForActivation(product: Product): Promise<string[]> {
+        const errors: string[] = [];
+
+        // §4: Cins ZORUNLU
+        if (!product.productTypeId) {
+            errors.push('Ürün cinsi (sales_cins) seçilmeden ürün aktif olamaz');
+        }
+
+        // §17: Stok takibi parametresi kontrolü
+        const stockTrackingEnabled = await this.parametersService.getValue('inventory', 'stock_tracking_enabled');
+
+        if (!product.inventoryLinkType || product.inventoryLinkType === 'none') {
+            if (stockTrackingEnabled === 'true') {
+                errors.push('Stok takibi açıkken inventory_link_type "none" olamaz');
+            }
+            // none tipinde stok bağlantısı aranmaz
+        } else if (product.inventoryLinkType === 'direct_stock') {
+            // §10 B) direct_stock validasyonları
+            if (!product.linkedStockCardId) {
+                errors.push('Bağlı stok kartı (linked_stock_item) seçilmeli');
+            }
+            if (!product.directStockQty || Number(product.directStockQty) <= 0) {
+                errors.push('Düşüm miktarı (direct_stock_qty) belirtilmeli');
+            }
+            if (!product.directStockUnit) {
+                errors.push('Düşüm birimi (direct_stock_unit) belirtilmeli');
+            }
+        } else if (product.inventoryLinkType === 'recipe') {
+            // §10 C) recipe validasyonları
+            const recipe = await this.recipeHeaderRepository.findOne({
+                where: { productId: product.id, isActive: true },
+                relations: ['lines'],
+            });
+            if (!recipe || !recipe.lines || recipe.lines.length === 0) {
+                errors.push('En az 1 aktif reçete satırı olmalı');
+            }
+        }
+
+        return errors;
     }
 
     async create(
@@ -112,6 +178,11 @@ export class ProductsService {
         if (modifiers && modifiers.length > 0) {
             const modifierIds = modifiers.map(m => typeof m === 'object' ? m.id : m);
             fetchedModifiers = await this.modifierRepository.findByIds(modifierIds);
+        }
+
+        // inventoryLinkType default
+        if (!data.inventoryLinkType) {
+            data.inventoryLinkType = 'none';
         }
 
         const newProduct = this.productRepository.create({
@@ -169,6 +240,18 @@ export class ProductsService {
         const newPrice = data.price !== undefined ? parseFloat(String(data.price)) : oldPrice;
 
         this.productRepository.merge(product, data);
+
+        // §10: Aktif etme validasyonu
+        if (data.isActive === true || (product.isActive && data.isActive === undefined)) {
+            const errors = await this.validateForActivation(product);
+            if (errors.length > 0 && data.isActive === true) {
+                throw new BadRequestException({
+                    message: 'Ürün aktif edilemez',
+                    errors,
+                });
+            }
+        }
+
         const savedProduct = await this.productRepository.save(product);
 
         if (newPrice !== oldPrice) {
@@ -238,5 +321,27 @@ export class ProductsService {
         } catch (e) {
             console.error('Inventory link migration failed', e);
         }
+    }
+
+    // ─── Validasyon raporu: Eksik bağı olan ürünler (§10, §19) ─
+    async getActivationReview(): Promise<{ productId: number; productName: string; errors: string[] }[]> {
+        const products = await this.productRepository.find({
+            where: { isActive: true },
+        });
+
+        const results: { productId: number; productName: string; errors: string[] }[] = [];
+
+        for (const product of products) {
+            const errors = await this.validateForActivation(product);
+            if (errors.length > 0) {
+                results.push({
+                    productId: product.id,
+                    productName: product.name,
+                    errors,
+                });
+            }
+        }
+
+        return results;
     }
 }

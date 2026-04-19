@@ -7,6 +7,7 @@ import { ProductType } from '../product-types/product-type.entity';
 import { OutputProfile } from '../output-profiles/output-profile.entity';
 import { Department } from '../departments/department.entity';
 import { SaleItem } from '../sales/sale-item.entity';
+import { StockCard } from '../stock-cards/stock-card.entity';
 
 import { StockCard } from '../stock-cards/stock-card.entity';
 

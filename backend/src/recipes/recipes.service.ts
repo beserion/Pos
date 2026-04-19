@@ -96,18 +96,24 @@ export class RecipesService {
       name: data.name,
       isActive: data.isActive !== false,
       note: data.note,
-      lines: data.lines.map((line) =>
+    });
+
+    const saved = await this.headerRepository.save(header);
+
+    if (data.lines && data.lines.length > 0) {
+      const newLines = data.lines.map((line) =>
         this.lineRepository.create({
+          recipeHeaderId: saved.id,
           stockCardId: line.stockCardId,
           quantity: line.quantity,
           unit: line.unit || 'adet',
           isRequired: line.isRequired !== false,
           description: line.description,
         }),
-      ),
-    });
+      );
+      await this.lineRepository.save(newLines);
+    }
 
-    const saved = await this.headerRepository.save(header);
     return this.findOne(saved.id);
   }
 

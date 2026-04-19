@@ -39,6 +39,6 @@ export class SetGroup {
   @Column({ type: 'varchar', length: 20, nullable: true })
   excessFeeRule: string;
 
-  @OneToMany(() => SetGroupItem, (item) => item.setGroup, { cascade: true })
+  @OneToMany(() => SetGroupItem, (item) => item.setGroup, { cascade: true, orphanRemoval: true })
   items: SetGroupItem[];
 }

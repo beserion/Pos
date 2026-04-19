@@ -5,6 +5,7 @@ import { StockMovement } from './stock-movement.entity';
 import { StockCardsService } from '../stock-cards/stock-cards.service';
 import { RecipesService } from '../recipes/recipes.service';
 import { ParametersService } from '../parameters/parameters.service';
+import { Product } from '../products/product.entity';
 import { StocksService } from '../stocks/stocks.service';
 
 @Injectable()
@@ -12,6 +13,8 @@ export class StockMovementsService {
   constructor(
     @InjectRepository(StockMovement)
     private movementRepository: Repository<StockMovement>,
+    @InjectRepository(Product)
+    private productRepository: Repository<Product>,
     private stockCardsService: StockCardsService,
     @Inject(forwardRef(() => RecipesService))
     private recipesService: RecipesService,
@@ -37,16 +40,22 @@ export class StockMovementsService {
     documentNo?: string;
     sourceType?: string;
     sourceId?: number;
+    referenceType?: string;
+    referenceId?: number;
     approveUserId?: number;
     reasonCode?: string;
     description?: string;
+    note?: string;
     userId?: number;
   }, manager?: any): Promise<StockMovement> {
     const repo = manager ? manager.getRepository(StockMovement) : this.movementRepository;
 
     const card = await this.stockCardsService.findOne(data.stockCardId);
     const unitCost = data.unitCost ?? Number(card.costPerBaseUnit);
-    const totalCost = data.quantity * unitCost;
+    const totalCost = Math.abs(data.quantity) * unitCost;
+
+    // §15: qtyBefore
+    const qtyBefore = Number(card.currentStock);
 
     const qtyBefore = Number(card.currentStock);
 
@@ -57,6 +66,10 @@ export class StockMovementsService {
       manager,
     );
 
+    // §15: qtyIn / qtyOut hesaplama
+    const qtyIn = data.quantity > 0 ? Math.abs(data.quantity) : 0;
+    const qtyOut = data.quantity < 0 ? Math.abs(data.quantity) : 0;
+
     const movement = repo.create({
       stockCardId: data.stockCardId,
       movementType: data.movementType,
@@ -64,19 +77,24 @@ export class StockMovementsService {
       qtyIn: data.qtyIn ?? (data.quantity > 0 ? data.quantity : 0),
       qtyOut: data.qtyOut ?? (data.quantity < 0 ? Math.abs(data.quantity) : 0),
       quantity: data.quantity,
+      qtyIn,
+      qtyOut,
+      qtyBefore,
+      stockAfter: newStockLevel,
       unit: data.unit || card.baseUnit,
       unitCost,
       totalCost,
-      qtyBefore,
-      stockAfter: newStockLevel,
       warehouseId: data.warehouseId || card.warehouseId,
       documentType: data.documentType,
       documentNo: data.documentNo,
-      sourceType: data.sourceType,
-      sourceId: data.sourceId,
+      sourceType: data.sourceType || data.referenceType,
+      sourceId: data.sourceId || data.referenceId,
+      referenceType: data.referenceType || data.sourceType,
+      referenceId: data.referenceId || data.sourceId,
       approveUserId: data.approveUserId,
       reasonCode: data.reasonCode,
-      description: data.description,
+      note: data.note || data.description,
+      description: data.description || data.note,
       userId: data.userId,
     });
 
@@ -202,18 +220,47 @@ export class StockMovementsService {
         sourceType,
         sourceId,
         warehouseId,
-        description: `Reçete tüketimi (Varyant): ${header.name || `RecipeHeader #${recipeHeaderId}`}`,
-        userId,
-      }, manager);
+        descriptio  // ─── Direct Stock Consumption (§12.2) ────────────────
 
-      movements.push(movement);
+  /**
+   * Direct stock ürün satışında bağlı stoktan doğrudan düşüm.
+   * §12.2: Ürün adisyona eklenir → bağlı stoktan doğrudan düşüm yapılır.
+   */
+  async createDirectStockConsumption(
+    productId: number,
+    saleQuantity: number,
+    saleTypeMultiplier: number = 1,
+    referenceType: string = 'SALE',
+    referenceId?: number,
+    userId?: number,
+    manager?: any,
+  ): Promise<StockMovement | null> {
+    const product = await this.productRepository.findOne({ where: { id: productId } });
+
+    if (!product || product.inventoryLinkType !== 'direct_stock' || !product.linkedStockCardId) {
+      return null;
     }
 
-    return movements;
+    const consumeQty = Number(product.directStockQty || 1) * saleQuantity * saleTypeMultiplier;
+    if (consumeQty <= 0) return null;
+
+    return this.createMovement({
+      stockCardId: product.linkedStockCardId,
+      movementType: 'DIRECT_SALE_CONSUMPTION',
+      quantity: -consumeQty,
+      unit: product.directStockUnit || 'adet',
+      referenceType,
+      referenceId,
+      sourceType: 'SALE',
+      sourceId: referenceId,
+      description: `Direkt satış düşümü: ${product.name}`,
+      userId,
+    }, manager);
   }
 
   /**
-   * Reverse consumption (for cancellations/refunds).
+   * Robust reverse consumption (for cancellations/refunds).
+   * Handles direct stock, variations, and recipes.
    */
   async createReverseConsumption(
     productId: number,
@@ -231,32 +278,35 @@ export class StockMovementsService {
     );
     if (restoreParam === 'false') return [];
 
-    const product = await manager.query(`SELECT inventoryLinkType, linkedStockItemId, directStockQty, directStockUnit FROM products WHERE id = ${productId}`);
-    if (!product || product.length === 0) return [];
+    const productResults = await manager.query(`SELECT inventoryLinkType, linkedStockCardId, directStockQty, directStockUnit FROM products WHERE id = ${productId}`);
+    if (!productResults || productResults.length === 0) return [];
+    const product = productResults[0];
 
     let variation = null;
     if (variationId) {
-      const variations = await manager.query(`SELECT inventoryLinkType, linkedStockItemId, directStockQty, directStockUnit, recipeHeaderId FROM product_variations WHERE id = ${variationId}`);
+      const variations = await manager.query(`SELECT inventoryLinkType, linkedStockCardId, directStockQty, directStockUnit, recipeHeaderId FROM product_variations WHERE id = ${variationId}`);
       variation = variations?.[0] || null;
     }
 
-    const linkType = variation?.inventoryLinkType || product[0].inventoryLinkType;
+    const linkType = variation?.inventoryLinkType || product.inventoryLinkType;
 
     if (linkType === 'direct_stock') {
-      const stockItemId = variation?.linkedStockItemId || product[0].linkedStockItemId;
-      const stockQty = variation?.directStockQty || product[0].directStockQty;
-      const stockUnit = variation?.directStockUnit || product[0].directStockUnit;
+      const stockCardId = variation?.linkedStockCardId || product.linkedStockCardId;
+      const stockQty = variation?.directStockQty || product.directStockQty;
+      const stockUnit = variation?.directStockUnit || product.directStockUnit;
 
-      if (stockItemId && stockQty) {
-        const restoreQty = Number(stockQty) * saleQuantity;
+      if (stockCardId && stockQty) {
+        const restoreQty = Number(stockQty) * saleQuantity * saleTypeMultiplier;
         const movement = await this.createMovement({
-          stockCardId: stockItemId,
+          stockCardId,
           movementType: 'return_in', 
           quantity: restoreQty,
           qtyIn: restoreQty,
           unit: stockUnit,
           sourceType,
           sourceId,
+          referenceType: sourceType,
+          referenceId: sourceId,
           description: `Satış iptal iadesi (Direkt Stok)`,
           userId,
         }, manager);
@@ -289,6 +339,8 @@ export class StockMovementsService {
           unit: line.unit,
           sourceType,
           sourceId,
+          referenceType: sourceType,
+          referenceId: sourceId,
           description: `Satış iptal iadesi (Reçete): ${recipe.product?.name || `Ürün #${productId}`}`,
           userId,
         }, manager);
@@ -304,20 +356,22 @@ export class StockMovementsService {
 
   async createManualEntry(data: {
     stockCardId: number;
-    movementType: 'MANUAL_IN' | 'MANUAL_OUT' | 'WASTAGE' | 'STAFF_CONSUME' | 'COMPLIMENTARY';
+    movementType: 'MANUAL_IN' | 'MANUAL_OUT' | 'WASTAGE' | 'STAFF_CONSUME' | 'COMPLIMENTARY' | 'SPOILAGE';
     quantity: number;
     unit?: string;
     warehouseId?: number;
     description?: string;
+    reasonCode?: string;
     userId?: number;
   }): Promise<StockMovement> {
-    const qty = ['MANUAL_OUT', 'WASTAGE', 'STAFF_CONSUME', 'COMPLIMENTARY'].includes(data.movementType)
+    const qty = ['MANUAL_OUT', 'WASTAGE', 'SPOILAGE', 'STAFF_CONSUME', 'COMPLIMENTARY'].includes(data.movementType)
       ? -Math.abs(data.quantity)
       : Math.abs(data.quantity);
 
     return this.createMovement({
       ...data,
       quantity: qty,
+      referenceType: 'MANUAL',
       sourceType: 'MANUAL',
     });
   }

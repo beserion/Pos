@@ -36,6 +36,6 @@ export class SetMenu {
   @Column({ default: true })
   splitToSubItems: boolean;
 
-  @OneToMany(() => SetGroup, (group) => group.setMenu, { cascade: true })
+  @OneToMany(() => SetGroup, (group) => group.setMenu, { cascade: true, orphanRemoval: true })
   groups: SetGroup[];
 }

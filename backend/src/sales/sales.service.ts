@@ -353,6 +353,9 @@ export class SalesService implements OnModuleInit {
             saleItems.push(savedParent);
 
             if (item.subItems && item.subItems.length > 0) {
+              // Validate selections for CHOICE/BUNDLE menus
+              await this.validateSetMenuSelections(item.productId, item.subItems);
+
               const isMerging = Boolean(mergeSaleIds && mergeSaleIds.length > 0);
               for (const subItem of item.subItems) {
                 // Eğer birleştirme (merge) yapılıyorsa miktar zaten mutlaktır, değilse parent ile çarpılır
@@ -1259,6 +1262,9 @@ export class SalesService implements OnModuleInit {
         newSaleItems.push(savedParent);
 
         if (item.subItems && item.subItems.length > 0) {
+          // Validate selections for CHOICE/BUNDLE menus
+          await this.validateSetMenuSelections(item.productId, item.subItems);
+
           for (const subItem of item.subItems) {
             const newSub = manager.create(SaleItem, {
               productId: subItem.productId,
@@ -2564,5 +2570,34 @@ export class SalesService implements OnModuleInit {
     }
 
     return qb.take(200).getMany();
+  }
+
+  /**
+   * Validates set menu selections against its defined rules (min/max select, bundle limits).
+   */
+  private async validateSetMenuSelections(parentProductId: number, subItems: any[]): Promise<void> {
+    const setMenu = await this.setMenuRepository.findOne({
+      where: { productId: parentProductId },
+      relations: ['groups', 'groups.items']
+    });
+
+    if (!setMenu) return; // Not a managed set menu or not found
+
+    if (setMenu.setType === 'CHOICE') {
+      for (const group of setMenu.groups) {
+        const selectedInGroup = subItems.filter(si => Number(si.menuGroupId) === group.id);
+        const totalQty = selectedInGroup.reduce((sum, si) => sum + Number(si.quantity), 0);
+
+        if (totalQty < group.minSelect) {
+          throw new BadRequestException(`${group.groupName} grubundan en az ${group.minSelect} seçim yapmalısınız.`);
+        }
+        if (totalQty > group.maxSelect) {
+          throw new BadRequestException(`${group.groupName} grubundan en fazla ${group.maxSelect} seçim yapabilirsiniz.`);
+        }
+      }
+    } else if (setMenu.setType === 'BUNDLE') {
+        // Bundle entitlement limit validation could go here
+        // Current implementation focuses on CHOICE validation which is the most common
+    }
   }
 }

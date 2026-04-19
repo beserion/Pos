@@ -1,11 +1,23 @@
 'use client';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, lazy } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
-import PosView from './PosView';
-import QuickSaleView from './QuickSaleView';
-import TakeOrderView from './TakeOrderView';
+import Cookies from 'js-cookie';
+import { startPrefetch } from '../utils/posPrefetch';
+
+const PosView = lazy(() => import(/* webpackPrefetch: true */ './PosView'));
+const QuickSaleView = lazy(() => import(/* webpackPrefetch: true */ './QuickSaleView'));
+const TakeOrderView = lazy(() => import(/* webpackPrefetch: true */ './TakeOrderView'));
 import BusinessDayGuard from '@/components/shifts/BusinessDayGuard';
+
+function ViewLoadingSpinner() {
+    return (
+        <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900 gap-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest animate-pulse">Yükleniyor...</p>
+        </div>
+    );
+}
 
 function PosContainerContent() {
     const searchParams = useSearchParams();
@@ -26,7 +38,13 @@ function PosContainerContent() {
         } else if (!v) {
             setView('pos');
         }
-    }, [searchParams]);
+
+        // Auth beklenmeden, cookie varsa anında prefetch başlat (en erken aşama)
+        const token = Cookies.get('token');
+        if (token) {
+            startPrefetch(API_URL, token);
+        }
+    }, [searchParams, API_URL]);
 
     const changeView = (newView: 'pos' | 'quicksale' | 'takeorder') => {
         if (newView === 'pos') {
@@ -38,28 +56,24 @@ function PosContainerContent() {
 
     return (
         <div className="h-screen w-full overflow-hidden bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
-            {/* İş Günü Kontrol Guard'ı — POS içeriğinden önce kontrol eder */}
-            {!businessDayReady && (
-                <BusinessDayGuard
-                    apiUrl={API_URL}
-                    onReady={() => setBusinessDayReady(true)}
-                />
-            )}
+            {/* İş Günü Kontrol Guard'ı — Arka planda kontrol eder, hata varsa sayfa üzerine bindirilir */}
+            <BusinessDayGuard
+                apiUrl={API_URL}
+                onReady={() => setBusinessDayReady(true)}
+            />
 
-            {/* POS içeriği ancak iş günü kontrolü başarılı olduktan sonra render edilir */}
-            {businessDayReady && (
-                <>
-                    {view === 'pos' && (
-                        <PosView onSwitchToQuickSale={() => changeView('quicksale')} onSwitchToTakeOrder={() => changeView('takeorder')} />
-                    )}
-                    {view === 'quicksale' && (
-                        <QuickSaleView onSwitchToPos={() => changeView('pos')} />
-                    )}
-                    {view === 'takeorder' && (
-                        <TakeOrderView onSwitchToPos={() => changeView('pos')} />
-                    )}
-                </>
-            )}
+            {/* POS içeriği anında render edilmeye başlar (businessDayReady bağımsız) */}
+            <Suspense fallback={<ViewLoadingSpinner />}>
+                {view === 'pos' && (
+                    <PosView onSwitchToQuickSale={() => changeView('quicksale')} onSwitchToTakeOrder={() => changeView('takeorder')} />
+                )}
+                {view === 'quicksale' && (
+                    <QuickSaleView onSwitchToPos={() => changeView('pos')} />
+                )}
+                {view === 'takeorder' && (
+                    <TakeOrderView onSwitchToPos={() => changeView('pos')} />
+                )}
+            </Suspense>
         </div>
     );
 }

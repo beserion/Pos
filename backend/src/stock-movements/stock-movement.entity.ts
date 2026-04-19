@@ -9,6 +9,16 @@ import {
 import type { StockCard } from '../stock-cards/stock-card.entity';
 import type { Warehouse } from '../warehouses/warehouse.entity';
 
+/**
+ * Stok hareket tipleri (§15):
+ * OPENING_BALANCE, PURCHASE, GOODS_RECEIPT, COUNT_ADJUSTMENT,
+ * RECIPE_CONSUMPTION, DIRECT_SALE_CONSUMPTION, WASTE, SPOILAGE,
+ * TRANSFER_OUT, TRANSFER_IN, RETURN_IN, RETURN_OUT, MANUAL_ADJUSTMENT,
+ * RECIPE_CONSUME, RECIPE_REVERSE, MANUAL_IN, MANUAL_OUT,
+ * STAFF_CONSUME, COMPLIMENTARY, PRODUCTION, PRODUCTION_CONSUME,
+ * COUNT_SURPLUS, COUNT_DEFICIT, WASTAGE
+ */
+
 @Entity('stock_movements')
 export class StockMovement {
   @PrimaryGeneratedColumn()
@@ -22,38 +32,38 @@ export class StockMovement {
   stockCard: StockCard;
 
   @Column({ type: 'date', nullable: true })
-  businessDate: Date;
+  businessDate: Date; // İş günü tarihi
 
   @Column()
   movementType: string;
-  // opening_balance, purchase, goods_receipt, count_adjustment, 
-  // recipe_consumption, direct_sale_consumption, waste, spoilage, 
-  // transfer_out, transfer_in, return_in, return_out, manual_adjustment
 
+  // ─── Miktar Alanları (§15) ───────────────────────────
   @Column('decimal', { precision: 12, scale: 4, default: 0 })
-  qtyIn: number;
-
-  @Column('decimal', { precision: 12, scale: 4, default: 0 })
-  qtyOut: number;
-
-  @Column('decimal', { precision: 12, scale: 4 })
   quantity: number; // Net miktar (in - out)
+
+  @Column('decimal', { precision: 12, scale: 4, default: 0 })
+  qtyIn: number; // Giriş miktarı (pozitif)
+
+  @Column('decimal', { precision: 12, scale: 4, default: 0 })
+  qtyOut: number; // Çıkış miktarı (pozitif)
+
+  @Column('decimal', { precision: 12, scale: 4, default: 0 })
+  qtyBefore: number; // Hareket öncesi bakiye
+
+  @Column('decimal', { precision: 12, scale: 4, default: 0 })
+  stockAfter: number; // qtyAfter: hareket sonrası bakiye
 
   @Column({ default: 'adet' })
   unit: string;
 
+  // ─── Maliyet (§15) ──────────────────────────────────
   @Column('decimal', { precision: 12, scale: 4, default: 0 })
   unitCost: number;
 
   @Column('decimal', { precision: 12, scale: 4, default: 0 })
   totalCost: number;
 
-  @Column('decimal', { precision: 12, scale: 4, default: 0 })
-  qtyBefore: number;
-
-  @Column('decimal', { precision: 12, scale: 4, default: 0 })
-  stockAfter: number; // qty_after
-
+  // ─── Depo ───────────────────────────────────────────
   @Column({ nullable: true })
   warehouseId: number;
 
@@ -61,29 +71,36 @@ export class StockMovement {
   @JoinColumn({ name: 'warehouseId' })
   warehouse: Warehouse;
 
+  // ─── Belge Bilgileri (§15) ──────────────────────────
   @Column({ nullable: true })
-  documentType: string;
+  documentType: string; // INVOICE, COUNT_SESSION, TRANSFER, SALE, MANUAL
 
   @Column({ nullable: true })
-  documentNo: string;
+  documentNo: string; // Belge numarası
+
+  // ─── Kaynak İzleme (§15, §16 cross-reference) ──────
+  @Column({ nullable: true })
+  sourceType: string; // SALE, INVOICE, COUNT, MANUAL, PRODUCT_TRANSACTION
 
   @Column({ nullable: true })
-  sourceType: string;
+  sourceId: number; // referenceId
 
-  @Column({ nullable: true })
-  sourceId: number;
-
+  // ─── Kullanıcı (§15) ───────────────────────────────
   @Column({ nullable: true })
   userId: number;
 
   @Column({ nullable: true })
-  approveUserId: number;
+  approveUserId: number; // Onaylayan kullanıcı
 
+  // ─── Sebep / Not (§15) ─────────────────────────────
   @Column({ nullable: true })
   reasonCode: string;
 
   @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
-  description: string; // note
+  note: string;
+
+  @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
+  description: string; // Geriye uyumluluk için
 
   @CreateDateColumn()
   createdAt: Date;

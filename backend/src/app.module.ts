@@ -93,10 +93,11 @@ import { RecipeLine } from './recipes/recipe-line.entity';
 import { StockMovement } from './stock-movements/stock-movement.entity';
 import { InventorySession } from './inventory/inventory-session.entity';
 import { InventorySessionLine } from './inventory/inventory-session-line.entity';
-import { ProductTransaction } from './products/product-transaction.entity';
+import { ProductTransaction } from './sales/product-transaction.entity';
+import { ProductVariation } from './products/product-variation.entity';
+import { VariationGroup } from './products/variation-group.entity';
 import { StockGroup } from './stock-groups/stock-group.entity';
 import { StockGroupsModule } from './stock-groups/stock-groups.module';
-import { ProductVariation } from './products/product-variation.entity';
 import { Firm } from './firms/firm.entity';
 import { FirmsModule } from './firms/firms.module';
 import { ParentGroup } from './parent-groups/parent-group.entity';
@@ -178,8 +179,9 @@ import { ScheduleModule } from '@nestjs/schedule';
             InventorySession,
             InventorySessionLine,
             ProductTransaction,
-            StockGroup,
             ProductVariation,
+            VariationGroup,
+            StockGroup,
             Firm,
             ParentGroup,
             SystemLicense,
