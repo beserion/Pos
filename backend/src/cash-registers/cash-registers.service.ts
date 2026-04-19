@@ -13,6 +13,7 @@ export class CashRegistersService {
   async findAll(companyId: number): Promise<CashRegister[]> {
     return this.cashRegisterRepository.find({
       where: { companyId },
+      relations: ['receiptPrinter'],
       order: { id: 'DESC' },
     });
   }
@@ -29,9 +30,31 @@ export class CashRegistersService {
   }
 
   async update(id: number, data: Partial<CashRegister>, companyId: number): Promise<CashRegister> {
-    const register = await this.findOne(id, companyId);
-    Object.assign(register, data);
-    return this.cashRegisterRepository.save(register);
+    await this.findOne(id, companyId); // throws if not found / not owned
+
+    // Extract only the plain-column fields we want to persist.
+    // We use repository.update() (direct SQL UPDATE) instead of save() because
+    // TypeORM's save() can silently skip FK-only changes on ManyToOne relations.
+    const updatePayload: Partial<CashRegister> = {
+      name: data.name,
+      isActive: data.isActive,
+      locationId: data.locationId,
+      zoneIds: data.zoneIds,
+      allowedPaymentMethods: data.allowedPaymentMethods,
+      // receiptPrinterId is the FK column — update it directly
+      receiptPrinterId: data.receiptPrinterId,
+    };
+
+    // Remove undefined keys so we don't accidentally wipe untouched columns
+    (Object.keys(updatePayload) as Array<keyof typeof updatePayload>).forEach((key) => {
+      if (updatePayload[key] === undefined) delete updatePayload[key];
+    });
+
+    await this.cashRegisterRepository.update(id, updatePayload);
+    return this.cashRegisterRepository.findOne({
+      where: { id },
+      relations: ['receiptPrinter'],
+    }) as Promise<CashRegister>;
   }
 
   async remove(id: number, companyId: number): Promise<void> {

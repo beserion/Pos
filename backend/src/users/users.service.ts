@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './user.entity';
+import { PushSubscriptionEntity } from './push-subscription.entity';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -13,6 +14,8 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(PushSubscriptionEntity)
+    private pushSubRepository: Repository<PushSubscriptionEntity>,
   ) { }
 
   async findAll(): Promise<User[]> {
@@ -97,7 +100,7 @@ export class UsersService {
       console.error('USER CREATE ERROR:', error);
       if (error.number === 2627 || error.number === 2601) {
         throw new BadRequestException(
-          'Bu e-posta adresi sistemde zaten kayıtlı.',
+          'Bu e-posta adresi sistemde zaten kayÄ±tlÄ±.',
         );
       }
       throw error;
@@ -113,7 +116,7 @@ export class UsersService {
         const pinUnique = await this.isPinUnique(updateData.pinCode.trim(), id);
         if (!pinUnique) {
           throw new BadRequestException(
-            'Bu PIN kodu başka bir kullanıcı tarafından kullanılıyor. Lütfen farklı bir PIN seçin.'
+            'Bu PIN kodu baÅŸka bir kullanÄ±cÄ± tarafÄ±ndan kullanÄ±lÄ±yor. LÃ¼tfen farklÄ± bir PIN seÃ§in.'
           );
         }
       }
@@ -131,7 +134,7 @@ export class UsersService {
       console.error('USER UPDATE ERROR:', error);
       if (error.number === 2627 || error.number === 2601) {
         throw new BadRequestException(
-          'Bu e-posta adresi sistemde zaten kayıtlı.',
+          'Bu e-posta adresi sistemde zaten kayÄ±tlÄ±.',
         );
       }
       throw error;
@@ -147,4 +150,31 @@ export class UsersService {
     if (!userIds || userIds.length === 0) return;
     await this.userRepository.update(userIds, { role: { id: roleId } } as any);
   }
+
+  // --- Web Push Subscriptions ---
+  async savePushSubscription(userId: number, subscriptionDto: any): Promise<void> {
+    console.log(`Push sub request for user ${userId}:`, subscriptionDto.endpoint?.substring(0, 50));
+    
+    const existing = await this.pushSubRepository.findOne({
+      where: { userId, endpoint: subscriptionDto.endpoint }
+    });
+    
+    if (!existing) {
+      const sub = this.pushSubRepository.create({
+        userId,
+        endpoint: subscriptionDto.endpoint,
+        p256dh: subscriptionDto.keys?.p256dh || '',
+        auth: subscriptionDto.keys?.auth || ''
+      });
+      await this.pushSubRepository.save(sub);
+      console.log(`New push subscription saved for user ${userId}`);
+    } else {
+      console.log(`Subscription already exists for user ${userId}`);
+    }
+  }
+
+  async getPushSubscriptions(userId: number): Promise<PushSubscriptionEntity[]> {
+    return await this.pushSubRepository.find({ where: { userId } });
+  }
 }
+

@@ -16,6 +16,7 @@ interface OrderItem {
     product: { name: string };
     quantity: number;
     note?: string;
+    status?: string;
     isWaiting: boolean;
     isMarshed: boolean;
     isReady: boolean;
@@ -145,6 +146,7 @@ export function PageClient() {
 
             socket.on('orderReady', () => fetchKitchenOrders());
             socket.on('orderUpdated', () => fetchKitchenOrders());
+            socket.on('saleUpdated', () => fetchKitchenOrders()); // iptal bildirimi
             socket.on('itemMarshed', (data: any) => {
                 fetchKitchenOrders();
                 toastSwal({ icon: 'warning', title: 'MARŞ GELDİ!', text: `${data.tableName} masası için MARŞ komutu verildi.` });
@@ -404,8 +406,8 @@ export function PageClient() {
                                 <div className="p-3 flex-1 bg-white dark:bg-slate-800/40">
                                     <ul className="space-y-1">
                                         {(() => {
-                                            const parentItems = ticket.items.filter(i => !i.parentItemId);
-                                            const subItems = ticket.items.filter(i => i.parentItemId);
+                                            const parentItems = ticket.items.filter(i => !i.parentItemId && i.status !== 'CANCELLED' && i.status !== 'REFUNDED');
+                                            const subItems = ticket.items.filter(i => i.parentItemId && i.status !== 'CANCELLED' && i.status !== 'REFUNDED');
                                             
                                             return parentItems.map((item, idx) => {
                                                 const isItemUpdating = updatingItems.includes(item.id);

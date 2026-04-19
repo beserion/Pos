@@ -8,6 +8,8 @@ import { Repository, LessThan } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AlertRule } from './alert-rule.entity';
 import { AlertNotification } from './alert-notification.entity';
+import { PushSubscriptionEntity } from '../users/push-subscription.entity';
+import * as webpush from 'web-push';
 
 export interface AlertPayload {
   triggerUserId?: number;
@@ -17,9 +19,9 @@ export interface AlertPayload {
   tableName?: string;
   relatedId?: number;
   description: string;
-  /** Eşik karşılaştırması için sayısal değer (indirim oranı, PIN deneme sayısı vb.) */
+  /** EÅŸik karÅŸÄ±laÅŸtÄ±rmasÄ± iÃ§in sayÄ±sal deÄŸer (indirim oranÄ±, PIN deneme sayÄ±sÄ± vb.) */
   numericValue?: number;
-  /** Dinamik bildirim hedefi (örn. siparişi veren garson için) */
+  /** Dinamik bildirim hedefi (Ã¶rn. sipariÅŸi veren garson iÃ§in) */
   dynamicTargetUserId?: number;
 }
 
@@ -40,7 +42,7 @@ export interface UpdateRuleDto extends Partial<CreateRuleDto> {}
 export class AlertsService implements OnModuleInit {
   private readonly logger = new Logger(AlertsService.name);
 
-  // Bildirim WebSocket callback — Gateway tarafından set edilir
+  // Bildirim WebSocket callback â€” Gateway tarafÄ±ndan set edilir
   private notifyCallback: ((notification: AlertNotification) => void) | null = null;
 
   constructor(
@@ -49,13 +51,22 @@ export class AlertsService implements OnModuleInit {
 
     @InjectRepository(AlertNotification)
     private notificationRepository: Repository<AlertNotification>,
-  ) {}
+
+    @InjectRepository(PushSubscriptionEntity)
+    private pushSubRepository: Repository<PushSubscriptionEntity>,
+  ) {
+    webpush.setVapidDetails(
+      'mailto:test@posnetx.com',
+      process.env.VAPID_PUBLIC_KEY || 'BKCZ7bFimVEV8fWGuC2tRdmMO78CUqJ81bZbyjf08j57x4rdXogQ1x3oH2ROrPRdXKjLoOkGH6mPglk6KQFT4cI',
+      process.env.VAPID_PRIVATE_KEY || 'l-DQdBwG1CRIeNrJiJB9VBAFQ7KSjtj9NU5f9S7-g8M'
+    );
+  }
 
   async onModuleInit() {
     await this.ensureSchema();
   }
 
-  /** Tablolar yoksa oluştur (synchronize: false olduğu için manuel) */
+  /** Tablolar yoksa oluÅŸtur (synchronize: false olduÄŸu iÃ§in manuel) */
   private async ensureSchema() {
     try {
       const queryRunner = this.ruleRepository.manager.connection.createQueryRunner();
@@ -123,7 +134,7 @@ export class AlertsService implements OnModuleInit {
     this.notifyCallback = cb;
   }
 
-  // ─── KURAL YÖNETİMİ ───────────────────────────────────────────
+  // â”€â”€â”€ KURAL YÃ–NETÄ°MÄ° â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async findAllRules(): Promise<AlertRule[]> {
     return this.ruleRepository.find({ order: { createdAt: 'DESC' } });
@@ -141,7 +152,7 @@ export class AlertsService implements OnModuleInit {
 
   async toggleRule(id: number): Promise<AlertRule> {
     const rule = await this.ruleRepository.findOne({ where: { id } });
-    if (!rule) throw new Error(`AlertRule ${id} bulunamadı`);
+    if (!rule) throw new Error(`AlertRule ${id} bulunamadÄ±`);
     rule.isActive = !rule.isActive;
     return this.ruleRepository.save(rule);
   }
@@ -150,7 +161,7 @@ export class AlertsService implements OnModuleInit {
     await this.ruleRepository.delete(id);
   }
 
-  // ─── BİLDİRİM YÖNETİMİ ──────────────────────────────────────
+  // â”€â”€â”€ BÄ°LDÄ°RÄ°M YÃ–NETÄ°MÄ° â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async getNotifications(userId: number, roleId?: number): Promise<AlertNotification[]> {
     const query = this.notificationRepository.createQueryBuilder('n')
@@ -199,11 +210,11 @@ export class AlertsService implements OnModuleInit {
     await query.execute();
   }
 
-  // ─── ANA TETİKLEYİCİ ────────────────────────────────────────
+  // â”€â”€â”€ ANA TETÄ°KLEYÄ°CÄ° â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
-   * Bir olay gerçekleştiğinde çağrılır.
-   * İlgili aktif kuralları kontrol eder ve gerekirse bildirim üretir.
+   * Bir olay gerÃ§ekleÅŸtiÄŸinde Ã§aÄŸrÄ±lÄ±r.
+   * Ä°lgili aktif kurallarÄ± kontrol eder ve gerekirse bildirim Ã¼retir.
    */
   async trigger(eventKey: string, payload: AlertPayload): Promise<void> {
     try {
@@ -214,22 +225,22 @@ export class AlertsService implements OnModuleInit {
       if (!rules || rules.length === 0) return;
 
       for (const rule of rules) {
-        // Eşik kontrolü
+        // EÅŸik kontrolÃ¼
         if (rule.thresholdValue !== null && rule.thresholdValue !== undefined) {
           const val = payload.numericValue ?? 0;
           const threshold = Number(rule.thresholdValue);
           
           if (rule.eventKey === 'STOCK_LOW') {
-            if (val > threshold) continue; // Stok eşiğin üstündeyse atla
+            if (val > threshold) continue; // Stok eÅŸiÄŸin Ã¼stÃ¼ndeyse atla
           } else {
-            if (val < threshold) continue; // Diğer kurallarda eşiğin altındaysa atla
+            if (val < threshold) continue; // DiÄŸer kurallarda eÅŸiÄŸin altÄ±ndaysa atla
           }
         }
 
-        // Hedef kullanıcı(lar)ı belirle
+        // Hedef kullanÄ±cÄ±(lar)Ä± belirle
         let targets = await this.resolveTargets(rule);
 
-        // Özel durum: KDS_MESSAGE_ACTIVE dinamik hedef geçersizliği
+        // Ã–zel durum: KDS_MESSAGE_ACTIVE dinamik hedef geÃ§ersizliÄŸi
         if (rule.eventKey === 'KDS_MESSAGE_ACTIVE' && payload.dynamicTargetUserId) {
           targets = [{ userId: payload.dynamicTargetUserId }];
         }
@@ -258,10 +269,60 @@ export class AlertsService implements OnModuleInit {
           if (this.notifyCallback) {
             this.notifyCallback(saved);
           }
+
+          // Web Push Gönderimi (Native Bildirim için)
+          if (target.userId) {
+            this.sendWebPush(target.userId, {
+              title: 'PosNetX Bildirim',
+              body: payload.description,
+              url: '/#',
+            });
+          } else if (target.roleId) {
+             const manager = this.ruleRepository.manager;
+             const users: { id: number }[] = await manager.query(
+               `SELECT id FROM users WHERE roleId = @0 AND isActive = 1`,
+               [target.roleId],
+             );
+             users.forEach(u => this.sendWebPush(u.id, {
+               title: 'PosNetX Bildirim',
+               body: payload.description,
+               url: '/#',
+             }));
+          }
         }
       }
     } catch (error) {
       this.logger.error(`AlertsService.trigger(${eventKey}) error:`, error);
+    }
+  }
+
+  /** İlgili kullanıcıya VAPID üzerinden (arka plan) bildirim gönderir */
+  private async sendWebPush(userId: number, payload: any) {
+    try {
+      const subs = await this.pushSubRepository.find({ where: { userId } });
+      this.logger.log(`Found ${subs.length} push subscriptions for user ${userId}`);
+      
+      for (const sub of subs) {
+        try {
+          this.logger.log(`Sending push to endpoint: ${sub.endpoint.substring(0, 40)}...`);
+          const result = await webpush.sendNotification(
+            {
+              endpoint: sub.endpoint,
+              keys: { p256dh: sub.p256dh, auth: sub.auth }
+            },
+            JSON.stringify(payload)
+          );
+          this.logger.log(`Push sent successfully. Status: ${result.statusCode}`);
+        } catch (pushErr: any) {
+          this.logger.error(`Push Service error (User: ${userId}, Status: ${pushErr.statusCode}):`, pushErr.message);
+          if (pushErr.statusCode === 410 || pushErr.statusCode === 404) {
+            this.logger.warn(`Subscription expired or invalid. Deleting.`);
+            await this.pushSubRepository.delete(sub.id);
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.error('Push load error', err);
     }
   }
 
@@ -274,7 +335,7 @@ export class AlertsService implements OnModuleInit {
     }
 
     if (rule.targetType === 'ROLE' && rule.targetId) {
-      // O roldeki tüm aktif kullanıcılara kayıt yaz
+      // O roldeki tÃ¼m aktif kullanÄ±cÄ±lara kayÄ±t yaz
       const users: { id: number }[] = await manager.query(
         `SELECT id FROM users WHERE roleId = @0 AND isActive = 1`,
         [rule.targetId],
@@ -282,11 +343,11 @@ export class AlertsService implements OnModuleInit {
       return users.map((u) => ({ userId: u.id, roleId: rule.targetId }));
     }
 
-    // ALL → targetUserId / targetRoleId null bırak (herkes için)
+    // ALL â†’ targetUserId / targetRoleId null bÄ±rak (herkes iÃ§in)
     return [{ userId: undefined, roleId: undefined }];
   }
 
-  /** 30 günden eski bildirimleri her gece temizle */
+  /** 30 gÃ¼nden eski bildirimleri her gece temizle */
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async cleanOldNotifications() {
     try {
@@ -298,7 +359,8 @@ export class AlertsService implements OnModuleInit {
       });
       this.logger.log(`Temizlendi: ${result.affected || 0} eski bildirim silindi.`);
     } catch (error) {
-      this.logger.error('Eski bildirim temizliği hatası:', error);
+      this.logger.error('Eski bildirim temizliÄŸi hatasÄ±:', error);
     }
   }
 }
+

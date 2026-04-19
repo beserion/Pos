@@ -39,12 +39,15 @@
     "node-thermal-printer": "^4.6.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "pdf-to-printer": "^5.7.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "swagger-ui-express": "^5.0.1",
-    "typeorm": "^0.3.28"
+    "tcp-port-used": "^1.0.2",
+    "typeorm": "^0.3.28",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -57,6 +60,7 @@
     "@types/mssql": "^9.1.9",
     "@types/node": "^22.10.7",
     "@types/supertest": "^6.0.2",
+    "@types/web-push": "^3.6.4",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",

@@ -2,13 +2,28 @@ import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Printer } from './printer.entity';
+import { CashRegister } from '../cash-registers/cash-register.entity';
 import { OrderRoutingService } from '../order-routing/order-routing.service';
+
+/** Türkçe özel karakterleri ASCII karşılıklarına çevirir (yazıcı uyumluluğu için) */
+function trASCII(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/ş/g, 's').replace(/Ş/g, 'S')
+    .replace(/ğ/g, 'g').replace(/Ğ/g, 'G')
+    .replace(/ı/g, 'i').replace(/İ/g, 'I')
+    .replace(/ö/g, 'o').replace(/Ö/g, 'O')
+    .replace(/ü/g, 'u').replace(/Ü/g, 'U')
+    .replace(/ç/g, 'c').replace(/Ç/g, 'C');
+}
 
 @Injectable()
 export class PrintersService {
   constructor(
     @InjectRepository(Printer)
     private readonly printerRepository: Repository<Printer>,
+    @InjectRepository(CashRegister)
+    private readonly cashRegisterRepository: Repository<CashRegister>,
     @Inject(forwardRef(() => OrderRoutingService))
     private readonly orderRoutingService: OrderRoutingService,
   ) { }
@@ -44,20 +59,35 @@ export class PrintersService {
   async printReceipt(
     data: any,
   ): Promise<{ success: boolean; message: string }> {
-    // Try to find the printer named "Kasa"
-    const printer = await this.printerRepository
-      .createQueryBuilder('printer')
-      .where('LOWER(printer.name) = :name', { name: 'kasa' })
-      .andWhere('printer.isActive = :isActive', { isActive: true })
-      .getOne();
+    let printer: Printer | null = null;
+
+    if (data.cashRegisterId) {
+      const cashRegister = await this.cashRegisterRepository.findOne({
+        where: { id: data.cashRegisterId },
+        relations: ['receiptPrinter'],
+      });
+      if (cashRegister && cashRegister.receiptPrinter) {
+        printer = cashRegister.receiptPrinter;
+      }
+    }
+
+    if (!printer) {
+      // Fallback: If no cashRegisterId provided or no printer attached,
+      // fallback to standard 'kasa' lookup (for backwards compatibility).
+      printer = await this.printerRepository
+        .createQueryBuilder('printer')
+        .where('LOWER(printer.name) = :name', { name: 'kasa' })
+        .andWhere('printer.isActive = :isActive', { isActive: true })
+        .getOne() as Printer | null;
+    }
 
     if (!printer || !printer.ipAddress) {
       console.warn(
-        'Aktif "Kasa" isimli yazıcı veya IP adresi bulunamadı. Sadece tarayıcıdan yazdırma yapılabilir.',
+        'Bağlı bir fis yazıcısı bulunamadı veya IP adresi eksik. Sadece tarayıcıdan yazdırma yapılabilir.',
       );
       return {
         success: false,
-        message: 'Aktif "Kasa" yazıcısı veya IP adresi bulunamadı.',
+        message: 'Fiş yazdırılamadı: Geçerli kasa/yazıcı bulunamadı.',
       };
     }
 
@@ -66,20 +96,16 @@ export class PrintersService {
       const { ThermalPrinter, PrinterTypes, CharacterSet, BreakLine } =
         await import('node-thermal-printer');
 
-      let printerInterface = `tcp://${printer.ipAddress}`;
-      
-      // If ipAddress doesn't look like an IP (e.g., no dots or starts with printer:), 
-      // treat it as a local printer name
-      if (printer.ipAddress && !printer.ipAddress.includes('.') && !printer.ipAddress.startsWith('tcp://')) {
-        printerInterface = `printer:${printer.ipAddress}`;
-      } else if (printer.ipAddress.startsWith('printer:')) {
-        printerInterface = printer.ipAddress;
+      // Resolve printer interface
+      let printerInterface = printer.ipAddress;
+      if (printerInterface.includes('.') && !printerInterface.startsWith('tcp://') && !printerInterface.includes('//') && !printerInterface.includes('\\\\')) {
+        printerInterface = `tcp://${printerInterface}`;
       }
 
       const thermalPrinter = new ThermalPrinter({
         type: PrinterTypes.EPSON,
         interface: printerInterface,
-        characterSet: CharacterSet.PC857_TURKISH,
+        characterSet: CharacterSet.WPC1254_TURKISH,
         removeSpecialCharacters: false,
         lineCharacter: '=',
         breakLine: BreakLine.WORD,
@@ -103,7 +129,7 @@ export class PrintersService {
       thermalPrinter.alignCenter();
       thermalPrinter.bold(true);
       thermalPrinter.setTextSize(1, 1);
-      thermalPrinter.println(data.companyName || 'ANTIGRAVITY POS');
+      thermalPrinter.println(trASCII(data.companyName || 'ANTIGRAVITY POS'));
       thermalPrinter.setTextNormal();
       thermalPrinter.bold(false);
       thermalPrinter.println('Tesekkur Ederiz');
@@ -113,21 +139,21 @@ export class PrintersService {
       const date = new Date(data.date || new Date()).toLocaleString('tr-TR');
       thermalPrinter.println(`Tarih: ${date}`);
       thermalPrinter.println(`Fis No: ${data.receiptNumber || '000000'}`);
-      thermalPrinter.println(`Kasiyer: ${data.cashierName || 'Kasiyer'}`);
+      if (data.tableName) thermalPrinter.println(`Masa: ${trASCII(data.tableName)}`);
+      thermalPrinter.println(`Kasiyer: ${trASCII(data.cashierName || 'Kasiyer')}`);
       thermalPrinter.drawLine();
 
       thermalPrinter.leftRight('Urun', 'Tutar');
       thermalPrinter.drawLine();
 
       for (const item of data.items) {
-        const nameStr = `${item.quantity}x ${item.name.substring(0, 20)}`;
+        const nameStr = `${item.quantity}x ${trASCII(item.name).substring(0, 20)}`;
         const totalStr = `${Number(item.total).toFixed(2)} TL`;
         thermalPrinter.leftRight(nameStr, totalStr);
 
-        // Print subItems if they exist (extras)
         if (item.subItems && item.subItems.length > 0) {
           for (const sub of item.subItems) {
-            const subName = sub.product?.name || sub.name || `Urun #${sub.productId}`;
+            const subName = trASCII(sub.product?.name || sub.name || `Urun #${sub.productId}`);
             thermalPrinter.println(`  + ${subName}`);
           }
         }
@@ -166,6 +192,7 @@ export class PrintersService {
   ): Promise<{ success: boolean; message: string }> {
     try {
       const itemsToPrint = data.items || [];
+      console.log('[printKitchen] Gelen data:', JSON.stringify({ tableName: data.tableName, waiterName: data.waiterName, orderType: data.orderType, itemCount: itemsToPrint.length }));
       if (itemsToPrint.length === 0) {
         return { success: false, message: 'Yazdırılacak ürün bulunamadı.' };
       }
@@ -194,22 +221,33 @@ export class PrintersService {
           
           for (let c = 0; c < copyCount; c++) {
             try {
+              let printerInterface = printer.ipAddress;
+              if (printerInterface.includes('.') && !printerInterface.startsWith('tcp://') && !printerInterface.includes('//') && !printerInterface.includes('\\\\')) {
+                printerInterface = `tcp://${printerInterface}`;
+              }
+
               const thermalPrinter = new ThermalPrinter({
                 type: PrinterTypes.EPSON,
-                interface: `tcp://${printer.ipAddress}`,
-                characterSet: CharacterSet.PC857_TURKISH,
+                interface: printerInterface,
+                characterSet: CharacterSet.WPC1254_TURKISH,
                 removeSpecialCharacters: false,
                 lineCharacter: '=',
                 breakLine: BreakLine.WORD,
                 options: { timeout: 5000 },
               });
 
-              if (await thermalPrinter.isPrinterConnected()) {
+              let isConnected = true;
+              if (printerInterface.startsWith('tcp://')) {
+                isConnected = await thermalPrinter.isPrinterConnected();
+              }
+
+              if (isConnected) {
+                // === BAŞLIK ===
                 thermalPrinter.alignCenter();
                 thermalPrinter.bold(true);
-                thermalPrinter.setTextSize(2, 2);
+                thermalPrinter.setTextSize(1, 1);
                 
-                let title = data.orderType || 'MUTFAK SIPARISI';
+                let title = trASCII(data.orderType || 'MUTFAK SIPARISI');
                 if (target.type === 'INFO') title = 'BILGI FISI';
                 
                 thermalPrinter.println(title);
@@ -217,58 +255,76 @@ export class PrintersService {
                 thermalPrinter.bold(false);
                 thermalPrinter.drawLine();
 
+                // === BİLGİ SATIRI ===
                 thermalPrinter.alignLeft();
                 const date = new Date(data.date || new Date()).toLocaleString('tr-TR');
+
+                // Masa adı — büyük ve belirgin
+                if (data.tableName) {
+                  thermalPrinter.alignCenter();
+                  thermalPrinter.bold(true);
+                  thermalPrinter.setTextSize(2, 2);
+                  thermalPrinter.println(trASCII(data.tableName));
+                  thermalPrinter.setTextNormal();
+                  thermalPrinter.bold(false);
+                  thermalPrinter.drawLine();
+                  thermalPrinter.alignLeft();
+                }
+
                 thermalPrinter.println(`Tarih: ${date}`);
-                thermalPrinter.println(`Sipariş No: ${data.receiptNumber || '000000'}`);
+                thermalPrinter.println(`Siparis No: ${data.receiptNumber || '000000'}`);
+                if (data.waiterName) {
+                  thermalPrinter.bold(true);
+                  thermalPrinter.println(`Garson: ${trASCII(data.waiterName)}`);
+                  thermalPrinter.bold(false);
+                }
                 if (target.type === 'MAIN') {
-                  thermalPrinter.println(`Cikti Profili: ${profile.name}`);
+                  thermalPrinter.println(`Profil: ${trASCII(profile.name)}`);
                 }
                 thermalPrinter.drawLine();
-                thermalPrinter.leftRight('Adet', 'Urun');
-                thermalPrinter.drawLine();
 
+
+                // === ÜRÜN LİSTESİ ===
                 const immediateItems = group.items.filter((i: any) => !i.isWaiting);
                 const waitingItems = group.items.filter((i: any) => i.isWaiting);
 
                 for (const item of immediateItems) {
                   thermalPrinter.bold(true);
-                  if (target.type === 'MAIN') thermalPrinter.setTextSize(1, 1);
-                  thermalPrinter.leftRight(`${item.quantity}x`, item.name.substring(0,30));
-                  thermalPrinter.setTextNormal();
+                  thermalPrinter.leftRight(`${item.quantity}x`, trASCII(item.name).substring(0,28));
                   thermalPrinter.bold(false);
                   
-                  // Print subItems if they exist (extras)
                   if (item.subItems && item.subItems.length > 0) {
                     for (const sub of item.subItems) {
-                      const subName = sub.product?.name || sub.name || `Urun #${sub.productId}`;
+                      const subName = trASCII(sub.product?.name || sub.name || `Urun #${sub.productId}`);
                       thermalPrinter.println(`  + ${subName}`);
                     }
                   }
 
-                  if (item.note) thermalPrinter.println(`Not: ${item.note}`);
+                  if (item.note) thermalPrinter.println(`  Not: ${trASCII(item.note)}`);
                 }
 
+                // === BEKLEYENLER ===
                 if (waitingItems.length > 0) {
                   thermalPrinter.drawLine();
                   thermalPrinter.alignCenter();
+                  thermalPrinter.bold(true);
                   thermalPrinter.println('--- BEKLEYENLER ---');
+                  thermalPrinter.bold(false);
                   thermalPrinter.alignLeft();
                   thermalPrinter.drawLine();
                   for (const item of waitingItems) {
                     thermalPrinter.bold(true);
-                    thermalPrinter.leftRight(`${item.quantity}x`, item.name.substring(0,30));
+                    thermalPrinter.leftRight(`${item.quantity}x`, trASCII(item.name).substring(0,28));
                     thermalPrinter.bold(false);
 
-                    // Print subItems if they exist
                     if (item.subItems && item.subItems.length > 0) {
                       for (const sub of item.subItems) {
-                        const subName = sub.product?.name || sub.name || `Urun #${sub.productId}`;
+                        const subName = trASCII(sub.product?.name || sub.name || `Urun #${sub.productId}`);
                         thermalPrinter.println(`  + ${subName}`);
                       }
                     }
 
-                    if (item.note) thermalPrinter.println(`Not: ${item.note}`);
+                    if (item.note) thermalPrinter.println(`  Not: ${trASCII(item.note)}`);
                   }
                 }
 
@@ -322,17 +378,26 @@ export class PrintersService {
       const { ThermalPrinter, PrinterTypes, CharacterSet, BreakLine } =
         await import('node-thermal-printer');
 
+      let printerInterface = targetPrinter.ipAddress;
+      if (printerInterface.includes('.') && !printerInterface.startsWith('tcp://') && !printerInterface.includes('//') && !printerInterface.includes('\\\\')) {
+        printerInterface = `tcp://${printerInterface}`;
+      }
+
       const thermalPrinter = new ThermalPrinter({
         type: PrinterTypes.EPSON,
-        interface: `tcp://${targetPrinter.ipAddress}`,
-        characterSet: CharacterSet.PC857_TURKISH,
+        interface: printerInterface,
+        characterSet: CharacterSet.WPC1254_TURKISH,
         removeSpecialCharacters: false,
         lineCharacter: '=',
         breakLine: BreakLine.WORD,
         options: { timeout: 5000 },
       });
 
-      const isConnected = await thermalPrinter.isPrinterConnected();
+      let isConnected = true;
+      if (printerInterface.startsWith('tcp://')) {
+        isConnected = await thermalPrinter.isPrinterConnected();
+      }
+
       if (!isConnected) return { success: false, message: 'Yazıcı bağlantı hatası.' };
 
       thermalPrinter.alignCenter();
@@ -363,6 +428,53 @@ export class PrintersService {
     } catch (error: any) {
       console.error('Mars Yazıcı Hatası:', error);
       return { success: false, message: `Yazıcı hatası: ${error.message}` };
+    }
+  }
+
+  async discoverPrinters(): Promise<{ success: boolean, printers: any[], message?: string }> {
+    try {
+      // First try to use pdf-to-printer to get local Windows printers
+      let osPrinters: any[] = [];
+      try {
+        const ptp = await import('pdf-to-printer');
+        // getPrinters returns an array of printer objects which usually have { deviceId, name } or similar.
+        const list = await ptp.getPrinters();
+        osPrinters = list.map((p: any) => ({
+          name: p.deviceId || p.name || typeof p === 'string' ? p : 'Bilinmeyen Yazıcı',
+          port: p.port || p.portName || '',
+          isDefault: p.isDefault || false
+        }));
+      } catch (err) {
+        console.warn('pdf-to-printer method failed, system might not support it.', err);
+      }
+
+      // If library fails or returns nothing, we can try to fall back to node-thermal-printer's internal interface (if it has one) or just return what we have.
+      if (osPrinters.length === 0 && process.platform === 'win32') {
+         // Fallback powershell command
+         const { exec } = require('child_process');
+         const util = require('util');
+         const execAsync = util.promisify(exec);
+         try {
+            const { stdout } = await execAsync('powershell -Command "Get-Printer | Select-Object Name, PortName, Shared | ConvertTo-Json"');
+            const parsed = JSON.parse(stdout);
+            const printersArr = Array.isArray(parsed) ? parsed : [parsed];
+            osPrinters = printersArr.map((p: any) => ({
+              name: p.Name,
+              port: p.PortName,
+              shared: p.Shared
+            }));
+         } catch(e) {
+            console.warn('Powershell fallback failed', e);
+         }
+      }
+
+      return {
+        success: true,
+        printers: osPrinters
+      };
+    } catch (error: any) {
+      console.error('Printer Discovery Hatası:', error);
+      return { success: false, printers: [], message: `Yazıcı tarama hatası: ${error.message}` };
     }
   }
 }

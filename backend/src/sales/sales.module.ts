@@ -13,7 +13,7 @@ import { PartnersModule } from '../partners/partners.module';
 import { PrintersModule } from '../printers/printers.module';
 import { Table } from '../tables/table.entity';
 import { User } from '../users/user.entity';
-import { KitchenGateway } from '../orders/kitchen.gateway';
+import { OrdersModule } from '../orders/orders.module';
 import { AlertsModule } from '../alerts/alerts.module';
 import { StockMovementsModule } from '../stock-movements/stock-movements.module';
 import { ProductsModule } from '../products/products.module';
@@ -30,8 +30,9 @@ import { ProductsModule } from '../products/products.module';
     AlertsModule,
     StockMovementsModule,
     ProductsModule,
+    OrdersModule,
   ],
-  providers: [SalesService, KitchenGateway],
+  providers: [SalesService],
   controllers: [SalesController],
   exports: [SalesService],
 })

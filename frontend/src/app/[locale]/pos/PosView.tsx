@@ -1,5 +1,6 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { io } from 'socket.io-client';
 import { useAuth } from '../AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { showSwal, toastSwal } from '../utils/swal';
@@ -88,7 +89,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
     const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')));
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         try {
             const token = (user as any)?.token || localStorage.getItem('token');
             if (!token) {
@@ -131,7 +132,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
         } finally {
             setDataLoading(false);
         }
-    };
+    }, [API_URL, user]);
 
     useEffect(() => {
         setMounted(true);
@@ -143,6 +144,31 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             fetchData();
         }
     }, [user, loading, router]);
+
+    // ── WebSocket: Anlık masa/sipariş güncellemeleri ──
+    useEffect(() => {
+        const socket = io(API_URL, {
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionAttempts: Infinity,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            withCredentials: false,
+        });
+        socket.on('connect', () => {
+            console.log('[POS Kasa Socket] Bağlandı:', socket.id);
+        });
+        socket.on('disconnect', (reason: string) => {
+            console.warn('[POS Kasa Socket] Bağlantı kesildi:', reason);
+        });
+        socket.on('connect_error', (err: Error) => {
+            console.error('[POS Kasa Socket] Bağlantı hatası:', err.message);
+        });
+        socket.on('salesUpdate', () => { fetchData(); });
+        socket.on('newOrder', () => { fetchData(); });
+        socket.on('orderUpdated', () => { fetchData(); });
+        return () => { socket.disconnect(); };
+    }, [API_URL, fetchData]);
 
     // Apply zone filtering whenever allZones or activeCashRegister changes
     useEffect(() => {
@@ -416,7 +442,9 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     receiptNumber: check.receiptNumber,
                     companyName: 'ANTIGRAVITY POS',
                     paymentMethod: 'HESAP',
-                    subType: 'BILL'
+                    subType: 'BILL',
+                    cashRegisterId: activeCashRegister?.id || null,
+                    tableName: selectedTable?.name || null
                 };
 
                 const res = await fetch(`${API_URL}/printers/print-receipt`, {
@@ -522,9 +550,42 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             });
 
             if (saleRes.ok) {
+                // Fişi Yazdır (Kasa Yazıcısından)
+                const saleDataRes = await saleRes.clone().json();
+                const printData = {
+                    companyName: 'ANTIGRAVITY POS',
+                    cashierName: user?.firstName || (user as any)?.name || 'Kasiyer',
+                    date: new Date(),
+                    tableName: selectedTable?.name || null,
+                    items: itemsToPay.map(item => {
+                        const effectivePrice = (item as any).unitPrice ?? item.product.price;
+                        return {
+                            name: item.product.name,
+                            quantity: item.quantity,
+                            price: effectivePrice * (item.saleTypeMultiplier || 1),
+                            total: Number(((effectivePrice * (item.saleTypeMultiplier || 1) * item.quantity) * 1.1).toFixed(2)),
+                            subItems: item.subItems,
+                            note: item.note
+                        };
+                    }),
+                    totalAmount: selectedGrandTotal,
+                    paymentMethod: finalPMethod,
+                    receiptNumber: saleDataRes?.id?.toString() || Math.floor(100000 + Math.random() * 900000).toString(),
+                    cashRegisterId: activeCashRegister?.id || null
+                };
+
+                // Arka planda yazdırma isteğini gönder
+                fetch(`${API_URL}/printers/print-receipt`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify(printData)
+                }).then(r => r.json()).then(res => {
+                    if(!res.success) console.warn('Yazıcı uyarı:', res.message);
+                }).catch(e => console.error('Yazdırma hatası:', e));
+
                 showSwal({
                     title: tc('success'),
-                    text: `${t('paymentCollected')} (${paymentMethod})!`,
+                    text: `${t('paymentCollected')} (${paymentMethod}) ve fiş yazdırıldı!`,
                     icon: 'success',
                 });
 

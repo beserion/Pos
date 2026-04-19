@@ -246,7 +246,23 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     // ── WebSocket: Garson veya başka kaynaktan gelen anlık güncellemeler ──
     useEffect(() => {
-        const socket: Socket = io(API_URL, { transports: ['websocket'] });
+        const socket: Socket = io(API_URL, {
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionAttempts: Infinity,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            withCredentials: false,
+        });
+        socket.on('connect', () => {
+            console.log('[POS Socket] Bağlandı:', socket.id, '| Transport:', socket.io.engine.transport.name);
+        });
+        socket.on('disconnect', (reason) => {
+            console.warn('[POS Socket] Bağlantı kesildi:', reason);
+        });
+        socket.on('connect_error', (err) => {
+            console.error('[POS Socket] Bağlantı hatası:', err.message);
+        });
         socket.on('salesUpdate', () => { fetchData(); });
         socket.on('newOrder', () => { fetchData(); });
         socket.on('orderUpdated', () => { fetchData(); });
@@ -606,24 +622,27 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
             const orderData = await orderRes.json();
 
-            // Trigger kitchen printing for items that have a printer assigned
-            const kitchenItems = cart.filter(item => item.product.printerId);
-            if (kitchenItems.length > 0) {
+            // Tüm kalemleri mutfak yazıcısı yönlendirme sistemine gönder
+            // Backend OutputProfile sistemi ile hangi ürünün nereye gideceğini belirler
+            if (cart.length > 0) {
                 const kitchenPrintData = {
                     orderType: 'MASA SİPARİŞİ',
                     receiptNumber: `SİP-${orderData?.id || '00'}`,
                     date: new Date(),
-                    items: kitchenItems.map(item => ({
+                    tableName: selectedTable?.name,
+                    waiterName: (user as any)?.firstName || (user as any)?.name || (user as any)?.username || (user as any)?.email?.split('@')[0] || 'Garson',
+                    items: cart.map(item => ({
                         name: item.product.name + (item.variationName ? ` (${item.variationName})` : ''),
                         quantity: item.quantity,
-                        printerId: item.product.printerId,
                         productId: item.product.id,
                         subItems: item.subItems,
-                        isWaiting: params.mars_enabled ? (item.isWaiting || false) : false
+                        isWaiting: params.mars_enabled ? (item.isWaiting || false) : false,
+                        note: item.note
                     }))
                 };
+                console.log('[sendOrder] kitchenPrintData:', { tableName: kitchenPrintData.tableName, waiterName: kitchenPrintData.waiterName });
 
-                // Non-blocking print request
+                // Non-blocking print request — backend route algoritması çalışır
                 fetch(`${API_URL}/printers/print-kitchen`, {
                     method: 'POST',
                     headers: {
@@ -631,6 +650,14 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                         Authorization: `Bearer ${token}`
                     },
                     body: JSON.stringify(kitchenPrintData)
+                }).then(r => r.json()).then(res => {
+                    if (res.message && res.message.includes('0 adet')) {
+                        console.warn('Mutfak yazıcısına hiçbir ürün yönlendirilemedi. Lütfen ürünlerin "Üretim Yönlendirme (Output Profile)" ayarlarını kontrol edin.');
+                        // Optionally show a toast if you want it visible to the waiter
+                        // toastSwal({ icon: 'info', title: 'Mutfak Yazıcısı Uyarısı', text: 'Bu ürünler için yönlendirme profili seçilmediği için fiş yazdırılmadı.' });
+                    } else if (!res.success) {
+                        console.error('Yazıcı hatası:', res.message);
+                    }
                 }).catch(printErr => console.warn('Mutfak yazıcısına istek gönderilemedi (arka plan):', printErr.message || printErr));
             }
 

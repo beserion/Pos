@@ -584,12 +584,20 @@ export class SalesService implements OnModuleInit {
     item.isReady = !item.isReady;
     const updated = await this.saleItemRepository.save(item);
 
+    const rawProduct = await this.saleRepository.query(`
+      SELECT p.name FROM products p WHERE p.id = ${item.productId}
+    `);
+    const productName = rawProduct && rawProduct.length > 0 ? rawProduct[0].name : 'Ürün';
+    const tableName = item.sale?.tableName || 'Bilinmeyen Masa';
+
     // Mutfak bildirimini gönder
     this.kitchenGateway.server.emit('itemReady', {
       itemId: item.id,
       saleId: item.sale?.id,
       productId: item.productId,
-      isReady: updated.isReady
+      isReady: updated.isReady,
+      productName: productName,
+      tableName: tableName
     });
 
     if (updated.isReady && item.sale) {
@@ -720,6 +728,13 @@ export class SalesService implements OnModuleInit {
 
     const sales = await query.getMany();
 
+    // JS Filtreleme: İptal edilenleri çıkar
+    sales.forEach(sale => {
+      if (sale.items) {
+        sale.items = sale.items.filter(i => i.status !== 'CANCELLED' && i.status !== 'REFUNDED');
+      }
+    });
+
     return this.mapProductsToSales(sales);
   }
 
@@ -783,9 +798,8 @@ export class SalesService implements OnModuleInit {
       throw new BadRequestException('Set menü içerikleri tek tek iptal edilemez. Lütfen ana menüyü iptal ediniz.');
     }
 
-    if (item.isMarshed) {
-      throw new BadRequestException('Bu ürün mutfağa gönderilmiştir. İptal yerine iade işlemi yapınız.');
-    }
+    // isMarshed check removed: garson mutfağa gönderilmiş ürünü de iptal edebilir
+    // Mutfak ekranına iptal bildirimi gidecek
 
     item.status = 'CANCELLED';
     item.cancelReason = reason;
@@ -852,6 +866,47 @@ export class SalesService implements OnModuleInit {
             businessDate: item.sale?.createdAt || new Date(),
         });
     } catch {}
+
+    // 13. Adisyon ve Masa durumlarını güncelle (Tutarlar & Askıda kalma kontrolü)
+    if (item.sale) {
+      const remainingItems = await this.saleItemRepository.find({
+        where: { sale: { id: item.sale.id } }
+      });
+      const activeItems = remainingItems.filter(i => i.status !== 'CANCELLED' && i.status !== 'REFUNDED');
+      const newTotalAmount = activeItems.reduce((sum, i) => sum + Number(i.total || (Number(i.unitPrice) * Number(i.quantity))), 0);
+
+      const manager = this.saleRepository.manager;
+      if (activeItems.length === 0) {
+        await manager.update(Sale, item.sale.id, { status: 'CANCELLED', totalAmount: 0 });
+        if (item.sale.tableId) {
+           const otherActiveSales = await this.saleRepository.count({
+             where: { tableId: item.sale.tableId, status: In(['NEW', 'PREPARATION', 'READY', 'SERVED']) }
+           });
+           if (otherActiveSales === 0) {
+              await manager.update(Table, item.sale.tableId, {
+                  status: 'BOŞ',
+                  waiterName: '',
+                  currentTotal: 0,
+                  orderStartTime: () => 'NULL',
+                  isBillRequested: false,
+              });
+              this.alertsService.trigger('SALE_CANCELLED', {
+                tableId: item.sale.tableId,
+                description: `Tüm ürünler iptal edildiği için masa adisyonu otomatik kapatıldı.`
+              }).catch(() => {});
+           }
+        }
+      } else {
+        await manager.update(Sale, item.sale.id, { totalAmount: newTotalAmount });
+        if (item.sale.tableId) {
+            const activeSales = await this.saleRepository.find({
+              where: { tableId: item.sale.tableId, status: In(['NEW', 'PREPARATION', 'READY', 'SERVED']) }
+            });
+            const newTableTotal = activeSales.reduce((sum, s) => sum + (s.id === item.sale.id ? newTotalAmount : Number(s.totalAmount)), 0);
+            await manager.update(Table, item.sale.tableId, { currentTotal: newTableTotal });
+        }
+      }
+    }
 
     this.kitchenGateway.notifySaleUpdate(item.sale as any);
     return updated;
@@ -1444,6 +1499,20 @@ export class SalesService implements OnModuleInit {
       },
       relations: ['items', 'table', 'waiter', 'subChecks', 'subChecks.items'],
       order: { subCheckIndex: 'ASC', createdAt: 'ASC' },
+    });
+
+    // JS Filtreleme: İptal / İade edilenleri çıkar
+    sales.forEach(sale => {
+      if (sale.items) {
+        sale.items = sale.items.filter(i => i.status !== 'CANCELLED' && i.status !== 'REFUNDED');
+      }
+      if (sale.subChecks) {
+        sale.subChecks.forEach(sub => {
+          if (sub.items) {
+            sub.items = sub.items.filter(i => i.status !== 'CANCELLED' && i.status !== 'REFUNDED');
+          }
+        });
+      }
     });
 
     // Sadece kök adisyonları dön (alt adisyonlar zaten subChecks relation'ında)

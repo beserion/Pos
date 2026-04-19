@@ -25,6 +25,6 @@ import { KitchenGateway } from './kitchen.gateway';
   ],
   providers: [OrdersService, KitchenGateway],
   controllers: [OrdersController],
-  exports: [OrdersService],
+  exports: [OrdersService, KitchenGateway],
 })
 export class OrdersModule { }

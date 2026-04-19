@@ -232,18 +232,19 @@ export function PageClient() {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
-            // Trigger kitchen printing for items that have a printer assigned
-            const kitchenItems = cart.filter(item => item.product.printerId);
-            if (kitchenItems.length > 0) {
+            // Tüm kalemleri mutfak yazıcısı yönlendirme sistemine gönder
+            // Backend OutputProfile sistemi ile hangi ürünün nereye gideceğini belirler
+            if (cart.length > 0) {
                 const kitchenPrintData = {
                     orderType: 'MASA SİPARİŞİ',
                     receiptNumber: `SİP-${orderRes.data?.id || '00'}`,
                     date: new Date(),
-                    items: kitchenItems.map(item => ({
+                    items: cart.map(item => ({
                         name: item.product.name + (item.variationName ? ` (${item.variationName})` : ''),
                         quantity: item.quantity,
-                        printerId: item.product.printerId,
-                        productId: item.product.id
+                        productId: item.product.id,
+                        subItems: item.subItems,
+                        note: (item as any).note
                     }))
                 };
 

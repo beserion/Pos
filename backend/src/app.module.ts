@@ -101,6 +101,7 @@ import { Firm } from './firms/firm.entity';
 import { FirmsModule } from './firms/firms.module';
 import { ParentGroup } from './parent-groups/parent-group.entity';
 import { ParentGroupsModule } from './parent-groups/parent-groups.module';
+import { PushSubscriptionEntity } from './users/push-subscription.entity';
 
 import { ScheduleModule } from '@nestjs/schedule';
 
@@ -182,6 +183,7 @@ import { ScheduleModule } from '@nestjs/schedule';
             Firm,
             ParentGroup,
             SystemLicense,
+            PushSubscriptionEntity,
           ],
           synchronize: true, // Auto-sync enabled by user permission
           logging: true,

@@ -387,7 +387,8 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 })),
                 totalAmount: totalAmount,
                 paymentMethod: paymentMethod,
-                receiptNumber: res.data?.id?.toString() || Math.floor(100000 + Math.random() * 900000).toString()
+                receiptNumber: res.data?.id?.toString() || Math.floor(100000 + Math.random() * 900000).toString(),
+                cashRegisterId: activeCashRegister?.id || null
             };
 
             // 1. Attempt Network Printing (Kasa Printer via Backend API) if requested

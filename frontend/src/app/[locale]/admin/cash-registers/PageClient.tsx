@@ -9,7 +9,8 @@ interface CashRegister {
     id: number;
     name: string;
     isActive: boolean;
-    printerAddress: string;
+    receiptPrinterId: number | null;
+    receiptPrinter?: any;
     zoneIds?: number[];
     allowedPaymentMethods?: string[];
 }
@@ -25,12 +26,13 @@ export function PageClient() {
     const { user } = useAuth();
     const [registers, setRegisters] = useState<CashRegister[]>([]);
     const [zones, setZones] = useState<Zone[]>([]);
+    const [printers, setPrinters] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const tCommon = useTranslations('Common');
     const locale = useLocale();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [formData, setFormData] = useState<Partial<CashRegister>>({ id: 0, name: '', isActive: true, printerAddress: '', zoneIds: [], allowedPaymentMethods: [] });
+    const [formData, setFormData] = useState<Partial<CashRegister>>({ id: 0, name: '', isActive: true, receiptPrinterId: null, zoneIds: [], allowedPaymentMethods: [] });
 
     const PAYMENT_METHODS = ['Nakit', 'Kart', 'Parçalı', 'Cari', 'Yemek Kartı', 'Online', 'KASA'];
 
@@ -38,6 +40,7 @@ export function PageClient() {
         if (user?.token) {
             fetchRegisters();
             fetchZones();
+            fetchPrinters();
         } else if (user === null) {
             setLoading(false);
         }
@@ -53,6 +56,19 @@ export function PageClient() {
             setZones(res.data);
         } catch (error) {
             console.error('Error fetching zones', error);
+        }
+    };
+
+    const fetchPrinters = async () => {
+        if (!user?.token) return;
+        try {
+            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050';
+            const res = await axios.get(`${API_URL}/printers`, {
+                headers: { Authorization: `Bearer ${user.token}` }
+            });
+            setPrinters(res.data);
+        } catch (error) {
+            console.error('Error fetching printers', error);
         }
     };
 
@@ -147,7 +163,7 @@ export function PageClient() {
             }
             setFormData(regData);
         }
-        else setFormData({ id: 0, name: '', isActive: true, printerAddress: '', zoneIds: [], allowedPaymentMethods: [] });
+        else setFormData({ id: 0, name: '', isActive: true, receiptPrinterId: null, zoneIds: [], allowedPaymentMethods: [] });
         setIsModalOpen(true);
     };
 
@@ -207,7 +223,7 @@ export function PageClient() {
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Durum</th>
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Yetkili Bölümler</th>
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ödeme Yöntemleri</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Yazıcı IP/Adres</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Fiş Yazıcısı</th>
                                         <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">İşlemler</th>
                                     </tr>
                                 </thead>
@@ -284,7 +300,7 @@ export function PageClient() {
                                             <td className="px-8 py-3">
                                                 <div className="text-sm font-bold text-slate-600 dark:text-slate-400 flex items-center gap-2">
                                                     <i className="fat fa-print text-slate-300"></i>
-                                                    {reg.printerAddress || 'Belirtilmemiş'}
+                                                    {reg.receiptPrinter ? reg.receiptPrinter.name : 'Seçilmedi'}
                                                 </div>
                                             </td>
                                             <td className="px-8 py-3 text-right">
@@ -354,15 +370,18 @@ export function PageClient() {
 
                                         <div className="input-group flex items-center h-[54px]">
                                             <div className="input-group-text wd-130 font-bold bg-slate-100 dark:bg-slate-900/50 border border-r-0 border-slate-200 dark:border-slate-700 h-full flex items-center px-4 rounded-l-2xl text-[10px] uppercase tracking-widest text-slate-400">
-                                                Yazıcı IP
+                                                Fiş Yazıcısı
                                             </div>
-                                            <input
-                                                type="text"
-                                                value={formData.printerAddress || ''}
-                                                onChange={(e) => setFormData({ ...formData, printerAddress: e.target.value })}
+                                            <select
+                                                value={formData.receiptPrinterId || ''}
+                                                onChange={(e) => setFormData({ ...formData, receiptPrinterId: e.target.value ? Number(e.target.value) : null })}
                                                 className="form-control flex-1 h-full px-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white font-bold focus:ring-0 outline-none"
-                                                placeholder="192.168.1.100"
-                                            />
+                                            >
+                                                <option value="">-- Yazıcı Seçilmedi --</option>
+                                                {printers.map(p => (
+                                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                                ))}
+                                            </select>
                                             <div className="input-group-text wd-50 bg-slate-100 dark:bg-slate-900/50 border border-l-0 border-slate-200 dark:border-slate-700 h-full flex items-center justify-center px-4 rounded-r-2xl text-emerald-500/50">
                                                 <i className="fat fa-print"></i>
                                             </div>

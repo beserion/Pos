@@ -37,7 +37,7 @@ export class UsersController {
     return this.usersService.findCashiers();
   }
 
-  /** GET /users/check-pin?pin=1234&excludeId=5  → { unique: true/false } */
+  /** GET /users/check-pin?pin=1234&excludeId=5  â†’ { unique: true/false } */
   @Get('check-pin')
   async checkPin(
     @Query('pin') pin: string,
@@ -85,4 +85,11 @@ export class UsersController {
   batchUpdateRole(@Body() body: { userIds: number[]; roleId: number }) {
     return this.usersService.batchUpdateRole(body.userIds, body.roleId);
   }
+
+  @Post(':id/push-subscribe')
+  async pushSubscribe(@Param('id') id: string, @Body() subscription: any) {
+    await this.usersService.savePushSubscription(+id, subscription);
+    return { success: true };
+  }
 }
+

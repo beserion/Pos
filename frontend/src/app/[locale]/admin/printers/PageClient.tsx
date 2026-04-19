@@ -24,6 +24,10 @@ export function PageClient() {
     const [printers, setPrinters] = useState<Printer[]>([]);
     const [loading, setLoading] = useState(true);
 
+    const [isScannerOpen, setIsScannerOpen] = useState(false);
+    const [isScanning, setIsScanning] = useState(false);
+    const [scannedPrinters, setScannedPrinters] = useState<any[]>([]);
+
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [formData, setFormData] = useState({ id: 0, name: '', location: '', printerName: '', ipAddress: '', isActive: true });
 
@@ -48,6 +52,45 @@ export function PageClient() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const scanPrinters = async () => {
+        setIsScannerOpen(true);
+        setIsScanning(true);
+        try {
+            const res = await axios.get(`${(typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'))}/printers/discover`, {
+                headers: { Authorization: `Bearer ${user?.token}` }
+            });
+            if (res.data?.success) {
+                setScannedPrinters(res.data.printers);
+            } else {
+                showSwal({ title: tc('error'), text: res.data?.message || tc('error'), icon: 'error' });
+            }
+        } catch (error) {
+           console.error(error);
+           showSwal({ title: tc('error'), text: tc('error'), icon: 'error' });
+        } finally {
+            setIsScanning(false);
+        }
+    };
+
+    const selectScannedPrinter = (p: any) => {
+        setIsScannerOpen(false);
+        // Try to extract IP if port looks like an IP or starts with IP_ (Standard TCP/IP Port)
+        const ipRegex = /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/;
+        const match = p.port && p.port.match(ipRegex);
+        const ipAddr = match ? match[0] : '';
+        const isUsb = p.port && (p.port.toLowerCase().includes('usb') || !ipAddr);
+
+        setFormData({
+            id: 0,
+            name: p.name,
+            location: '',
+            printerName: p.name, 
+            ipAddress: isUsb ? p.name : ipAddr,
+            isActive: true
+        });
+        setIsModalOpen(true);
     };
 
     const handleSave = async (e: React.FormEvent) => {
@@ -120,6 +163,9 @@ export function PageClient() {
                         </div>
                     </div>
                     <div className="flex gap-3">
+                        <button onClick={scanPrinters} className="px-6 py-3 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
+                            <i className="fat fa-radar text-lg"></i> OTOMATİK TARA
+                        </button>
                         <button onClick={() => openModal()} className="px-6 py-3 bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/20 text-sky-600 dark:text-sky-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-sky-100 dark:hover:bg-sky-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
                             <i className="fat fa-plus-circle text-lg"></i> {t('newPrinter')}
                         </button>
@@ -333,6 +379,65 @@ export function PageClient() {
                                     </button>
                                 </div>
                             </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Scanner Modal */}
+            {isScannerOpen && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xl">
+                    <div className="bg-white dark:bg-slate-800 rounded-[40px] w-full max-w-2xl shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col max-h-[85vh] animate-in fade-in zoom-in duration-300">
+                        <div className="p-8 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20 shrink-0 h-[100px]">
+                            <div>
+                                <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3 tracking-tighter uppercase mb-0">
+                                    <i className={`fat ${isScanning ? 'fa-radar animate-pulse text-emerald-500' : 'fa-list-check text-sky-600'}`}></i>
+                                    Yazıcı Tarayıcı
+                                </h2>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-0">
+                                    {isScanning ? 'Sistem taranıyor...' : 'Sistemde Kurulu Yazıcılar'}
+                                </p>
+                            </div>
+                            <button type="button" onClick={() => setIsScannerOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-400 hover:text-slate-800 dark:hover:text-white shadow-sm transition-all">&times;</button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-slate-50/30 dark:bg-transparent">
+                            {isScanning ? (
+                                <div className="flex flex-col items-center justify-center py-20 opacity-70">
+                                    <i className="fat fa-spinner-third animate-spin text-5xl text-emerald-500 mb-4"></i>
+                                    <p className="font-bold text-slate-500 uppercase tracking-widest">Yazıcılar Aranıyor...</p>
+                                </div>
+                            ) : scannedPrinters.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-20 opacity-50">
+                                    <i className="fat fa-triangle-exclamation text-6xl text-amber-500 mb-4"></i>
+                                    <p className="font-bold text-slate-500 uppercase tracking-widest text-center px-4">Sistemde kaydedilmiş bir yazıcı bulunamadı.<br/> Lütfen Windows/Linux Ayarlarında yazıcı ekleyin.</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 gap-3">
+                                    {scannedPrinters.map((p, idx) => (
+                                        <button key={idx} onClick={() => selectScannedPrinter(p)} className="flex items-center gap-4 text-left w-full bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-200 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 hover:shadow-lg transition-all group">
+                                            <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-2xl text-slate-500 group-hover:text-emerald-500 transition-colors shrink-0">
+                                                <i className="fat fa-print"></i>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="font-bold text-slate-800 dark:text-white text-base truncate">{p.name || 'Bilinmeyen'}</h4>
+                                                <div className="flex items-center gap-3 mt-1.5 opacity-70 text-xs">
+                                                    <span className="flex items-center gap-1 font-bold text-slate-600 dark:text-slate-400">
+                                                        <i className="fat fa-plug"></i> {p.port || 'Port Yok'}
+                                                    </span>
+                                                    {p.shared && (
+                                                        <span className="flex items-center gap-1 font-bold text-blue-500">
+                                                            <i className="fat fa-share-nodes"></i> Paylaşılan
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="w-10 h-10 border-2 border-slate-200 dark:border-slate-700 group-hover:border-emerald-500 text-transparent group-hover:text-emerald-500 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-500/10 rounded-full flex items-center justify-center transition-all shrink-0">
+                                                <i className="fat fa-arrow-right"></i>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

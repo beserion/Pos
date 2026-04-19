@@ -19,6 +19,11 @@ export class PrintersController {
     return this.printersService.findAll();
   }
 
+  @Get('discover')
+  async discoverPrinters(): Promise<{ success: boolean, printers: any[], message?: string }> {
+    return this.printersService.discoverPrinters();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string): Promise<Printer> {
     return this.printersService.findOne(+id);
