@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useLocale } from 'next-intl';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface OutputProfile {
     id: number;
@@ -202,14 +203,16 @@ export function PageClient() {
                             </div>
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">ÇIKTI PROFİLİ</label>
-                                <div className="relative">
-                                    <i className="fat fa-route absolute left-4 top-4 text-fuchsia-500/50"></i>
-                                    <select value={formData.outputProfileId || ''} onChange={(e) => setFormData({ ...formData, outputProfileId: e.target.value ? parseInt(e.target.value) : 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-fuchsia-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                        <option value="">Profil seçin (opsiyonel)</option>
-                                        {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                    </select>
-                                    <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                </div>
+                                <SearchableSelect
+                                    value={formData.outputProfileId || ''}
+                                    onChange={(val) => setFormData({ ...formData, outputProfileId: val ? parseInt(val) : 0 })}
+                                    options={[
+                                        { value: '', label: 'Profil seçin (opsiyonel)' },
+                                        ...profiles.map(p => ({ value: p.id.toString(), label: p.name }))
+                                    ]}
+                                    icon="fat fa-route"
+                                    placeholder="Profil seçin (opsiyonel)"
+                                />
                             </div>
                             <div className="flex items-center gap-3">
                                 <div onClick={() => setFormData({ ...formData, isActive: !formData.isActive })} className={`cursor-pointer flex items-center gap-3 p-4 rounded-2xl border-2 transition-all w-full ${formData.isActive ? 'bg-emerald-50 border-emerald-500 dark:bg-emerald-500/10' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800'}`}>

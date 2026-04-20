@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface Zone {
     id: number;
@@ -394,13 +395,16 @@ export function PageClient() {
                                         </label>
                                         <div className="relative">
                                             <i className="fat fa-layer-group absolute left-4 top-4 text-indigo-500/50"></i>
-                                            <select required value={formData.zoneId} onChange={(e) => setFormData({ ...formData, zoneId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                <option value={0} disabled>{t('selectZone')}</option>
-                                                {zones.map(z => (
-                                                    <option key={z.id} value={z.id}>{z.name} ({z.location?.name})</option>
-                                                ))}
-                                            </select>
-                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                            <div className="-m-2 w-full">
+                                                <SearchableSelect
+                                                    value={formData.zoneId}
+                                                    onChange={(val) => setFormData({ ...formData, zoneId: parseInt(val.toString()) || 0 })}
+                                                    options={[
+                                                        { value: 0, label: t('selectZone') },
+                                                        ...zones.map(z => ({ value: z.id, label: `${z.name} (${z.location?.name})` }))
+                                                    ]}
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 
@@ -531,13 +535,16 @@ export function PageClient() {
                                         </label>
                                         <div className="relative">
                                             <i className="fat fa-building absolute left-4 top-4 text-violet-500/50"></i>
-                                            <select required value={bulkFormData.zoneId} onChange={(e) => setBulkFormData({ ...bulkFormData, zoneId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-violet-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                <option value={0} disabled>{t('selectZone')}</option>
-                                                {zones.map(z => (
-                                                    <option key={z.id} value={z.id}>{z.name} ({z.location?.name})</option>
-                                                ))}
-                                            </select>
-                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                            <div className="-m-2 w-full">
+                                                <SearchableSelect
+                                                    value={bulkFormData.zoneId}
+                                                    onChange={(val) => setBulkFormData({ ...bulkFormData, zoneId: parseInt(val.toString()) || 0 })}
+                                                    options={[
+                                                        { value: 0, label: t('selectZone') },
+                                                        ...zones.map(z => ({ value: z.id, label: `${z.name} (${z.location?.name})` }))
+                                                    ]}
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 

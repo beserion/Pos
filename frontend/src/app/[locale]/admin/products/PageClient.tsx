@@ -1,9 +1,10 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
+import SearchableSelect from '@/components/SearchableSelect';
 import { useTranslations, useLocale } from 'next-intl';
 
 interface Product {
@@ -36,6 +37,7 @@ interface Product {
     linkedStockItemId?: number | null;
     directStockQty?: number;
     directStockUnit?: string;
+    posVisible?: boolean;
 }
 
 interface Modifier {
@@ -77,14 +79,18 @@ interface Printer {
     name: string;
 }
 
+
+
 export function PageClient() {
     const t = useTranslations('Products');
     const tc = useTranslations('Common');
     const locale = useLocale();
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, hasFeature } = useAuth();
     const [products, setProducts] = useState<Product[]>([]);
     const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+    const [sortField, setSortField] = useState<'name' | 'category' | 'productType' | 'price'>('name');
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
     const [searchQuery, setSearchQuery] = useState('');
     const [printers, setPrinters] = useState<Printer[]>([]);
     const [productTypes, setProductTypes] = useState<any[]>([]);
@@ -99,7 +105,7 @@ export function PageClient() {
     const [currentRecipe, setCurrentRecipe] = useState<RecipeHeader | null>(null);
     const [recipeSummary, setRecipeSummary] = useState<any>(null);
     const [loadingRecipe, setLoadingRecipe] = useState(false);
-    const hasRecipeLicense = (user?.firm?.activeFeatures || []).includes('recipe_system');
+    const hasRecipeLicense = hasFeature('recipe_system');
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'genel' | 'gorsel' | 'recete' | 'ozellik' | 'yonlendirme' | 'varyant'>('genel');
@@ -129,7 +135,8 @@ export function PageClient() {
         inventoryLinkType: 'none',
         linkedStockItemId: null,
         directStockQty: 0,
-        directStockUnit: 'adet'
+        directStockUnit: 'adet',
+        posVisible: true
     });
 
     const [ingredientProduct, setIngredientProduct] = useState({ ingredientId: 0, quantity: 0, unit: 'adet' });
@@ -187,6 +194,35 @@ export function PageClient() {
         );
         setFilteredProducts(filtered);
     }, [searchQuery, products]);
+
+    const handleSort = (field: 'name' | 'category' | 'productType' | 'price') => {
+        if (sortField === field) {
+            setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortDir('asc');
+        }
+    };
+
+    const sortedProducts = [...filteredProducts].sort((a, b) => {
+        const dir = sortDir === 'asc' ? 1 : -1;
+        if (sortField === 'price') {
+            return (a.price - b.price) * dir;
+        }
+        let aStr = '';
+        let bStr = '';
+        if (sortField === 'name') {
+            aStr = (a.name || '').trim().toLocaleLowerCase('tr');
+            bStr = (b.name || '').trim().toLocaleLowerCase('tr');
+        } else if (sortField === 'category') {
+            aStr = (a.category || '').trim().toLocaleLowerCase('tr');
+            bStr = (b.category || '').trim().toLocaleLowerCase('tr');
+        } else if (sortField === 'productType') {
+            aStr = (productTypes.find(pt => pt.id === a.productTypeId)?.name || '').trim().toLocaleLowerCase('tr');
+            bStr = (productTypes.find(pt => pt.id === b.productTypeId)?.name || '').trim().toLocaleLowerCase('tr');
+        }
+        return aStr.localeCompare(bStr, 'tr') * dir;
+    });
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -335,14 +371,14 @@ export function PageClient() {
         if (!currentRecipe) return;
         const newLines = [...(currentRecipe.lines || [])];
         const line = { ...newLines[index], [field]: value };
-        
+
         if (field === 'stockCardId' && value > 0) {
             const card = stockCards.find(c => c.id === parseInt(value));
             if (card) {
                 line.unit = card.baseUnit;
             }
         }
-        
+
         newLines[index] = line;
         setCurrentRecipe({ ...currentRecipe, lines: newLines });
     };
@@ -359,7 +395,7 @@ export function PageClient() {
         try {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            
+
             // Veriyi temizle: Reçete satırlarındaki stockCard nesnesini ve ana nesnedeki product nesnesini çıkar
             const { product, ...cleanRecipe } = currentRecipe as any;
             const sanitizedLines = (cleanRecipe.lines || []).map((line: any) => {
@@ -376,7 +412,7 @@ export function PageClient() {
                 await axios.put(`${API_URL}/recipes/${currentRecipe.id}`, cleanPayload, config);
                 toastSwal({ title: tc('success'), text: 'Reçete başarıyla güncellendi.', icon: 'success' });
             }
-            
+
             fetchRecipeForProduct(currentRecipe.productId);
             // Refresh recipeHeaders so the new recipe appears in variant dropdowns
             const recipesRes = await axios.get(`${API_URL}/recipes`, config).catch(() => ({ data: [] }));
@@ -417,10 +453,10 @@ export function PageClient() {
 
     const openModal = (prod?: Product) => {
         if (prod) {
-            setFormData({ 
-                ...prod, 
-                recipes: prod.recipes || [], 
-                modifiers: prod.modifiers || [], 
+            setFormData({
+                ...prod,
+                recipes: prod.recipes || [],
+                modifiers: prod.modifiers || [],
                 variations: prod.variations || [],
                 inventoryLinkType: prod.inventoryLinkType || 'none',
                 linkedStockItemId: prod.linkedStockItemId || null,
@@ -498,7 +534,7 @@ export function PageClient() {
         // Kategori yoksa "URUN" ön ekini kullan, varsa ilk 3 karakteri al
         const prefixStr = (categoryName && categoryName.trim() !== '') ? categoryName : 'URUN';
         const prefix = prefixStr.substring(0, 3).toLocaleLowerCase('tr');
-        
+
         const sameCategorySkus = products
             .filter(p => p.sku && p.sku.toLocaleLowerCase('tr').startsWith(`${prefix}-`))
             .map(p => {
@@ -519,7 +555,10 @@ export function PageClient() {
         setFormData({ ...formData, category: val, sku: newSku });
     };
 
-    const categoryOptions = departments.filter(d => d.isActive).map(d => ({ key: d.name, value: d.name }));
+    const categoryOptions = departments
+        .filter(d => d.isActive)
+        .map(d => ({ key: d.name, value: d.name }))
+        .sort((a, b) => a.value.localeCompare(b.value, 'tr', { sensitivity: 'base' }));
 
     const unitOptions = [
         { key: 'unitPiece', value: 'piece' },
@@ -621,17 +660,49 @@ export function PageClient() {
                                 <thead className="sticky top-0 z-10">
                                     <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-700/50">
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest" style={{ width: '40px' }}>{t('tableId')}</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableInfo')}</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                            <button type="button" onClick={() => handleSort('name')} className={`flex items-center gap-1.5 group transition-colors hover:text-teal-500 ${sortField === 'name' ? 'text-teal-500' : ''}`}>
+                                                {t('tableInfo')}
+                                                <span className="flex flex-col leading-[0] opacity-60 group-hover:opacity-100">
+                                                    <i className={`fat fa-chevron-up text-[7px] ${sortField === 'name' && sortDir === 'asc' ? 'opacity-100 text-teal-400' : 'opacity-30'}`}></i>
+                                                    <i className={`fat fa-chevron-down text-[7px] ${sortField === 'name' && sortDir === 'desc' ? 'opacity-100 text-teal-400' : 'opacity-30'}`}></i>
+                                                </span>
+                                            </button>
+                                        </th>
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableSku')}</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tableCategory')}</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">ÜRÜN CİNSİ</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                            <button type="button" onClick={() => handleSort('category')} className={`flex items-center gap-1.5 group transition-colors hover:text-teal-500 ${sortField === 'category' ? 'text-teal-500' : ''}`}>
+                                                {t('tableCategory')}
+                                                <span className="flex flex-col leading-[0] opacity-60 group-hover:opacity-100">
+                                                    <i className={`fat fa-chevron-up text-[7px] ${sortField === 'category' && sortDir === 'asc' ? 'opacity-100 text-teal-400' : 'opacity-30'}`}></i>
+                                                    <i className={`fat fa-chevron-down text-[7px] ${sortField === 'category' && sortDir === 'desc' ? 'opacity-100 text-teal-400' : 'opacity-30'}`}></i>
+                                                </span>
+                                            </button>
+                                        </th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                            <button type="button" onClick={() => handleSort('productType')} className={`flex items-center gap-1.5 group transition-colors hover:text-teal-500 ${sortField === 'productType' ? 'text-teal-500' : ''}`}>
+                                                ÜRÜN CİNSİ
+                                                <span className="flex flex-col leading-[0] opacity-60 group-hover:opacity-100">
+                                                    <i className={`fat fa-chevron-up text-[7px] ${sortField === 'productType' && sortDir === 'asc' ? 'opacity-100 text-teal-400' : 'opacity-30'}`}></i>
+                                                    <i className={`fat fa-chevron-down text-[7px] ${sortField === 'productType' && sortDir === 'desc' ? 'opacity-100 text-teal-400' : 'opacity-30'}`}></i>
+                                                </span>
+                                            </button>
+                                        </th>
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">ÇIKTI PROFİLİ</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('tablePrice')}</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                            <button type="button" onClick={() => handleSort('price')} className={`flex items-center gap-1.5 group transition-colors hover:text-teal-500 ${sortField === 'price' ? 'text-teal-500' : ''}`}>
+                                                {t('tablePrice')}
+                                                <span className="flex flex-col leading-[0] opacity-60 group-hover:opacity-100">
+                                                    <i className={`fat fa-chevron-up text-[7px] ${sortField === 'price' && sortDir === 'asc' ? 'opacity-100 text-teal-400' : 'opacity-30'}`}></i>
+                                                    <i className={`fat fa-chevron-down text-[7px] ${sortField === 'price' && sortDir === 'desc' ? 'opacity-100 text-teal-400' : 'opacity-30'}`}></i>
+                                                </span>
+                                            </button>
+                                        </th>
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t('tableActions')}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
-                                    {filteredProducts.map(prod => (
+                                    {sortedProducts.map(prod => (
                                         <tr key={prod.id} className="hover:bg-teal-500/5 dark:hover:bg-teal-500/10 transition-all group">
                                             <td className="px-8 py-3">
                                                 <span className="text-sm font-black text-slate-400">#{prod.id}</span>
@@ -769,29 +840,29 @@ export function PageClient() {
                                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-3">
                                                     <div>
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-0">ÜRÜN CİNSİ</label>
-                                                        <div className="relative">
-                                                            <i className="fat fa-shapes absolute left-4 top-4 text-teal-500/50"></i>
-                                                            <select value={formData.productTypeId || ''} onChange={(e) => setFormData({ ...formData, productTypeId: e.target.value ? parseInt(e.target.value) : null })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                                <option value="">Cins Seçin (Zorunlu)</option>
-                                                                {productTypes.map(pt => (
-                                                                    <option key={pt.id} value={pt.id}>{pt.name}</option>
-                                                                ))}
-                                                            </select>
-                                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                                        </div>
+                                                        <SearchableSelect
+                                                            value={formData.productTypeId || ''}
+                                                            onChange={(val) => setFormData({ ...formData, productTypeId: val ? parseInt(val) : null })}
+                                                            options={[
+                                                                { value: '', label: 'Cins Seçin (Zorunlu)' },
+                                                                ...productTypes.map(pt => ({ value: pt.id, label: pt.name }))
+                                                            ]}
+                                                            placeholder="Cins Seçin (Zorunlu)"
+                                                            icon="fat fa-shapes"
+                                                        />
                                                     </div>
                                                     <div>
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelCategory')}</label>
-                                                        <div className="relative">
-                                                            <i className="fat fa-folder-tree absolute left-4 top-4 text-teal-500/50"></i>
-                                                            <select value={formData.category} onChange={(e) => handleCategoryChange(e.target.value)} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                                <option value="">{t('selectCategory')}</option>
-                                                                {categoryOptions.map(cat => (
-                                                                    <option key={cat.value} value={cat.value}>{cat.value}</option>
-                                                                ))}
-                                                            </select>
-                                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                                        </div>
+                                                        <SearchableSelect
+                                                            value={formData.category || ''}
+                                                            onChange={(val) => handleCategoryChange(val)}
+                                                            options={[
+                                                                { value: '', label: t('selectCategory') },
+                                                                ...categoryOptions.map(cat => ({ value: cat.value, label: cat.value }))
+                                                            ]}
+                                                            placeholder={t('selectCategory')}
+                                                            icon="fat fa-folder-tree"
+                                                        />
                                                     </div>
 
 
@@ -817,31 +888,24 @@ export function PageClient() {
                                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                                     <div>
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">KDV ORANI (%)</label>
-                                                        <div className="relative">
-                                                            <i className="fat fa-percent absolute left-4 top-4 text-teal-500/50"></i>
-                                                            <select
-                                                                value={formData.vatRate ?? 0}
-                                                                onChange={(e) => setFormData({ ...formData, vatRate: parseFloat(e.target.value) || 0 })}
-                                                                className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer"
-                                                            >
-                                                                {(parameters.find(p => p.key === 'available_tax_rates')?.value || "0,1,10,20").split(',').map((rate: string) => (
-                                                                    <option key={rate} value={rate.trim()}>%{rate.trim()}</option>
-                                                                ))}
-                                                            </select>
-                                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                                        </div>
+                                                        <SearchableSelect
+                                                            value={String(formData.vatRate ?? 0)}
+                                                            onChange={(val) => setFormData({ ...formData, vatRate: parseFloat(val) || 0 })}
+                                                            options={(parameters.find(p => p.key === 'available_tax_rates')?.value || "0,1,10,20").split(',').map((rate: string) => ({
+                                                                value: rate.trim(),
+                                                                label: `%${rate.trim()}`
+                                                            }))}
+                                                            icon="fat fa-percent"
+                                                        />
                                                     </div>
                                                     <div>
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelUnit')}</label>
-                                                        <div className="relative">
-                                                            <i className="fat fa-scale-balanced absolute left-4 top-4 text-teal-500/50"></i>
-                                                            <select value={formData.unit || ''} onChange={(e) => setFormData({ ...formData, unit: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                                {unitOptions.map(u => (
-                                                                    <option key={u.key} value={u.value}>{t(u.key)}</option>
-                                                                ))}
-                                                            </select>
-                                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                                        </div>
+                                                        <SearchableSelect
+                                                            value={formData.unit || ''}
+                                                            onChange={(val) => setFormData({ ...formData, unit: val })}
+                                                            options={unitOptions.map(u => ({ value: u.value, label: t(u.key) }))}
+                                                            icon="fat fa-scale-balanced"
+                                                        />
                                                     </div>
                                                     <div>
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">BARKOD</label>
@@ -854,21 +918,21 @@ export function PageClient() {
 
                                                 <div>
                                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">ÇIKTI PROFİLİ</label>
-                                                    <div className="relative">
-                                                        <i className="fat fa-route absolute left-4 top-4 text-teal-500/50"></i>
-                                                        <select value={formData.outputProfileId || ''} onChange={(e) => setFormData({ ...formData, outputProfileId: e.target.value ? parseInt(e.target.value) : null })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                            <option value="">Varsayılanı Kullan</option>
-                                                            {outputProfiles.map(op => (
-                                                                <option key={op.id} value={op.id}>{op.name}</option>
-                                                            ))}
-                                                        </select>
-                                                        <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                                    </div>
+                                                    <SearchableSelect
+                                                        value={formData.outputProfileId || ''}
+                                                        onChange={(val) => setFormData({ ...formData, outputProfileId: val ? parseInt(val) : null })}
+                                                        options={[
+                                                            { value: '', label: 'Varsayılanı Kullan' },
+                                                            ...outputProfiles.map(op => ({ value: op.id, label: op.name }))
+                                                        ]}
+                                                        placeholder="Varsayılanı Kullan"
+                                                        icon="fat fa-route"
+                                                    />
                                                 </div>
 
                                                 <div>
                                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">ÜRÜN DURUMU & ÖZELLİKLERİ</label>
-                                                    <div className="grid grid-cols-1 gap-4">
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                         <div
                                                             onClick={() => setFormData({ ...formData, isQuickSale: !formData.isQuickSale })}
                                                             className={`cursor-pointer group flex items-center p-4 rounded-3xl border-2 transition-all duration-300 ${formData.isQuickSale ? 'bg-teal-50 border-teal-500 dark:bg-teal-500/10 shadow-lg shadow-teal-500/10' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800 hover:border-teal-300'}`}
@@ -878,10 +942,26 @@ export function PageClient() {
                                                             </div>
                                                             <div className="flex-1 ml-4 text-left">
                                                                 <h6 className={`text-sm font-black mb-0.5 tracking-tight ${formData.isQuickSale ? 'text-teal-900 dark:text-teal-400' : 'text-slate-600 dark:text-slate-400'}`}>{t('labelQuickSale')}</h6>
-                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none m-0">Hızlı Satış Aktif</p>
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none m-0">{formData.isQuickSale ? 'Hızlı Satış Aktif' : 'Hızlı Satış Kapalı'}</p>
                                                             </div>
                                                             <div className={`w-6 h-6 shrink-0 rounded-full border-2 transition-all flex items-center justify-center ${formData.isQuickSale ? 'border-teal-600 bg-teal-600' : 'border-slate-300'}`}>
                                                                 {formData.isQuickSale && <i className="fat fa-check text-[10px] text-white"></i>}
+                                                            </div>
+                                                        </div>
+
+                                                        <div
+                                                            onClick={() => setFormData({ ...formData, posVisible: formData.posVisible === undefined ? false : !formData.posVisible })}
+                                                            className={`cursor-pointer group flex items-center p-4 rounded-3xl border-2 transition-all duration-300 ${formData.posVisible !== false ? 'bg-indigo-50 border-indigo-500 dark:bg-indigo-500/10 shadow-lg shadow-indigo-500/10' : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800 hover:border-indigo-300'}`}
+                                                        >
+                                                            <div className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center transition-colors ${formData.posVisible !== false ? 'bg-white text-indigo-600 shadow-sm' : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>
+                                                                <i className="fat fa-display text-xl"></i>
+                                                            </div>
+                                                            <div className="flex-1 ml-4 text-left">
+                                                                <h6 className={`text-sm font-black mb-0.5 tracking-tight ${formData.posVisible !== false ? 'text-indigo-900 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400'}`}>Siparişte Göster</h6>
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none m-0">{formData.posVisible !== false ? 'Menüde Görünür' : 'Gizli'}</p>
+                                                            </div>
+                                                            <div className={`w-6 h-6 shrink-0 rounded-full border-2 transition-all flex items-center justify-center ${formData.posVisible !== false ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'}`}>
+                                                                {formData.posVisible !== false && <i className="fat fa-check text-[10px] text-white"></i>}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -989,51 +1069,45 @@ export function PageClient() {
                                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                                                 <div>
                                                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">STOK TAKİP KURALI</label>
-                                                                    <div className="relative">
-                                                                        <select 
-                                                                            value={formData.inventoryLinkType || 'none'} 
-                                                                            onChange={(e) => setFormData({ ...formData, inventoryLinkType: e.target.value })} 
-                                                                            className="w-full px-4 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-orange-500/10 outline-none appearance-none cursor-pointer"
-                                                                        >
-                                                                            <option value="none">Stok Düşümü Yapılmayacak</option>
-                                                                            <option value="direct_stock">Tekil Stok Kartından Düşülsün</option>
-                                                                        </select>
-                                                                        <i className="fat fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
-                                                                    </div>
+                                                                    <SearchableSelect
+                                                                        value={formData.inventoryLinkType || 'none'}
+                                                                        onChange={(val) => setFormData({ ...formData, inventoryLinkType: val })}
+                                                                        options={[
+                                                                            { value: 'none', label: 'Stok Düşümü Yapılmayacak' },
+                                                                            { value: 'direct_stock', label: 'Tekil Stok Kartından Düşülsün' }
+                                                                        ]}
+                                                                        icon="fat fa-boxes-stacked"
+                                                                    />
                                                                 </div>
 
                                                                 {formData.inventoryLinkType === 'direct_stock' && (
                                                                     <>
                                                                         <div>
                                                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">EŞLEŞEN STOK KARTI</label>
-                                                                            <div className="relative">
-                                                                                <select 
-                                                                                    value={formData.linkedStockItemId || ''} 
-                                                                                    onChange={(e) => {
-                                                                                        const val = e.target.value ? parseInt(e.target.value) : null;
-                                                                                        const sc = stockCards.find(c => c.id === val);
-                                                                                        setFormData({ ...formData, linkedStockItemId: val, directStockUnit: sc?.baseUnit || 'adet' });
-                                                                                    }}
-                                                                                    className="w-full px-4 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-orange-500/10 outline-none appearance-none cursor-pointer"
-                                                                                >
-                                                                                    <option value="">Stok Kartı Seçin</option>
-                                                                                    {stockCards.map(c => (
-                                                                                        <option key={c.id} value={c.id}>{c.name} ({c.baseUnit})</option>
-                                                                                    ))}
-                                                                                </select>
-                                                                                <i className="fat fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
-                                                                            </div>
+                                                                            <SearchableSelect
+                                                                                value={(formData.linkedStockItemId || '').toString()}
+                                                                                onChange={(val) => {
+                                                                                    const id = val ? parseInt(val) : null;
+                                                                                    const sc = stockCards.find(c => c.id === id);
+                                                                                    setFormData({ ...formData, linkedStockItemId: id, directStockUnit: sc?.baseUnit || 'adet' });
+                                                                                }}
+                                                                                options={[
+                                                                                    { value: '', label: 'Stok Kartı Seçin' },
+                                                                                    ...stockCards.map(c => ({ value: c.id.toString(), label: `${c.name} (${c.baseUnit})` }))
+                                                                                ]}
+                                                                                icon="fat fa-box"
+                                                                            />
                                                                         </div>
 
                                                                         <div>
                                                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">DÜŞÜLECEK MİKTAR ({formData.directStockUnit || 'Birim'})</label>
                                                                             <div className="relative">
-                                                                                <input 
-                                                                                    type="number" 
-                                                                                    step="0.0001" 
-                                                                                    value={formData.directStockQty || ''} 
-                                                                                    onChange={(e) => setFormData({ ...formData, directStockQty: parseFloat(e.target.value) || 0 })} 
-                                                                                    className="w-full px-4 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-black text-center focus:ring-4 focus:ring-orange-500/10 outline-none transition-shadow" 
+                                                                                <input
+                                                                                    type="number"
+                                                                                    step="0.0001"
+                                                                                    value={formData.directStockQty || ''}
+                                                                                    onChange={(e) => setFormData({ ...formData, directStockQty: parseFloat(e.target.value) || 0 })}
+                                                                                    className="w-full px-4 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-black text-center focus:ring-4 focus:ring-orange-500/10 outline-none transition-shadow"
                                                                                     placeholder="Örn: 1 veya 0.05"
                                                                                 />
                                                                             </div>
@@ -1072,12 +1146,12 @@ export function PageClient() {
                                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">REÇETE ADI (OPSİYONEL)</label>
                                                                 <div className="relative">
                                                                     <i className="fat fa-tag absolute left-4 top-3.5 text-slate-400 text-sm"></i>
-                                                                    <input 
-                                                                        type="text" 
-                                                                        value={currentRecipe.name || ''} 
-                                                                        onChange={(e) => setCurrentRecipe({ ...currentRecipe, name: e.target.value })} 
-                                                                        className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-2 focus:ring-orange-500/50 outline-none transition-shadow capitalize" 
-                                                                        placeholder="Örn: Standart Reçete" 
+                                                                    <input
+                                                                        type="text"
+                                                                        value={currentRecipe.name || ''}
+                                                                        onChange={(e) => setCurrentRecipe({ ...currentRecipe, name: e.target.value })}
+                                                                        className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-2 focus:ring-orange-500/50 outline-none transition-shadow capitalize"
+                                                                        placeholder="Örn: Standart Reçete"
                                                                     />
                                                                 </div>
                                                             </div>
@@ -1105,7 +1179,7 @@ export function PageClient() {
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                        
+
                                                         {/* Reçete Detay Tablosu */}
                                                         <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 rounded-[28px] overflow-hidden shadow-xl shadow-slate-200/40 dark:shadow-none">
                                                             <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/30 dark:bg-slate-800/10">
@@ -1113,15 +1187,12 @@ export function PageClient() {
                                                                     <i className="fat fa-list-check text-orange-500"></i> İçindekiler / Stok Kullanımı
                                                                 </h4>
                                                                 <div className="flex gap-2">
-                                                                    <button type="button" onClick={() => setCurrentRecipe({ id: 0, productId: formData.id, name: 'Yeni Reçete (Örn: L Boy)', isActive: false, note: '', lines: [] })} className="px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-black text-[10px] uppercase tracking-widest rounded-xl shadow-sm hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-all flex items-center gap-2">
-                                                                        <i className="fat fa-file-circle-plus text-xs"></i> Yeni Yan Reçete Aç
-                                                                    </button>
                                                                     <button type="button" onClick={handleAddRecipeLine} className="px-4 py-2 bg-white dark:bg-slate-700 border border-orange-100 dark:border-orange-500/20 text-orange-600 dark:text-orange-400 font-black text-[10px] uppercase tracking-widest rounded-xl shadow-sm hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-all flex items-center gap-2">
                                                                         <i className="fat fa-plus text-xs"></i> Satır Ekle
                                                                     </button>
                                                                 </div>
                                                             </div>
-                                                            
+
                                                             <div className="overflow-x-auto min-h-[200px]">
                                                                 <table className="w-full text-left border-collapse">
                                                                     <thead>
@@ -1137,26 +1208,23 @@ export function PageClient() {
                                                                         {(currentRecipe.lines || []).map((line, idx) => (
                                                                             <tr key={idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors group">
                                                                                 <td className="px-6 py-3">
-                                                                                    <div className="relative">
-                                                                                        <select 
-                                                                                            value={line.stockCardId || ''} 
-                                                                                            onChange={(e) => handleRecipeLineChange(idx, 'stockCardId', e.target.value ? parseInt(e.target.value) : 0)} 
-                                                                                            className="w-full pl-3 pr-8 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-2 focus:ring-orange-500/30 outline-none transition-all appearance-none cursor-pointer"
-                                                                                        >
-                                                                                            <option value="">Seçiniz...</option>
-                                                                                            {stockCards.map(c => (
-                                                                                                <option key={c.id} value={c.id}>{c.name} ({c.baseUnit})</option>
-                                                                                            ))}
-                                                                                        </select>
-                                                                                        <i className="fat fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] pointer-events-none"></i>
+                                                                                    <div className="-m-1 w-full">
+                                                                                        <SearchableSelect
+                                                                                            value={(line.stockCardId || '').toString()}
+                                                                                            onChange={(val) => handleRecipeLineChange(idx, 'stockCardId', val ? parseInt(val) : 0)}
+                                                                                            options={[
+                                                                                                { value: '', label: 'Seçiniz...' },
+                                                                                                ...stockCards.map(c => ({ value: c.id.toString(), label: `${c.name} (${c.baseUnit})` }))
+                                                                                            ]}
+                                                                                        />
                                                                                     </div>
                                                                                 </td>
                                                                                 <td className="px-6 py-3 text-center">
-                                                                                    <input 
-                                                                                        type="number" 
-                                                                                        step="0.0001" 
-                                                                                        value={line.quantity ?? ''} 
-                                                                                        onChange={(e) => handleRecipeLineChange(idx, 'quantity', parseFloat(e.target.value) || 0)} 
+                                                                                    <input
+                                                                                        type="number"
+                                                                                        step="0.0001"
+                                                                                        value={line.quantity ?? ''}
+                                                                                        onChange={(e) => handleRecipeLineChange(idx, 'quantity', parseFloat(e.target.value) || 0)}
                                                                                         className="w-24 px-3 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-800 dark:text-white font-black text-sm text-center focus:ring-2 focus:ring-orange-500/30 outline-none transition-all"
                                                                                     />
                                                                                 </td>
@@ -1166,8 +1234,8 @@ export function PageClient() {
                                                                                     </span>
                                                                                 </td>
                                                                                 <td className="px-6 py-3 text-center">
-                                                                                    <button 
-                                                                                        type="button" 
+                                                                                    <button
+                                                                                        type="button"
                                                                                         onClick={() => handleRecipeLineChange(idx, 'isRequired', !line.isRequired)}
                                                                                         className={`w-9 h-9 rounded-xl flex items-center justify-center mx-auto transition-all ${line.isRequired ? 'bg-emerald-50 text-emerald-600 border border-emerald-100 dark:bg-emerald-500/10 dark:border-emerald-500/30' : 'bg-slate-50 text-slate-300 border border-slate-100 dark:bg-slate-800 dark:border-slate-700'}`}
                                                                                     >
@@ -1202,7 +1270,7 @@ export function PageClient() {
                                                                 <h4 className="text-[10px] font-black text-orange-600 dark:text-orange-400 uppercase tracking-widest mb-6 flex items-center gap-2 m-0">
                                                                     <i className="fat fa-chart-pie"></i> Reçete Maliyet Analizi (Anlık)
                                                                 </h4>
-                                                                
+
                                                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                                                     <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm border border-slate-100 dark:border-slate-700/50">
                                                                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none">Satış Fiyatı</p>
@@ -1220,8 +1288,8 @@ export function PageClient() {
                                                                         <p className="text-[9px] font-black text-indigo-500 uppercase tracking-widest mb-2 leading-none">Maliyet Oranı (Cost %)</p>
                                                                         <div className="flex items-center gap-3">
                                                                             <div className="flex-1 h-2.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden shadow-inner">
-                                                                                <div 
-                                                                                    className={`h-full rounded-full transition-all duration-1000 ${recipeSummary.costRatio > 50 ? 'bg-gradient-to-r from-rose-500 to-rose-600' : recipeSummary.costRatio > 30 ? 'bg-gradient-to-r from-amber-500 to-amber-600' : 'bg-gradient-to-r from-emerald-500 to-emerald-600'}`} 
+                                                                                <div
+                                                                                    className={`h-full rounded-full transition-all duration-1000 ${recipeSummary.costRatio > 50 ? 'bg-gradient-to-r from-rose-500 to-rose-600' : recipeSummary.costRatio > 30 ? 'bg-gradient-to-r from-amber-500 to-amber-600' : 'bg-gradient-to-r from-emerald-500 to-emerald-600'}`}
                                                                                     style={{ width: `${Math.min(recipeSummary.costRatio || 0, 100)}%` }}
                                                                                 ></div>
                                                                             </div>
@@ -1344,29 +1412,42 @@ export function PageClient() {
                                                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-end">
                                                                         <div>
                                                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">STOK TAKİP KURALI</label>
-                                                                            <div className="relative">
-                                                                                <select value={v.inventoryLinkType || 'none'} onChange={e => { const nv = [...formData.variations!]; nv[idx].inventoryLinkType = e.target.value; setFormData({ ...formData, variations: nv }); }} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-2 focus:ring-slate-500/30 outline-none appearance-none">
-                                                                                    <option value="none">Stok Düşümü Yok</option>
-                                                                                    <option value="direct_stock">Tekil Stok Kartı Çık (Şişe vs)</option>
-                                                                                    <option value="recipe">Özel Reçete Düş (Kadeh, L Porsiyon)</option>
-                                                                                </select>
-                                                                                <i className="fat fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
-                                                                            </div>
+                                                                            <SearchableSelect
+                                                                                value={v.inventoryLinkType || 'none'}
+                                                                                onChange={(val) => {
+                                                                                    const nv = [...formData.variations!];
+                                                                                    nv[idx].inventoryLinkType = val;
+                                                                                    setFormData({ ...formData, variations: nv });
+                                                                                }}
+                                                                                options={[
+                                                                                    { value: 'none', label: 'Stok Düşümü Yok' },
+                                                                                    { value: 'direct_stock', label: 'Tekil Stok Kartı Çık (Şişe vs)' },
+                                                                                    { value: 'recipe', label: 'Özel Reçete Düş (Kadeh, L Porsiyon)' }
+                                                                                ]}
+                                                                                icon="fat fa-boxes-stacked"
+                                                                            />
                                                                         </div>
 
                                                                         {v.inventoryLinkType === 'direct_stock' && (
                                                                             <>
                                                                                 <div>
                                                                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">BAĞLI STOK KARTI</label>
-                                                                                    <div className="relative">
-                                                                                        <select value={v.linkedStockItemId || ''} onChange={e => { const nv = [...formData.variations!]; nv[idx].linkedStockItemId = e.target.value ? parseInt(e.target.value) : null; setFormData({ ...formData, variations: nv }); }} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-xs focus:ring-2 focus:ring-slate-500/30 outline-none appearance-none truncate">
-                                                                                            <option value="">Stok Seçin</option>
-                                                                                            {(Array.isArray(stockCards) ? stockCards : []).map((sc: any) => (
-                                                                                                <option key={sc.id} value={sc.id}>{sc.name} ({sc.unit})</option>
-                                                                                            ))}
-                                                                                        </select>
-                                                                                        <i className="fat fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
-                                                                                    </div>
+                                                                                    <SearchableSelect
+                                                                                        value={(v.linkedStockItemId || '').toString()}
+                                                                                        onChange={(val) => {
+                                                                                            const nv = [...formData.variations!];
+                                                                                            nv[idx].linkedStockItemId = val ? parseInt(val) : null;
+                                                                                            setFormData({ ...formData, variations: nv });
+                                                                                        }}
+                                                                                        options={[
+                                                                                            { value: '', label: 'Stok Seçin' },
+                                                                                            ...(Array.isArray(stockCards) ? stockCards : []).map((sc: any) => ({
+                                                                                                value: (sc.id || '').toString(),
+                                                                                                label: `${sc.name || ''} (${sc.baseUnit || sc.unit || ''})`
+                                                                                            }))
+                                                                                        ]}
+                                                                                        icon="fat fa-box"
+                                                                                    />
                                                                                 </div>
                                                                                 <div>
                                                                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">DÜŞÜLECEK MİKTAR ({v.linkedStockItemId ? stockCards.find((sc: any) => sc.id === v.linkedStockItemId)?.unit : 'Birimi'})</label>
@@ -1380,15 +1461,22 @@ export function PageClient() {
                                                                         {v.inventoryLinkType === 'recipe' && (
                                                                             <div className="md:col-span-2">
                                                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">VARYANT YAN REÇETESİ (BAŞLIK)</label>
-                                                                                <div className="relative flex items-center">
-                                                                                    <select value={v.recipeHeaderId || ''} onChange={e => { const nv = [...formData.variations!]; nv[idx].recipeHeaderId = e.target.value ? parseInt(e.target.value) : null; setFormData({ ...formData, variations: nv }); }} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-sm focus:ring-2 focus:ring-slate-500/30 outline-none appearance-none">
-                                                                                        <option value="">Reçete Başlığı Seçin (Örn: L Boy Özel Reçete)</option>
-                                                                                        {availableVariantRecipes.map((rh: any) => (
-                                                                                            <option key={rh.id} value={rh.id}>{rh.name || `Başlıksız Reçete #${rh.id}`}{!rh.isActive ? ' (Pasif)' : ''}</option>
-                                                                                        ))}
-                                                                                    </select>
-                                                                                    <i className="fat fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
-                                                                                </div>
+                                                                                <SearchableSelect
+                                                                                    value={(v.recipeHeaderId || '').toString()}
+                                                                                    onChange={(val) => {
+                                                                                        const nv = [...formData.variations!];
+                                                                                        nv[idx].recipeHeaderId = val ? parseInt(val) : null;
+                                                                                        setFormData({ ...formData, variations: nv });
+                                                                                    }}
+                                                                                    options={[
+                                                                                        { value: '', label: 'Reçete Başlığı Seçin (Örn: L Boy Özel Reçete)' },
+                                                                                        ...availableVariantRecipes.map((rh: any) => ({
+                                                                                            value: (rh.id || '').toString(),
+                                                                                            label: `${rh.name || `Başlıksız Reçete #${rh.id}`}${!rh.isActive ? ' (Pasif)' : ''}`
+                                                                                        }))
+                                                                                    ]}
+                                                                                    icon="fat fa-receipt"
+                                                                                />
                                                                             </div>
                                                                         )}
                                                                     </div>

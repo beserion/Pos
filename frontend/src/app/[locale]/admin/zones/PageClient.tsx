@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface Location {
     id: number;
@@ -453,13 +454,16 @@ export function PageClient() {
                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelBranch')}</label>
                                         <div className="relative">
                                             <i className="fat fa-building absolute left-4 top-4 text-indigo-500/50"></i>
-                                            <select required value={formData.locationId} onChange={(e) => setFormData({ ...formData, locationId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                <option value={0} disabled>{t('selectBranch')}</option>
-                                                {locations.map(loc => (
-                                                    <option key={loc.id} value={loc.id}>{loc.name}</option>
-                                                ))}
-                                            </select>
-                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                            <div className="-m-2 w-full">
+                                                <SearchableSelect
+                                                    value={formData.locationId}
+                                                    onChange={(val) => setFormData({ ...formData, locationId: parseInt(val.toString()) || 0 })}
+                                                    options={[
+                                                        { value: 0, label: t('selectBranch') },
+                                                        ...locations.map(loc => ({ value: loc.id, label: loc.name }))
+                                                    ]}
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                     <div>

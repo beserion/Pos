@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import SearchableSelect from '@/components/SearchableSelect';
 interface CashRegister {
     id: number;
     name: string;
@@ -372,16 +373,15 @@ export function PageClient() {
                                             <div className="input-group-text wd-130 font-bold bg-slate-100 dark:bg-slate-900/50 border border-r-0 border-slate-200 dark:border-slate-700 h-full flex items-center px-4 rounded-l-2xl text-[10px] uppercase tracking-widest text-slate-400">
                                                 Fiş Yazıcısı
                                             </div>
-                                            <select
-                                                value={formData.receiptPrinterId || ''}
-                                                onChange={(e) => setFormData({ ...formData, receiptPrinterId: e.target.value ? Number(e.target.value) : null })}
-                                                className="form-control flex-1 h-full px-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white font-bold focus:ring-0 outline-none"
-                                            >
-                                                <option value="">-- Yazıcı Seçilmedi --</option>
-                                                {printers.map(p => (
-                                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                                ))}
-                                            </select>
+                                            <SearchableSelect
+                                                value={formData.receiptPrinterId?.toString() || ''}
+                                                onChange={(val) => setFormData({ ...formData, receiptPrinterId: val ? Number(val) : null })}
+                                                options={[
+                                                    { value: '', label: '-- Yazıcı Seçilmedi --' },
+                                                    ...printers.map(p => ({ value: p.id.toString(), label: p.name }))
+                                                ]}
+                                                icon="fat fa-print"
+                                            />
                                             <div className="input-group-text wd-50 bg-slate-100 dark:bg-slate-900/50 border border-l-0 border-slate-200 dark:border-slate-700 h-full flex items-center justify-center px-4 rounded-r-2xl text-emerald-500/50">
                                                 <i className="fat fa-print"></i>
                                             </div>

@@ -22,6 +22,11 @@ export class DepartmentsController {
     return this.service.create(data);
   }
 
+  @Put('reorder')
+  reorder(@Body('items') items: { id: number, orderIndex: number }[]) {
+    return this.service.reorder(items);
+  }
+
   @Put(':id')
   update(@Param('id') id: string, @Body() data: any) {
     return this.service.update(+id, data);

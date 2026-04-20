@@ -67,7 +67,7 @@ async function bootstrap() {
         'wss://test.posnetx.com',
         'wss://apitest.posnetx.com',
         'http://localhost:3000',
-        'http://localhost:3001',
+        'http://localhost:3050',
         'https://localhost:3000',
         'https://garson.posnetx.com',
         'https://boss.posnetx.com',

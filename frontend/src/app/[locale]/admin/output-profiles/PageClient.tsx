@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useLocale } from 'next-intl';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface Printer { id: number; name: string; }
 
@@ -210,26 +211,26 @@ export function PageClient() {
                             </div>
                             <div className="grid grid-cols-2 gap-5">
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">ANA YAZICI</label>
-                                    <div className="relative">
-                                        <i className="fat fa-print absolute left-4 top-4 text-cyan-500/50"></i>
-                                        <select value={formData.mainPrinterId || ''} onChange={(e) => setFormData({ ...formData, mainPrinterId: e.target.value ? parseInt(e.target.value) : 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-cyan-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                            <option value="">Yazıcı yok</option>
-                                            {printers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                        </select>
-                                        <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                    </div>
+                                    <SearchableSelect
+                                        value={formData.mainPrinterId || ''}
+                                        onChange={(val) => setFormData({ ...formData, mainPrinterId: val ? parseInt(val) : 0 })}
+                                        options={[
+                                            { value: '', label: 'Yazıcı yok' },
+                                            ...printers.map(p => ({ value: p.id.toString(), label: p.name }))
+                                        ]}
+                                        icon="fat fa-print"
+                                    />
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">BİLGİ YAZICISI</label>
-                                    <div className="relative">
-                                        <i className="fat fa-file-invoice absolute left-4 top-4 text-cyan-500/50"></i>
-                                        <select value={formData.infoPrinterId || ''} onChange={(e) => setFormData({ ...formData, infoPrinterId: e.target.value ? parseInt(e.target.value) : 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-cyan-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                            <option value="">Yazıcı yok</option>
-                                            {printers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                        </select>
-                                        <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                    </div>
+                                    <SearchableSelect
+                                        value={formData.infoPrinterId || ''}
+                                        onChange={(val) => setFormData({ ...formData, infoPrinterId: val ? parseInt(val) : 0 })}
+                                        options={[
+                                            { value: '', label: 'Yazıcı yok' },
+                                            ...printers.map(p => ({ value: p.id.toString(), label: p.name }))
+                                        ]}
+                                        icon="fat fa-file-invoice"
+                                    />
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-5">

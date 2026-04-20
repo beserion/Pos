@@ -6,6 +6,7 @@ import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal } from '@/app/[locale]/utils/swal';
 import { useLocale } from 'next-intl';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface RoutingEntry {
     productId: number;
@@ -133,13 +134,19 @@ export function PageClient() {
                         <i className="fat fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
                         <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Ürün, cins veya kategori ara..." className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold text-sm focus:ring-4 focus:ring-lime-500/10 outline-none" />
                     </div>
-                    <select value={filterSource} onChange={e => setFilterSource(e.target.value)} className="px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold text-sm appearance-none cursor-pointer min-w-[200px]">
-                        <option value="">Tüm Kaynaklar</option>
-                        <option value="PRODUCT_TYPE">Ürün Cinsi</option>
-                        <option value="STOCK_GROUP">Stok Grubu</option>
-                        <option value="STOCK_CARD">Stok Kartı</option>
-                        <option value="DEFAULT">Tanımsız</option>
-                    </select>
+                    <div className="w-[250px]">
+                        <SearchableSelect
+                            value={filterSource}
+                            onChange={(val) => setFilterSource(val.toString())}
+                            options={[
+                                { value: '', label: 'Tüm Kaynaklar' },
+                                { value: 'PRODUCT_TYPE', label: 'Ürün Cinsi' },
+                                { value: 'STOCK_GROUP', label: 'Stok Grubu' },
+                                { value: 'STOCK_CARD', label: 'Stok Kartı' },
+                                { value: 'DEFAULT', label: 'Tanımsız' }
+                            ]}
+                        />
+                    </div>
                 </div>
 
                 {loading ? (

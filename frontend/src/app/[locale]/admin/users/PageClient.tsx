@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface Role {
     id: number;
@@ -610,21 +611,31 @@ export function PageClient() {
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('labelRole')}</label>
                                                 <div className="relative"><i className="fat fa-shield-halved absolute left-4 top-4 text-cyan-500/50"></i>
-                                                    <select required value={formData.roleId} onChange={(e) => setFormData({ ...formData, roleId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-cyan-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                        <option value={0} disabled>{t('selectRole')}</option>
-                                                        {roles.map(role => <option key={role.id} value={role.id}>{role.name.toUpperCase()}</option>)}
-                                                    </select>
-                                                    <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                    <div className="-m-2 w-full">
+                                                        <SearchableSelect
+                                                            value={formData.roleId}
+                                                            onChange={(val) => setFormData({ ...formData, roleId: parseInt(val.toString()) || 0 })}
+                                                            options={[
+                                                                { value: 0, label: t('selectRole') },
+                                                                ...roles.map(role => ({ value: role.id, label: role.name.toUpperCase() }))
+                                                            ]}
+                                                        />
+                                                    </div>
                                                 </div>
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">YETKİLİ KASA</label>
                                                 <div className="relative"><i className="fat fa-cash-register absolute left-4 top-4 text-cyan-500/50"></i>
-                                                    <select value={formData.cashRegisterId} onChange={(e) => setFormData({ ...formData, cashRegisterId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-cyan-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                        <option value={0}>Kasa Atanmamış</option>
-                                                        {cashRegisters.filter(cr => cr.isActive).map(cr => <option key={cr.id} value={cr.id}>{cr.name}</option>)}
-                                                    </select>
-                                                    <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                                    <div className="-m-2 w-full">
+                                                        <SearchableSelect
+                                                            value={formData.cashRegisterId}
+                                                            onChange={(val) => setFormData({ ...formData, cashRegisterId: parseInt(val.toString()) || 0 })}
+                                                            options={[
+                                                                { value: 0, label: 'Kasa Atanmamış' },
+                                                                ...cashRegisters.filter(cr => cr.isActive).map(cr => ({ value: cr.id, label: cr.name }))
+                                                            ]}
+                                                        />
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

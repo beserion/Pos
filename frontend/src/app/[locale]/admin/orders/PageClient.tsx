@@ -7,6 +7,7 @@ import Cookies from 'js-cookie';
 import { useLocale, useTranslations } from 'next-intl';
 import { showSwal, toastSwal } from '../../utils/swal';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface Product {
     id: number;
@@ -620,18 +621,15 @@ export function PageClient() {
                             <div className="w-64 p-5 border-r border-slate-100 dark:border-slate-800 space-y-4 overflow-y-auto bg-slate-50/30 dark:bg-slate-900/10">
                                 <div>
                                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Tedarikçi Seçimi *</label>
-                                    <select
-                                        value={formData.supplierId}
-                                        onChange={e => setFormData({ ...formData, supplierId: parseInt(e.target.value) })}
-                                        className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:border-amber-500 transition-all shadow-sm"
-                                    >
-                                        <option value="0">Tedarikçi Seçiniz...</option>
-                                        {suppliers.length > 0 ? (
-                                            suppliers.map(s => <option key={s.id} value={s.id}>{s.name || 'İsimsiz'}</option>)
-                                        ) : (
-                                            <option disabled>Tedarikçi Bulunamadı</option>
-                                        )}
-                                    </select>
+                                    <SearchableSelect
+                                        value={formData.supplierId?.toString() || '0'}
+                                        onChange={val => setFormData({ ...formData, supplierId: parseInt(val) || 0 })}
+                                        options={[
+                                            { value: '0', label: 'Tedarikçi Seçiniz...' },
+                                            ...suppliers.map(s => ({ value: (s.id || '').toString(), label: s.name || 'İsimsiz' }))
+                                        ]}
+                                        icon="fat fa-truck-field"
+                                    />
                                     <p className="text-[8px] text-indigo-500 mt-1 font-bold italic uppercase tracking-widest">({suppliers.length} tedarikçi yüklendi)</p>
                                 </div>
                                 <div>
@@ -820,18 +818,28 @@ export function PageClient() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Ödeme</label>
-                                    <select value={invoiceForm.paymentMethod} onChange={e => setInvoiceForm({ ...invoiceForm, paymentMethod: e.target.value })} className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-[10px] font-bold shadow-sm">
-                                        <option value="KASA">KASA</option>
-                                        <option value="BANKA">BANKA</option>
-                                        <option value="KREDI_KARTI">KREDİ KARTI</option>
-                                    </select>
+                                    <SearchableSelect
+                                        value={invoiceForm.paymentMethod}
+                                        onChange={val => setInvoiceForm({ ...invoiceForm, paymentMethod: val } as any)}
+                                        options={[
+                                            { value: 'KASA', label: 'KASA' },
+                                            { value: 'BANKA', label: 'BANKA' },
+                                            { value: 'KREDI_KARTI', label: 'KREDİ KARTI' }
+                                        ]}
+                                        icon="fat fa-credit-card"
+                                    />
                                 </div>
                                 <div>
                                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Durum</label>
-                                    <select value={invoiceForm.paymentStatus} onChange={e => setInvoiceForm({ ...invoiceForm, [e.target.name]: e.target.value })} className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-[10px] font-bold shadow-sm">
-                                        <option value="PAID">ÖDENDİ</option>
-                                        <option value="UNPAID">ÖDENMEDİ</option>
-                                    </select>
+                                    <SearchableSelect
+                                        value={invoiceForm.paymentStatus}
+                                        onChange={val => setInvoiceForm({ ...invoiceForm, paymentStatus: val })}
+                                        options={[
+                                            { value: 'PAID', label: 'ÖDENDİ' },
+                                            { value: 'UNPAID', label: 'ÖDENMEDİ' }
+                                        ]}
+                                        icon="fat fa-circle-check"
+                                    />
                                 </div>
                             </div>
                         </div>

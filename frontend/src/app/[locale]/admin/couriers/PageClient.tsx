@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface Courier {
     id: number;
@@ -426,17 +427,18 @@ export function PageClient() {
 
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Araç Tipi</label>
-                                                <div className="relative">
-                                                    <i className="fat fa-truck-pickup absolute left-4 top-3.5 text-orange-600/50"></i>
-                                                    <select value={formData.vehicleType} onChange={(e) => setFormData({ ...formData, vehicleType: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-orange-500/10 outline-none transition-shadow appearance-none">
-                                                        <option value="">Araç Seçin</option>
-                                                        <option value="Motosiklet">Motosiklet</option>
-                                                        <option value="Bisiklet">Bisiklet</option>
-                                                        <option value="Araba">Araba</option>
-                                                        <option value="Yaya">Yaya</option>
-                                                    </select>
-                                                </div>
+                                                <SearchableSelect
+                                                    value={formData.vehicleType}
+                                                    onChange={(val) => setFormData({ ...formData, vehicleType: val })}
+                                                    options={[
+                                                        { value: '', label: 'Araç Seçin' },
+                                                        { value: 'Motosiklet', label: 'Motosiklet' },
+                                                        { value: 'Bisiklet', label: 'Bisiklet' },
+                                                        { value: 'Araba', label: 'Araba' },
+                                                        { value: 'Yaya', label: 'Yaya' }
+                                                    ]}
+                                                    icon="fat fa-truck-pickup"
+                                                />
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Plaka</label>
@@ -448,15 +450,16 @@ export function PageClient() {
                                         </div>
 
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Çalışma Durumu</label>
-                                            <div className="relative">
-                                                <i className="fat fa-traffic-light absolute left-4 top-3.5 text-orange-600/50"></i>
-                                                <select value={formData.courierStatus} onChange={(e) => setFormData({ ...formData, courierStatus: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-orange-500/10 outline-none transition-shadow appearance-none">
-                                                    <option value="AVAILABLE">MÜSAİT</option>
-                                                    <option value="BUSY">MEŞGUL</option>
-                                                    <option value="OFF_DUTY">MESAİ DIŞI</option>
-                                                </select>
-                                            </div>
+                                                <SearchableSelect
+                                                    value={formData.courierStatus}
+                                                    onChange={(val) => setFormData({ ...formData, courierStatus: val })}
+                                                    options={[
+                                                        { value: 'AVAILABLE', label: 'MÜSAİT' },
+                                                        { value: 'BUSY', label: 'MEŞGUL' },
+                                                        { value: 'OFF_DUTY', label: 'MESAİ DIŞI' }
+                                                    ]}
+                                                    icon="fat fa-traffic-light"
+                                                />
                                         </div>
                                     </div>
 
@@ -502,15 +505,19 @@ export function PageClient() {
                                                 <div className="space-y-4">
                                                     <div>
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 px-1">Doküman Tipi</label>
-                                                        <select value={newDocType} onChange={e => setNewDocType(e.target.value)} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-emerald-500/10 outline-none transition-shadow text-sm">
-                                                            <option value="">Seçiniz...</option>
-                                                            <option value="Sürücü Belgesi (Ehliyet)">Sürücü Belgesi (Ehliyet)</option>
-                                                            <option value="Kimlik Fotokopisi">Kimlik Fotokopisi</option>
-                                                            <option value="İş Sözleşmesi">İş Sözleşmesi</option>
-                                                            <option value="Sabıka Kaydı (Adli Sicil)">Sabıka Kaydı (Adli Sicil)</option>
-                                                            <option value="İkametgah">İkametgah</option>
-                                                            <option value="Diğer">Diğer</option>
-                                                        </select>
+                                                        <SearchableSelect
+                                                            value={newDocType}
+                                                            onChange={val => setNewDocType(val)}
+                                                            options={[
+                                                                { value: '', label: 'Seçiniz...' },
+                                                                { value: 'Sürücü Belgesi (Ehliyet)', label: 'Sürücü Belgesi (Ehliyet)' },
+                                                                { value: 'Kimlik Fotokopisi', label: 'Kimlik Fotokopisi' },
+                                                                { value: 'İş Sözleşmesi', label: 'İş Sözleşmesi' },
+                                                                { value: 'Sabıka Kaydı (Adli Sicil)', label: 'Sabıka Kaydı (Adli Sicil)' },
+                                                                { value: 'İkametgah', label: 'İkametgah' },
+                                                                { value: 'Diğer', label: 'Diğer' }
+                                                            ]}
+                                                        />
                                                     </div>
                                                     <div>
                                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 px-1">Dosya / Görsel</label>

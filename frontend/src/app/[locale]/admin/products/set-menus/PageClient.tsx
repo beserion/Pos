@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface SetGroupItem {
     id?: number;
@@ -339,15 +340,15 @@ export function PageClient() {
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 px-1">Kategori</label>
-                                        <div className="relative">
-                                            <i className="fat fa-folder-tree absolute left-4 top-4 text-teal-500/50 dark:text-teal-400/50"></i>
-                                            <select value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-slate-200 font-bold focus:ring-4 focus:ring-teal-500/10 outline-none appearance-none">
-                                                <option value="">Kategori Seçin</option>
-                                                {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-                                            </select>
-                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 dark:text-slate-500 pointer-events-none"></i>
-                                        </div>
+                                            <SearchableSelect
+                                                value={formData.category}
+                                                onChange={val => setFormData({ ...formData, category: val })}
+                                                options={[
+                                                    { value: '', label: 'Kategori Seçin' },
+                                                    ...departments.map(d => ({ value: d.name, label: d.name }))
+                                                ]}
+                                                icon="fat fa-folder-tree"
+                                            />
                                     </div>
                                     <div>
                                         <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 px-1">Fiyat (Satış Bedeli)</label>
@@ -377,16 +378,16 @@ export function PageClient() {
                                 <div className="space-y-6">
                                     <div className="bg-slate-50 dark:bg-slate-900/30 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 flex flex-col items-start gap-4">
                                         <div className="w-full max-w-sm">
-                                            <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 px-1">SET TİPİ</label>
-                                            <div className="relative">
-                                                <i className="fat fa-code-merge absolute left-4 top-4 text-indigo-500/50 dark:text-indigo-400/50"></i>
-                                                <select value={formData.setMenu?.setType} onChange={e => setFormData({ ...formData, setMenu: { ...formData.setMenu!, setType: e.target.value } })} className="w-full pl-12 pr-4 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-indigo-600 dark:text-indigo-400 font-black focus:ring-4 focus:ring-indigo-500/10 outline-none appearance-none uppercase transform-wide">
-                                                    <option value="FIX">Fiks Menü (Sabit İçerik)</option>
-                                                    <option value="CHOICE">Seçmeli Menü</option>
-                                                    <option value="BUNDLE">Kampanya / Bundle Set</option>
-                                                </select>
-                                                <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 dark:text-slate-500 pointer-events-none"></i>
-                                            </div>
+                                            <SearchableSelect
+                                                value={formData.setMenu?.setType || 'FIX'}
+                                                onChange={val => setFormData({ ...formData, setMenu: { ...formData.setMenu!, setType: val } })}
+                                                options={[
+                                                    { value: 'FIX', label: 'Fiks Menü (Sabit İçerik)' },
+                                                    { value: 'CHOICE', label: 'Seçmeli Menü' },
+                                                    { value: 'BUNDLE', label: 'Kampanya / Bundle Set' }
+                                                ]}
+                                                icon="fat fa-code-merge"
+                                            />
                                         </div>
                                         <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Fiks Menüler seçim ekranı açmadan doğrudan sepete varsayılanları koyar. Seçmeli Menüler ise zorunlu grupların (Min Seçim) tamamlanmasını bekler.</p>
                                     </div>
@@ -439,24 +440,18 @@ export function PageClient() {
                                                 {/* Group Body: Add Item */}
                                                 <div className="p-6">
                                                     <div className="flex gap-3 mb-6">
-                                                        <div className="relative flex-1">
-                                                            <i className="fat fa-leaf text-teal-500/50 absolute left-4 top-3.5"></i>
-                                                            <select id={`pSelect-${gIdx}`} className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-bold focus:ring-4 focus:ring-teal-500/10 outline-none appearance-none text-sm">
-                                                                <option value="">Ürün Ekle...</option>
-                                                                {allProducts.filter(p => !p.isSet).map(p => <option key={p.id} value={p.id}>{p.name} (₺{p.price})</option>)}
-                                                            </select>
-                                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none text-xs"></i>
-                                                        </div>
-                                                        <button
-                                                            onClick={() => {
-                                                                const sel = document.getElementById(`pSelect-${gIdx}`) as HTMLSelectElement;
-                                                                if (sel.value) addItemToGroup(gIdx, Number(sel.value));
-                                                                sel.value = "";
+                                                        <SearchableSelect
+                                                            value={""}
+                                                            onChange={val => {
+                                                                if (val) addItemToGroup(gIdx, Number(val));
                                                             }}
-                                                            className="px-6 py-3 bg-teal-50 text-teal-600 font-black text-xs uppercase tracking-widest border border-teal-200 rounded-xl hover:bg-teal-100 transition-all flex items-center gap-2"
-                                                        >
-                                                            <i className="fat fa-plus"></i> Ekle
-                                                        </button>
+                                                            options={[
+                                                                { value: '', label: 'Ürün Ekle...' },
+                                                                ...allProducts.filter(p => !p.isSet).map(p => ({ value: p.id.toString(), label: `${p.name} (₺${p.price})` }))
+                                                            ]}
+                                                            icon="fat fa-leaf"
+                                                        />
+
                                                     </div>
 
                                                     {/* Items Table */}

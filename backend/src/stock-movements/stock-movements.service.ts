@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { StockMovement } from './stock-movement.entity';
@@ -18,6 +18,8 @@ export class StockMovementsService {
     private parametersService: ParametersService,
     private stocksService: StocksService,
   ) {}
+
+  private readonly logger = new Logger(StockMovementsService.name);
 
   // ─── Core Movement Creation ──────────────────────────
 
@@ -45,15 +47,77 @@ export class StockMovementsService {
     const repo = manager ? manager.getRepository(StockMovement) : this.movementRepository;
 
     const card = await this.stockCardsService.findOne(data.stockCardId);
-    const unitCost = data.unitCost ?? Number(card.costPerBaseUnit);
-    const totalCost = data.quantity * unitCost;
-
     const qtyBefore = Number(card.currentStock);
 
-    // Update the stock card's currentStock
-    const newStockLevel = await this.stockCardsService.adjustStock(
+    let unitCostValue = data.unitCost ?? Number(card.costPerBaseUnit);
+
+    // ─── Cost Calculation Logic ──────────────────────────
+    const costs: {
+      lastPurchasePrice?: number;
+      averageCost?: number;
+      costPerBaseUnit?: number;
+    } = {};
+
+    if (data.quantity > 0 && data.unitCost != null && !isNaN(data.unitCost)) {
+      const method =
+        (await this.parametersService.getValue(
+          'stocks',
+          'stock_valuation_method',
+        )) || 'Ortalama Maliyet';
+
+      const newQty = Number(data.quantity); // Gelen miktar
+      const newUnitCost = Number(data.unitCost); // Gelen birim maliyet
+      const oldQtyRaw = Number(card.currentStock); // Eldeki miktar (string olabilir, Number garantiye alıyor)
+      const oldAvg = Number(card.averageCost) || 0; // Eldeki ortalama maliyet
+
+      // Negatif stok koruması: Eğer eski stok negatifse, maliyet bazını 0 kabul et.
+      const oldQty = Math.max(0, oldQtyRaw);
+
+      costs.lastPurchasePrice = newUnitCost;
+
+      // Ağırlıklı Ortalama Maliyet Formülü
+      const totalValue = oldQty * oldAvg + newQty * newUnitCost;
+      const totalQty = oldQty + newQty;
+
+      if (totalQty > 0) {
+        costs.averageCost = totalValue / totalQty;
+      } else {
+        costs.averageCost = newUnitCost;
+      }
+
+      // Güvenlik: NaN veya Infinity oluşursa yeni maliyeti baz al.
+      if (!isFinite(costs.averageCost) || isNaN(costs.averageCost)) {
+        costs.averageCost = newUnitCost;
+      }
+
+      // Değerleme yöntemine göre gösterge maliyetini eşitle (Birim Maliyet sütunu için)
+      if (method.trim() === 'Ortalama Maliyet') {
+        costs.costPerBaseUnit = costs.averageCost;
+      } else {
+        // FIFO/LIFO vb için şimdilik ortalama maliyet gösterimi mantıklıdır.
+        costs.costPerBaseUnit = costs.averageCost;
+      }
+
+      unitCostValue = newUnitCost;
+
+      this.logger.log(
+        `[CostCalc] Card: ${card.name} (#${data.stockCardId}), Method: ${method}, ` +
+          `OldQty: ${oldQtyRaw} (used: ${oldQty}), OldAvg: ${oldAvg}, ` +
+          `NewQty: ${newQty}, NewCost: ${newUnitCost} -> NewAvg: ${costs.averageCost}`,
+      );
+    } else if (data.quantity > 0) {
+      this.logger.warn(
+        `[CostCalc] Skipping cost for card ${data.stockCardId} because unitCost is invalid: ${data.unitCost}`,
+      );
+    }
+
+    const totalCost = data.quantity * unitCostValue;
+
+    // Update the stock card's currentStock and costs atomically
+    const newStockLevel = await this.stockCardsService.updateStockAndCost(
       data.stockCardId,
       data.quantity,
+      costs,
       manager,
     );
 
@@ -65,7 +129,7 @@ export class StockMovementsService {
       qtyOut: data.qtyOut ?? (data.quantity < 0 ? Math.abs(data.quantity) : 0),
       quantity: data.quantity,
       unit: data.unit || card.baseUnit,
-      unitCost,
+      unitCost: unitCostValue,
       totalCost,
       qtyBefore,
       stockAfter: newStockLevel,

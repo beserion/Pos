@@ -6,6 +6,7 @@ import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import axios from 'axios';
 import { showSwal, toastSwal } from '../utils/swal';
 import { useLocale } from 'next-intl';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface Employee {
     id: number;
@@ -375,16 +376,19 @@ export function PageClient() {
                                 </div>
                                 <div>
                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Kurye Ata</label>
-                                    <div className="relative">
-                                        <i className="fat fa-user-helmet-safety absolute left-4 top-3.5 text-amber-600/50"></i>
-                                        <select value={formData.courierId} onChange={(e) => setFormData({ ...formData, courierId: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-amber-500/10 outline-none transition-shadow appearance-none">
-                                            <option value="">Seçilmedi</option>
-                                            {couriers.map(c => (
-                                                <option key={c.id} value={c.id} disabled={c.courierStatus === 'OFF_DUTY'}>
-                                                    {c.firstName} {c.lastName} ({c.vehicleType || 'Araçsız'}) - {c.courierStatus === 'AVAILABLE' ? 'MÜSAİT' : c.courierStatus === 'BUSY' ? 'MEŞGUL' : 'MESAİ DIŞI'}
-                                                </option>
-                                            ))}
-                                        </select>
+                                    <div className="-m-2 w-full">
+                                        <SearchableSelect
+                                            value={formData.courierId}
+                                            onChange={(val) => setFormData({ ...formData, courierId: val.toString() })}
+                                            options={[
+                                                { value: '', label: 'Seçilmedi' },
+                                                ...couriers.map(c => ({
+                                                    value: c.id.toString(),
+                                                    label: `${c.firstName} ${c.lastName} (${c.vehicleType || 'Araçsız'}) - ${c.courierStatus === 'AVAILABLE' ? 'MÜSAİT' : c.courierStatus === 'BUSY' ? 'MEŞGUL' : 'MESAİ DIŞI'}`,
+                                                    disabled: c.courierStatus === 'OFF_DUTY'
+                                                }))
+                                            ]}
+                                        />
                                     </div>
                                 </div>
                             </div>

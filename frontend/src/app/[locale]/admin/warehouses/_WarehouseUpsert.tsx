@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
+import SearchableSelect from '@/components/SearchableSelect';
 
 const MapContainer = dynamic(() => import('react-leaflet').then((mod) => mod.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then((mod) => mod.TileLayer), { ssr: false });
@@ -72,14 +73,17 @@ export default function WarehouseUpsert({ formData, setFormData, locations, onSa
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{tc('linkedBranch')}</label>
                                 <div className="relative">
-                                    <i className="fat fa-building absolute left-4 top-4 text-sky-500/50"></i>
-                                    <select value={formData.locationId || 0} onChange={(e) => setFormData({ ...formData, locationId: parseInt(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-sky-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                        <option value={0}>{tc('headquarters')}</option>
-                                        {locations.map((loc) => (
-                                            <option key={loc.id} value={loc.id}>{loc.name}</option>
-                                        ))}
-                                    </select>
-                                    <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                    <i className="fat fa-building absolute left-4 top-4 z-10 text-sky-500/50"></i>
+                                    <div className="w-full pl-8 -m-1.5 pt-0.5 pb-0.5">
+                                        <SearchableSelect
+                                            value={(formData.locationId || 0).toString()}
+                                            onChange={(val) => setFormData({ ...formData, locationId: parseInt(val) })}
+                                            options={[
+                                                { value: '0', label: tc('headquarters') },
+                                                ...locations.map((loc) => ({ value: loc.id.toString(), label: loc.name }))
+                                            ]}
+                                        />
+                                    </div>
                                 </div>
                             </div>
 

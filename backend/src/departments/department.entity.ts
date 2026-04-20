@@ -11,6 +11,9 @@ export class Department {
   @Column()
   name: string;
 
+  @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
+  imageUrl: string;
+
   @ManyToOne(() => Location, { nullable: true })
   location: Location;
 
@@ -46,6 +49,9 @@ export class Department {
 
   @Column({ default: true })
   isActive: boolean;
+
+  @Column({ default: 0 })
+  orderIndex: number;
 
   @CreateDateColumn()
   createdAt: Date;

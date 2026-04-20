@@ -84,6 +84,42 @@ function SortableProductCard({ product, onClick, isDesignMode }: { product: Prod
         </button>
     );
 }
+
+function SortableGroupCard({ id, name, imageUrl, iconClass, onClick, isDesignMode, colorClass }: { id: string | number, name: string, imageUrl?: string, iconClass: string, onClick: () => void, isDesignMode: boolean, colorClass: { bg: string, text: string, hover: string } }) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+        id: id,
+        disabled: !isDesignMode,
+        transition: {
+            duration: 250,
+            easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
+        }
+    });
+
+    const style = {
+        transform: CSS.Translate.toString(transform),
+        transition,
+        opacity: isDragging ? 0.3 : 1,
+    };
+
+    return (
+        <button
+            ref={setNodeRef}
+            style={style}
+            {...(isDesignMode ? { ...attributes, ...listeners } : {})}
+            onClick={() => { if (!isDesignMode) onClick(); }}
+            className={`group relative flex flex-col items-center justify-start p-2 pb-1 bg-white/70 dark:bg-slate-800/70 rounded-xl border-2 border-transparent shadow-sm hover:shadow-xl ${colorClass.hover} hover:-translate-y-1 transition-all duration-300 w-full ${isDesignMode ? 'cursor-grab active:cursor-grabbing ring-2 ring-indigo-500/50' : ''}`}
+        >
+            <div className={`w-full h-20 shrink-0 rounded-lg ${colorClass.bg} flex items-center justify-center mb-1 group-hover:scale-105 transition-transform overflow-hidden shadow-sm pointer-events-none`}>
+                {imageUrl ? (
+                    <img src={imageUrl.startsWith('http') || imageUrl.startsWith('data:') || imageUrl.startsWith('/') ? imageUrl : `/uploads/${imageUrl}`} alt={name} className="w-full h-full object-cover" />
+                ) : (
+                    <i className={`fat ${iconClass} text-2xl ${colorClass.text}`}></i>
+                )}
+            </div>
+            <span className="text-[10px] leading-tight mt-auto font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider truncate w-full px-1 pointer-events-none">{name}</span>
+        </button>
+    );
+}
 interface Modifier {
     id: number;
     name: string;
@@ -103,6 +139,7 @@ interface Product {
     stockGroup?: string;
     stockGroupId?: number;
     sku?: string;
+    posVisible?: boolean;
     linkedStockCard?: {
         stockGroup?: string;
         category?: string;
@@ -128,7 +165,7 @@ interface OrderItem { product: Product; quantity: number; note?: string; isWaiti
 interface ExistingOrder {
     id: number;
     totalAmount: number;
-    items: { id: number; product: { id: number; name: string; price: number; isSet?: boolean }; quantity: number; unitPrice: number; isPaid: boolean; isWaiting: boolean; isMarshed: boolean; parentItemId?: number; }[];
+    items: { id: number; product: { id: number; name: string; price: number; isSet?: boolean }; quantity: number; unitPrice: number; isPaid: boolean; isWaiting: boolean; isMarshed: boolean; parentItemId?: number; addedByName?: string; addedAt?: string; }[];
 }
 interface Zone { id: number; name: string; }
 interface Table { id: number; name: string; status: string; waiterName?: string; orderStartTime?: string; currentTotal?: number; isBillRequested?: boolean; zone: { id: number } }
@@ -144,6 +181,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     const [isDesignMode, setIsDesignMode] = useState(false);
     const [activeDragItem, setActiveDragItem] = useState<Product | null>(null);
+    const [activeDragGroup, setActiveDragGroup] = useState<any | null>(null);
 
     const [activeTab, setActiveTab] = useState<'tables' | 'menu'>('tables');
     const [products, setProducts] = useState<Product[]>([]);
@@ -277,19 +315,46 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     const handleDragStart = (event: DragStartEvent) => {
         const { active } = event;
-        const card = products.find(c => c.id === active.id);
-        if (card) setActiveDragItem(card);
+        const activeIdStr = String(active.id);
+        if (activeIdStr.startsWith('pg-')) {
+            const card = parentGroups.find(c => `pg-${c.id}` === activeIdStr);
+            if (card) setActiveDragGroup({ ...card, dragType: 'pg' });
+        } else if (activeIdStr.startsWith('dept-')) {
+            const card = departments.find(c => `dept-${c.id}` === activeIdStr);
+            if (card) setActiveDragGroup({ ...card, dragType: 'dept' });
+        } else {
+            const card = products.find(c => c.id === active.id);
+            if (card) setActiveDragItem(card);
+        }
     };
 
     const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event;
         setActiveDragItem(null);
+        setActiveDragGroup(null);
         if (over && active.id !== over.id) {
-            setProducts((items) => {
-                const oldIndex = items.findIndex(i => i.id === active.id);
-                const newIndex = items.findIndex(i => i.id === over.id);
-                return arrayMove(items, oldIndex, newIndex);
-            });
+            const activeIdStr = String(active.id);
+            const overIdStr = String(over.id);
+            
+            if (activeIdStr.startsWith('pg-') && overIdStr.startsWith('pg-')) {
+                setParentGroups((items) => {
+                    const oldIndex = items.findIndex(i => `pg-${i.id}` === activeIdStr);
+                    const newIndex = items.findIndex(i => `pg-${i.id}` === overIdStr);
+                    return arrayMove(items, oldIndex, newIndex);
+                });
+            } else if (activeIdStr.startsWith('dept-') && overIdStr.startsWith('dept-')) {
+                setDepartments((items) => {
+                    const oldIndex = items.findIndex(i => `dept-${i.id}` === activeIdStr);
+                    const newIndex = items.findIndex(i => `dept-${i.id}` === overIdStr);
+                    return arrayMove(items, oldIndex, newIndex);
+                });
+            } else if (!activeIdStr.startsWith('pg-') && !activeIdStr.startsWith('dept-') && !overIdStr.startsWith('pg-') && !overIdStr.startsWith('dept-')) {
+                setProducts((items) => {
+                    const oldIndex = items.findIndex(i => i.id === active.id);
+                    const newIndex = items.findIndex(i => i.id === over.id);
+                    return arrayMove(items, oldIndex, newIndex);
+                });
+            }
         }
     };
 
@@ -301,7 +366,32 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     const productTypeOptions = [{ id: 'all', name: 'Tümü' }, ...productTypes];
 
+    const filteredParentGroups = parentGroups.filter(pg => {
+        if (selectedProductTypeId === 'all') return true;
+        const pgDepts = departments.filter(d => d.parentGroupId === pg.id);
+        return products.some(p => p.productTypeId === selectedProductTypeId && pgDepts.some(d => d.name === p.category));
+    });
+
+    const filteredRootDepartments = departments.filter(d => !d.parentGroupId).filter(d => {
+        if (selectedProductTypeId === 'all') return true;
+        return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
+    });
+
+    const filteredSubDepartments = selectedParentGroupId ? departments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
+        if (selectedProductTypeId === 'all') return true;
+        return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
+    }) : [];
+
+    const sortableGroupIds = selectedParentGroupId 
+        ? filteredSubDepartments.map(d => `dept-${d.id}`)
+        : [
+            ...filteredParentGroups.map(pg => `pg-${pg.id}`),
+            ...filteredRootDepartments.map(d => `dept-${d.id}`)
+        ];
+
     const filteredProducts = products.filter(p => {
+        if (p.posVisible === false) return false;
+
         const matchesType = selectedProductTypeId === 'all' || p.productTypeId === selectedProductTypeId;
 
         // Arama yapılıyorsa hiyerarşiyi baypas et
@@ -975,70 +1065,70 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                                 }}
                                             >
                                                 {zoneTables.map(table => (
-                                            <div
-                                                key={table.id}
-                                                onClick={() => handleTableClick(table)}
-                                                className={`relative p-3 rounded-2xl cursor-pointer shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border flex flex-col items-center justify-center text-center gap-1 group ${selectedTable?.id === table.id ? 'ring-4 ring-emerald-500 scale-105 ' : ''}${table.isBillRequested
-                                                    ? 'bg-yellow-100 dark:bg-yellow-500/20 border-yellow-400 dark:border-yellow-500/50 shadow-yellow-500/30 animate-[pulse_3s_ease-in-out_infinite]'
-                                                    : table.status === 'BOŞ' ? 'bg-white/60 dark:bg-slate-800/60 border-white dark:border-slate-700' :
-                                                        table.status === 'REZERVE' ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30' :
-                                                            'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30'}`}
-                                            >
-                                                <div className="absolute top-4 right-4 animate-pulse">
-                                                    <div className={`w-2 h-2 rounded-full ${table.status === 'BOŞ' ? 'bg-emerald-500' : table.status === 'REZERVE' ? 'bg-amber-500' : 'bg-rose-500'}`}></div>
-                                                </div>
-
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        if (table.status !== 'DOLU') {
-                                                            toastSwal({ icon: 'warning', title: 'Boş masa transfer edilemez!' });
-                                                            return;
-                                                        }
-                                                        setTransferSourceTableId(table.id);
-                                                        setTransferSourceTableName(table.name);
-                                                        setTransferMode('TABLE_TRANSFER');
-                                                        setTransferSelectedItemIds([]);
-                                                        setIsTransferModalOpen(true);
-                                                    }}
-                                                    className="absolute top-3 left-3 w-8 h-8 flex items-center justify-center rounded-xl bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-500/30 transition-all opacity-70 hover:opacity-100"
-                                                    title="Masa Transfer"
-                                                >
-                                                    <i className="fat fa-arrow-right-arrow-left text-xs"></i>
-                                                </button>
-
-                                                <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">
-                                                    {table.status === 'BOŞ' ? '🪑' : table.status === 'REZERVE' ? '📅' : '🍽️'}
-                                                </span>
-                                                <span className="font-extrabold text-slate-800 dark:text-white uppercase tracking-tighter text-sm">{table.name}</span>
-
-                                                {table.status === 'DOLU' ? (
-                                                    <div className="flex flex-col items-center gap-1 mt-1 border-t border-rose-200 dark:border-rose-500/20 pt-3 w-full">
-                                                        <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">
-                                                            <span className="opacity-70">👤</span>
-                                                            <span>{table.waiterName || 'POS / Garson'}</span>
+                                                    <div
+                                                        key={table.id}
+                                                        onClick={() => handleTableClick(table)}
+                                                        className={`relative p-3 rounded-2xl cursor-pointer shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border flex flex-col items-center justify-center text-center gap-1 group ${selectedTable?.id === table.id ? 'ring-4 ring-emerald-500 scale-105 ' : ''}${table.isBillRequested
+                                                            ? 'bg-yellow-100 dark:bg-yellow-500/20 border-yellow-400 dark:border-yellow-500/50 shadow-yellow-500/30 animate-[pulse_3s_ease-in-out_infinite]'
+                                                            : table.status === 'BOŞ' ? 'bg-white/60 dark:bg-slate-800/60 border-white dark:border-slate-700' :
+                                                                table.status === 'REZERVE' ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30' :
+                                                                    'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30'}`}
+                                                    >
+                                                        <div className="absolute top-4 right-4 animate-pulse">
+                                                            <div className={`w-2 h-2 rounded-full ${table.status === 'BOŞ' ? 'bg-emerald-500' : table.status === 'REZERVE' ? 'bg-amber-500' : 'bg-rose-500'}`}></div>
                                                         </div>
-                                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
-                                                            <span className="opacity-70">🕒</span>
-                                                            <span>{formatTime(table.orderStartTime)}</span>
-                                                        </div>
-                                                        <div className="mt-2 text-rose-700 dark:text-rose-300 font-extrabold text-sm drop-shadow-sm">
-                                                            ₺{Number(table.currentTotal || 0).toFixed(2)}
-                                                        </div>
+
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (table.status !== 'DOLU') {
+                                                                    toastSwal({ icon: 'warning', title: 'Boş masa transfer edilemez!' });
+                                                                    return;
+                                                                }
+                                                                setTransferSourceTableId(table.id);
+                                                                setTransferSourceTableName(table.name);
+                                                                setTransferMode('TABLE_TRANSFER');
+                                                                setTransferSelectedItemIds([]);
+                                                                setIsTransferModalOpen(true);
+                                                            }}
+                                                            className="absolute top-3 left-3 w-8 h-8 flex items-center justify-center rounded-xl bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-500/30 transition-all opacity-70 hover:opacity-100"
+                                                            title="Masa Transfer"
+                                                        >
+                                                            <i className="fat fa-arrow-right-arrow-left text-xs"></i>
+                                                        </button>
+
+                                                        <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">
+                                                            {table.status === 'BOŞ' ? '🪑' : table.status === 'REZERVE' ? '📅' : '🍽️'}
+                                                        </span>
+                                                        <span className="font-extrabold text-slate-800 dark:text-white uppercase tracking-tighter text-sm">{table.name}</span>
+
+                                                        {table.status === 'DOLU' ? (
+                                                            <div className="flex flex-col items-center gap-1 mt-1 border-t border-rose-200 dark:border-rose-500/20 pt-3 w-full">
+                                                                <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">
+                                                                    <span className="opacity-70">👤</span>
+                                                                    <span>{table.waiterName || 'POS / Garson'}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                                                                    <span className="opacity-70">🕒</span>
+                                                                    <span>{formatTime(table.orderStartTime)}</span>
+                                                                </div>
+                                                                <div className="mt-2 text-rose-700 dark:text-rose-300 font-extrabold text-sm drop-shadow-sm">
+                                                                    ₺{Number(table.currentTotal || 0).toFixed(2)}
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex flex-col items-center gap-1 mt-1 opacity-40">
+                                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('emptyTable') || 'BOŞ MASA'}</span>
+                                                            </div>
+                                                        )}
+
+                                                        <span className={`text-[9px] font-black px-3 py-1 rounded-full mt-2 uppercase tracking-tighter ${table.status === 'BOŞ' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' :
+                                                            table.status === 'REZERVE' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' :
+                                                                'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'}`}>
+                                                            {table.status}
+                                                        </span>
                                                     </div>
-                                                ) : (
-                                                    <div className="flex flex-col items-center gap-1 mt-1 opacity-40">
-                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('emptyTable') || 'BOŞ MASA'}</span>
-                                                    </div>
-                                                )}
-
-                                                <span className={`text-[9px] font-black px-3 py-1 rounded-full mt-2 uppercase tracking-tighter ${table.status === 'BOŞ' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' :
-                                                    table.status === 'REZERVE' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' :
-                                                        'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'}`}>
-                                                    {table.status}
-                                                </span>
-                                            </div>
-                                        ))}
+                                                ))}
                                             </div>
                                         );
                                     })()}
@@ -1073,15 +1163,39 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                             {isDesignMode ? (
                                                 <button
                                                     onClick={async () => {
-                                                        const newOrder = filteredProducts.map((p, i) => ({ id: p.id, orderIndex: i }));
                                                         const token = localStorage.getItem('token') || Cookies.get('token');
                                                         try {
-                                                            const res = await fetch(`${API_URL}/products/reorder`, {
+                                                            const requests = [];
+                                                            if (!selectedDepartmentId && !selectedParentGroupId) {
+                                                                const pgOrder = parentGroups.map((pg, i) => ({ id: pg.id, orderIndex: i }));
+                                                                const deptOrder = departments.map((d, i) => ({ id: d.id, orderIndex: i }));
+                                                                requests.push(fetch(`${API_URL}/parent-groups/reorder`, {
+                                                                    method: 'PUT',
+                                                                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                                                    body: JSON.stringify({ items: pgOrder })
+                                                                }));
+                                                                requests.push(fetch(`${API_URL}/departments/reorder`, {
+                                                                    method: 'PUT',
+                                                                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                                                    body: JSON.stringify({ items: deptOrder })
+                                                                }));
+                                                            } else if (selectedParentGroupId && !selectedDepartmentId) {
+                                                                const deptOrder = departments.filter(d => d.parentGroupId === selectedParentGroupId).map((d, i) => ({ id: d.id, orderIndex: i }));
+                                                                requests.push(fetch(`${API_URL}/departments/reorder`, {
+                                                                    method: 'PUT',
+                                                                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                                                    body: JSON.stringify({ items: deptOrder })
+                                                                }));
+                                                            }
+                                                            const newOrder = filteredProducts.map((p, i) => ({ id: p.id, orderIndex: i }));
+                                                            requests.push(fetch(`${API_URL}/products/reorder`, {
                                                                 method: 'PUT',
                                                                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                                                                 body: JSON.stringify({ items: newOrder })
-                                                            });
-                                                            if (res.ok) {
+                                                            }));
+                                                            
+                                                            const results = await Promise.all(requests);
+                                                            if (results.every(r => r.ok)) {
                                                                 toastSwal({ icon: 'success', title: 'Tasarım Kaydedildi' });
                                                             } else {
                                                                 throw new Error('Hata');
@@ -1090,6 +1204,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                                             toastSwal({ icon: 'error', title: 'Hata', text: 'Sıra kaydedilemedi.' });
                                                         }
                                                         setIsDesignMode(false);
+                                                        fetchData();
                                                     }}
                                                     className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 bg-indigo-500 text-white shadow-md shadow-indigo-500/30 animate-pulse"
                                                 >
@@ -1180,61 +1295,80 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                 <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-280px)]">
                                     {!selectedDepartmentId && !searchQuery ? (
                                         <>
-                                            <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-4 mb-6 mt-2 p-2">
-                                                {/* SEVİYE 1: Üst Gruplar ve Bağımsız Kategoriler */}
-                                                {!selectedParentGroupId && (
-                                                    <>
-                                                        {parentGroups.filter(pg => {
-                                                            if (selectedProductTypeId === 'all') return true;
-                                                            const pgDepts = departments.filter(d => d.parentGroupId === pg.id);
-                                                            return products.some(p => p.productTypeId === selectedProductTypeId && pgDepts.some(d => d.name === p.category));
-                                                        }).map(pg => (
-                                                            <button
-                                                                key={`pg-${pg.id}`}
-                                                                onClick={() => setSelectedParentGroupId(pg.id)}
-                                                                className="group relative flex flex-col items-center justify-center p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-indigo-400 hover:-translate-y-1 transition-all duration-300"
-                                                            >
-                                                                <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
-                                                                    <i className="fat fa-folder-tree text-lg text-indigo-500"></i>
-                                                                </div>
-                                                                <span className="text-[10px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{pg.name}</span>
-                                                            </button>
-                                                        ))}
-                                                        {departments.filter(d => !d.parentGroupId).filter(d => {
-                                                            if (selectedProductTypeId === 'all') return true;
-                                                            return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
-                                                        }).map(d => (
-                                                            <button
-                                                                key={`dept-${d.id}`}
-                                                                onClick={() => setSelectedDepartmentId(d.id)}
-                                                                className="group relative flex flex-col items-center justify-center p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-400 hover:-translate-y-1 transition-all duration-300"
-                                                            >
-                                                                <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
-                                                                    <i className="fat fa-tags text-lg text-emerald-500"></i>
-                                                                </div>
-                                                                <span className="text-[10px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
-                                                            </button>
-                                                        ))}
-                                                    </>
-                                                )}
+                                            <DndContext
+                                                sensors={sensors}
+                                                collisionDetection={closestCenter}
+                                                onDragStart={handleDragStart}
+                                                onDragEnd={handleDragEnd}
+                                                onDragCancel={() => { setActiveDragItem(null); setActiveDragGroup(null); }}
+                                            >
+                                                <SortableContext items={sortableGroupIds} strategy={rectSortingStrategy}>
+                                                    <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-4 mb-6 mt-2 p-2 relative">
+                                                        {/* SEVİYE 1: Üst Gruplar ve Bağımsız Kategoriler */}
+                                                        {!selectedParentGroupId && (
+                                                            <>
+                                                                {filteredParentGroups.map(pg => (
+                                                                    <SortableGroupCard
+                                                                        key={`pg-${pg.id}`}
+                                                                        id={`pg-${pg.id}`}
+                                                                        name={pg.name}
+                                                                        iconClass="fa-folder-tree"
+                                                                        imageUrl={(pg as any).imageUrl}
+                                                                        colorClass={{ bg: "bg-indigo-100 dark:bg-indigo-900/30", text: "text-indigo-500", hover: "hover:border-indigo-400" }}
+                                                                        onClick={() => setSelectedParentGroupId(pg.id)}
+                                                                        isDesignMode={isDesignMode}
+                                                                    />
+                                                                ))}
+                                                                {filteredRootDepartments.map(d => (
+                                                                    <SortableGroupCard
+                                                                        key={`dept-${d.id}`}
+                                                                        id={`dept-${d.id}`}
+                                                                        name={d.name}
+                                                                        iconClass="fa-tags"
+                                                                        imageUrl={(d as any).imageUrl}
+                                                                        colorClass={{ bg: "bg-emerald-100 dark:bg-emerald-900/30", text: "text-emerald-500", hover: "hover:border-emerald-400" }}
+                                                                        onClick={() => setSelectedDepartmentId(d.id)}
+                                                                        isDesignMode={isDesignMode}
+                                                                    />
+                                                                ))}
+                                                            </>
+                                                        )}
 
-                                                {/* SEVİYE 2: Seçili Üst Gruba Bağlı Kategoriler */}
-                                                {selectedParentGroupId && departments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
-                                                    if (selectedProductTypeId === 'all') return true;
-                                                    return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
-                                                }).map(d => (
-                                                    <button
-                                                        key={`dept-sub-${d.id}`}
-                                                        onClick={() => setSelectedDepartmentId(d.id)}
-                                                        className="group relative flex flex-col items-center justify-center p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-400 hover:-translate-y-1 transition-all duration-300"
-                                                    >
-                                                        <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
-                                                            <i className="fat fa-tags text-lg text-emerald-500"></i>
-                                                        </div>
-                                                        <span className="text-[10px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
-                                                    </button>
-                                                ))}
-                                            </div>
+                                                        {/* SEVİYE 2: Seçili Üst Gruba Bağlı Kategoriler */}
+                                                        {selectedParentGroupId && filteredSubDepartments.map(d => (
+                                                            <SortableGroupCard
+                                                                key={`dept-${d.id}`}
+                                                                id={`dept-${d.id}`}
+                                                                name={d.name}
+                                                                iconClass="fa-tags"
+                                                                imageUrl={(d as any).imageUrl}
+                                                                colorClass={{ bg: "bg-emerald-100 dark:bg-emerald-900/30", text: "text-emerald-500", hover: "hover:border-emerald-400" }}
+                                                                onClick={() => setSelectedDepartmentId(d.id)}
+                                                                isDesignMode={isDesignMode}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </SortableContext>
+                                                <DragOverlay dropAnimation={{
+                                                    duration: 300,
+                                                    easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+                                                    sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.4' } } })
+                                                }}>
+                                                    {activeDragGroup ? (
+                                                        <SortableGroupCard
+                                                            id={activeDragGroup.dragType === 'pg' ? `pg-${activeDragGroup.id}` : `dept-${activeDragGroup.id}`}
+                                                            name={activeDragGroup.name}
+                                                            imageUrl={activeDragGroup.imageUrl}
+                                                            iconClass={activeDragGroup.dragType === 'pg' ? "fa-folder-tree" : "fa-tags"}
+                                                            colorClass={activeDragGroup.dragType === 'pg' 
+                                                                ? { bg: "bg-indigo-100 dark:bg-indigo-900/30", text: "text-indigo-500", hover: "hover:border-indigo-400" } 
+                                                                : { bg: "bg-emerald-100 dark:bg-emerald-900/30", text: "text-emerald-500", hover: "hover:border-emerald-400" }}
+                                                            onClick={() => {}}
+                                                            isDesignMode={true}
+                                                        />
+                                                    ) : null}
+                                                </DragOverlay>
+                                            </DndContext>
 
                                             {/* Kategorisi olmayan ürünleri doğrudan göster */}
                                             {filteredProducts.length > 0 && (
@@ -1442,34 +1576,47 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                                 ₺{(item.quantity * item.unitPrice).toFixed(2)}
                                             </span>
                                         </div>
-                                        <div className="flex justify-between items-center mt-1">
-                                            <span className="text-xs font-bold text-slate-400">Birim: ₺{item.unitPrice} &nbsp;·&nbsp; {item.quantity} Adet</span>
-                                            {!item.isPaid && (
-                                                <button
-                                                    onClick={() => {
-                                                        setTransferSourceSubCheckId(item.saleId);
-                                                        setTransferSelectedItemIds([item.id]);
-                                                        setTransferMode('ITEM_TO_TABLE');
-                                                        setIsTransferModalOpen(true);
-                                                    }}
-                                                    className="text-[10px] font-black uppercase text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 border border-yellow-200 dark:border-yellow-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1"
-                                                >
-                                                    <i className="fat fa-arrow-right-arrow-left text-[10px]"></i> Transfer
-                                                </button>
-                                            )}
-                                            {params.mars_enabled && item.isWaiting && !item.isMarshed && (
-                                                <button
-                                                    onClick={() => marsItem(item.id)}
-                                                    className="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400 hover:text-rose-700 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 border border-rose-200 dark:border-rose-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1 animate-pulse"
-                                                >
-                                                    <i className="fat fa-fire-flame-curved text-[10px]"></i> MARŞ VER
-                                                </button>
-                                            )}
-                                            {params.mars_enabled && item.isWaiting && item.isMarshed && (
-                                                <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-full flex items-center gap-1">
-                                                    <i className="fat fa-check text-[10px]"></i> Marshed
-                                                </span>
-                                            )}
+                                        <div className="flex justify-between items-end mt-1">
+                                            <div className="flex flex-col items-start gap-0.5">
+                                                <span className="text-xs font-bold text-slate-400">Birim: ₺{item.unitPrice} &nbsp;·&nbsp; {item.quantity} Adet</span>
+                                                {item.addedByName && (
+                                                    <span className="text-[9px] font-bold text-rose-500 dark:text-rose-400 flex items-center gap-1">
+                                                        <i className="fat fa-user-clock text-[8px]"></i>
+                                                        {item.addedByName}
+                                                        {item.addedAt && (
+                                                            <span className="opacity-75">· {formatTime(item.addedAt)}</span>
+                                                        )}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {!item.isPaid && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setTransferSourceSubCheckId(item.saleId);
+                                                            setTransferSelectedItemIds([item.id]);
+                                                            setTransferMode('ITEM_TO_TABLE');
+                                                            setIsTransferModalOpen(true);
+                                                        }}
+                                                        className="text-[10px] font-black uppercase text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 border border-yellow-200 dark:border-yellow-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1"
+                                                    >
+                                                        <i className="fat fa-arrow-right-arrow-left text-[10px]"></i> Transfer
+                                                    </button>
+                                                )}
+                                                {params.mars_enabled && item.isWaiting && !item.isMarshed && (
+                                                    <button
+                                                        onClick={() => marsItem(item.id)}
+                                                        className="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400 hover:text-rose-700 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 border border-rose-200 dark:border-rose-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1 animate-pulse"
+                                                    >
+                                                        <i className="fat fa-fire-flame-curved text-[10px]"></i> MARŞ VER
+                                                    </button>
+                                                )}
+                                                {params.mars_enabled && item.isWaiting && item.isMarshed && (
+                                                    <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-full flex items-center gap-1">
+                                                        <i className="fat fa-check text-[10px]"></i> Marshed
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                     {/* Sub-items for existing orders */}

@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useLocale } from 'next-intl';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface OutputProfile {
     id: number;
@@ -15,6 +16,7 @@ interface ParentGroup {
     id: number;
     name: string;
     description?: string;
+    imageUrl?: string;
 }
 
 interface Department {
@@ -28,6 +30,7 @@ interface Department {
     autoOpenExtraPopup?: boolean;
     parentGroupId?: number | null;
     parentGroup?: ParentGroup;
+    imageUrl?: string;
 }
 
 const EMPTY_PARENT_GROUP: ParentGroup = { id: 0, name: '' };
@@ -107,9 +110,9 @@ export function PageClient() {
             const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
             const h = { headers: { Authorization: `Bearer ${user.token}` } };
             if (parentGroupFormData.id === 0) {
-                await axios.post(`${API}/parent-groups`, { name: parentGroupFormData.name, description: parentGroupFormData.description }, h);
+                await axios.post(`${API}/parent-groups`, { name: parentGroupFormData.name, description: parentGroupFormData.description, imageUrl: parentGroupFormData.imageUrl }, h);
             } else {
-                await axios.put(`${API}/parent-groups/${parentGroupFormData.id}`, { name: parentGroupFormData.name, description: parentGroupFormData.description }, h);
+                await axios.put(`${API}/parent-groups/${parentGroupFormData.id}`, { name: parentGroupFormData.name, description: parentGroupFormData.description, imageUrl: parentGroupFormData.imageUrl }, h);
             }
             toastSwal({ title: 'Başarılı', text: 'Üst grup kaydedildi', icon: 'success' });
             setParentGroupFormData({ ...EMPTY_PARENT_GROUP });
@@ -132,6 +135,32 @@ export function PageClient() {
     const openModal = (item?: Department) => {
         setFormData(item ? { ...item } : { ...EMPTY });
         setIsModalOpen(true);
+    };
+
+    const handleParentGroupImageUpload = (file: File) => {
+        if (!file.type.startsWith('image/')) {
+            showSwal({ title: 'Hata', text: 'Sadece görsel dosyaları yüklenebilir.', icon: 'error' });
+            return;
+        }
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64String = reader.result as string;
+            setParentGroupFormData(prev => ({ ...prev, imageUrl: base64String }));
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleDepartmentImageUpload = (file: File) => {
+        if (!file.type.startsWith('image/')) {
+            showSwal({ title: 'Hata', text: 'Sadece görsel dosyaları yüklenebilir.', icon: 'error' });
+            return;
+        }
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64String = reader.result as string;
+            setFormData(prev => ({ ...prev, imageUrl: base64String }));
+        };
+        reader.readAsDataURL(file);
     };
 
     return (
@@ -188,9 +217,13 @@ export function PageClient() {
                                             <td className="px-6 py-4"><span className="text-sm font-black text-slate-400">#{item.id}</span></td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-2xl flex items-center justify-center bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500">
-                                                        <i className="fat fa-layer-group text-lg"></i>
-                                                    </div>
+                                                    {item.imageUrl ? (
+                                                        <img src={item.imageUrl.startsWith('http') || item.imageUrl.startsWith('data:') || item.imageUrl.startsWith('/') ? item.imageUrl : `/uploads/${item.imageUrl}`} alt={item.name} className="w-10 h-10 rounded-2xl object-cover border border-slate-100 dark:border-slate-700 shadow-sm" />
+                                                    ) : (
+                                                        <div className="w-10 h-10 shrink-0 rounded-2xl flex items-center justify-center bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500">
+                                                            <i className="fat fa-layer-group text-lg"></i>
+                                                        </div>
+                                                    )}
                                                     <span className="font-black text-slate-800 dark:text-white text-lg">{item.name}</span>
                                                 </div>
                                             </td>
@@ -264,23 +297,47 @@ export function PageClient() {
                         </div>
 
                         <div className="p-8 flex-1 overflow-auto">
-                            <form onSubmit={handleParentGroupSave} className="flex gap-4 mb-8">
-                                <div className="flex-1">
-                                    <input
-                                        type="text"
-                                        required
-                                        placeholder="Üst Grup Adı (Örn: Gıda, İçecek...)"
-                                        value={parentGroupFormData.name}
-                                        onChange={(e) => setParentGroupFormData({ ...parentGroupFormData, name: e.target.value })}
-                                        className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-amber-500/10 outline-none transition-shadow"
-                                    />
+                            <form onSubmit={handleParentGroupSave} className="mb-8">
+                                <div className="flex gap-4 items-start mb-4">
+                                    <div className="flex-1">
+                                        <input
+                                            type="text"
+                                            required
+                                            placeholder="Üst Grup Adı (Örn: Gıda, İçecek...)"
+                                            value={parentGroupFormData.name}
+                                            onChange={(e) => setParentGroupFormData({ ...parentGroupFormData, name: e.target.value })}
+                                            className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-amber-500/10 outline-none transition-shadow"
+                                        />
+                                    </div>
+                                    <button type="submit" className="px-6 py-3 bg-amber-600 hover:bg-amber-500 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2">
+                                        {parentGroupFormData.id ? 'GÜNCELLE' : 'EKLE'}
+                                    </button>
+                                    {parentGroupFormData.id !== 0 && (
+                                        <button type="button" onClick={() => setParentGroupFormData({ ...EMPTY_PARENT_GROUP })} className="px-4 py-3 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl">&times;</button>
+                                    )}
                                 </div>
-                                <button type="submit" className="px-6 py-3 bg-amber-600 hover:bg-amber-500 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2">
-                                    {parentGroupFormData.id ? 'GÜNCELLE' : 'EKLE'}
-                                </button>
-                                {parentGroupFormData.id !== 0 && (
-                                    <button type="button" onClick={() => setParentGroupFormData({ ...EMPTY_PARENT_GROUP })} className="px-4 py-3 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl">&times;</button>
-                                )}
+                                <div>
+                                    <div className="flex gap-3">
+                                        <div className="relative flex-1">
+                                            <i className="fat fa-image absolute left-4 top-3.5 text-amber-500/50"></i>
+                                            <input type="text" value={parentGroupFormData.imageUrl || ''} onChange={(e) => setParentGroupFormData({ ...parentGroupFormData, imageUrl: e.target.value })} className="w-full pl-10 pr-10 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white text-sm font-bold outline-none" placeholder="Görsel (https:// veya Base64)..." />
+                                            {parentGroupFormData.imageUrl && (
+                                                <button type="button" onClick={() => setParentGroupFormData({ ...parentGroupFormData, imageUrl: '' })} className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded bg-slate-200 text-slate-500 hover:bg-red-100 hover:text-red-500">
+                                                    <i className="fat fa-trash-can text-[10px]"></i>
+                                                </button>
+                                            )}
+                                        </div>
+                                        <button type="button" onClick={() => document.getElementById('pgImageUploadInput')?.click()} className="px-4 py-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-black uppercase rounded-xl flex items-center gap-2">
+                                            <i className="fat fa-upload"></i> Seç
+                                        </button>
+                                        <input type="file" id="pgImageUploadInput" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleParentGroupImageUpload(e.target.files[0])} />
+                                    </div>
+                                    {parentGroupFormData.imageUrl && (
+                                        <div className="mt-3 bg-white dark:bg-slate-800 p-2 rounded-xl inline-block border border-slate-200 dark:border-slate-700 shadow-sm">
+                                            <img src={parentGroupFormData.imageUrl.startsWith('http') || parentGroupFormData.imageUrl.startsWith('data:') || parentGroupFormData.imageUrl.startsWith('/') ? parentGroupFormData.imageUrl : `/uploads/${parentGroupFormData.imageUrl}`} alt="preview" className="h-16 w-32 object-cover rounded-lg" />
+                                        </div>
+                                    )}
+                                </div>
                             </form>
 
                             <div className="space-y-3">
@@ -334,17 +391,16 @@ export function PageClient() {
                                     <label className="block text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-2 px-1">ÜST GRUP</label>
                                     <div className="relative">
                                         <i className="fat fa-folder-tree absolute left-4 top-4 text-indigo-500/50"></i>
-                                        <select
-                                            value={formData.parentGroupId || ''}
-                                            onChange={(e) => setFormData({ ...formData, parentGroupId: e.target.value ? parseInt(e.target.value) : null })}
-                                            className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow appearance-none cursor-pointer"
-                                        >
-                                            <option value="">Üst Grup Yok</option>
-                                            {parentGroups.map(pg => (
-                                                <option key={pg.id} value={pg.id}>{pg.name}</option>
-                                            ))}
-                                        </select>
-                                        <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                        <div className="-m-2 w-full">
+                                            <SearchableSelect
+                                                value={formData.parentGroupId || ''}
+                                                onChange={(val) => setFormData({ ...formData, parentGroupId: val ? parseInt(val.toString()) : null })}
+                                                options={[
+                                                    { value: '', label: 'Üst Grup Yok' },
+                                                    ...parentGroups.map(pg => ({ value: pg.id, label: pg.name }))
+                                                ]}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -356,17 +412,16 @@ export function PageClient() {
                                 </label>
                                 <div className="relative">
                                     <i className="fat fa-cubes-stacked absolute left-4 top-4 text-amber-500/50"></i>
-                                    <select
-                                        value={formData.extraDepartmentId || ''}
-                                        onChange={(e) => setFormData({ ...formData, extraDepartmentId: e.target.value ? parseInt(e.target.value) : null })}
-                                        className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-amber-500/10 outline-none transition-shadow appearance-none cursor-pointer"
-                                    >
-                                        <option value="">Ekstra Grup Yok</option>
-                                        {items.filter(d => d.id !== formData.id).map(d => (
-                                            <option key={d.id} value={d.id}>{d.name}</option>
-                                        ))}
-                                    </select>
-                                    <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                    <div className="-m-2 w-full">
+                                        <SearchableSelect
+                                            value={formData.extraDepartmentId || ''}
+                                            onChange={(val) => setFormData({ ...formData, extraDepartmentId: val ? parseInt(val.toString()) : null })}
+                                            options={[
+                                                { value: '', label: 'Ekstra Grup Yok' },
+                                                ...items.filter(d => d.id !== formData.id).map(d => ({ value: d.id, label: d.name }))
+                                            ]}
+                                        />
+                                    </div>
                                 </div>
                                 <p className="text-[10px] text-slate-500 mt-1.5 px-1">Bu kategoriden ürün seçildiğinde, ekstra olarak önerilecek ürün grubu.</p>
                             </div>
@@ -397,13 +452,43 @@ export function PageClient() {
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">STOK GRUBU OVERRIDE PROFİLİ</label>
                                 <div className="relative">
                                     <i className="fat fa-route absolute left-4 top-4 text-indigo-500/50"></i>
-                                    <select value={formData.outputProfileId || ''} onChange={(e) => setFormData({ ...formData, outputProfileId: e.target.value ? parseInt(e.target.value) : 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                        <option value="">Cins Profilini Kullan (Geçersiz Kılma)</option>
-                                        {outputProfiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                    </select>
-                                    <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                    <div className="-m-2 w-full">
+                                        <SearchableSelect
+                                            value={formData.outputProfileId || ''}
+                                            onChange={(val) => setFormData({ ...formData, outputProfileId: val ? parseInt(val.toString()) : null })}
+                                            options={[
+                                                { value: '', label: 'Cins Profilini Kullan (Geçersiz Kılma)' },
+                                                ...outputProfiles.map(p => ({ value: p.id, label: p.name }))
+                                            ]}
+                                        />
+                                    </div>
                                 </div>
                                 <p className="text-[10px] text-slate-500 mt-2 px-1">Profil seçilirse, bu kategoriye ait tüm ürünler o profile yönlendirilir.</p>
+                            </div>
+
+                            {/* Kategori Görseli */}
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">KATEGORİ GÖRSELİ (Base64)</label>
+                                <div className="flex gap-3">
+                                    <div className="relative flex-1">
+                                        <i className="fat fa-image absolute left-4 top-4 text-indigo-500/50"></i>
+                                        <input type="text" value={formData.imageUrl || ''} onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })} className="w-full pl-12 pr-10 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow" placeholder="https:// veya Base64..." />
+                                        {formData.imageUrl && (
+                                            <button type="button" onClick={() => setFormData({ ...formData, imageUrl: '' })} className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded bg-slate-200 text-slate-500 hover:bg-red-100 hover:text-red-500 transition-all">
+                                                <i className="fat fa-trash-can text-[10px]"></i>
+                                            </button>
+                                        )}
+                                    </div>
+                                    <button type="button" onClick={() => document.getElementById('deptImageUploadInput')?.click()} className="px-5 py-3.5 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-indigo-100 transition-all flex items-center justify-center gap-2">
+                                        <i className="fat fa-upload text-lg"></i> Seç
+                                    </button>
+                                    <input type="file" id="deptImageUploadInput" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleDepartmentImageUpload(e.target.files[0])} />
+                                </div>
+                                {formData.imageUrl && (
+                                    <div className="mt-4 bg-white dark:bg-slate-800 p-2 rounded-2xl inline-block border border-slate-200 dark:border-slate-700 shadow-sm">
+                                        <img src={formData.imageUrl.startsWith('http') || formData.imageUrl.startsWith('data:') || formData.imageUrl.startsWith('/') ? formData.imageUrl : `/uploads/${formData.imageUrl}`} alt="preview" className="h-20 w-32 object-cover rounded-xl" />
+                                    </div>
+                                )}
                             </div>
 
                             {/* Aktif switch */}
@@ -415,6 +500,7 @@ export function PageClient() {
                                     <span className={`text-sm font-black ${formData.isActive ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500'}`}>Kategori Aktif</span>
                                 </div>
                             </div>
+
 
                             <div className="flex justify-between pt-4">
                                 <button type="button" onClick={() => setIsModalOpen(false)} className="w-[140px] py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">

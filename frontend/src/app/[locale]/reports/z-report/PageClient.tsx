@@ -6,6 +6,7 @@ import { useLocale } from 'next-intl';
 import Cookies from 'js-cookie';
 import axios from 'axios';
 import { ArrowLeft, FileText, Printer, AlertCircle, CheckCircle, Loader } from 'lucide-react';
+import SearchableSelect from '@/components/SearchableSelect';
 
 const API_URL = (typeof window !== 'undefined' && window.location.hostname === 'localhost')
   ? 'http://localhost:3050'
@@ -102,12 +103,17 @@ export function PageClient() {
                 </div>
                 <div>
                   <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2">Kasa</label>
-                  <select value={cashRegisterId} onChange={e => setCashRegisterId(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500">
-                    {cashRegisters.length === 0 && <option value="">Kasa bulunamadı</option>}
-                    {cashRegisters.map((cr: any) => (
-                      <option key={cr.id} value={cr.id}>{cr.name}</option>
-                    ))}
-                  </select>
+                  <div className="-m-2 w-full">
+                    <SearchableSelect
+                        value={cashRegisterId}
+                        onChange={(val) => setCashRegisterId(val.toString())}
+                        options={
+                            cashRegisters.length === 0 
+                                ? [{ value: '', label: 'Kasa bulunamadı' }]
+                                : cashRegisters.map((cr: any) => ({ value: cr.id.toString(), label: cr.name }))
+                        }
+                    />
+                  </div>
                 </div>
                 {error && <div className="flex items-center gap-2 p-3 bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 rounded-xl text-sm font-medium"><AlertCircle size={16} />{error}</div>}
                 {success && <div className="flex items-center gap-2 p-3 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded-xl text-sm font-medium"><CheckCircle size={16} />{success}</div>}

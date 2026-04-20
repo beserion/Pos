@@ -169,13 +169,38 @@ export class StockCardsService {
   }
 
   /**
-   * Update stock quantity directly (used by StockMovementsService)
+   * Update stock quantity directly (used for reversals and simple adjustments)
    */
   async adjustStock(id: number, delta: number, manager?: any): Promise<number> {
     const repo = manager ? manager.getRepository(StockCard) : this.stockCardRepository;
     const card = await repo.findOne({ where: { id } });
     if (!card) throw new NotFoundException(`StockCard with ID ${id} not found`);
     card.currentStock = Number(card.currentStock) + delta;
+    await repo.save(card);
+    return Number(card.currentStock);
+  }
+
+  /**
+   * Update stock quantity and costs (used by StockMovementsService)
+   */
+  async updateStockAndCost(
+    id: number,
+    delta: number,
+    costs: { lastPurchasePrice?: number; averageCost?: number; costPerBaseUnit?: number },
+    manager?: any,
+  ): Promise<number> {
+    const repo = manager ? manager.getRepository(StockCard) : this.stockCardRepository;
+    const card = await repo.findOne({ where: { id } });
+    if (!card) throw new NotFoundException(`StockCard with ID ${id} not found`);
+
+    card.currentStock = Number(card.currentStock) + delta;
+    if (costs.lastPurchasePrice !== undefined && !isNaN(costs.lastPurchasePrice))
+      card.lastPurchasePrice = costs.lastPurchasePrice;
+    if (costs.averageCost !== undefined && !isNaN(costs.averageCost))
+      card.averageCost = costs.averageCost;
+    if (costs.costPerBaseUnit !== undefined && !isNaN(costs.costPerBaseUnit))
+      card.costPerBaseUnit = costs.costPerBaseUnit;
+
     await repo.save(card);
     return Number(card.currentStock);
   }

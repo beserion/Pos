@@ -9,12 +9,14 @@ import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
 import { JwtStrategy } from './jwt.strategy';
 import { AlertsModule } from '../alerts/alerts.module';
+import { LicenseModule } from '../license/license.module';
 
 @Module({
   imports: [
     forwardRef(() => UsersModule),
     PassportModule,
     AlertsModule,
+    LicenseModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { Invoice } from './invoice.entity';
 import { InvoiceItem } from './invoice-item.entity';
 import { StockMovementsService } from '../stock-movements/stock-movements.service';
+import { StockCardsService } from '../stock-cards/stock-cards.service';
 import { FinanceService } from '../finance/finance.service';
 
 @Injectable()
@@ -18,6 +19,7 @@ export class InvoicesService {
     @InjectRepository(InvoiceItem)
     private invoiceItemRepository: Repository<InvoiceItem>,
     private readonly stockMovementsService: StockMovementsService,
+    private readonly stockCardsService: StockCardsService,
     private readonly financeService: FinanceService,
   ) {}
 
@@ -209,16 +211,31 @@ export class InvoicesService {
     if (invoiceType === 'PURCHASE' || invoiceType === 'SALE') {
       for (const item of data.items) {
         if (item.stockCardId) {
+          const baseQty = await this.stockCardsService.convertToBaseUnit(
+            item.stockCardId,
+            item.unit || 'adet',
+            Number(item.quantity),
+          );
+
+          const quantityMultiplier = baseQty / Number(item.quantity || 1);
+          const baseUnitCost =
+            quantityMultiplier !== 0
+              ? Number(item.unitPrice) / quantityMultiplier
+              : Number(item.unitPrice);
+
           await this.stockMovementsService.createMovement({
             stockCardId: item.stockCardId,
-            movementType: invoiceType === 'PURCHASE' ? 'purchase' : 'direct_sale_consumption',
-            quantity: invoiceType === 'PURCHASE' ? Number(item.quantity) : -Number(item.quantity),
+            movementType:
+              invoiceType === 'PURCHASE' ? 'purchase' : 'direct_sale_consumption',
+            quantity: invoiceType === 'PURCHASE' ? baseQty : -baseQty,
             unit: item.unit || 'adet',
-            unitCost: Number(item.unitPrice),
+            unitCost: baseUnitCost,
             sourceType: 'INVOICE',
             sourceId: savedInvoice.id,
             documentNo: savedInvoice.invoiceNumber,
-            description: `${invoiceType === 'PURCHASE' ? 'Alış' : 'Satış'} Faturası: ${savedInvoice.invoiceNumber}`,
+            description: `${
+              invoiceType === 'PURCHASE' ? 'Alış' : 'Satış'
+            } Faturası: ${savedInvoice.invoiceNumber}`,
           });
         }
       }
@@ -244,7 +261,7 @@ export class InvoicesService {
 
   async seedTestData() {
     const manager = this.invoiceRepository.manager;
-    const partners = await manager.query(`SELECT TOP 1 id FROM partner WHERE isDeleted = 0 OR isDeleted IS NULL`);
+    const partners = await manager.query(`SELECT TOP 1 id FROM partners WHERE isDeleted = 0 OR isDeleted IS NULL`);
     const partnerId = partners && partners.length > 0 ? partners[0].id : null;
 
     const cards = await manager.query(`SELECT TOP 2 id, costPrice FROM stock_cards WHERE isDeleted = 0 OR isDeleted IS NULL`);
@@ -420,16 +437,31 @@ export class InvoicesService {
     if (existing.status !== 'CANCELLED') {
       for (const item of items) {
         if (item.stockCardId) {
+          const baseQty = await this.stockCardsService.convertToBaseUnit(
+            item.stockCardId,
+            item.unit || 'adet',
+            Number(item.quantity),
+          );
+
+          const quantityMultiplier = baseQty / Number(item.quantity || 1);
+          const baseUnitCost =
+            quantityMultiplier !== 0
+              ? Number(item.unitPrice) / quantityMultiplier
+              : Number(item.unitPrice);
+
           await this.stockMovementsService.createMovement({
             stockCardId: item.stockCardId,
-            movementType: newType === 'PURCHASE' ? 'purchase' : 'direct_sale_consumption',
-            quantity: newType === 'PURCHASE' ? Number(item.quantity) : -Number(item.quantity),
+            movementType:
+              newType === 'PURCHASE' ? 'purchase' : 'direct_sale_consumption',
+            quantity: newType === 'PURCHASE' ? baseQty : -baseQty,
             unit: item.unit || 'adet',
-            unitCost: Number(item.unitPrice),
+            unitCost: baseUnitCost,
             sourceType: 'INVOICE',
             sourceId: existing.id,
             documentNo: existing.invoiceNumber,
-            description: `Fatura Güncelleme (${newType === 'PURCHASE' ? 'Alış' : 'Satış'}): ${existing.invoiceNumber}`,
+            description: `Fatura Güncelleme (${
+              newType === 'PURCHASE' ? 'Alış' : 'Satış'
+            }): ${existing.invoiceNumber}`,
           });
         }
       }

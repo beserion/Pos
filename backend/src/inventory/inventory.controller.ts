@@ -16,7 +16,7 @@ import { FeatureGuard } from '../auth/feature.guard';
 
 @Controller('inventory-sessions')
 @UseGuards(JwtAuthGuard, FeatureGuard)
-@RequireFeature('inventory_system')
+@RequireFeature('recipe_system')
 export class InventoryController {
   constructor(private readonly service: InventoryService) {}
 

@@ -4,6 +4,7 @@ import {
   PrimaryGeneratedColumn,
   ManyToOne,
   JoinColumn,
+  CreateDateColumn,
 } from 'typeorm';
 import { Sale } from './sale.entity';
 
@@ -94,4 +95,11 @@ export class SaleItem {
 
   @Column({ type: 'nvarchar', length: 200, nullable: true })
   variationName: string;
+
+  // --- Kim Ekledi / Ne Zaman ---
+  @Column({ nullable: true })
+  addedByUserId: number;
+
+  @CreateDateColumn({ nullable: true })
+  addedAt: Date;
 }

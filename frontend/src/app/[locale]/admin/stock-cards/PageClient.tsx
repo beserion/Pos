@@ -6,6 +6,7 @@ import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface StockCard {
     id: number;
@@ -299,17 +300,20 @@ export function PageClient() {
                                 className="w-64 pl-12 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold text-sm focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow"
                             />
                         </div>
-                        <div className="relative">
-                            <i className="fat fa-filter absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                            <select
-                                value={selectedCategory}
-                                onChange={(e) => setSelectedCategory(e.target.value)}
-                                className="w-48 pl-12 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold text-sm focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer"
-                            >
-                                <option value="">Tüm Kategoriler</option>
-                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                            <i className="fat fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                        <div className="relative w-48">
+                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10 pointer-events-none">
+                                <i className="fat fa-filter"></i>
+                            </div>
+                            <div className="-m-2 w-[calc(100%+16px)]">
+                                <SearchableSelect
+                                    value={selectedCategory}
+                                    onChange={(val) => setSelectedCategory(val.toString())}
+                                    options={[
+                                        { value: '', label: 'Tüm Kategoriler' },
+                                        ...categories.map(c => ({ value: c, label: c }))
+                                    ]}
+                                />
+                            </div>
                         </div>
                         <button onClick={() => openModal()} className="px-6 py-3 bg-teal-50 dark:bg-teal-500/10 border border-teal-200 dark:border-teal-500/20 text-teal-600 dark:text-teal-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-teal-100 dark:hover:bg-teal-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
                             <i className="fat fa-plus-circle text-lg"></i> Yeni Kart
@@ -536,13 +540,19 @@ export function PageClient() {
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Stok Doğası (Nature)</label>
-                                                <select value={formData.stockNature} onChange={(e) => setFormData({ ...formData, stockNature: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                    <option value="raw_material">Hammadde</option>
-                                                    <option value="traded_good">Ticari Mal (Al-Sat)</option>
-                                                    <option value="semi_finished">Yarı Mamul</option>
-                                                    <option value="consumable">Sarf Malzeme</option>
-                                                    <option value="packaging">Paketleme</option>
-                                                </select>
+                                                <div className="-m-2 w-full">
+                                                    <SearchableSelect
+                                                        value={formData.stockNature}
+                                                        onChange={(val) => setFormData({ ...formData, stockNature: val.toString() })}
+                                                        options={[
+                                                            { value: 'raw_material', label: 'Hammadde' },
+                                                            { value: 'traded_good', label: 'Ticari Mal (Al-Sat)' },
+                                                            { value: 'semi_finished', label: 'Yarı Mamul' },
+                                                            { value: 'consumable', label: 'Sarf Malzeme' },
+                                                            { value: 'packaging', label: 'Paketleme' }
+                                                        ]}
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
 
@@ -573,9 +583,13 @@ export function PageClient() {
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1 text-teal-600">Takip Birimi (Base Unit)</label>
-                                                <select value={formData.baseUnit} onChange={(e) => setFormData({ ...formData, baseUnit: e.target.value })} className="w-full px-4 py-3.5 bg-teal-50 dark:bg-teal-900/10 border border-teal-200 dark:border-teal-700 rounded-2xl text-teal-800 dark:text-teal-300 font-bold outline-none appearance-none">
-                                                    {unitOptions.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
-                                                </select>
+                                                <div className="-m-2 w-full">
+                                                    <SearchableSelect
+                                                        value={formData.baseUnit}
+                                                        onChange={(val) => setFormData({ ...formData, baseUnit: val.toString() })}
+                                                        options={unitOptions}
+                                                    />
+                                                </div>
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Alış Birimi (Purchase Unit)</label>
@@ -601,10 +615,16 @@ export function PageClient() {
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Varsayılan Depo</label>
-                                                <select value={formData.warehouseId || ''} onChange={(e) => setFormData({ ...formData, warehouseId: e.target.value ? parseInt(e.target.value) : null })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold appearance-none">
-                                                    <option value="">Depo Seçilmedi</option>
-                                                    {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                                                </select>
+                                                <div className="-m-2 w-full">
+                                                    <SearchableSelect
+                                                        value={formData.warehouseId || ''}
+                                                        onChange={(val) => setFormData({ ...formData, warehouseId: val ? parseInt(val.toString()) : null })}
+                                                        options={[
+                                                            { value: '', label: 'Depo Seçilmedi' },
+                                                            ...warehouses.map(w => ({ value: w.id, label: w.name }))
+                                                        ]}
+                                                    />
+                                                </div>
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">SKU / Referans No</label>
@@ -638,10 +658,16 @@ export function PageClient() {
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1 text-blue-600">Yazıcı Profili</label>
-                                                <select value={formData.outputProfileId || ''} onChange={(e) => setFormData({ ...formData, outputProfileId: e.target.value ? parseInt(e.target.value) : null })} className="w-full px-4 py-3.5 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-700 rounded-2xl text-blue-800 dark:text-blue-300 font-bold appearance-none">
-                                                    <option value="">Profil Seçilmedi (Varsayılan)</option>
-                                                    {outputProfiles.map(op => <option key={op.id} value={op.id}>{op.name}</option>)}
-                                                </select>
+                                                <div className="-m-2 w-full">
+                                                    <SearchableSelect
+                                                        value={formData.outputProfileId || ''}
+                                                        onChange={(val) => setFormData({ ...formData, outputProfileId: val ? parseInt(val.toString()) : null })}
+                                                        options={[
+                                                            { value: '', label: 'Profil Seçilmedi (Varsayılan)' },
+                                                            ...outputProfiles.map(op => ({ value: op.id, label: op.name }))
+                                                        ]}
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
 

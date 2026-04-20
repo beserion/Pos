@@ -6,6 +6,7 @@ import axios from 'axios';
 import Cookies from 'js-cookie';
 import { useLocale, useTranslations } from 'next-intl';
 import { showSwal, toastSwal } from '../utils/swal';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface Partner {
     id: number;
@@ -427,10 +428,16 @@ export function PageClient() {
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tür</label>
-                                    <select value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value })} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-purple-500/20 outline-none">
-                                        <option value="CUSTOMER">Müşteri</option>
-                                        <option value="SUPPLIER">Tedarikçi</option>
-                                    </select>
+                                    <div className="-m-2 w-full">
+                                        <SearchableSelect
+                                            value={formData.type}
+                                            onChange={(val) => setFormData({ ...formData, type: val.toString() })}
+                                            options={[
+                                                { value: 'CUSTOMER', label: 'Müşteri' },
+                                                { value: 'SUPPLIER', label: 'Tedarikçi' }
+                                            ]}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
