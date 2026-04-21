@@ -142,6 +142,18 @@ export function PageClient() {
     };
 
     const handleSave = async () => {
+        const perms = user?.extraPermissions || [];
+        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+
+        if (formData.type === 'INCOME' && !isSuperAdmin && !perms.includes('OP:FINANCE_COLLECT_CURRENT_ACCOUNT')) {
+            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Gelir/Tahsilat ekleme yetkiniz bulunmamaktadır.' });
+            return;
+        }
+        if (formData.type === 'EXPENSE' && !isSuperAdmin && !perms.includes('OP:FINANCE_PAY_CURRENT_ACCOUNT')) {
+            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Gider/Ödeme ekleme yetkiniz bulunmamaktadır.' });
+            return;
+        }
+
         if (!formData.description.trim() || formData.amount <= 0) {
             showSwal({ icon: 'warning', title: 'Uyarı', text: 'Tutar ve açıklama zorunludur.' });
             return;
@@ -164,6 +176,17 @@ export function PageClient() {
     };
 
     const handleDelete = async (id: number) => {
+        const perms = user?.extraPermissions || [];
+        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+        
+        // Deleting a finance record is a sensitive operation, checking either collect or pay permission 
+        // as a minimum or we could define a specific delete permission if needed. 
+        // For now, let's use the collect/pay ones as high-level markers.
+        if (!isSuperAdmin && !perms.includes('OP:FINANCE_COLLECT_CURRENT_ACCOUNT') && !perms.includes('OP:FINANCE_PAY_CURRENT_ACCOUNT')) {
+            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Finans hareketi silme yetkiniz bulunmamaktadır.' });
+            return;
+        }
+
         const result = await showSwal({
             icon: 'warning', title: 'Silmek istediğinize emin misiniz?',
             text: 'Bu işlem geri alınamaz!', showCancelButton: true,

@@ -35,7 +35,7 @@ interface Product {
 }
 
 interface Zone { id: number; name: string; }
-interface Table { id: number; name: string; status: string; waiterName?: string; orderStartTime?: string; currentTotal?: number; isBillRequested?: boolean; zone: { id: number } }
+interface Table { id: number; name: string; status: string; waiterName?: string; waiterId?: number; orderStartTime?: string; currentTotal?: number; isBillRequested?: boolean; zone: { id: number } }
 
 export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { onSwitchToQuickSale: () => void, onSwitchToTakeOrder: () => void }) {
     const { user, loading } = useAuth();
@@ -96,24 +96,64 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
         setMounted(true);
     }, []);
 
-    // Apply zone filtering whenever allZones or activeCashRegister changes
+    // Apply zone filtering whenever allZones, activeCashRegister or user permissions change
+    const perms = (user as any)?.extraPermissions || [];
+    const isSuperAdmin = (user as any)?.role?.name?.toUpperCase() === 'ADMIN' || (user as any)?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+    const canCancelSale = isSuperAdmin || perms.includes('OP:CAN_CANCEL_SALE');
+    const canPrintBill = isSuperAdmin || perms.includes('OP:CAN_PRINT_BILL');
+    const canReprintBill = isSuperAdmin || perms.includes('OP:REPRINT_BILL');
+    const canDiscount = isSuperAdmin || perms.includes('OP:CAN_DISCOUNT');
+    const canDiscountAfterBill = isSuperAdmin || perms.includes('OP:DISCOUNT_AFTER_BILL');
+
     useEffect(() => {
         if (!allZones || allZones.length === 0) return;
 
-        let filteredZones = allZones;
-        if (activeCashRegister && activeCashRegister.zoneIds && activeCashRegister.zoneIds.length > 0) {
-            const allowedZoneIds = activeCashRegister.zoneIds.map((id: any) => Number(id));
-            filteredZones = allZones.filter((z: any) => allowedZoneIds.includes(z.id));
+        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+        
+        if (isSuperAdmin) {
+            setZones(allZones);
+            if (selectedZone === null) setSelectedZone('ALL');
+            return;
         }
-        setZones(filteredZones);
 
-        // Auto-select zone based on filtered results
-        if (filteredZones.length === 1) {
-            setSelectedZone(filteredZones[0].id);
-        } else if (filteredZones.length > 0 && selectedZone === null) {
-            setSelectedZone('ALL');
+        // Kasa (Terminal) bazlı salon kısıtlaması varsa uygula
+        if (activeCashRegister && activeCashRegister.zoneIds && activeCashRegister.zoneIds.length > 0) {
+            const terminalZoneIds = activeCashRegister.zoneIds.map((id: any) => Number(id));
+            const filteredZones = allZones.filter((z: any) => terminalZoneIds.includes(z.id));
+            setZones(filteredZones);
+
+            if (filteredZones.length === 1) {
+                setSelectedZone(filteredZones[0].id);
+            } else if (selectedZone === null) {
+                setSelectedZone('ALL');
+            }
+        } else {
+            // Kasa kısıtlaması yoksa Context'ten gelen (zaten yetkilere göre filtrelenmiş) listeyi kullan
+            setZones(allZones);
+            if (selectedZone === null) setSelectedZone('ALL');
         }
-    }, [activeCashRegister, allZones]);
+    }, [activeCashRegister, allZones, user]);
+
+    // Auto-load activeCashRegister if user has an assigned cashRegisterId but it's not set
+    useEffect(() => {
+        const loadAssignedCashRegister = async () => {
+            if (user?.cashRegisterId && !activeCashRegister && mounted) {
+                try {
+                    const token = localStorage.getItem('token') || (user as any)?.token;
+                    const res = await fetch(`${API_URL}/cash-registers/${user.cashRegisterId}`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const register = await res.json();
+                        setActiveCashRegister(register);
+                    }
+                } catch (error) {
+                    console.error('Error loading assigned cash register:', error);
+                }
+            }
+        };
+        loadAssignedCashRegister();
+    }, [user, activeCashRegister, mounted, API_URL]);
 
     // Restore Sale Logic
     useEffect(() => {
@@ -351,6 +391,25 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
         }
 
         try {
+            const perms = user?.extraPermissions || [];
+            const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+
+            // 1. Yazdırma Yetkisi Kontrolü
+            if (!isSuperAdmin && !perms.includes('OP:CAN_PRINT_BILL')) {
+                toastSwal({ icon: 'warning', title: 'Adisyon yazdırma yetkiniz bulunmamaktadır.' });
+                return;
+            }
+
+            // 2. Tekrar Yazdırma Kontrolü
+            if (selectedTable?.isBillRequested && !isSuperAdmin && !perms.includes('OP:REPRINT_BILL')) {
+                showSwal({
+                    icon: 'warning',
+                    title: 'Yetki Yetersiz',
+                    text: 'Bu adisyon zaten daha önce yazdırılmıştır. Tekrar yazdırma yetkiniz bulunmamaktadır.'
+                });
+                return;
+            }
+
             const token = (user as any)?.token || localStorage.getItem('token');
             for (const check of checksToPrint) {
                 const checkItems = check.items.map((i: any) => ({
@@ -370,7 +429,8 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     paymentMethod: 'HESAP',
                     subType: 'BILL',
                     cashRegisterId: activeCashRegister?.id || null,
-                    tableName: selectedTable?.name || null
+                    tableName: selectedTable?.name || null,
+                    isAlreadyPrinted: selectedTable?.isBillRequested || false // Backend'e bildir
                 };
 
                 const res = await fetch(`${API_URL}/printers/print-receipt`, {
@@ -380,13 +440,14 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 });
                 
                 if (!res.ok) {
-                   toastSwal({ icon: 'error', title: 'Yazdırma Başarısız' });
+                   const errorData = await res.json();
+                   toastSwal({ icon: 'error', title: errorData.message || 'Yazdırma Başarısız' });
                    return;
                 }
             }
             
             // Masanın hesap istendi durumunu backend üzerinde güncelle
-            if (selectedTable && selectedTable.id) {
+            if (selectedTable && selectedTable.id && !selectedTable.isBillRequested) {
                 await fetch(`${API_URL}/tables/${selectedTable.id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -404,7 +465,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
         }
     };
 
-    const handleCheckout = async (paymentMethod: 'Nakit' | 'Kart' | 'Parçalı', cashAmount: number = 0, creditAmount: number = 0) => {
+    const handleCheckout = async (paymentMethod: 'Nakit' | 'Kart' | 'Parçalı' | 'Cari', cashAmount: number = 0, creditAmount: number = 0, partnerId?: number) => {
         if (!selectedTable) return;
 
         const itemsToPay = cart.filter(item => selectedPosItems.includes(item.itemId || item.product.id));
@@ -429,12 +490,17 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
         try {
             const token = localStorage.getItem('token') || (user as any)?.token;
-            const finalPMethod = paymentMethod === 'Nakit' ? 'CASH' : paymentMethod === 'Kart' ? 'CREDIT_CARD' : 'SPLIT';
+            const finalPMethod = 
+                paymentMethod === 'Nakit' ? 'CASH' : 
+                paymentMethod === 'Kart' ? 'CREDIT_CARD' : 
+                paymentMethod === 'Cari' ? 'PARTNER' :
+                'SPLIT';
 
             const saleData = {
                 userId: user?.id || user?.sub,
                 tableId: selectedTable.id,
                 tableName: selectedTable.name,
+                partnerId: partnerId || (paymentMethod === 'Cari' ? partnerId : undefined),
                 paymentMethod: finalPMethod,
                 paidAmountCash: paymentMethod === 'Nakit' ? selectedGrandTotal : cashAmount,
                 paidAmountCreditCard: paymentMethod === 'Kart' ? selectedGrandTotal : creditAmount,
@@ -537,6 +603,28 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     };
 
 
+    const handleTableSelection = (table: Table) => {
+        if (selectedTable?.id === table.id) {
+            setSelectedTable(null);
+            return;
+        }
+
+        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+        const ownTablesOnly = (user?.extraPermissions || []).includes('OWN_TABLES_ONLY');
+
+        if (!isSuperAdmin && ownTablesOnly && (table.status === 'DOLU' || table.status === 'REZERVE')) {
+            if (table.waiterId && table.waiterId !== user.id) {
+                showSwal({
+                    icon: 'warning',
+                    title: 'Erişim Engellendi',
+                    text: `Bu masa ${table.waiterName || 'başka bir personel'} üzerine açılmıştır. Sadece kendi masalarınıza bakabilirsiniz.`
+                });
+                return;
+            }
+        }
+        setSelectedTable(table);
+    };
+
     if (loading || !user) return null;
 
 
@@ -552,6 +640,11 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const grandTotal = Number((totalBeforeAdjustments + serviceFee - discount).toFixed(2));
 
     const handleCancelAdisyon = async () => {
+        if (!canCancelSale) {
+            toastSwal({ icon: 'warning', title: 'Adisyon iptal yetkiniz bulunmamaktadır.' });
+            return;
+        }
+
         if (!selectedTable) return;
         const result = await showSwal({
             title: 'Emin misiniz?',
@@ -693,7 +786,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                         .map(table => (
                             <div
                                 key={table.id}
-                                onClick={() => setSelectedTable(selectedTable?.id === table.id ? null : table)}
+                                onClick={() => handleTableSelection(table)}
                                 className={`relative p-6 rounded-[32px] cursor-pointer shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border flex flex-col items-center justify-center text-center gap-2 group 
                                     ${selectedTable?.id === table.id
                                         ? 'ring-4 ring-indigo-500 scale-105 bg-indigo-50/90 dark:bg-indigo-500/30 border-indigo-400/50 dark:border-indigo-400/50'
@@ -852,31 +945,33 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     </div>
 
 
-                    <div className="grid grid-cols-2 gap-3 mb-4 mt-2">
-                        <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">İndirim (₺)</label>
-                            <input
-                                type="number"
-                                value={discount || ''}
-                                onChange={(e) => setDiscount(Number(e.target.value) || 0)}
-                                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
-                                placeholder="0.00"
-                            />
+                    {(canDiscount && (!selectedTable?.isBillRequested || canDiscountAfterBill)) && (
+                        <div className="grid grid-cols-2 gap-3 mb-4 mt-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-2 tracking-widest">İndirim (₺)</label>
+                                <input
+                                    type="number"
+                                    value={discount || ''}
+                                    onChange={(e) => setDiscount(Number(e.target.value) || 0)}
+                                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-black dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                                    placeholder="0.00"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-2 tracking-widest">İndirim (%)</label>
+                                <input
+                                    type="number"
+                                    value={(totalBeforeAdjustments > 0 && discount > 0) ? Number((discount / totalBeforeAdjustments) * 100).toFixed(1).replace(/\.0$/, '') : ''}
+                                    onChange={(e) => {
+                                        const percent = Number(e.target.value) || 0;
+                                        setDiscount(Number((totalBeforeAdjustments * percent / 100).toFixed(2)));
+                                    }}
+                                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-black dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-mono"
+                                    placeholder="% 0"
+                                />
+                            </div>
                         </div>
-                        <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-2">İndirim (%)</label>
-                            <input
-                                type="number"
-                                value={(totalBeforeAdjustments > 0 && discount > 0) ? Number((discount / totalBeforeAdjustments) * 100).toFixed(1).replace(/\.0$/, '') : ''}
-                                onChange={(e) => {
-                                    const percent = Number(e.target.value) || 0;
-                                    setDiscount(Number((totalBeforeAdjustments * percent / 100).toFixed(2)));
-                                }}
-                                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
-                                placeholder="% 0"
-                            />
-                        </div>
-                    </div>
+                    )}
 
                     <div className="flex justify-between mb-6 border-t border-slate-200 dark:border-slate-700 pt-4">
                         <span className="text-lg font-bold text-slate-800 dark:text-slate-100">{t('total') || 'Genel Toplam'}</span>
@@ -893,6 +988,13 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                         </button>
                         <button
                             onClick={() => {
+                                const perms = user?.extraPermissions || [];
+                                const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+                                if (!isSuperAdmin && !perms.includes('OP:FINANCE_PARTIAL_PAYMENT')) {
+                                    showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Adisyon bölme yetkiniz bulunmamaktadır.' });
+                                    return;
+                                }
+
                                 if (!activeSubCheckId || activeSubCheckId === 'ALL') {
                                     toastSwal({ icon: 'warning', title: 'Lütfen bölünecek tek bir adisyon seçin!' });
                                     return;
@@ -918,6 +1020,19 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                         <button
                             onClick={() => {
                                 if (!selectedTable) return;
+
+                                // --- Yetki Kontrolü ---
+                                const perms = user?.extraPermissions || [];
+                                const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+                                if (!isSuperAdmin && !perms.includes('OP:CAN_TRANSFER')) {
+                                    showSwal({
+                                        icon: 'warning',
+                                        title: 'Yetki Yetersiz',
+                                        text: 'Masa veya ürün transferi yapma yetkiniz bulunmamaktadır.'
+                                    });
+                                    return;
+                                }
+
                                 // Seçili ürünler varsa ürün transferi, yoksa masa transferi
                                 const unpaidItems = cart.filter(i => !i.product.isQuickSale);
                                 if (activeSubCheckId && activeSubCheckId !== 'ALL') {
@@ -934,36 +1049,49 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                         >
                             <i className="fat fa-arrow-right-arrow-left mr-1"></i> Transfer
                         </button>
-                        <button
-                            onClick={handleCancelAdisyon}
-                            className="py-3 rounded-2xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-400 font-bold text-sm shadow-sm transition-all active:scale-[0.98]"
-                            disabled={!selectedTable || cart.length === 0}
-                        >
-                            <i className="fat fa-trash mr-1"></i> İptal
-                        </button>
+                        {canCancelSale && (
+                            <button
+                                onClick={handleCancelAdisyon}
+                                className="py-3 rounded-2xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-400 font-bold text-sm shadow-sm transition-all active:scale-[0.98]"
+                                disabled={!selectedTable || cart.length === 0}
+                            >
+                                <i className="fat fa-trash mr-1"></i> İptal
+                            </button>
+                        )}
+
                     </div>
                     <div className="flex gap-3 w-full">
-                        <button
-                            onClick={() => {
-                                if (allFlatChecks.length === 1) {
-                                    handlePrintBill([allFlatChecks[0].id]);
-                                } else {
-                                    setIsPrintBillModalOpen(true);
-                                    if (activeSubCheckId && activeSubCheckId !== 'ALL') {
-                                        setSelectedPrintCheckIds([activeSubCheckId as number]);
+                        {((!selectedTable?.isBillRequested && canPrintBill) || (selectedTable?.isBillRequested && canReprintBill)) && (
+                            <button
+                                onClick={() => {
+                                    if (allFlatChecks.length === 1) {
+                                        handlePrintBill([allFlatChecks[0].id]);
                                     } else {
-                                        setSelectedPrintCheckIds(allFlatChecks.map(c => c.id));
+                                        setIsPrintBillModalOpen(true);
+                                        if (activeSubCheckId && activeSubCheckId !== 'ALL') {
+                                            setSelectedPrintCheckIds([activeSubCheckId as number]);
+                                        } else {
+                                            setSelectedPrintCheckIds(allFlatChecks.map(c => c.id));
+                                        }
                                     }
-                                }
-                            }}
-                            className="w-1/4 py-4 rounded-2xl bg-orange-100 hover:bg-orange-200 dark:bg-orange-600/20 dark:hover:bg-orange-600/30 border border-orange-300 dark:border-orange-500/50 text-orange-600 dark:text-orange-500 font-bold text-xl shadow-lg shadow-orange-500/20 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center shrink-0"
-                            disabled={!selectedTable || allFlatChecks.length === 0}
-                            title="Hesap İste"
-                        >
-                            <i className="fat fa-receipt"></i>
-                        </button>
+                                }}
+                                className="w-1/4 py-4 rounded-2xl bg-orange-100 hover:bg-orange-200 dark:bg-orange-600/20 dark:hover:bg-orange-600/30 border border-orange-300 dark:border-orange-500/50 text-orange-600 dark:text-orange-500 font-bold text-xl shadow-lg shadow-orange-500/20 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center shrink-0"
+                                disabled={!selectedTable || allFlatChecks.length === 0}
+                                title={selectedTable?.isBillRequested ? "2. Kez Yazdır" : "Hesap İste"}
+                            >
+                                <i className={`fat ${selectedTable?.isBillRequested ? 'fa-repeat' : 'fa-receipt'}`}></i>
+                            </button>
+                        )}
+
                         <button
                             onClick={() => {
+                                const perms = user?.extraPermissions || [];
+                                const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+                                if (!isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_ACCOUNT')) {
+                                    showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Hesap kapatma ve ödeme alma yetkiniz bulunmamaktadır.' });
+                                    return;
+                                }
+
                                 setIsCheckoutOpen(true);
                                 setSelectedPosItems(cart.map(i => i.itemId || i.product.id));
                             }}
@@ -1067,28 +1195,107 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
                                     return (
                                         <>
-                                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
                                                 {canCash && (
                                                     <button
-                                                        onClick={() => handleCheckout('Nakit')}
-                                                        className="flex items-center justify-center gap-2 p-3 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/30 rounded-xl transition-all font-bold text-emerald-700 dark:text-emerald-400 active:scale-95"
+                                                        onClick={() => {
+                                                            const perms = user?.extraPermissions || [];
+                                                            const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+                                                            if (!isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_ACCOUNT')) {
+                                                                showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Nakit ödeme alma yetkiniz bulunmamaktadır.' });
+                                                                return;
+                                                            }
+                                                            handleCheckout('Nakit');
+                                                        }}
+                                                        className="flex flex-col items-center justify-center gap-1 p-3 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/30 rounded-xl transition-all font-bold text-emerald-700 dark:text-emerald-400 active:scale-95 text-xs"
                                                     >
                                                         <span className="text-xl">💵</span> {t('paymentCash') || 'Nakit'}
                                                     </button>
                                                 )}
                                                 {canCard && (
                                                     <button
-                                                        onClick={() => handleCheckout('Kart')}
-                                                        className="flex items-center justify-center gap-2 p-3 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 border border-blue-200 dark:border-blue-500/30 rounded-xl transition-all font-bold text-blue-700 dark:text-blue-400 active:scale-95"
+                                                        onClick={() => {
+                                                            const perms = user?.extraPermissions || [];
+                                                            const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+                                                            if (!isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_ACCOUNT')) {
+                                                                showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Kart ile ödeme alma yetkiniz bulunmamaktadır.' });
+                                                                return;
+                                                            }
+                                                            handleCheckout('Kart');
+                                                        }}
+                                                        className="flex flex-col items-center justify-center gap-1 p-3 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 border border-blue-200 dark:border-blue-500/30 rounded-xl transition-all font-bold text-blue-700 dark:text-blue-400 active:scale-95 text-xs"
                                                     >
                                                         <span className="text-xl">💳</span> {t('paymentCreditCard') || 'Kart'}
                                                     </button>
                                                 )}
+                                                {canCari && (
+                                                    <button
+                                                        onClick={async () => {
+                                                            const perms = user?.extraPermissions || [];
+                                                            const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+                                                            if (!isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_TO_CURRENT_ACCOUNT')) {
+                                                                showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Cariye hesap kapatma yetkiniz bulunmamaktadır.' });
+                                                                return;
+                                                            }
+                                                            
+                                                            const token = localStorage.getItem('token') || (user as any)?.token;
+                                                            let partners: any[] = [];
+                                                            try {
+                                                                const pRes = await fetch(`${API_URL}/partners`, { headers: { Authorization: `Bearer ${token}` } });
+                                                                if (pRes.ok) partners = await pRes.json();
+                                                            } catch (e) { console.error("Partners fetch failed", e); }
+
+                                                            const customerOptions = partners
+                                                                .filter(p => p.type === 'CUSTOMER')
+                                                                .reduce((acc, p) => ({ ...acc, [p.id]: p.name }), {});
+
+                                                            const Swal = (await import('sweetalert2')).default;
+                                                            const { value: partnerId } = await Swal.fire({
+                                                                title: 'Cari Seçimi',
+                                                                input: 'select',
+                                                                inputOptions: customerOptions,
+                                                                inputPlaceholder: 'Müşteri seçin...',
+                                                                showCancelButton: true,
+                                                                confirmButtonText: 'Cariye Kapat',
+                                                                cancelButtonText: 'Vazgeç',
+                                                                background: theme === 'dark' ? '#1e293b' : '#fff',
+                                                                color: theme === 'dark' ? '#fff' : '#1e293b',
+                                                            });
+
+                                                            if (partnerId) {
+                                                                handleCheckout('Cari' as any, 0, 0, parseInt(partnerId));
+                                                            }
+                                                        }}
+                                                        className="flex flex-col items-center justify-center gap-1 p-3 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 rounded-xl transition-all font-bold text-indigo-700 dark:text-indigo-400 active:scale-95 text-xs"
+                                                    >
+                                                        <span className="text-xl">👤</span> {t('paymentCari') || 'Cari'}
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => {
+                                                        const perms = user?.extraPermissions || [];
+                                                        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+                                                        if (!isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_OPEN_ACCOUNT')) {
+                                                            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Açık hesap kapatma yetkiniz bulunmamaktadır.' });
+                                                            return;
+                                                        }
+                                                        handleCheckout('Cari' as any, 0, 0, 0); // partnerId 0 means general Open Account if handled in backend
+                                                    }}
+                                                    className="flex flex-col items-center justify-center gap-1 p-3 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 border border-rose-200 dark:border-rose-500/30 rounded-xl transition-all font-bold text-rose-700 dark:text-rose-400 active:scale-95 text-xs"
+                                                >
+                                                    <span className="text-xl">📂</span> {t('paymentOpen') || 'Açık'}
+                                                </button>
                                             </div>
 
                                             {canSplit && (
                                                 <button
                                                     onClick={() => {
+                                                        const perms = user?.extraPermissions || [];
+                                                        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+                                                        if (!isSuperAdmin && !perms.includes('OP:FINANCE_PARTIAL_PAYMENT')) {
+                                                            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Parçalı ödeme alma yetkiniz bulunmamaktadır.' });
+                                                            return;
+                                                        }
                                                         setIsSplitPaymentOpen(true);
                                                         setSplitAmounts({ cash: 0, creditCard: selectedGrandTotal });
                                                     }}

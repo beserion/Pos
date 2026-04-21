@@ -31,6 +31,9 @@ export class Table {
   @Column({ nullable: true })
   waiterName: string;
 
+  @Column({ type: 'int', nullable: true })
+  waiterId: number | null;
+
   @Column({ type: 'datetime', nullable: true })
   orderStartTime: Date;
 

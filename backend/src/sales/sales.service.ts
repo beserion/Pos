@@ -17,6 +17,7 @@ import { AlertsService } from '../alerts/alerts.service';
 import { StockMovementsService } from '../stock-movements/stock-movements.service';
 import { ProductsService } from '../products/products.service';
 import { TablesService } from '../tables/tables.service';
+import { getCachedPerms } from '../auth/permissions.guard';
 
 @Injectable()
 export class SalesService implements OnModuleInit {
@@ -56,6 +57,17 @@ export class SalesService implements OnModuleInit {
           type: 'bit',
           isNullable: false,
           default: 0
+        } as any);
+      }
+
+      const tablesTable = await queryRunner.getTable('tables');
+      if (tablesTable && !tablesTable.columns.find(c => c.name === 'waiterId')) {
+        this.logger.log('Adding waiterId column to tables table...');
+        await queryRunner.addColumn('tables', {
+          name: 'waiterId',
+          type: 'int',
+          isNullable: true,
+          default: null
         } as any);
       }
 
@@ -313,6 +325,14 @@ export class SalesService implements OnModuleInit {
   }
 
   async create(saleData: Partial<Sale>, addedByUserId: number = 0): Promise<Sale> {
+    if (addedByUserId) {
+        const cached = getCachedPerms(addedByUserId);
+        const isSuper = cached?.roleName === 'ADMIN' || cached?.roleName === 'ADMINISTRATOR';
+        if (!isSuper && !cached?.allUserPerms?.includes('OP:CAN_ORDER')) {
+            throw new BadRequestException('Sipariş alma yetkiniz bulunmamaktadır.');
+        }
+    }
+
     return await this.saleRepository.manager.transaction(async (manager) => {
       try {
         const { items, ...dataRaw } = saleData;
@@ -336,6 +356,57 @@ export class SalesService implements OnModuleInit {
         const newSale = manager.create(Sale, data);
         const savedSale = await manager.save(Sale, newSale);
 
+        // Security / Permission Checks
+        if (addedByUserId) {
+          const cached = getCachedPerms(addedByUserId);
+          const isSuper = cached?.roleName === 'ADMIN' || cached?.roleName === 'ADMINISTRATOR';
+
+          if (!isSuper) {
+            const up = cached?.allUserPerms || [];
+            const table = data.tableId ? await manager.findOne(Table, { where: { id: data.tableId } }) : null;
+            const isBillRequested = table?.isBillRequested || false;
+
+            // 1. Discount Check
+            if (Number(data.discountAmount || 0) > 0) {
+              if (!up.includes('OP:CAN_DISCOUNT')) {
+                throw new BadRequestException('İndirim yapma yetkiniz bulunmamaktadır.');
+              }
+              if (isBillRequested && !up.includes('OP:DISCOUNT_AFTER_BILL')) {
+                throw new BadRequestException('Hesabı istenmiş adisyonda indirim yapma yetkiniz bulunmamaktadır.');
+              }
+
+              // Limit Check
+              const discLimitStr = up.find(p => p.startsWith('DISCOUNT_LIMIT:'));
+              const limit = discLimitStr ? parseInt(discLimitStr.split(':')[1]) : 0;
+              if (limit > 0) {
+                const subTotalForLimit = items?.reduce((sum, i: any) => sum + (Number(i.unitPrice || 0) * Number(i.quantity || 0)), 0) || 0;
+                const requestedRate = subTotalForLimit > 0 ? (Number(data.discountAmount) / subTotalForLimit) * 100 : 0;
+
+                if (requestedRate > limit) {
+                  // Trigger Alert
+                  const waiterUser = await manager.findOne(User, { where: { id: addedByUserId } });
+                  this.alertsService.trigger('DISCOUNT_LIMIT_VIOLATION', {
+                    triggerUserId: addedByUserId,
+                    triggerUserName: waiterUser ? `${waiterUser.firstName} ${waiterUser.lastName}` : 'Kullanıcı',
+                    tableName: table?.name || data.tableName,
+                    description: `Limit Aşımı: %${requestedRate.toFixed(1)} indirim talep edildi (Kullanıcı limiti: %${limit}). Masa: ${table?.name || '-'}`,
+                    numericValue: requestedRate,
+                  }).catch(() => {});
+
+                  throw new BadRequestException(`İndirim limitinizi (%${limit}) aştınız. Sizin için %${requestedRate.toFixed(1)} talep edildi.`);
+                }
+              }
+            }
+
+            // 2. Complimentary (İkram) Check
+            if (Number(data.totalAmount || 0) === 0 && (items?.length || 0) > 0) {
+              if (!up.includes('OP:CAN_COMPLIMENTARY')) {
+                throw new BadRequestException('İkram yapma yetkiniz bulunmamaktadır.');
+              }
+            }
+          }
+        }
+
         if (items && items.length > 0) {
           const saleItems: SaleItem[] = [];
           for (const item of items as any[]) {
@@ -344,6 +415,27 @@ export class SalesService implements OnModuleInit {
               const rawProducts = await manager.query(`SELECT isSet FROM products WHERE id = ${item.productId}`);
               if (rawProducts[0]?.isSet) {
                  rawSetMenu = await manager.query(`SELECT id, setType FROM set_menus WHERE productId = ${item.productId}`);
+              }
+            }
+
+            // Price Change Security Check
+            if (addedByUserId) {
+              const cached = getCachedPerms(addedByUserId);
+              const isSuper = cached?.roleName === 'ADMIN' || cached?.roleName === 'ADMINISTRATOR';
+              if (!isSuper) {
+                const up = cached?.allUserPerms || [];
+                const product = await manager.query(`SELECT price FROM products WHERE id = ${item.productId}`);
+                const originalPrice = product[0]?.price || 0;
+                
+                if (Number(item.unitPrice) !== Number(originalPrice)) {
+                  if (!up.includes('OP:CAN_CHANGE_PRICE')) {
+                    throw new BadRequestException(`${item.productId} ID'li ürünün fiyatını değiştirme yetkiniz bulunmamaktadır.`);
+                  }
+                  const table = data.tableId ? await manager.findOne(Table, { where: { id: data.tableId } }) : null;
+                  if (table?.isBillRequested && !up.includes('OP:PRICE_AFTER_BILL')) {
+                     throw new BadRequestException('Hesabı istenmiş masada fiyat değiştirme yetkiniz bulunmamaktadır.');
+                  }
+                }
               }
             }
 
@@ -436,6 +528,7 @@ export class SalesService implements OnModuleInit {
             await manager.update(Table, data.tableId, {
               status: savedSale.status === 'COMPLETED' ? 'BOŞ' : 'DOLU',
               waiterName: savedSale.status === 'COMPLETED' ? '' : (waiter ? `${waiter.firstName} ${waiter.lastName}` : (table.waiterName || 'Sistem')),
+              waiterId: savedSale.status === 'COMPLETED' ? (null as any) : (waiter ? waiter.id : (table.waiterId || null)),
               currentTotal: savedSale.status === 'COMPLETED' ? 0 : (Number(table.currentTotal || 0) + effectiveTotal),
               orderStartTime: table.status === 'BOŞ' ? new Date() : (savedSale.status === 'COMPLETED' ? null as any : table.orderStartTime),
               isBillRequested: false
@@ -695,6 +788,7 @@ export class SalesService implements OnModuleInit {
           if (newTotal === 0) {
             freshTable.status = 'BOŞ';
             freshTable.waiterName = '';
+            freshTable.waiterId = null as any;
             freshTable.orderStartTime = null as any;
             (freshTable as any).isBillRequested = false;
           }
@@ -771,7 +865,15 @@ export class SalesService implements OnModuleInit {
   // Automatic End of Day and manual endOfDay logic moved to BusinessDayService
 
 
-  async cancelTableOrders(tableId: number): Promise<void> {
+  async cancelTableOrders(tableId: number, userId: number): Promise<void> {
+    if (userId) {
+      const cached = getCachedPerms(userId);
+      const isSuper = cached?.roleName === 'ADMIN' || cached?.roleName === 'ADMINISTRATOR';
+      if (!isSuper && !cached?.allUserPerms?.includes('OP:CAN_CANCEL_SALE')) {
+        throw new BadRequestException('Adisyon iptal etme yetkiniz bulunmamaktadır.');
+      }
+    }
+
     await this.saleRepository.manager.transaction(async (manager) => {
       await manager.update(Sale,
         { tableId, status: In(['NEW', 'PREPARATION', 'READY', 'SERVED']) },
@@ -782,6 +884,7 @@ export class SalesService implements OnModuleInit {
         await manager.update(Table, tableId, {
           status: 'BOŞ',
           waiterName: '',
+          waiterId: null as any,
           currentTotal: 0,
           orderStartTime: () => 'NULL',
           isBillRequested: false,
@@ -806,9 +909,17 @@ export class SalesService implements OnModuleInit {
   }
 
   async cancelItem(itemId: number, reason: string, userId: number): Promise<SaleItem> {
+    if (userId) {
+      const cached = getCachedPerms(userId);
+      const isSuper = cached?.roleName === 'ADMIN' || cached?.roleName === 'ADMINISTRATOR';
+      if (!isSuper && !cached?.allUserPerms?.includes('OP:CAN_CANCEL_SALE')) {
+        throw new BadRequestException('Ürün iptal etme yetkiniz bulunmamaktadır.');
+      }
+    }
+
     const item = await this.saleItemRepository.findOne({
       where: { id: itemId },
-      relations: ['sale', 'sale.table'],
+      relations: ['sale', 'sale.waiter', 'sale.table', 'sale.table.zone']
     });
     if (!item) throw new NotFoundException('Ürün bulunamadı.');
 
@@ -931,6 +1042,13 @@ export class SalesService implements OnModuleInit {
   }
 
   async refundItem(itemId: number, reason: string, userId: number): Promise<SaleItem> {
+    if (userId) {
+      const cached = getCachedPerms(userId);
+      const isSuper = cached?.roleName === 'ADMIN' || cached?.roleName === 'ADMINISTRATOR';
+      if (!isSuper && !cached?.allUserPerms?.includes('OP:CAN_REFUND')) {
+        throw new BadRequestException('İade yapma yetkiniz bulunmamaktadır.');
+      }
+    }
     const item = await this.saleItemRepository.findOne({
       where: { id: itemId },
       relations: ['sale', 'sale.table'],
@@ -976,6 +1094,13 @@ export class SalesService implements OnModuleInit {
   }
 
   async refundSale(saleId: number, reason: string, userId: number): Promise<Sale> {
+    if (userId) {
+      const cached = getCachedPerms(userId);
+      const isSuper = cached?.roleName === 'ADMIN' || cached?.roleName === 'ADMINISTRATOR';
+      if (!isSuper && !cached?.allUserPerms?.includes('OP:CAN_REFUND')) {
+        throw new BadRequestException('İade yapma yetkiniz bulunmamaktadır.');
+      }
+    }
     const sale = await this.findOne(saleId);
     if (!sale) throw new NotFoundException('Satış bulunamadı.');
 
@@ -1247,6 +1372,39 @@ export class SalesService implements OnModuleInit {
       });
       if (!sale) throw new NotFoundException('Adisyon bulunamadı.');
 
+      // --- Sahiplik Kontrolü (Ownership Check) ---
+      if (addedByUserId) {
+          const cached = getCachedPerms(addedByUserId);
+          let extraPerms: string[] = [];
+          let roleName = '';
+
+          if (cached) {
+              extraPerms = cached.allUserPerms;
+              roleName = (cached.roleName || '').toUpperCase();
+          } else {
+              const user = await manager.findOne(User, { where: { id: addedByUserId }, relations: ['role'] });
+              extraPerms = user?.extraPermissions || [];
+              roleName = (user?.role?.name || '').toUpperCase();
+          }
+
+          if (roleName !== 'ADMIN' && roleName !== 'ADMINISTRATOR') {
+              if (!extraPerms.includes('OP:CAN_ORDER')) {
+                  throw new BadRequestException('Sipariş alma yetkiniz bulunmamaktadır.');
+              }
+
+              if (sale.table?.isBillRequested && !extraPerms.includes('OP:ORDER_AFTER_BILL')) {
+                  throw new BadRequestException('Adisyon zaten yazdırılmış. Yeni ürün eklemek için yetkiniz yetersiz veya masa geri açılmalıdır.');
+              }
+
+              if (extraPerms.includes('OWN_TABLES_ONLY')) {
+                  // Eğer masa kilitliyse ve waiterId atanmışsa, kontrol et
+                  if (sale.waiterId && sale.waiterId !== addedByUserId) {
+                      throw new BadRequestException('Bu masa başka bir personele aittir. Sipariş ekleyemezsiniz.');
+                  }
+              }
+          }
+      }
+
       if (!items || items.length === 0) return sale;
 
       const newSaleItems: SaleItem[] = [];
@@ -1257,6 +1415,12 @@ export class SalesService implements OnModuleInit {
           if (rawProducts[0]?.isSet) {
              rawSetMenu = await manager.query(`SELECT id, setType FROM set_menus WHERE productId = ${item.productId}`);
           }
+        }
+
+        // Fiyat değişikliği doğrulaması
+        const productPrice = await manager.query(`SELECT price FROM products WHERE id = ${item.productId}`);
+        if (productPrice.length > 0 && Math.abs(Number(productPrice[0].price) - Number(item.unitPrice)) > 0.01) {
+           // Opsiyonel: Fiyat değişikliği loglanabilir veya hata fırlatılabilir
         }
 
         const parentItem = manager.create(SaleItem, {
@@ -2374,7 +2538,16 @@ export class SalesService implements OnModuleInit {
         throw new BadRequestException('Aynı masaya transfer yapılamaz.');
       }
 
-      // 2. Dolu masa onayı
+      // 2. Yetki Kontrolü
+      if (userId) {
+          const cached = getCachedPerms(userId);
+          const isSuper = cached?.roleName === 'ADMIN' || cached?.roleName === 'ADMINISTRATOR';
+          if (!isSuper && !cached?.allUserPerms?.includes('OP:CAN_TRANSFER')) {
+              throw new BadRequestException('Transfer yapma yetkiniz bulunmamaktadır.');
+          }
+      }
+
+      // 3. Dolu masa onayı
       if (targetTable.status === 'DOLU' && !body.confirmed) {
         return { requireConfirmation: true, message: 'Dolu bir masaya taşıma yapıyorsunuz. Onaylıyor musunuz?' };
       }

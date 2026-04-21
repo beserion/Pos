@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import Cookies from 'js-cookie';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from '../AuthContext';
@@ -108,11 +108,39 @@ export function PosProvider({ children }: { children: ReactNode }) {
         };
     }, [API_URL, user, fetchDynamicData]);
 
+    // Yetki bazlı salon filtreleme
+    const filteredZones = useMemo(() => {
+        if (!user || zones.length === 0) return zones;
+        const role = user?.role?.name?.toUpperCase();
+        if (role === 'ADMIN' || role === 'ADMINISTRATOR') return zones;
+
+        // 1. Manuel Zone Yetkileri (ZONE:ID)
+        const manualZoneIds = (user?.extraPermissions || [])
+            .filter((p: string) => p.startsWith('ZONE:'))
+            .map((p: string) => Number(p.split(':')[1]));
+
+        // 2. Masa bazlı daraltma (Eğer hiç yetkili masası yoksa salonu gizle)
+        // Not: tables zaten backend tarafından yetkilere göre filtrelenmiş geliyor
+        if (tables.length > 0) {
+            return zones.filter(z => 
+                (manualZoneIds.length === 0 || manualZoneIds.includes(z.id)) && // Salon yetkisi varsa
+                tables.some(t => t.zone?.id === z.id || (t as any).zoneId === z.id) // Ve o salonda en az bir masası varsa
+            );
+        }
+
+        // Masalar henüz yüklenmediyse sadece salon yetkilerine göre dön
+        if (manualZoneIds.length > 0) {
+            return zones.filter(z => manualZoneIds.includes(z.id));
+        }
+
+        return zones;
+    }, [zones, tables, user]);
+
     return (
         <PosContext.Provider value={{
             products,
             tables,
-            zones,
+            zones: filteredZones,
             departments,
             parentGroups,
             productTypes,

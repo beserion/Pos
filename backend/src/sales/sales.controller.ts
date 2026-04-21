@@ -114,8 +114,9 @@ export class SalesController {
   }
 
   @Post('table/:tableId/cancel')
-  cancelTableOrders(@Param('tableId') tableId: string) {
-    return (this.salesService as any).cancelTableOrders(+tableId);
+  cancelTableOrders(@Param('tableId') tableId: string, @Request() req: any) {
+    const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
+    return this.salesService.cancelTableOrders(+tableId, userId);
   }
 
   @Post('items/:id/cancel')

@@ -169,7 +169,7 @@ interface ExistingOrder {
     items: { id: number; product: { id: number; name: string; price: number; isSet?: boolean }; quantity: number; unitPrice: number; isPaid: boolean; isWaiting: boolean; isMarshed: boolean; parentItemId?: number; addedByName?: string; addedAt?: string; }[];
 }
 interface Zone { id: number; name: string; }
-interface Table { id: number; name: string; status: string; waiterName?: string; orderStartTime?: string; currentTotal?: number; isBillRequested?: boolean; zone: { id: number } }
+interface Table { id: number; name: string; status: string; waiterName?: string; waiterId?: number; orderStartTime?: string; currentTotal?: number; isBillRequested?: boolean; zone: { id: number } }
 
 export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => void }) {
     const { user, loginPinOnly, logout, loading } = useAuth();
@@ -386,6 +386,20 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     }), [products, selectedProductTypeId, searchQuery, selectedDepartmentId, departments]);
 
     const handleTableClick = async (table: Table) => {
+        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+        const ownTablesOnly = (user?.extraPermissions || []).includes('OWN_TABLES_ONLY');
+
+        if (!isSuperAdmin && ownTablesOnly && (table.status === 'DOLU' || table.status === 'REZERVE')) {
+            if (table.waiterId && table.waiterId !== user.id) {
+                showSwal({
+                    icon: 'warning',
+                    title: 'Erişim Engellendi',
+                    text: `Bu masa ${table.waiterName || 'başka bir personel'} üzerine açılmıştır. Sadece kendi masalarınıza sipariş ekleyebilirsiniz.`
+                });
+                return;
+            }
+        }
+
         setSelectedTable(table);
         setActiveTab('menu');
         setCart([]);
@@ -442,6 +456,19 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     const reopenTable = async () => {
         if (!selectedTable) return;
+
+        // --- Yetki Kontrolü ---
+        const perms = user?.extraPermissions || [];
+        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+        if (!isSuperAdmin && !perms.includes('OP:ORDER_AFTER_BILL')) {
+            showSwal({
+                icon: 'warning',
+                title: 'Yetki Yetersiz',
+                text: 'Hesap istendikten sonra masayı geri açma yetkiniz bulunmamaktadır.'
+            });
+            return;
+        }
+
         try {
             const token = localStorage.getItem('token') || (user as any)?.token;
             const res = await fetch(`${API_URL}/tables/${selectedTable.id}`, {
@@ -463,6 +490,14 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     };
 
     const addToCart = (product: Product, note?: string, skipExtraCheck?: boolean, forceVariationId?: number) => {
+        // --- Yetki Kontrolü ---
+        const perms = user?.extraPermissions || [];
+        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+        if (!isSuperAdmin && !perms.includes('OP:CAN_ORDER')) {
+            toastSwal({ icon: 'warning', title: 'Sipariş alma yetkiniz bulunmamaktadır.' });
+            return;
+        }
+
         if (!forceVariationId && product.variations && product.variations.filter(v => v.isActive !== false).length > 0) {
             setSelectedProductForVariation(product);
             setPendingAddToCartArgs({ note, skipExtraCheck });
@@ -755,6 +790,13 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const remainingTotal = unpaidItems.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0) + cartTotal;
 
     const payItem = async (itemId: number) => {
+        const perms = user?.extraPermissions || [];
+        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+        if (!isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_ACCOUNT')) {
+            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Ödeme alma yetkiniz bulunmamaktadır.' });
+            return;
+        }
+
         const token = localStorage.getItem('token') || (user as any)?.token;
 
         // Fetch partners first
@@ -782,6 +824,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                 <option value="KASA">Nakit (Kasa)</option>
                                 <option value="KREDI_KARTI">Kredi Kartı</option>
                                 <option value="BANKA">Banka</option>
+                                <option value="OPEN">Açık Hesap</option>
                             </select>
                         </div>
                     </div>
@@ -818,6 +861,16 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         if (!formValues) return;
         const { paymentMethod, partnerId } = formValues;
 
+        if (partnerId !== '0' && !isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_TO_CURRENT_ACCOUNT')) {
+            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Cariye hesap kapatma yetkiniz bulunmamaktadır.' });
+            return;
+        }
+
+        if (paymentMethod === 'OPEN' && !isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_OPEN_ACCOUNT')) {
+            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Açık hesap kapatma yetkiniz bulunmamaktadır.' });
+            return;
+        }
+
         try {
             const res = await fetch(`${API_URL}/sales/items/${itemId}/pay`, {
                 method: 'PUT',
@@ -848,6 +901,13 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         }
     };
     const handleCheckout = async (paymentMethod: 'Nakit' | 'Kart' | 'Parçalı', cashAmount: number = 0, creditAmount: number = 0) => {
+        const perms = user?.extraPermissions || [];
+        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+        if (!isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_ACCOUNT')) {
+            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Ödeme alma yetkiniz bulunmamaktadır.' });
+            return;
+        }
+
         if (!selectedTable) return;
         const unpaidItems = existingOrders.flatMap(o => o.items).filter(i => !i.isPaid);
         const itemsToPay = unpaidItems.filter(item => selectedPosItems.includes(item.id));

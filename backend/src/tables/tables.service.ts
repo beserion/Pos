@@ -49,10 +49,23 @@ export class TablesService {
       }
 
       if (roleName !== 'ADMIN' && roleName !== 'ADMINISTRATOR') {
+        // 1. Salon (Zone) Filtreleme
         allowedZoneIds = extraPerms
           .filter(p => p.startsWith('ZONE:'))
           .map(p => parseInt(p.split(':')[1]))
           .filter(id => !isNaN(id));
+        
+        // 2. Masa (Table) Filtreleme
+        const isTableAccessAssigned = extraPerms.includes('TABLE_ACCESS:ASSIGNED');
+        if (isTableAccessAssigned) {
+          const assignedTableIds = extraPerms
+            .filter(p => p.startsWith('TABLE:'))
+            .map(p => parseInt(p.split(':')[1]))
+            .filter(id => !isNaN(id));
+          
+          // Listeyi sadece atanan masalarla sınırla
+          allTables = allTables.filter(t => assignedTableIds.includes(t.id));
+        }
       }
     }
 

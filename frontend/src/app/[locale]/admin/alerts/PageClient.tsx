@@ -24,6 +24,7 @@ interface Role { id: number; name: string; }
 const EVENT_OPTIONS = [
     { key: 'SALE_CANCELLED', label: 'Adisyon İptal Edildi', hasThreshold: false, category: 'Finansal' },
     { key: 'SALE_DISCOUNT_HIGH', label: 'Yüksek Oran İndirim', hasThreshold: true, thresholdLabel: 'Min. İndirim %', category: 'Finansal' },
+    { key: 'DISCOUNT_LIMIT_VIOLATION', label: 'İndirim Limiti Aşıldı', hasThreshold: false, category: 'Finansal' },
     { key: 'SALE_COMPLIMENTARY', label: 'İkram Yapıldı', hasThreshold: false, category: 'Finansal' },
     { key: 'PAYMENT_METHOD_CHANGE', label: 'Ödeme Tipi Değiştirildi', hasThreshold: false, category: 'Finansal' },
     { key: 'END_OF_DAY', label: 'Gün Sonu Kapandı', hasThreshold: false, category: 'Operasyonel' },

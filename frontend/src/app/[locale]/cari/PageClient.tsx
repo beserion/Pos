@@ -86,6 +86,18 @@ export function PageClient() {
     };
 
     const handleSaveTransaction = async () => {
+        const perms = user?.extraPermissions || [];
+        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+        
+        if (form.type === 'INCOME' && !isSuperAdmin && !perms.includes('OP:FINANCE_COLLECT_CURRENT_ACCOUNT')) {
+            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Cari hesap tahsilatı yapma yetkiniz bulunmamaktadır.' });
+            return;
+        }
+        if (form.type === 'INCOME' && form.category === 'Peşinat' && !isSuperAdmin && !perms.includes('OP:FINANCE_DOWN_PAYMENT')) {
+            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Peşinat tahsilatı yapma yetkiniz bulunmamaktadır.' });
+            return;
+        }
+
         if (!selectedPartner || !form.description.trim() || form.amount <= 0) {
             showSwal({ icon: 'warning', title: 'Uyarı', text: 'Tutar ve açıklama zorunludur.' });
             return;
@@ -345,6 +357,7 @@ export function PageClient() {
                                                 { value: 'Ödeme', label: 'Ödeme' },
                                                 { value: 'Alım', label: 'Alım' },
                                                 { value: 'Gider', label: 'Gider' },
+                                                { value: 'Peşinat', label: 'Peşinat' },
                                                 { value: 'Diğer', label: 'Diğer' }
                                             ]}
                                         />

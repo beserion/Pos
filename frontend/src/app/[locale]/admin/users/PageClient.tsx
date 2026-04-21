@@ -62,6 +62,7 @@ export function PageClient() {
     const [modules, setModules] = useState<any[]>([]);
     const [cashRegisters, setCashRegisters] = useState<CashRegister[]>([]);
     const [zones, setZones] = useState<Zone[]>([]);
+    const [tables, setTables] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -71,6 +72,7 @@ export function PageClient() {
     const [extraPerms, setExtraPerms] = useState<string[]>([]);
     const [permSaving, setPermSaving] = useState(false);
     const [activePermTab, setActivePermTab] = useState<'MODULES' | 'POS_SPECIAL'>('MODULES');
+    const [tempCashRegisterId, setTempCashRegisterId] = useState<number>(0);
 
     // UI states
     const [showPassword, setShowPassword] = useState(false);
@@ -101,18 +103,20 @@ export function PageClient() {
             const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
             const API_URL = isLocalhost ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050');
 
-            const [usersRes, rolesRes, modulesRes, cashRegsRes, zonesRes] = await Promise.all([
+            const [usersRes, rolesRes, modulesRes, cashRegsRes, zonesRes, tablesRes] = await Promise.all([
                 axios.get(`${API_URL}/users`, config),
                 axios.get(`${API_URL}/roles`, config),
                 axios.get(`${API_URL}/permission-modules`, config),
                 axios.get(`${API_URL}/cash-registers`, config),
-                axios.get(`${API_URL}/zones`, config)
+                axios.get(`${API_URL}/zones`, config),
+                axios.get(`${API_URL}/tables`, config)
             ]);
 
             setUsers(usersRes.data);
             setRoles(rolesRes.data);
             setCashRegisters(cashRegsRes.data || []);
             setZones(zonesRes.data || []);
+            setTables(tablesRes.data || []);
 
             const backendModules = (modulesRes.data || []).map((m: any) => ({
                 key: m.key,
@@ -136,7 +140,7 @@ export function PageClient() {
             const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
             const API_URL = isLocalhost ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050');
             const config = { headers: { Authorization: `Bearer ${currentUser?.token}` } };
-            
+
             const payload = {
                 firstName: formData.firstName,
                 lastName: formData.lastName,
@@ -238,6 +242,7 @@ export function PageClient() {
         setPermUser(usr);
         setRolePerms(usr.role?.permissions || []);
         setExtraPerms(usr.extraPermissions || []);
+        setTempCashRegisterId(usr.cashRegisterId || 0);
         setActivePermTab('MODULES');
         setIsPermModalOpen(true);
     };
@@ -294,6 +299,42 @@ export function PageClient() {
         if (isSuperAdmin(permUser)) return;
         const key = `ZONE:${zoneId}`;
         setExtraPerms(prev => prev.includes(key) ? prev.filter(p => p !== key) : [...prev, key]);
+    };
+
+    const toggleTablePerm = (tableId: number) => {
+        if (isSuperAdmin(permUser)) return;
+        const key = `TABLE:${tableId}`;
+        setExtraPerms(prev => prev.includes(key) ? prev.filter(p => p !== key) : [...prev, key]);
+    };
+
+    const setTableAccessType = (type: 'ALL' | 'ASSIGNED') => {
+        if (isSuperAdmin(permUser)) return;
+        setExtraPerms(prev => {
+            // Remove existing access type keys and specific table keys if switching to ALL
+            let next = prev.filter(p => !p.startsWith('TABLE_ACCESS:') && (type === 'ASSIGNED' || !p.startsWith('TABLE:')));
+            next.push(`TABLE_ACCESS:${type}`);
+            return [...new Set(next)];
+        });
+    };
+
+    const toggleExtraPerm = (key: string) => {
+        if (isSuperAdmin(permUser)) return;
+        setExtraPerms(prev => prev.includes(key) ? prev.filter(p => p !== key) : [...prev, key]);
+    };
+
+    const setDiscountLimit = (val: string) => {
+        if (isSuperAdmin(permUser)) return;
+        const num = Math.min(100, Math.max(0, parseInt(val) || 0));
+        setExtraPerms(prev => {
+            const next = prev.filter(p => !p.startsWith('DISCOUNT_LIMIT:'));
+            if (num > 0) next.push(`DISCOUNT_LIMIT:${num}`);
+            return next;
+        });
+    };
+
+    const getTableAccessType = () => {
+        if (extraPerms.includes('TABLE_ACCESS:ASSIGNED')) return 'ASSIGNED';
+        return 'ALL'; // Default
     };
 
     const toggleRowAll = (mod: string, actions: Action[]) => {
@@ -363,7 +404,10 @@ export function PageClient() {
             const API_URL = isLocalhost ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050');
             const config = { headers: { Authorization: `Bearer ${currentUser?.token}` } };
             // Hit the standard PUT /users/:id endpoint which accepts Partial<User>
-            await axios.put(`${API_URL}/users/${permUser.id}`, { extraPermissions: extraPerms }, config);
+            await axios.put(`${API_URL}/users/${permUser.id}`, {
+                extraPermissions: extraPerms,
+                cashRegisterId: tempCashRegisterId || null
+            }, config);
             toastSwal({ title: 'Başarılı', text: 'Kişisel ek yetkiler kaydedildi', icon: 'success' });
             setIsPermModalOpen(false);
             fetchData();
@@ -374,8 +418,6 @@ export function PageClient() {
             setPermSaving(false);
         }
     };
-
-    // Render Logic
 
     return (
         <div className="h-screen overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative transition-colors duration-300">
@@ -704,7 +746,7 @@ export function PageClient() {
                                 </div>
                                 <div>
                                     <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight leading-none mb-1.5">Kişisel Yetki Yönetimi</h2>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1.5">
                                         <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
                                             <div className="w-6 h-6 rounded-md bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-xs font-black text-purple-600 dark:text-purple-400 shadow-sm">{permUser.firstName[0]}{permUser.lastName[0]}</div>
                                             <span className="text-xs font-bold text-slate-600 dark:text-slate-300 capitalize">{permUser.firstName} {permUser.lastName}</span>
@@ -776,138 +818,438 @@ export function PageClient() {
                     </div>
 
                     {/* MATRIX TABLE & TAB CONTENT */}
-                    <div className="flex-1 min-h-0 px-10 py-4 relative z-0">
+                    <div className="flex-1 min-h-0 px-10 py-4 relative z-0 flex flex-col">
                         {activePermTab === 'MODULES' && (
-                        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-3xl border border-slate-200 dark:border-slate-700/50 shadow-xl overflow-auto h-full custom-scrollbar animate-in fade-in zoom-in-95 duration-300">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr>
-                                        <th className="px-6 py-4 border-b-2 border-slate-200 dark:border-slate-700 text-xs font-black text-slate-400 uppercase tracking-wider min-w-[220px] w-[22%] align-middle bg-slate-50/90 dark:bg-slate-900/70 sticky top-0 z-20 backdrop-blur-xl">Modül Adı</th>
-                                        {ALL_ACTIONS.map(action => {
-                                            const meta = ACTION_META[action];
-                                            const colAll = isColAllSelected(action);
-                                            return (
-                                                <th key={action} className="border-b-2 border-slate-200 dark:border-slate-700 min-w-[90px] bg-slate-50/90 dark:bg-slate-900/70 sticky top-0 z-20 backdrop-blur-xl align-middle p-1.5">
-                                                    <button onClick={() => toggleColAll(action)} className={`flex flex-col items-center gap-1 mx-auto px-2 py-2 rounded-xl border-2 transition-all w-[85%] hover:scale-105 active:scale-95 ${colAll ? 'bg-indigo-50 border-indigo-300 text-indigo-600 dark:bg-indigo-900/30 dark:border-indigo-500/30 dark:text-indigo-400 shadow-md shadow-indigo-500/10' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-400 hover:border-slate-400 hover:text-slate-600'}`}>
-                                                        <i className={`fat ${meta.icon} text-sm`}></i>
-                                                        <span className="text-[9px] font-black uppercase tracking-wider">{meta.label}</span>
-                                                    </button>
-                                                </th>
-                                            );
-                                        })}
-                                        <th className="border-b-2 border-slate-200 dark:border-slate-700 min-w-[90px] align-middle bg-slate-50/90 dark:bg-slate-900/70 sticky top-0 z-20 backdrop-blur-xl text-center p-1.5">
-                                            <button onClick={toggleAll} className={`flex flex-col items-center gap-1 mx-auto px-2 py-2 rounded-xl border-2 transition-all w-[85%] hover:scale-105 active:scale-95 ${isAllSelected() ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-indigo-500 hover:bg-indigo-50'}`}>
-                                                <i className={`fat ${isAllSelected() ? 'fa-square-xmark' : 'fa-square-check'} text-sm`}></i>
-                                                <span className="text-[9px] font-black uppercase tracking-wider">Tümü</span>
-                                            </button>
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {modules.map((mod, idx) => {
-                                        const modActions = mod.actions as Action[];
-                                        if (modActions.length === 0) return null;
-                                        const rowPerms = modActions.map(a => permKey(mod.key, a));
-                                        const rowAllSelected = rowPerms.every(k => rolePerms.includes(k) || extraPerms.includes(k));
+                            <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-3xl border border-slate-200 dark:border-slate-700/50 shadow-xl overflow-auto h-full custom-scrollbar animate-in fade-in zoom-in-95 duration-300">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr>
+                                            <th className="px-6 py-4 border-b-2 border-slate-200 dark:border-slate-700 text-xs font-black text-slate-400 uppercase tracking-wider min-w-[220px] w-[22%] align-middle bg-slate-50/90 dark:bg-slate-900/70 sticky top-0 z-20 backdrop-blur-xl">Modül Adı</th>
+                                            {ALL_ACTIONS.map(action => {
+                                                const meta = ACTION_META[action];
+                                                const colAll = isColAllSelected(action);
+                                                return (
+                                                    <th key={action} className="border-b-2 border-slate-200 dark:border-slate-700 min-w-[90px] bg-slate-50/90 dark:bg-slate-900/70 sticky top-0 z-20 backdrop-blur-xl align-middle p-1.5">
+                                                        <button onClick={() => toggleColAll(action)} className={`flex flex-col items-center gap-1 mx-auto px-2 py-2 rounded-xl border-2 transition-all w-[85%] hover:scale-105 active:scale-95 ${colAll ? 'bg-indigo-50 border-indigo-300 text-indigo-600 dark:bg-indigo-900/30 dark:border-indigo-500/30 dark:text-indigo-400 shadow-md shadow-indigo-500/10' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-400 hover:border-slate-400 hover:text-slate-600'}`}>
+                                                            <i className={`fat ${meta.icon} text-sm`}></i>
+                                                            <span className="text-[9px] font-black uppercase tracking-wider">{meta.label}</span>
+                                                        </button>
+                                                    </th>
+                                                );
+                                            })}
+                                            <th className="border-b-2 border-slate-200 dark:border-slate-700 min-w-[90px] align-middle bg-slate-50/90 dark:bg-slate-900/70 sticky top-0 z-20 backdrop-blur-xl text-center p-1.5">
+                                                <button onClick={toggleAll} className={`flex flex-col items-center gap-1 mx-auto px-2 py-2 rounded-xl border-2 transition-all w-[85%] hover:scale-105 active:scale-95 ${isAllSelected() ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-800 text-indigo-500 hover:bg-indigo-50'}`}>
+                                                    <i className={`fat ${isAllSelected() ? 'fa-square-xmark' : 'fa-square-check'} text-sm`}></i>
+                                                    <span className="text-[9px] font-black uppercase tracking-wider">Tümü</span>
+                                                </button>
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {modules.map((mod, idx) => {
+                                            const modActions = mod.actions as Action[];
+                                            if (modActions.length === 0) return null;
+                                            const rowPerms = modActions.map(a => permKey(mod.key, a));
+                                            const rowAllSelected = rowPerms.every(k => rolePerms.includes(k) || extraPerms.includes(k));
 
-                                        return (
-                                            <tr key={mod.key || idx} className={`hover:bg-indigo-50/50 dark:hover:bg-indigo-500/5 transition-all group border-b border-slate-100 dark:border-slate-700/30 ${idx % 2 === 0 ? 'bg-white dark:bg-slate-800/40' : 'bg-slate-50/80 dark:bg-slate-800/70'}`}>
-                                                <td className="px-5 py-2 align-middle">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-500/10 dark:to-purple-500/10 text-indigo-500 flex items-center justify-center shrink-0 shadow-sm group-hover:shadow-md transition-shadow border border-indigo-100/50 dark:border-indigo-500/10">
-                                                            <i className={`fat ${mod.icon} text-sm`}></i>
+                                            return (
+                                                <tr key={mod.key || idx} className={`hover:bg-indigo-50/50 dark:hover:bg-indigo-500/5 transition-all group border-b border-slate-100 dark:border-slate-700/30 ${idx % 2 === 0 ? 'bg-white dark:bg-slate-800/40' : 'bg-slate-50/80 dark:bg-slate-800/70'}`}>
+                                                    <td className="px-5 py-2 align-middle">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-500/10 dark:to-purple-500/10 text-indigo-500 flex items-center justify-center shrink-0 shadow-sm group-hover:shadow-md transition-shadow border border-indigo-100/50 dark:border-indigo-500/10">
+                                                                <i className={`fat ${mod.icon} text-sm`}></i>
+                                                            </div>
+                                                            <span className="text-sm font-bold text-slate-700 dark:text-slate-200 capitalize tracking-tight">{mod.name}</span>
                                                         </div>
-                                                        <span className="text-sm font-bold text-slate-700 dark:text-slate-200 capitalize tracking-tight">{mod.name}</span>
-                                                    </div>
-                                                </td>
-                                                {ALL_ACTIONS.map(action => {
-                                                    const supported = modActions.includes(action);
-                                                    if (!supported) {
+                                                    </td>
+                                                    {ALL_ACTIONS.map(action => {
+                                                        const supported = modActions.includes(action);
+                                                        if (!supported) {
+                                                            return (
+                                                                <td key={action} className="p-1 text-center align-middle">
+                                                                    <div className="w-7 h-7 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-dashed border-slate-200 dark:border-slate-700/50 flex items-center justify-center mx-auto opacity-30">
+                                                                        <i className="fat fa-minus text-slate-300 text-[10px]"></i>
+                                                                    </div>
+                                                                </td>
+                                                            );
+                                                        }
+
+                                                        const state = getCellState(mod.key, action);
                                                         return (
                                                             <td key={action} className="p-1 text-center align-middle">
-                                                                <div className="w-7 h-7 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-dashed border-slate-200 dark:border-slate-700/50 flex items-center justify-center mx-auto opacity-30">
-                                                                    <i className="fat fa-minus text-slate-300 text-[10px]"></i>
-                                                                </div>
+                                                                <button onClick={() => togglePermission(mod.key, action)} className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center mx-auto transition-all hover:scale-110 active:scale-90 ${state === 'role' ? 'bg-purple-50 border-purple-200 text-purple-500 dark:bg-purple-900/30 dark:border-purple-500/30 shadow-none cursor-not-allowed' : state === 'extra' ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/25' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-300 hover:border-slate-400 hover:text-slate-500'}`} title={state === 'role' ? 'Rol Yetkisi' : ACTION_META[action].label}>
+                                                                    <i className={`fat ${state === 'role' ? 'fa-shield-check text-[10px]' : state === 'extra' ? 'fa-check text-xs' : ACTION_META[action].icon + ' text-[10px]'}`}></i>
+                                                                </button>
                                                             </td>
                                                         );
-                                                    }
-
-                                                    const state = getCellState(mod.key, action);
-                                                    return (
-                                                        <td key={action} className="p-1 text-center align-middle">
-                                                            <button onClick={() => togglePermission(mod.key, action)} className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center mx-auto transition-all hover:scale-110 active:scale-90 ${state === 'role' ? 'bg-purple-50 border-purple-200 text-purple-500 dark:bg-purple-900/30 dark:border-purple-500/30 shadow-none cursor-not-allowed' : state === 'extra' ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/25' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-300 hover:border-slate-400 hover:text-slate-500'}`} title={state === 'role' ? 'Rol Yetkisi' : ACTION_META[action].label}>
-                                                                <i className={`fat ${state === 'role' ? 'fa-shield-check text-[10px]' : state === 'extra' ? 'fa-check text-xs' : ACTION_META[action].icon + ' text-[10px]'}`}></i>
-                                                            </button>
-                                                        </td>
-                                                    );
-                                                })}
-                                                <td className="p-1 text-center align-middle">
-                                                    <button onClick={() => toggleRowAll(mod.key, modActions)} className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center mx-auto transition-all hover:scale-110 active:scale-90 ${rowAllSelected ? 'bg-indigo-50 border-indigo-300 text-indigo-600 dark:bg-indigo-900/40 dark:border-indigo-500/40 shadow-md shadow-indigo-500/10' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-400 hover:border-indigo-300 hover:text-indigo-500'}`} title="Tüm Satırı Seç/İptal Et">
-                                                        <i className={`fat ${rowAllSelected ? 'fa-check-double text-[10px]' : 'fa-list-check text-[10px]'}`}></i>
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
+                                                    })}
+                                                    <td className="p-1 text-center align-middle">
+                                                        <button onClick={() => toggleRowAll(mod.key, modActions)} className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center mx-auto transition-all hover:scale-110 active:scale-90 ${rowAllSelected ? 'bg-indigo-50 border-indigo-300 text-indigo-600 dark:bg-indigo-900/40 dark:border-indigo-500/40 shadow-md shadow-indigo-500/10' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-400 hover:border-indigo-300 hover:text-indigo-500'}`} title="Tüm Satırı Seç/İptal Et">
+                                                            <i className={`fat ${rowAllSelected ? 'fa-check-double text-[10px]' : 'fa-list-check text-[10px]'}`}></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
                         )}
 
                         {activePermTab === 'POS_SPECIAL' && (
-                            <div className="flex flex-col h-full bg-white/40 dark:bg-slate-800/40 backdrop-blur-xl rounded-3xl border border-slate-300 dark:border-slate-700/70 shadow-inner overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-                                {/* Zone Permissions */}
-                                <div className="p-8">
-                                    <h4 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest mb-6 flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 flex items-center justify-center shrink-0">
-                                            <i className="fat fa-location-dot"></i>
-                                        </div>
-                                        Yetkili Olduğu Salon / Zone'lar
-                                    </h4>
-                                    
-                                    {zones.length === 0 ? (
-                                        <p className="text-xs text-slate-500 font-bold uppercase tracking-widest bg-slate-100 dark:bg-slate-800 p-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-600 inline-block">Sistemde tanımlı salon/zone bulunmuyor.</p>
-                                    ) : (
-                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                            {zones.map(zone => {
-                                                const key = `ZONE:${zone.id}`;
-                                                const isRolePerm = rolePerms.includes(key);
-                                                const isExtraPerm = extraPerms.includes(key);
-                                                const isActive = isRolePerm || isExtraPerm;
-                                                const isSuper = isSuperAdmin(permUser);
-                                                
-                                                return (
-                                                    <div 
-                                                        key={`zone-${zone.id}`}
-                                                        onClick={() => !isRolePerm && !isSuper && toggleZonePerm(zone.id)}
-                                                        className={`relative flex items-center gap-3 p-4 rounded-2xl border-2 transition-all cursor-pointer ${isSuper || isRolePerm ? 'bg-purple-50 border-purple-200 dark:bg-purple-900/20 dark:border-purple-800/50 cursor-not-allowed opacity-90' : isExtraPerm ? 'bg-emerald-50 border-emerald-500 dark:bg-emerald-900/40 dark:border-emerald-500 shadow-sm hover:bg-emerald-100 hover:border-emerald-600' : 'bg-white border-slate-200 hover:border-emerald-300 dark:bg-slate-900 dark:border-slate-700'}`}
-                                                    >
-                                                        <div className={`w-6 h-6 rounded flex items-center justify-center shrink-0 transition-colors ${isSuper || isRolePerm ? 'bg-purple-500 text-white' : isExtraPerm ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-transparent'}`}>
-                                                            <i className="fat fa-check text-[10px]"></i>
-                                                        </div>
-                                                        <span className={`text-xs font-black uppercase tracking-wider leading-tight pr-6 ${isActive || isSuper ? 'text-slate-800 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400'}`}>
-                                                            {zone.name}
-                                                        </span>
-                                                        {(isSuper || isRolePerm) && (
-                                                            <i className="fat fa-shield-check text-purple-400 dark:text-purple-500 absolute right-4 opacity-50 text-base" title="Rol veya Admin yetkisi ile yönetiliyor"></i>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
+                            <div className="h-full overflow-auto bg-slate-50/50 dark:bg-slate-900/50 animate-in fade-in zoom-in-95 duration-300 custom-scrollbar rounded-3xl border border-slate-200 dark:border-slate-700/50 shadow-xl">
+                                <div className="p-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
 
-                                {/* Placeholder for Next Features */}
-                                <div className="p-8 border-t border-slate-200 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-900/50 flex-1 flex flex-col items-center justify-center">
-                                     <i className="fat fa-tools text-4xl text-slate-300 dark:text-slate-600 mb-4 inline-block drop-shadow-xl"></i>
-                                     <h3 className="text-lg font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">DİĞER POS YETKİLERİ</h3>
-                                     <p className="text-xs font-bold text-slate-400 max-w-sm mx-auto text-center leading-relaxed">İskonto, İptal, İade ve İkram gibi diğer operasyonel kontroller bu alana eklenecektir.</p>
+                                        {/* Column 1: Settings & Info (3 Units) */}
+                                        <div className="md:col-span-3 space-y-2">
+                                            <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm transition-all hover:shadow-md">
+                                                <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                                                    <i className="fat fa-cash-register text-indigo-500"></i> Kasa Ayarı
+                                                </h4>
+
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5 px-1">Atanmış Kasa POS</label>
+                                                        <div className="relative">
+                                                            <i className="fat fa-cash-register absolute left-3.5 top-1/2 -translate-y-1/2 text-cyan-500/50 text-[10px] z-10 pointer-events-none"></i>
+                                                            <div className="-m-1 w-full">
+                                                                <SearchableSelect
+                                                                    value={tempCashRegisterId}
+                                                                    onChange={(val) => setTempCashRegisterId(parseInt(val.toString()) || 0)}
+                                                                    options={[
+                                                                        { value: 0, label: 'Kasa Atanmamış' },
+                                                                        ...cashRegisters.filter(cr => cr.isActive).map(cr => ({ value: cr.id, label: cr.name }))
+                                                                    ]}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="border-t border-slate-100 dark:border-slate-700 pt-3">
+                                                        <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Masa Erişim Tipi</label>
+                                                        <div className="flex flex-col gap-2">
+                                                            <button
+                                                                onClick={() => setTableAccessType('ALL')}
+                                                                className={`flex items-center gap-2 p-2 rounded-xl border transition-all ${getTableAccessType() === 'ALL' ? 'bg-indigo-50 border-indigo-200 text-indigo-600 dark:bg-indigo-900/30 dark:border-indigo-500/30' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:border-indigo-300'}`}
+                                                            >
+                                                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${getTableAccessType() === 'ALL' ? 'border-indigo-500' : 'border-slate-300'}`}>
+                                                                    {getTableAccessType() === 'ALL' && <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>}
+                                                                </div>
+                                                                <span className="text-[10px] font-bold uppercase">Tüm Masalar</span>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setTableAccessType('ASSIGNED')}
+                                                                className={`flex items-center gap-2 p-2 rounded-xl border transition-all ${getTableAccessType() === 'ASSIGNED' ? 'bg-purple-50 border-purple-200 text-purple-600 dark:bg-purple-900/30 dark:border-purple-500/30' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:border-purple-300'}`}
+                                                            >
+                                                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${getTableAccessType() === 'ASSIGNED' ? 'border-purple-500' : 'border-slate-300'}`}>
+                                                                    {getTableAccessType() === 'ASSIGNED' && <div className="w-2 h-2 bg-purple-500 rounded-full"></div>}
+                                                                </div>
+                                                                <span className="text-[10px] font-bold uppercase">Görevli Olduğu Masalar</span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+
+                                            </div>
+
+                                            <div className="bg-slate-800 dark:bg-slate-950 rounded-2xl p-4 text-white shadow-lg">
+                                                <h4 className="text-[8px] font-black text-white/40 uppercase tracking-[0.2em] mb-3">Durum Paneli</h4>
+                                                <div className="space-y-2">
+                                                    <div className="bg-white/5 p-3 rounded-xl border border-white/5 flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center"><i className="fat fa-location-dot text-xs"></i></div>
+                                                            <span className="text-[9px] font-bold uppercase text-white/60">Salonlar</span>
+                                                        </div>
+                                                        <span className="text-[11px] font-black text-emerald-400">{extraPerms.filter(p => p.startsWith('ZONE:')).length}</span>
+                                                    </div>
+                                                    <div className="bg-white/5 p-3 rounded-xl border border-white/5 flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-6 h-6 rounded-lg bg-slate-500/20 text-slate-400 flex items-center justify-center"><i className="fat fa-bolt text-xs"></i></div>
+                                                            <span className="text-[9px] font-bold uppercase text-white/60">Yetkiler</span>
+                                                        </div>
+                                                        <span className="text-[11px] font-black text-slate-400">0</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Column 2: Zone Permissions + Price/Campaign (4 Units) */}
+                                        <div className="md:col-span-4 space-y-4">
+                                            {/* Zone Permissions */}
+                                            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden min-h-[100px] transition-all hover:shadow-md">
+                                                <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/20">
+                                                    <h4 className="text-[9px] font-black text-slate-500 dark:text-white uppercase tracking-[0.2em] flex items-center gap-2">
+                                                        <i className="fat fa-location-dot text-emerald-500"></i> Yetkili Salonlar
+                                                    </h4>
+                                                </div>
+                                                <div className="p-4 overflow-auto max-h-[300px] custom-scrollbar">
+                                                    {zones.length === 0 ? (
+                                                        <div className="text-center p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                                                            <p className="text-[9px] text-slate-400 font-bold uppercase">Salon bulunmuyor.</p>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
+                                                            {zones.map(zone => {
+                                                                const key = `ZONE:${zone.id}`;
+                                                                const isRolePerm = rolePerms.includes(key);
+                                                                const isExtraPerm = extraPerms.includes(key);
+                                                                const isActive = isRolePerm || isExtraPerm;
+                                                                const isSuper = isSuperAdmin(permUser);
+
+                                                                return (
+                                                                    <button
+                                                                        key={`zone-${zone.id}`}
+                                                                        type="button"
+                                                                        onClick={() => !isRolePerm && !isSuper && toggleZonePerm(zone.id)}
+                                                                        disabled={isRolePerm || isSuper}
+                                                                        className={`relative flex items-center gap-2 p-2 rounded-xl border transition-all ${isSuper || isRolePerm ? 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-60 cursor-not-allowed' : isExtraPerm ? 'bg-emerald-500 border-emerald-500 text-white shadow-md shadow-emerald-500/20' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-emerald-400'}`}
+                                                                    >
+                                                                        <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 ${isActive || isSuper ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-900 text-transparent'}`}>
+                                                                            <i className="fat fa-check text-[9px]"></i>
+                                                                        </div>
+                                                                        <span className="text-[10px] font-black uppercase tracking-tight truncate flex-1 text-left">
+                                                                            {zone.name}
+                                                                        </span>
+                                                                        {(isSuper || isRolePerm) && (
+                                                                            <i className="fat fa-shield-check text-slate-400 text-[10px] opacity-30"></i>
+                                                                        )}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Column 2 - Box 2: Price / Campaign Permissions */}
+                                            <div className="bg-white dark:bg-slate-800 rounded-[32px] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col transition-all hover:shadow-md animate-in slide-in-from-bottom-5 duration-500 mt-4">
+                                                <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/20">
+                                                    <h4 className="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-widest flex items-center gap-2">
+                                                        <i className="fat fa-tags"></i> Fiyat / Kampanya Yetkileri
+                                                    </h4>
+                                                </div>
+
+                                                <div className="p-4 relative">
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 transition-all duration-300">
+                                                        {[
+                                                            { key: 'OP:CAN_CHANGE_PRICE', label: 'Fiyat Değiştirebilir', icon: 'fa-tags', color: 'text-blue-500' },
+                                                            { key: 'OP:PRICE_AFTER_BILL', label: 'Hesap Sonrası Fiyat', icon: 'fa-file-invoice-dollar', color: 'text-indigo-500' },
+                                                            { key: 'OP:CAN_DISCOUNT', label: 'İndirim Yapabilir', icon: 'fa-percent', color: 'text-emerald-500' },
+                                                            { key: 'OP:DISCOUNT_AFTER_BILL', label: 'Hesap Sonrası İndirim', icon: 'fa-receipt', color: 'text-amber-500' },
+                                                            { key: 'OP:CAN_COMPLIMENTARY', label: 'İkram Yapabilir', icon: 'fa-gift', color: 'text-pink-500' },
+                                                            { key: 'OP:CAN_REFUND', label: 'İade Edebilir', icon: 'fa-rotate-left', color: 'text-rose-500' },
+                                                            { key: 'OP:CAN_PROMOTION', label: 'Promosyon Uygula', icon: 'fa-star', color: 'text-yellow-500' },
+                                                            { key: 'OP:STAFF_SALE', label: 'Personel Satışı', icon: 'fa-user-tag', color: 'text-indigo-600' },
+                                                            { key: 'OP:NON_PAYMENT', label: 'Bedelsiz İşlem', icon: 'fa-hand-holding-dollar', color: 'text-teal-500' },
+                                                            { key: 'OP:SET_MENU_SALE', label: 'Set Menü Satışı', icon: 'fa-list-check', color: 'text-violet-500' },
+                                                            { key: 'OP:COMBO_SALE', label: 'Kombo Satışı', icon: 'fa-cubes', color: 'text-cyan-500' },
+                                                            { key: 'OP:BOGO_CAMPAIGN', label: 'BOGO / Kampanya', icon: 'fa-ticket', color: 'text-orange-500' },
+                                                        ].map((item, i) => {
+                                                            const isActive = extraPerms.includes(item.key);
+                                                            const isSuper = isSuperAdmin(permUser);
+                                                            return (
+                                                                <button
+                                                                    key={item.key}
+                                                                    type="button"
+                                                                    onClick={() => !isSuper && toggleExtraPerm(item.key)}
+                                                                    disabled={isSuper}
+                                                                    className={`group flex items-center justify-between gap-3 p-3 rounded-2xl border-2 transition-all duration-300 ${isSuper ? 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-60 cursor-not-allowed' : isActive ? 'bg-rose-500/10 border-rose-500 text-rose-600 dark:text-rose-400 shadow-sm shadow-rose-500/5' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-rose-300 hover:shadow-md'}`}
+                                                                >
+                                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors ${isActive ? 'bg-rose-500 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-400 group-hover:bg-rose-100 dark:group-hover:bg-rose-900/30'}`}>
+                                                                            <i className={`fat ${item.icon} text-sm`}></i>
+                                                                        </div>
+                                                                        <span className="text-[10px] font-black uppercase tracking-tight truncate leading-tight">{item.label}</span>
+                                                                    </div>
+                                                                    {!isSuper && <i className={`fat ${isActive ? 'fa-check-circle' : 'fa-circle'} text-xs ${isActive ? 'text-rose-500' : 'text-slate-200 dark:text-slate-700'}`}></i>}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+
+                                                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+                                                        <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/40 p-3 rounded-2xl border border-slate-100 dark:border-slate-800/50">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-9 h-9 rounded-xl bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+                                                                    <i className="fat fa-gauge-high"></i>
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-[10px] font-black text-slate-800 dark:text-white uppercase leading-none">Azami İndirim Oranı</p>
+                                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-1">Kullanıcı için üst limit (%)</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <input
+                                                                    type="number"
+                                                                    min="0"
+                                                                    max="100"
+                                                                    value={extraPerms.find(p => p.startsWith('DISCOUNT_LIMIT:'))?.split(':')[1] || '0'}
+                                                                    onChange={(e) => setDiscountLimit(e.target.value)}
+                                                                    className="w-16 h-10 bg-white dark:bg-slate-800 border-2 border-rose-200 dark:border-rose-900/50 rounded-xl text-center font-black text-rose-600 dark:text-rose-400 outline-none focus:border-rose-500 transition-all font-mono"
+                                                                />
+                                                                <span className="font-black text-rose-400 font-mono">%</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="md:col-span-5 space-y-4">
+                                            {/* Operational Permissions (Always Visible) */}
+                                            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden min-h-[100px]">
+                                                <div className="p-4 border-b border-slate-100 dark:border-slate-700">
+                                                    <h4 className="text-[9px] font-black text-slate-500 dark:text-white uppercase tracking-[0.2em] flex items-center gap-2">
+                                                        <i className="fat fa-scale-balanced text-orange-500"></i> Operasyonel Yetkiler
+                                                    </h4>
+                                                </div>
+
+                                                <div className="p-4 relative">
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 transition-all duration-300">
+                                                        {[
+                                                            { key: 'OP:CAN_ORDER', label: 'Sipariş Alabilir', icon: 'fa-cart-plus', color: 'text-emerald-500' },
+                                                            { key: 'OP:ORDER_AFTER_BILL', label: 'Hesap Sonrası Sipariş', icon: 'fa-file-invoice-dollar', color: 'text-amber-500' },
+                                                            { key: 'OP:CAN_TRANSFER', label: 'Transfer Yapabilir', icon: 'fa-arrow-right-arrow-left', color: 'text-blue-500' },
+                                                            { key: 'OP:CAN_PRINT_BILL', label: 'Adisyon Yazdır / Hesap İste', icon: 'fa-print', color: 'text-slate-500' },
+                                                            { key: 'OP:REPRINT_BILL', label: '2. Kez / Tekrar Adisyon Yazdır', icon: 'fa-repeat', color: 'text-purple-500' },
+                                                            { key: 'OP:CAN_CANCEL_SALE', label: 'Adisyon İptal', icon: 'fa-ban', color: 'text-rose-500' },
+                                                            { key: 'OWN_TABLES_ONLY', label: 'Kendi Masaları', icon: 'fa-user-lock', color: 'text-indigo-500' },
+                                                        ].map((item, i) => {
+                                                            const isActive = extraPerms.includes(item.key);
+                                                            const isSuper = isSuperAdmin(permUser);
+                                                            return (
+                                                                <button
+                                                                    key={item.key}
+                                                                    onClick={() => !isSuper && toggleExtraPerm(item.key)}
+                                                                    disabled={isSuper}
+                                                                    className={`group flex items-center justify-between gap-3 p-3 rounded-2xl border-2 transition-all duration-300 ${isSuper ? 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-60 cursor-not-allowed' : isActive ? 'bg-orange-500/10 border-orange-500 text-orange-600 dark:text-orange-400 shadow-sm shadow-orange-500/5' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-orange-300 hover:shadow-md'}`}
+                                                                >
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 shadow-sm ${isActive ? 'bg-orange-500 text-white shadow-orange-500/30' : 'bg-slate-100 dark:bg-slate-900 shadow-black/5'}`}>
+                                                                            <i className={`fat ${item.icon} text-sm ${isActive ? 'text-white' : item.color}`}></i>
+                                                                        </div>
+                                                                        <div className="flex flex-col items-start translate-y-[-1px]">
+                                                                            <span className={`text-[10px] font-black uppercase tracking-widest leading-none ${isActive ? 'text-orange-600 dark:text-orange-400' : 'text-slate-600 dark:text-slate-300'}`}>{item.label}</span>
+                                                                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter mt-1 opacity-60">{isActive ? 'AKTİF' : 'PASİF'}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className={`w-8 h-4 rounded-full relative transition-all duration-500 overflow-hidden ${isActive ? 'bg-orange-500' : 'bg-slate-200 dark:bg-slate-700'}`}>
+                                                                        <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm ${isActive ? 'left-[18px]' : 'left-0.5'}`}></div>
+                                                                    </div>
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Finance / Payment Permissions */}
+                                            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden min-h-[100px] animate-in slide-in-from-bottom-5 duration-500 mt-4">
+                                                <div className="p-4 border-b border-slate-100 dark:border-slate-700">
+                                                    <h4 className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                                        <i className="fat fa-money-bill-wave"></i> Finans / Ödeme Yetkileri
+                                                    </h4>
+                                                </div>
+
+                                                <div className="p-4 relative">
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 transition-all duration-300">
+                                                        {[
+                                                            { key: 'OP:FINANCE_CLOSE_ACCOUNT', label: 'Hesap kapatabilir', icon: 'fa-cash-register', color: 'text-emerald-600' },
+                                                            { key: 'OP:FINANCE_CLOSE_OPEN_ACCOUNT', label: 'Açık hesap adisyon kpt', icon: 'fa-file-invoice', color: 'text-blue-500' },
+                                                            { key: 'OP:FINANCE_PARTIAL_PAYMENT', label: 'Parçalı ödeme alabilir', icon: 'fa-chart-pie', color: 'text-indigo-500' },
+                                                            { key: 'OP:FINANCE_DOWN_PAYMENT', label: 'Peşinat tahsilatı', icon: 'fa-hand-holding-dollar', color: 'text-teal-500' },
+                                                            { key: 'OP:FINANCE_COLLECT_CURRENT_ACCOUNT', label: 'Cari hesap tahsilatı', icon: 'fa-money-bill-transfer', color: 'text-cyan-500' },
+                                                            { key: 'OP:FINANCE_PAY_CURRENT_ACCOUNT', label: 'Cari hesap ödemesi', icon: 'fa-money-bill-wave', color: 'text-orange-500' },
+                                                            { key: 'OP:FINANCE_CLOSE_TO_CURRENT_ACCOUNT', label: 'Cariye hesap kapatabilir', icon: 'fa-building-columns', color: 'text-purple-500' },
+                                                        ].map((item, i) => {
+                                                            const isActive = extraPerms.includes(item.key);
+                                                            const isSuper = isSuperAdmin(permUser);
+                                                            return (
+                                                                <button
+                                                                    key={item.key}
+                                                                    onClick={() => !isSuper && toggleExtraPerm(item.key)}
+                                                                    disabled={isSuper}
+                                                                    className={`group flex items-center justify-between gap-3 p-3 rounded-2xl border-2 transition-all duration-300 ${isSuper ? 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-60 cursor-not-allowed' : isActive ? 'bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-sm shadow-emerald-500/5' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-emerald-300 hover:shadow-md'}`}
+                                                                >
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 shadow-sm ${isActive ? 'bg-emerald-500 text-white shadow-emerald-500/30' : 'bg-slate-100 dark:bg-slate-900 shadow-black/5'}`}>
+                                                                            <i className={`fat ${item.icon} text-sm ${isActive ? 'text-white' : item.color}`}></i>
+                                                                        </div>
+                                                                        <div className="flex flex-col items-start translate-y-[-1px]">
+                                                                            <span className={`text-[10px] font-black uppercase tracking-widest leading-none truncate max-w-[130px] ${isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'}`} title={item.label}>{item.label}</span>
+                                                                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter mt-1 opacity-60">{isActive ? 'AKTİF' : 'PASİF'}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className={`w-8 h-4 rounded-full relative transition-all duration-500 overflow-hidden shrink-0 ${isActive ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'}`}>
+                                                                        <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm ${isActive ? 'left-[18px]' : 'left-0.5'}`}></div>
+                                                                    </div>
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Assigned Tables (Conditional) */}
+                                            {getTableAccessType() === 'ASSIGNED' && (
+                                                <div className="bg-white dark:bg-slate-800 rounded-[32px] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col animate-in slide-in-from-top duration-400 mt-2">
+                                                    <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-purple-500/5">
+                                                        <h4 className="text-[9px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                                            <i className="fat fa-table-list"></i> Görevli Olduğu Masalar
+                                                        </h4>
+                                                        <span className="text-[10px] font-black text-purple-600 bg-purple-100 dark:bg-purple-900/40 px-3 py-1 rounded-full border border-purple-200 dark:border-purple-500/30">
+                                                            {extraPerms.filter(p => p.startsWith('TABLE:')).length} Seçili
+                                                        </span>
+                                                    </div>
+                                                    <div className="divide-y divide-slate-50 dark:divide-slate-700/50 max-h-[300px] overflow-y-auto custom-scrollbar">
+                                                        {zones.filter(z => {
+                                                            const key = `ZONE:${z.id}`;
+                                                            return rolePerms.includes(key) || extraPerms.includes(key);
+                                                        }).map(zone => {
+                                                            const zoneTables = tables.filter(t => t.zone?.id === zone.id);
+                                                            if (zoneTables.length === 0) return null;
+                                                            return (
+                                                                <div key={`table-zone-final-${zone.id}`} className="p-4">
+                                                                    <div className="flex items-center gap-2 mb-3">
+                                                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                                                                        <h5 className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{zone.name}</h5>
+                                                                    </div>
+                                                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                                                        {zoneTables.map(table => {
+                                                                            const isSelected = extraPerms.includes(`TABLE:${table.id}`);
+                                                                            const isSuper = isSuperAdmin(permUser);
+                                                                            return (
+                                                                                <button
+                                                                                    key={`table-btn-${table.id}`}
+                                                                                    type="button"
+                                                                                    onClick={() => !isSuper && toggleTablePerm(table.id)}
+                                                                                    disabled={isSuper}
+                                                                                    className={`group relative flex flex-col items-center justify-center p-2 rounded-xl border transition-all ${isSelected ? 'bg-purple-600 border-purple-600 text-white shadow-lg' : 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 hover:border-purple-300 text-slate-600 dark:text-slate-400'}`}
+                                                                                >
+                                                                                    <span className="text-[10px] font-black uppercase tracking-tight text-center leading-none">{table.name}</span>
+                                                                                    {isSelected && (
+                                                                                        <div className="absolute -top-1 -right-1 w-3 h-3 bg-white rounded-full flex items-center justify-center shadow-lg border border-purple-100">
+                                                                                            <i className="fat fa-check text-[7px] text-purple-600 font-black"></i>
+                                                                                        </div>
+                                                                                    )}
+                                                                                </button>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         )}
                     </div>
-
                 </div>
             )}
         </div>
