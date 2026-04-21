@@ -17,6 +17,7 @@ import { OrdersModule } from '../orders/orders.module';
 import { AlertsModule } from '../alerts/alerts.module';
 import { StockMovementsModule } from '../stock-movements/stock-movements.module';
 import { ProductsModule } from '../products/products.module';
+import { TablesModule } from '../tables/tables.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { ProductsModule } from '../products/products.module';
     StockMovementsModule,
     ProductsModule,
     OrdersModule,
+    TablesModule,
   ],
   providers: [SalesService],
   controllers: [SalesController],

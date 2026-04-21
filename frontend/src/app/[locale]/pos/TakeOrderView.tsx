@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
 import { useRouter } from 'next/navigation';
 import { showSwal, toastSwal } from '../utils/swal';
@@ -9,7 +9,8 @@ import { useThemeTransition } from '@/hooks/useThemeTransition';
 import { useParameters } from '../utils/useParameters';
 import TransferModal from './TransferModal';
 import SetMenuSelectionModal from './SetMenuSelectionModal';
-import { io, Socket } from 'socket.io-client';
+import { Socket } from 'socket.io-client';
+import { usePos } from './PosContext';
 import {
     DndContext,
     closestCenter,
@@ -184,23 +185,47 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [activeDragGroup, setActiveDragGroup] = useState<any | null>(null);
 
     const [activeTab, setActiveTab] = useState<'tables' | 'menu'>('tables');
+    const { 
+        products: contextProducts, 
+        tables: contextTables, 
+        zones, 
+        departments: contextDepartments, 
+        parentGroups: contextParentGroups, 
+        productTypes, 
+        dataLoading: posDataLoading, 
+        refreshDynamicData 
+    } = usePos();
+
     const [products, setProducts] = useState<Product[]>([]);
-    const [tables, setTables] = useState<Table[]>([]);
-    const [zones, setZones] = useState<Zone[]>([]);
     const [departments, setDepartments] = useState<any[]>([]);
     const [parentGroups, setParentGroups] = useState<any[]>([]);
+    const [tables, setTables] = useState<Table[]>([]);
+
+    useEffect(() => {
+        if (contextProducts.length > 0) setProducts(contextProducts);
+        if (contextDepartments.length > 0) setDepartments(contextDepartments);
+        if (contextParentGroups.length > 0) setParentGroups(contextParentGroups);
+        if (contextTables.length > 0) setTables(contextTables);
+    }, [contextProducts, contextDepartments, contextParentGroups, contextTables]);
+
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
     const [selectedZone, setSelectedZone] = useState<number | null>(null);
     const [cart, setCart] = useState<OrderItem[]>([]);
     const [activeSaleType, setActiveSaleType] = useState<'STANDARD' | 'HALF' | 'DOUBLE'>('STANDARD');
     const [existingOrders, setExistingOrders] = useState<ExistingOrder[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
-    const [dataLoading, setDataLoading] = useState(true);
+    const [dataLoading, setDataLoading] = useState(false); 
 
-    const [productTypes, setProductTypes] = useState<ProductType[]>([]);
     const [selectedProductTypeId, setSelectedProductTypeId] = useState<number | 'all'>('all');
     const [selectedParentGroupId, setSelectedParentGroupId] = useState<number | 'all' | 'unassigned' | null>(null);
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<number | 'all' | null>(null);
+
+    // Initial zone select
+    useEffect(() => {
+        if (zones.length > 0 && selectedZone === null) {
+            setSelectedZone(zones[0].id);
+        }
+    }, [zones, selectedZone]);
 
     // --- Ekstra Popup State ---
     const [extraPopupOpen, setExtraPopupOpen] = useState(false);
@@ -245,67 +270,13 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
     const { params } = useParameters();
 
-    const fetchData = useCallback(async () => {
-        try {
-            const token = Cookies.get('token') || localStorage.getItem('token');
-            if (!token) return;
-            const [productsRes, tablesRes, zonesRes, depsRes, typesRes, pGroupsRes] = await Promise.all([
-                fetch(`${API_URL}/products`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-                fetch(`${API_URL}/tables`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-                fetch(`${API_URL}/zones`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-                fetch(`${API_URL}/departments`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => []),
-                fetch(`${API_URL}/product-types`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => []),
-                fetch(`${API_URL}/parent-groups`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => [])
-            ]);
-            setProducts(Array.isArray(productsRes) ? productsRes : []);
-            setTables(Array.isArray(tablesRes) ? tablesRes : []);
-            setZones(Array.isArray(zonesRes) ? zonesRes : []);
-            setDepartments(Array.isArray(depsRes) ? depsRes : []);
-            setProductTypes(Array.isArray(typesRes) ? typesRes : []);
-            setParentGroups(Array.isArray(pGroupsRes) ? pGroupsRes : []);
-            if (Array.isArray(zonesRes) && zonesRes.length > 0) setSelectedZone(zonesRes[0].id);
-        } catch (error) {
-            console.error('Error fetching POS data:', error);
-        } finally {
-            setDataLoading(false);
-        }
-    }, [API_URL]);
-
     useEffect(() => {
         setMounted(true);
     }, []);
 
     useEffect(() => {
         if (!loading && !user) router.push(`/${locale}/login`);
-        if (!loading && user) {
-            fetchData();
-        }
     }, [user, loading]);
-
-    // ── WebSocket: Garson veya başka kaynaktan gelen anlık güncellemeler ──
-    useEffect(() => {
-        const socket: Socket = io(API_URL, {
-            transports: ['websocket', 'polling'],
-            reconnection: true,
-            reconnectionAttempts: Infinity,
-            reconnectionDelay: 1000,
-            reconnectionDelayMax: 5000,
-            withCredentials: false,
-        });
-        socket.on('connect', () => {
-            console.log('[POS Socket] Bağlandı:', socket.id, '| Transport:', socket.io.engine.transport.name);
-        });
-        socket.on('disconnect', (reason) => {
-            console.warn('[POS Socket] Bağlantı kesildi:', reason);
-        });
-        socket.on('connect_error', (err) => {
-            console.error('[POS Socket] Bağlantı hatası:', err.message);
-        });
-        socket.on('salesUpdate', () => { fetchData(); });
-        socket.on('newOrder', () => { fetchData(); });
-        socket.on('orderUpdated', () => { fetchData(); });
-        return () => { socket.disconnect(); };
-    }, [API_URL, fetchData]);
 
     const sensors = useSensors(
         useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
@@ -337,19 +308,19 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             const overIdStr = String(over.id);
             
             if (activeIdStr.startsWith('pg-') && overIdStr.startsWith('pg-')) {
-                setParentGroups((items) => {
+                setParentGroups((items: any[]) => {
                     const oldIndex = items.findIndex(i => `pg-${i.id}` === activeIdStr);
                     const newIndex = items.findIndex(i => `pg-${i.id}` === overIdStr);
                     return arrayMove(items, oldIndex, newIndex);
                 });
             } else if (activeIdStr.startsWith('dept-') && overIdStr.startsWith('dept-')) {
-                setDepartments((items) => {
+                setDepartments((items: any[]) => {
                     const oldIndex = items.findIndex(i => `dept-${i.id}` === activeIdStr);
                     const newIndex = items.findIndex(i => `dept-${i.id}` === overIdStr);
                     return arrayMove(items, oldIndex, newIndex);
                 });
             } else if (!activeIdStr.startsWith('pg-') && !activeIdStr.startsWith('dept-') && !overIdStr.startsWith('pg-') && !overIdStr.startsWith('dept-')) {
-                setProducts((items) => {
+                setProducts((items: Product[]) => {
                     const oldIndex = items.findIndex(i => i.id === active.id);
                     const newIndex = items.findIndex(i => i.id === over.id);
                     return arrayMove(items, oldIndex, newIndex);
@@ -366,21 +337,21 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     const productTypeOptions = [{ id: 'all', name: 'Tümü' }, ...productTypes];
 
-    const filteredParentGroups = parentGroups.filter(pg => {
+    const filteredParentGroups = useMemo(() => parentGroups.filter(pg => {
         if (selectedProductTypeId === 'all') return true;
         const pgDepts = departments.filter(d => d.parentGroupId === pg.id);
         return products.some(p => p.productTypeId === selectedProductTypeId && pgDepts.some(d => d.name === p.category));
-    });
+    }), [parentGroups, selectedProductTypeId, departments, products]);
 
-    const filteredRootDepartments = departments.filter(d => !d.parentGroupId).filter(d => {
+    const filteredRootDepartments = useMemo(() => departments.filter(d => !d.parentGroupId).filter(d => {
         if (selectedProductTypeId === 'all') return true;
         return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
-    });
+    }), [departments, selectedProductTypeId, products]);
 
-    const filteredSubDepartments = selectedParentGroupId ? departments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
+    const filteredSubDepartments = useMemo(() => selectedParentGroupId ? departments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
         if (selectedProductTypeId === 'all') return true;
         return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
-    }) : [];
+    }) : [], [selectedParentGroupId, departments, selectedProductTypeId, products]);
 
     const sortableGroupIds = selectedParentGroupId 
         ? filteredSubDepartments.map(d => `dept-${d.id}`)
@@ -389,7 +360,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             ...filteredRootDepartments.map(d => `dept-${d.id}`)
         ];
 
-    const filteredProducts = products.filter(p => {
+    const filteredProducts = useMemo(() => products.filter(p => {
         if (p.posVisible === false) return false;
 
         const matchesType = selectedProductTypeId === 'all' || p.productTypeId === selectedProductTypeId;
@@ -412,7 +383,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
         const matchesCategory = p.category === dept.name || (!p.category && dept.name === 'Diğer');
         return matchesType && matchesCategory;
-    });
+    }), [products, selectedProductTypeId, searchQuery, selectedDepartmentId, departments]);
 
     const handleTableClick = async (table: Table) => {
         setSelectedTable(table);
@@ -483,7 +454,8 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                 // Proced with normal flow
                 const updatedTable = { ...selectedTable, isBillRequested: false };
                 setSelectedTable(updatedTable);
-                setTables(prev => prev.map(t => t.id === updatedTable.id ? updatedTable : t));
+                setTables((prev: Table[]) => prev.map(t => t.id === updatedTable.id ? updatedTable : t));
+                refreshDynamicData();
             }
         } catch (err) {
             console.error("Failed to reopen table", err);
@@ -758,7 +730,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             setCart([]);
             setSelectedTable(null);
             setActiveTab('tables');
-            fetchData(); // Refresh table status
+            refreshDynamicData(); // Only refresh table status - much faster
         } catch (error) {
             showSwal({
                 icon: 'error',
@@ -1204,7 +1176,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                                             toastSwal({ icon: 'error', title: 'Hata', text: 'Sıra kaydedilemedi.' });
                                                         }
                                                         setIsDesignMode(false);
-                                                        fetchData();
+                                                        refreshDynamicData();
                                                     }}
                                                     className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 bg-indigo-500 text-white shadow-md shadow-indigo-500/30 animate-pulse"
                                                 >
@@ -2051,7 +2023,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                 tables={tables}
                 zones={zones}
                 onTransferComplete={() => {
-                    fetchData();
+                    refreshDynamicData();
                     setSelectedTable(null);
                     setActiveTab('tables');
                 }}

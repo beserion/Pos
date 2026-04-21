@@ -94,8 +94,7 @@ export function PageClient() {
             icon: 'fa-calendar-check',
             color: 'from-fuchsia-600 to-pink-600',
             bg: 'bg-fuchsia-600',
-            route: `/${locale}/reservations`,
-            featureKey: 'reservation_system'
+            route: `/${locale}/reservations`
         },
         {
             id: 'pos',
@@ -232,6 +231,26 @@ export function PageClient() {
             color: 'from-cyan-500 to-sky-600',
             bg: 'bg-cyan-500',
             route: `/${locale}/reports`
+        },
+        {
+            id: 'e-services',
+            permission: 'SALES:VIEW',
+            title: 'E-Hizmetler',
+            description: 'e-Fatura, e-Arşiv ve e-İrsaliye gibi işlemler.',
+            icon: 'fa-cloud',
+            color: 'from-teal-500 to-emerald-600',
+            bg: 'bg-teal-500',
+            route: `/${locale}/e-services`
+        },
+        {
+            id: 'integrations',
+            permission: 'SALES:VIEW',
+            title: 'Entegrasyonlar',
+            description: 'Ek uygulamalar ve özellikler',
+            icon: 'fa-cubes',
+            color: 'from-slate-500 to-slate-800',
+            bg: 'bg-slate-500',
+            route: `/${locale}/integrations`
         }
     ], [tDashboard, tAdmin, locale]);
 
@@ -411,7 +430,7 @@ export function PageClient() {
             <main className="relative z-10 w-full px-[50px] py-8">
                 <DndContext
                     sensors={sensors}
-                    collisionDetection={ closestCenter}
+                    collisionDetection={closestCenter}
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                     onDragCancel={handleDragCancel}
@@ -436,7 +455,7 @@ export function PageClient() {
                             ))}
                         </div>
                     </SortableContext>
-                    
+
                     <DragOverlay dropAnimation={{
                         duration: 300,
                         easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)', // Yerine otururken hafif yaylanma efekti (spring)
@@ -483,12 +502,12 @@ function DashboardCard({ id, title, description, icon, color, bg, onClick, isDes
         transform,
         transition,
         isDragging,
-    } = useSortable({ 
-        id: id, 
+    } = useSortable({
+        id: id,
         disabled: !isDesignMode,
         transition: {
             duration: 250, // Diğer nesnelerin yanal kaymasında hızlı ve pürüzsüz animasyon
-            easing: 'cubic-bezier(0.25, 1, 0.5, 1)', 
+            easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
         }
     });
 

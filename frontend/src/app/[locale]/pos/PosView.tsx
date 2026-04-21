@@ -8,6 +8,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { useThemeTransition } from '@/hooks/useThemeTransition';
 import ShiftManager from '@/components/shifts/ShiftManager';
 import TransferModal from './TransferModal';
+import { usePos } from './PosContext';
 
 interface Product {
     id: number;
@@ -48,18 +49,16 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const targetTableId = searchParams.get('tableId');
     const [mounted, setMounted] = useState(false);
 
-    const [products, setProducts] = useState<Product[]>([]);
-    const [tables, setTables] = useState<Table[]>([]);
+    const { products, tables, zones: allZones, dataLoading: posDataLoading, refreshDynamicData } = usePos();
     const [zones, setZones] = useState<Zone[]>([]);
-    const [allZones, setAllZones] = useState<Zone[]>([]);
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
     const [selectedZone, setSelectedZone] = useState<number | 'ALL'>('ALL');
-    const [cart, setCart] = useState<{ product: Product; quantity: number; itemId?: number; subCheckId?: number; subItems?: any[]; saleType?: string; saleTypeMultiplier?: number; }[]>([]);
+    const [cart, setCart] = useState<{ product: Product; quantity: number; itemId?: number; subCheckId?: number; subItems?: any[]; saleType?: string; saleTypeMultiplier?: number; note?: string; }[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string>('Tümü');
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [isSplitPaymentOpen, setIsSplitPaymentOpen] = useState(false);
     const [splitAmounts, setSplitAmounts] = useState({ cash: 0, creditCard: 0 });
-    const [dataLoading, setDataLoading] = useState(true);
+    const [dataLoading, setDataLoading] = useState(false);
     const [activeOrderIds, setActiveOrderIds] = useState<number[]>([]);
     const [selectedPosItems, setSelectedPosItems] = useState<number[]>([]);
     const [discount, setDiscount] = useState<number>(0);
@@ -89,86 +88,13 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
     const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')));
 
-    const fetchData = useCallback(async () => {
-        try {
-            const token = (user as any)?.token || localStorage.getItem('token');
-            if (!token) {
-                console.warn('PosView: No token found for fetchData');
-                return;
-            }
-
-            const [productsRes, tablesRes, zonesRes] = await Promise.all([
-                fetch(`${API_URL}/products`, { headers: { Authorization: `Bearer ${token}` } }),
-                fetch(`${API_URL}/tables`, { headers: { Authorization: `Bearer ${token}` } }),
-                fetch(`${API_URL}/zones`, { headers: { Authorization: `Bearer ${token}` } })
-            ]);
-
-            if (!productsRes.ok || !tablesRes.ok || !zonesRes.ok) {
-                console.error('PosView: Fetch failed', {
-                    productsStatus: productsRes.status,
-                    tablesStatus: tablesRes.status,
-                    zonesStatus: zonesRes.status
-                });
-                return;
-            }
-
-            const [productsData, tablesData, zonesData] = await Promise.all([
-                productsRes.json(),
-                tablesRes.json(),
-                zonesRes.json()
-            ]);
-
-            console.log('PosView: Data loaded', {
-                productsCount: productsData.length,
-                tablesCount: tablesData.length,
-                zonesCount: zonesData.length
-            });
-
-            setProducts(productsData);
-            setTables(tablesData);
-            setAllZones(zonesData);
-        } catch (error) {
-            console.error('Error fetching POS data:', error);
-        } finally {
-            setDataLoading(false);
-        }
-    }, [API_URL, user]);
+    useEffect(() => {
+        if (!loading && !user) router.push(`/${locale}/login`);
+    }, [user, loading, router]);
 
     useEffect(() => {
         setMounted(true);
     }, []);
-
-    useEffect(() => {
-        if (!loading && !user) router.push(`/${locale}/login`);
-        if (user) {
-            fetchData();
-        }
-    }, [user, loading, router]);
-
-    // ── WebSocket: Anlık masa/sipariş güncellemeleri ──
-    useEffect(() => {
-        const socket = io(API_URL, {
-            transports: ['websocket', 'polling'],
-            reconnection: true,
-            reconnectionAttempts: Infinity,
-            reconnectionDelay: 1000,
-            reconnectionDelayMax: 5000,
-            withCredentials: false,
-        });
-        socket.on('connect', () => {
-            console.log('[POS Kasa Socket] Bağlandı:', socket.id);
-        });
-        socket.on('disconnect', (reason: string) => {
-            console.warn('[POS Kasa Socket] Bağlantı kesildi:', reason);
-        });
-        socket.on('connect_error', (err: Error) => {
-            console.error('[POS Kasa Socket] Bağlantı hatası:', err.message);
-        });
-        socket.on('salesUpdate', () => { fetchData(); });
-        socket.on('newOrder', () => { fetchData(); });
-        socket.on('orderUpdated', () => { fetchData(); });
-        return () => { socket.disconnect(); };
-    }, [API_URL, fetchData]);
 
     // Apply zone filtering whenever allZones or activeCashRegister changes
     useEffect(() => {
@@ -468,7 +394,6 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 });
                 // Local state'i de hemen güncelle ki anında sarı olsun (fetchData beklemeden).
                 setSelectedTable(prev => prev ? { ...prev, isBillRequested: true } : prev);
-                setTables(prevTables => prevTables.map(t => t.id === selectedTable.id ? { ...t, isBillRequested: true } : t));
             }
 
             toastSwal({ icon: 'success', title: 'Yazdırma isteği gönderildi' });
@@ -594,11 +519,9 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 setIsCheckoutOpen(false);
                 setIsSplitPaymentOpen(false);
                 setActiveOrderIds([]);
-                setSelectedPosItems([]);
-                setSplitAmounts({ cash: 0, creditCard: 0 });
                 setDiscount(0);
                 setServiceFee(0);
-                fetchData();
+                refreshDynamicData();
             } else {
                 const errorData = await saleRes.json();
                 showSwal({
@@ -650,7 +573,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     toastSwal({ icon: 'success', title: 'Adisyon iptal edildi.' });
                     setSelectedTable(null);
                     setCart([]);
-                    fetchData();
+                    refreshDynamicData();
                 } else {
                     toastSwal({ icon: 'error', title: 'İşlem başarısız.' });
                 }
@@ -1552,7 +1475,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                 İptal
                             </button>
                             <button
-                                onClick={handlePrintBill}
+                                onClick={() => handlePrintBill()}
                                 disabled={selectedPrintCheckIds.length === 0}
                                 className="flex-[2] py-3 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold shadow-lg shadow-orange-500/30 transition-all disabled:opacity-50 disabled:grayscale flex items-center justify-center gap-2"
                             >
@@ -1578,7 +1501,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 onTransferComplete={() => {
                     if (selectedTable) {
                         // Refresh table data
-                        fetchData();
+                        refreshDynamicData();
                         setSelectedTable(null);
                     }
                 }}

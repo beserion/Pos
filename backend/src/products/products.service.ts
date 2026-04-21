@@ -20,11 +20,23 @@ export class ProductsService {
         private transactionRepository: Repository<ProductTransaction>,
     ) { }
 
+    private productsCache: Product[] | null = null;
+    private quickSaleCache: Product[] | null = null;
+    
+    private clearCache() {
+        this.productsCache = null;
+        this.quickSaleCache = null;
+    }
+
     async countProducts(): Promise<number> {
         return await this.productRepository.count();
     }
 
     async findAll(): Promise<Product[]> {
+        if (this.productsCache) {
+            return this.productsCache;
+        }
+
         const products = await this.productRepository.find({
             relations: ['recipes', 'variations', 'printer', 'productType', 'outputProfile', 'setMenu', 'setMenu.groups', 'setMenu.groups.items', 'linkedStockCard', 'linkedStockCard.stockGroupRelation'],
             order: { orderIndex: 'ASC', id: 'ASC' }
@@ -48,13 +60,18 @@ export class ProductsService {
                 }));
             });
         }
+        this.productsCache = products;
         return products;
     }
 
     async findAllQuickSale(): Promise<Product[]> {
+        if (this.quickSaleCache) {
+            return this.quickSaleCache;
+        }
+
         // Fast, lightweight fetch without joining recipes, modifiers, or printers.
         // Exclude products where isIngredient = true (handle NULL as non-ingredient)
-        return await this.productRepository
+        const data = await this.productRepository
             .createQueryBuilder('p')
             .leftJoinAndSelect('p.variations', 'v')
             .leftJoinAndSelect('p.linkedStockCard', 'sc')
@@ -63,6 +80,9 @@ export class ProductsService {
             .orderBy('p.orderIndex', 'ASC')
             .addOrderBy('p.id', 'ASC')
             .getMany();
+
+        this.quickSaleCache = data;
+        return data;
     }
 
     async findOne(id: number): Promise<Product> {
@@ -131,6 +151,7 @@ export class ProductsService {
             await this.recipeRepository.save(recipesToSave);
         }
 
+        this.clearCache();
         return savedProduct;
     }
 
@@ -193,6 +214,7 @@ export class ProductsService {
             }
         }
 
+        this.clearCache();
         return savedProduct;
     }
 
@@ -205,6 +227,7 @@ export class ProductsService {
         for (const item of items) {
              await this.productRepository.update(item.id, { orderIndex: item.orderIndex });
         }
+        this.clearCache();
     }
 
     async findAllTransactions(): Promise<ProductTransaction[]> {

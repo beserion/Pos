@@ -19,6 +19,11 @@ interface CashRegister {
     isActive: boolean;
 }
 
+interface Zone {
+    id: number;
+    name: string;
+}
+
 interface User {
     id: number;
     firstName: string;
@@ -56,6 +61,7 @@ export function PageClient() {
     const [roles, setRoles] = useState<Role[]>([]);
     const [modules, setModules] = useState<any[]>([]);
     const [cashRegisters, setCashRegisters] = useState<CashRegister[]>([]);
+    const [zones, setZones] = useState<Zone[]>([]);
     const [loading, setLoading] = useState(true);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -64,6 +70,7 @@ export function PageClient() {
     const [rolePerms, setRolePerms] = useState<string[]>([]);
     const [extraPerms, setExtraPerms] = useState<string[]>([]);
     const [permSaving, setPermSaving] = useState(false);
+    const [activePermTab, setActivePermTab] = useState<'MODULES' | 'POS_SPECIAL'>('MODULES');
 
     // UI states
     const [showPassword, setShowPassword] = useState(false);
@@ -94,16 +101,18 @@ export function PageClient() {
             const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
             const API_URL = isLocalhost ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050');
 
-            const [usersRes, rolesRes, modulesRes, cashRegsRes] = await Promise.all([
+            const [usersRes, rolesRes, modulesRes, cashRegsRes, zonesRes] = await Promise.all([
                 axios.get(`${API_URL}/users`, config),
                 axios.get(`${API_URL}/roles`, config),
                 axios.get(`${API_URL}/permission-modules`, config),
-                axios.get(`${API_URL}/cash-registers`, config)
+                axios.get(`${API_URL}/cash-registers`, config),
+                axios.get(`${API_URL}/zones`, config)
             ]);
 
             setUsers(usersRes.data);
             setRoles(rolesRes.data);
             setCashRegisters(cashRegsRes.data || []);
+            setZones(zonesRes.data || []);
 
             const backendModules = (modulesRes.data || []).map((m: any) => ({
                 key: m.key,
@@ -229,6 +238,7 @@ export function PageClient() {
         setPermUser(usr);
         setRolePerms(usr.role?.permissions || []);
         setExtraPerms(usr.extraPermissions || []);
+        setActivePermTab('MODULES');
         setIsPermModalOpen(true);
     };
 
@@ -277,6 +287,12 @@ export function PageClient() {
             toastSwal({ title: 'Rol Yetkisi', text: 'Bu yetki kullanıcının rolünden gelmektedir, buradan kaldırılamaz.', icon: 'info' });
             return;
         }
+        setExtraPerms(prev => prev.includes(key) ? prev.filter(p => p !== key) : [...prev, key]);
+    };
+
+    const toggleZonePerm = (zoneId: number) => {
+        if (isSuperAdmin(permUser)) return;
+        const key = `ZONE:${zoneId}`;
         setExtraPerms(prev => prev.includes(key) ? prev.filter(p => p !== key) : [...prev, key]);
     };
 
@@ -741,9 +757,28 @@ export function PageClient() {
                         </div>
                     </div>
 
-                    {/* MATRIX TABLE */}
+                    {/* TABS */}
+                    <div className="flex items-center justify-center mt-6 z-20 relative">
+                        <div className="bg-white/50 dark:bg-slate-800/50 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700/50 flex gap-2 shadow-sm">
+                            <button
+                                onClick={() => setActivePermTab('MODULES')}
+                                className={`px-5 py-2.5 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all duration-300 flex items-center gap-2 ${activePermTab === 'MODULES' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25 scale-100' : 'bg-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 scale-95 opacity-80'}`}
+                            >
+                                <i className="fat fa-layer-group"></i> Genel Modüller
+                            </button>
+                            <button
+                                onClick={() => setActivePermTab('POS_SPECIAL')}
+                                className={`px-5 py-2.5 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all duration-300 flex items-center gap-2 ${activePermTab === 'POS_SPECIAL' ? 'bg-purple-600 text-white shadow-md shadow-purple-500/25 scale-100' : 'bg-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50 scale-95 opacity-80'}`}
+                            >
+                                <i className="fat fa-cash-register"></i> POS / Kasa Yetkileri
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* MATRIX TABLE & TAB CONTENT */}
                     <div className="flex-1 min-h-0 px-10 py-4 relative z-0">
-                        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-3xl border border-slate-200 dark:border-slate-700/50 shadow-xl overflow-auto h-full custom-scrollbar">
+                        {activePermTab === 'MODULES' && (
+                        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-3xl border border-slate-200 dark:border-slate-700/50 shadow-xl overflow-auto h-full custom-scrollbar animate-in fade-in zoom-in-95 duration-300">
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr>
@@ -817,6 +852,60 @@ export function PageClient() {
                                 </tbody>
                             </table>
                         </div>
+                        )}
+
+                        {activePermTab === 'POS_SPECIAL' && (
+                            <div className="flex flex-col h-full bg-white/40 dark:bg-slate-800/40 backdrop-blur-xl rounded-3xl border border-slate-300 dark:border-slate-700/70 shadow-inner overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+                                {/* Zone Permissions */}
+                                <div className="p-8">
+                                    <h4 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-widest mb-6 flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 flex items-center justify-center shrink-0">
+                                            <i className="fat fa-location-dot"></i>
+                                        </div>
+                                        Yetkili Olduğu Salon / Zone'lar
+                                    </h4>
+                                    
+                                    {zones.length === 0 ? (
+                                        <p className="text-xs text-slate-500 font-bold uppercase tracking-widest bg-slate-100 dark:bg-slate-800 p-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-600 inline-block">Sistemde tanımlı salon/zone bulunmuyor.</p>
+                                    ) : (
+                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                            {zones.map(zone => {
+                                                const key = `ZONE:${zone.id}`;
+                                                const isRolePerm = rolePerms.includes(key);
+                                                const isExtraPerm = extraPerms.includes(key);
+                                                const isActive = isRolePerm || isExtraPerm;
+                                                const isSuper = isSuperAdmin(permUser);
+                                                
+                                                return (
+                                                    <div 
+                                                        key={`zone-${zone.id}`}
+                                                        onClick={() => !isRolePerm && !isSuper && toggleZonePerm(zone.id)}
+                                                        className={`relative flex items-center gap-3 p-4 rounded-2xl border-2 transition-all cursor-pointer ${isSuper || isRolePerm ? 'bg-purple-50 border-purple-200 dark:bg-purple-900/20 dark:border-purple-800/50 cursor-not-allowed opacity-90' : isExtraPerm ? 'bg-emerald-50 border-emerald-500 dark:bg-emerald-900/40 dark:border-emerald-500 shadow-sm hover:bg-emerald-100 hover:border-emerald-600' : 'bg-white border-slate-200 hover:border-emerald-300 dark:bg-slate-900 dark:border-slate-700'}`}
+                                                    >
+                                                        <div className={`w-6 h-6 rounded flex items-center justify-center shrink-0 transition-colors ${isSuper || isRolePerm ? 'bg-purple-500 text-white' : isExtraPerm ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-transparent'}`}>
+                                                            <i className="fat fa-check text-[10px]"></i>
+                                                        </div>
+                                                        <span className={`text-xs font-black uppercase tracking-wider leading-tight pr-6 ${isActive || isSuper ? 'text-slate-800 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400'}`}>
+                                                            {zone.name}
+                                                        </span>
+                                                        {(isSuper || isRolePerm) && (
+                                                            <i className="fat fa-shield-check text-purple-400 dark:text-purple-500 absolute right-4 opacity-50 text-base" title="Rol veya Admin yetkisi ile yönetiliyor"></i>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Placeholder for Next Features */}
+                                <div className="p-8 border-t border-slate-200 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-900/50 flex-1 flex flex-col items-center justify-center">
+                                     <i className="fat fa-tools text-4xl text-slate-300 dark:text-slate-600 mb-4 inline-block drop-shadow-xl"></i>
+                                     <h3 className="text-lg font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">DİĞER POS YETKİLERİ</h3>
+                                     <p className="text-xs font-bold text-slate-400 max-w-sm mx-auto text-center leading-relaxed">İskonto, İptal, İade ve İkram gibi diğer operasyonel kontroller bu alana eklenecektir.</p>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                 </div>

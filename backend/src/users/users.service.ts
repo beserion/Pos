@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { User } from './user.entity';
 import { PushSubscriptionEntity } from './push-subscription.entity';
 import * as bcrypt from 'bcrypt';
+import { clearUserPermissionsCache } from '../auth/permissions.guard';
 
 @Injectable()
 export class UsersService {
@@ -129,7 +130,12 @@ export class UsersService {
       }
       const { id: _, ...data } = updateData as any;
       this.userRepository.merge(user, data);
-      return await this.userRepository.save(user);
+      const savedUser = await this.userRepository.save(user);
+      
+      // Cache'ı temizle (yetki matrisi veya rol değişmiş olabilir)
+      clearUserPermissionsCache(id);
+      
+      return savedUser;
     } catch (error: any) {
       console.error('USER UPDATE ERROR:', error);
       if (error.number === 2627 || error.number === 2601) {
@@ -144,11 +150,13 @@ export class UsersService {
   async remove(id: number): Promise<void> {
     await this.findOne(id);
     await this.userRepository.delete(id);
+    clearUserPermissionsCache(id);
   }
 
   async batchUpdateRole(userIds: number[], roleId: number): Promise<void> {
     if (!userIds || userIds.length === 0) return;
     await this.userRepository.update(userIds, { role: { id: roleId } } as any);
+    userIds.forEach(uid => clearUserPermissionsCache(uid));
   }
 
   // --- Web Push Subscriptions ---

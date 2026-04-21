@@ -7,6 +7,7 @@ import {
   Put,
   Delete,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { TablesService } from './tables.service';
 import { Table } from './table.entity';
@@ -18,8 +19,9 @@ export class TablesController {
   constructor(private readonly tablesService: TablesService) {}
 
   @Get()
-  findAll() {
-    return this.tablesService.findAll();
+  findAll(@Request() req: any) {
+    const userId = req?.user?.userId || req?.user?.id;
+    return this.tablesService.findAll(userId);
   }
 
   @Get(':id')

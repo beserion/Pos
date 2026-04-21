@@ -7,6 +7,7 @@ import {
   Put,
   Delete,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { ZonesService } from './zones.service';
 import { Zone } from './zone.entity';
@@ -18,8 +19,9 @@ export class ZonesController {
   constructor(private readonly zonesService: ZonesService) {}
 
   @Get()
-  findAll() {
-    return this.zonesService.findAll();
+  findAll(@Request() req: any) {
+    const userId = req?.user?.userId || req?.user?.id;
+    return this.zonesService.findAll(userId);
   }
 
   @Get(':id')

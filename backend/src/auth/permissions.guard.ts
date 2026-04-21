@@ -10,6 +10,26 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
 
+interface CachedPerms {
+  allUserPerms: string[];
+  roleName?: string;
+  expiresAt: number;
+}
+const userPermsCache = new Map<number, CachedPerms>();
+const CACHE_TTL_MS = 9 * 60 * 60 * 1000; // 9 hours
+
+export function getCachedPerms(userId: number) {
+  return userPermsCache.get(userId);
+}
+
+export function clearUserPermissionsCache(userId?: number) {
+  if (userId) {
+    userPermsCache.delete(userId);
+  } else {
+    userPermsCache.clear();
+  }
+}
+
 @Injectable()
 export class PermissionsGuard implements CanActivate {
   constructor(
@@ -38,36 +58,49 @@ export class PermissionsGuard implements CanActivate {
     const userId = user.userId || user.id;
 
     try {
-      const foundUser = await this.userRepository.findOne({
-        where: { id: userId },
-        relations: ['role'],
-      });
+      const now = Date.now();
+      const cached = userPermsCache.get(userId);
+      
+      let roleName = cached?.roleName;
+      let allUserPerms = cached?.allUserPerms || [];
 
-      if (!foundUser || !foundUser.role) {
-        throw new ForbiddenException('Rol bilgisi bulunamadı.');
+      if (!cached || cached.expiresAt < now) {
+        // Cache miss or expired, fetch from DB
+        const foundUser = await this.userRepository.findOne({
+          where: { id: userId },
+          relations: ['role'],
+        });
+
+        if (!foundUser || !foundUser.role) {
+          throw new ForbiddenException('Rol bilgisi bulunamadı.');
+        }
+
+        roleName = foundUser.role.name?.toUpperCase();
+
+        const userPermissions: any = foundUser.role.permissions || [];
+        const extra: string[] = foundUser.extraPermissions || [];
+        
+        let rolePermsArr: string[] = [];
+        if (Array.isArray(userPermissions)) {
+          rolePermsArr = userPermissions;
+        } else if (typeof userPermissions === 'string') {
+          rolePermsArr = userPermissions.split(',').map((s: string) => s.trim()).filter(Boolean);
+        }
+        
+        const extraPermsArr = extra.map((s: string) => s.trim()).filter(Boolean);
+        allUserPerms = [...rolePermsArr, ...extraPermsArr];
+
+        userPermsCache.set(userId, {
+          allUserPerms,
+          roleName,
+          expiresAt: now + CACHE_TTL_MS,
+        });
       }
 
       // Admin role bypasses all permission checks (Case-insensitive)
-      const roleName = foundUser.role.name?.toUpperCase();
-      console.log(`[PERM] Checking user ${foundUser.email} (Role: ${roleName})`);
       if (roleName === 'ADMIN' || roleName === 'ADMINISTRATOR') {
         return true;
       }
-
-      const userPermissions: any = foundUser.role.permissions || [];
-      const extra: string[] = foundUser.extraPermissions || [];
-      
-      let rolePermsArr: string[] = [];
-      if (Array.isArray(userPermissions)) {
-        rolePermsArr = userPermissions;
-      } else if (typeof userPermissions === 'string') {
-        rolePermsArr = userPermissions.split(',').map((s: string) => s.trim()).filter(Boolean);
-      }
-      
-      const extraPermsArr = extra.map((s: string) => s.trim()).filter(Boolean);
-      const allUserPerms = [...rolePermsArr, ...extraPermsArr];
-
-      console.log(`[PERM] User calculated perms:`, allUserPerms);
 
       if (allUserPerms.includes('ALL')) {
         return true;

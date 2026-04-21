@@ -10,6 +10,7 @@ import { printReceipt } from '../utils/print';
 import { useThemeTransition } from '@/hooks/useThemeTransition';
 import ShiftManager from '@/components/shifts/ShiftManager';
 import SetMenuSelectionModal from './SetMenuSelectionModal';
+import { usePos } from './PosContext';
 
 interface Modifier {
     id: number;
@@ -75,15 +76,17 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     const { theme, toggleTheme, setTheme } = useThemeTransition();
     const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')));
 
-    const [products, setProducts] = useState<Product[]>([]);
-    const [productTypeOptions, setProductTypeOptions] = useState<{ id: string | number; name: string }[]>([]);
+    const { products: allProducts, departments, parentGroups, productTypes, refreshDynamicData, dataLoading: posDataLoading } = usePos();
     const [selectedProductTypeId, setSelectedProductTypeId] = useState<number | 'all'>('all');
     const [selectedParentGroupId, setSelectedParentGroupId] = useState<number | 'all' | 'unassigned' | null>(null);
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<number | 'all' | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [cart, setCart] = useState<CartItem[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'CASH' | 'CREDIT_CARD'>('CASH');
+
+    const products = useMemo(() => allProducts.filter(p => p.isQuickSale), [allProducts]);
+    const productTypeOptions = useMemo(() => [{ id: 'all', name: tc('all') }, ...productTypes], [productTypes, tc]);
 
     const [activeShift, setActiveShift] = useState<any | null>(null);
     const [activeCashRegister, setActiveCashRegister] = useState<any | null>(null);
@@ -96,8 +99,6 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     const [selectedProductForVariation, setSelectedProductForVariation] = useState<Product | null>(null);
     const [pendingAddToCartArgs, setPendingAddToCartArgs] = useState<{ skipExtraCheck?: boolean }>({});
 
-    const [departments, setDepartments] = useState<any[]>([]);
-    const [parentGroups, setParentGroups] = useState<any[]>([]);
     const [extraPopupOpen, setExtraPopupOpen] = useState(false);
     const [extraPopupProducts, setExtraPopupProducts] = useState<Product[]>([]);
     const [extraPopupParentProduct, setExtraPopupParentProduct] = useState<Product | null>(null);
@@ -174,36 +175,8 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
         }
     }, [activeCashRegister]);
 
-    const fetchData = async () => {
-        try {
-            const token = Cookies.get('token');
-            const headers = { Authorization: `Bearer ${token}` };
-            const [productsRes, departmentsRes, typesRes, pGroupsRes] = await Promise.all([
-                axios.get(`${API_URL}/products/quicksale`, { headers }),
-                axios.get(`${API_URL}/departments`, { headers }),
-                axios.get(`${API_URL}/product-types`, { headers }),
-                axios.get(`${API_URL}/parent-groups`, { headers })
-            ]);
-
-            const allProducts = productsRes.data;
-            setProducts(allProducts);
-            setDepartments(departmentsRes.data);
-            setParentGroups(pGroupsRes.data || []);
-
-            const types = typesRes.data || [];
-            setProductTypeOptions([{ id: 'all', name: tc('all') }, ...types]);
-        } catch (error) {
-            console.error('Error fetching products:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
     useEffect(() => {
         if (!authLoading && !user) router.push(`/${locale}/login`);
-        if (user) {
-            fetchData();
-        }
     }, [user, authLoading, locale]);
 
 
@@ -429,6 +402,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
             }
 
             setCart([]);
+            refreshDynamicData();
         } catch (error: any) {
             showSwal({
                 title: 'Hata',

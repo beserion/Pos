@@ -1,7 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Table } from './table.entity';
+import { UsersService } from '../users/users.service';
+import { getCachedPerms } from '../auth/permissions.guard';
 import { Sale } from '../sales/sale.entity';
 
 @Injectable()
@@ -11,13 +13,62 @@ export class TablesService {
     private tableRepository: Repository<Table>,
     @InjectRepository(Sale)
     private saleRepository: Repository<Sale>,
+    @Inject(forwardRef(() => UsersService))
+    private usersService: UsersService,
   ) {}
 
-  async findAll(): Promise<Table[]> {
-    return await this.tableRepository.find({
-      where: { isDeleted: false },
-      relations: ['zone', 'zone.location'],
-    });
+  private tablesCache: Table[] | null = null;
+
+  async findAll(userId?: number): Promise<Table[]> {
+    let allTables: Table[];
+    
+    if (this.tablesCache) {
+        allTables = this.tablesCache;
+    } else {
+        allTables = await this.tableRepository.find({
+            where: { isDeleted: false },
+            relations: ['zone', 'zone.location'],
+        });
+        this.tablesCache = allTables;
+    }
+
+    let allowedZoneIds: number[] | 'ALL' = 'ALL';
+
+    if (userId) {
+      let roleName: string | undefined;
+      let extraPerms: string[] = [];
+
+      const cached = getCachedPerms(userId);
+      if (cached) {
+        roleName = cached.roleName;
+        extraPerms = cached.allUserPerms;
+      } else {
+        const user = await this.usersService.findOne(userId);
+        roleName = user?.role?.name?.toUpperCase();
+        extraPerms = user?.extraPermissions || [];
+      }
+
+      if (roleName !== 'ADMIN' && roleName !== 'ADMINISTRATOR') {
+        allowedZoneIds = extraPerms
+          .filter(p => p.startsWith('ZONE:'))
+          .map(p => parseInt(p.split(':')[1]))
+          .filter(id => !isNaN(id));
+      }
+    }
+
+    if (allowedZoneIds === 'ALL') {
+      return allTables;
+    }
+
+    if (allowedZoneIds.length === 0) {
+      return []; // Return empty array if not authorized for any zone
+    }
+
+    return allTables.filter(t => (allowedZoneIds as number[]).includes(t.zone?.id));
+  }
+
+  public clearCache() {
+    this.tablesCache = null;
   }
 
   async findOne(id: number): Promise<Table> {
@@ -42,7 +93,9 @@ export class TablesService {
       }
     }
     const newTable = this.tableRepository.create(tableData);
-    return await this.tableRepository.save(newTable);
+    const saved = await this.tableRepository.save(newTable);
+    this.clearCache();
+    return saved;
   }
 
   async update(id: number, updateData: Partial<Table>): Promise<Table> {
@@ -62,6 +115,7 @@ export class TablesService {
     }
 
     await this.tableRepository.update(id, updateData);
+    this.clearCache();
     return this.findOne(id);
   }
 
@@ -96,7 +150,9 @@ export class TablesService {
       if (i > 1000) break;
     }
 
-    return await this.tableRepository.save(newTables);
+    const saved = await this.tableRepository.save(newTables);
+    this.clearCache();
+    return saved;
   }
 
   async remove(id: number): Promise<void> {
@@ -112,5 +168,6 @@ export class TablesService {
     }
 
     await this.tableRepository.update(id, { isDeleted: true });
+    this.clearCache();
   }
 }

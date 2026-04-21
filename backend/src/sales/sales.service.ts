@@ -16,6 +16,7 @@ import { PrintersService } from '../printers/printers.service';
 import { AlertsService } from '../alerts/alerts.service';
 import { StockMovementsService } from '../stock-movements/stock-movements.service';
 import { ProductsService } from '../products/products.service';
+import { TablesService } from '../tables/tables.service';
 
 @Injectable()
 export class SalesService implements OnModuleInit {
@@ -37,6 +38,7 @@ export class SalesService implements OnModuleInit {
     private alertsService: AlertsService,
     private stockMovementsService: StockMovementsService,
     private productsService: ProductsService,
+    private tablesService: TablesService,
   ) { }
 
   async onModuleInit() {
@@ -513,6 +515,9 @@ export class SalesService implements OnModuleInit {
         // Notify real-time listeners (Admin, POS, etc.)
         this.kitchenGateway.notifySaleUpdate(fullSale);
 
+        // Invalidate Table Cache for real-time UI
+        this.tablesService.clearCache();
+
         // Notify kitchen specifically for new preparation orders
         if (fullSale.status === 'NEW' || fullSale.status === 'PREPARATION') {
           this.kitchenGateway.notifyNewOrder(fullSale as any);
@@ -720,7 +725,7 @@ export class SalesService implements OnModuleInit {
         }
       }
     });
-
+    this.tablesService.clearCache();
   }
 
   async getKitchenOrders(status?: string): Promise<Sale[]> {
@@ -782,6 +787,7 @@ export class SalesService implements OnModuleInit {
           isBillRequested: false,
         });
       }
+      this.tablesService.clearCache();
     });
 
     // Bildirim tetikle
