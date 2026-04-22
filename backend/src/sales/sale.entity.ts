@@ -92,6 +92,16 @@ export class Sale {
   @Column({ nullable: true })
   companyId: number;
 
+  // --- Yazarkasa (inPOS) Alanları ---
+  @Column({ nullable: true })
+  ecrReceiptNo: number;
+
+  @Column({ nullable: true })
+  ecrZNo: number;
+
+  @Column({ length: 12, nullable: true })
+  ecrSerialNo: string;
+
   // --- Alt Adisyon (Sub-Check) Alanları ---
   @ManyToOne(() => Sale, (sale) => sale.subChecks, { nullable: true })
   @JoinColumn({ name: 'parentSaleId' })

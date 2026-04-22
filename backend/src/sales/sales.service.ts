@@ -18,6 +18,9 @@ import { StockMovementsService } from '../stock-movements/stock-movements.servic
 import { ProductsService } from '../products/products.service';
 import { TablesService } from '../tables/tables.service';
 import { getCachedPerms } from '../auth/permissions.guard';
+import { InposService } from '../inpos/inpos.service';
+import { InposPaymentType, InposUnit } from '../inpos/inpos.types';
+import type { InposSaleItemData, InposPaymentInfo } from '../inpos/inpos.types';
 
 @Injectable()
 export class SalesService implements OnModuleInit {
@@ -40,6 +43,7 @@ export class SalesService implements OnModuleInit {
     private stockMovementsService: StockMovementsService,
     private productsService: ProductsService,
     private tablesService: TablesService,
+    private inposService: InposService,
   ) { }
 
   async onModuleInit() {
@@ -817,6 +821,72 @@ export class SalesService implements OnModuleInit {
           const newTotalAmount = remainingItemsData.reduce((sum, item) => sum + (item.total || Number(item.unitPrice) * Number(item.quantity)), 0);
           await manager.update(Sale, oldSaleId, { totalAmount: newTotalAmount });
         }
+      }
+
+      // ─── YAZARKASA FİŞ KESİMİ (inPOS) ──────────────────────
+      try {
+        const inposStatus = this.inposService.getStatus();
+        if (inposStatus.connected) {
+          // Satış kalemlerini yazarkasa formatına dönüştür
+          const ecrItems: InposSaleItemData[] = [];
+          for (const item of unpaidItems) {
+            const rawProduct = await manager.query(
+              `SELECT p.name, p.vatRate FROM products p WHERE p.id = ${item.productId}`
+            );
+            const productName = rawProduct?.[0]?.name || 'Ürün';
+            const vatRate = rawProduct?.[0]?.vatRate || 10;
+
+            // KDV oranına göre kısım belirle (1=%1, 2=%10, 3=%20, 4=%8 vb.)
+            let section = 1;
+            if (vatRate <= 1) section = 1;
+            else if (vatRate <= 8) section = 2;
+            else if (vatRate <= 10) section = 3;
+            else section = 4;
+
+            ecrItems.push({
+              name: productName.substring(0, 96),
+              unitPrice: Math.round(Number(item.unitPrice) * 100),
+              multiplier: Math.round(Number(item.quantity) * 1000),
+              discountRate: 0,
+              discountAmount: 0,
+              section,
+              unit: InposUnit.Quantity,
+            });
+          }
+
+          // Ödeme tipini POS → inPOS formatına dönüştür
+          const ecrPayments: InposPaymentInfo[] = [];
+          const amountInKurus = Math.round(totalCheckoutAmount * 100);
+
+          if (paymentMethod === 'SPLIT') {
+            if (paidAmountCash && paidAmountCash > 0) {
+              ecrPayments.push({ type: InposPaymentType.CashPayment, amount: Math.round(paidAmountCash * 100) });
+            }
+            if (paidAmountCreditCard && paidAmountCreditCard > 0) {
+              ecrPayments.push({ type: InposPaymentType.CreditCardPayment, amount: Math.round(paidAmountCreditCard * 100) });
+            }
+          } else if (paymentMethod === 'KREDI_KARTI' || paymentMethod === 'CREDIT_CARD') {
+            ecrPayments.push({ type: InposPaymentType.CreditCardPayment, amount: amountInKurus });
+          } else {
+            // KASA, CASH, ve diğerleri → Nakit
+            ecrPayments.push({ type: InposPaymentType.CashPayment, amount: amountInKurus });
+          }
+
+          const ecrResult = await this.inposService.processSale(ecrItems, ecrPayments);
+
+          if (ecrResult.success) {
+            await manager.update(Sale, savedCheckoutSale.id, {
+              ecrReceiptNo: ecrResult.receiptNo,
+              ecrZNo: ecrResult.zNo,
+            });
+            this.logger.log(`Yazarkasa fiş kesildi — Fiş No: ${ecrResult.receiptNo}, Z No: ${ecrResult.zNo}`);
+          } else {
+            this.logger.warn(`Yazarkasa fiş kesilemedi: ${ecrResult.error}`);
+          }
+        }
+      } catch (ecrError: any) {
+        this.logger.error(`Yazarkasa entegrasyon hatası: ${ecrError.message}`);
+        // Satış yine de tamamlanır, yazarkasa hatası satışı engellemez
       }
     });
     this.tablesService.clearCache();
