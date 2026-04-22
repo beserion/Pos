@@ -4,28 +4,21 @@ import {
   InposExtError, InposEcrState, InposEcrSaleState, InposPaymentType,
   InposSaleItemData, InposSaleTotals, InposSaleReceiptData, InposSectionInfo,
   InposConnectionConfig, InposConnectionStatus, InposInvoiceInfo,
-  InposInvoiceType, InposCustomerNoType, getErrorName,
 } from './inpos.types';
 
-// ffi-napi ve ref-napi tipleri (opsiyonel — DLL yoksa graceful degrade)
-let ffi: any = null;
-let ref: any = null;
-let StructType: any = null;
-let ArrayType: any = null;
-
+// koffi FFI kütüphanesi (opsiyonel — yoksa mock modda çalışır)
+let koffi: any = null;
 try {
-  ffi = require('ffi-napi');
-  ref = require('ref-napi');
-  StructType = require('ref-struct-napi');
-  ArrayType = require('ref-array-napi');
+  koffi = require('koffi');
 } catch {
-  // ffi-napi kurulu değilse servis mock modda çalışır
+  // koffi kurulu değilse servis mock modda çalışır
 }
 
 @Injectable()
 export class InposBridgeService implements OnModuleDestroy {
   private readonly logger = new Logger(InposBridgeService.name);
   private lib: any = null;
+  private fn: Record<string, any> = {};
   private connected = false;
   private activeSerialNo = '';
   private readonly DEFAULT_TIMEOUT = 5000;
@@ -40,85 +33,66 @@ export class InposBridgeService implements OnModuleDestroy {
 
   /** DLL'i yükle */
   private loadLibrary(): void {
-    if (!ffi) {
-      this.logger.warn('ffi-napi bulunamadı. inPOS bridge mock modda çalışacak.');
+    if (!koffi) {
+      this.logger.warn('koffi bulunamadı. inPOS bridge mock modda çalışacak.');
       return;
     }
 
     const dllPath = path.resolve(__dirname, '..', '..', 'lib', 'inpos', 'inposext.dll');
     try {
-      this.lib = ffi.Library(dllPath, {
-        'inposext_version':             ['string', []],
-        'inposext_initialize':          ['int', ['uint32', 'string', 'string', 'uint16', 'uint32']],
-        'inposext_close':               ['void', []],
-        'inposext_close_all':           ['void', []],
-        'inposext_set_active_device':   ['int', ['string']],
-        'inposext_active_device':       ['int', ['pointer']],
-        'inposext_login':               ['int', ['uint32']],
-        'inposext_logout':              ['int', ['uint32']],
-        'inposext_set_cashier_name':    ['int', ['uint32', 'string']],
-        'inposext_ecr_state':           ['int', ['uint32', 'pointer']],
-        'inposext_ecr_sale_state':      ['int', ['uint32', 'pointer', 'pointer']],
-        'inposext_start_sale':          ['int', ['uint32']],
-        'inposext_start_sale_with_invoice': ['int', ['uint32']],
-        'inposext_add_sale_item':       ['int', ['uint32', 'pointer', 'pointer']],
-        'inposext_add_payment':         ['int', ['int', 'uint64']],
-        'inposext_end_sale':            ['int', ['int']],
-        'inposext_end_sale_with_invoice': ['int', ['pointer']],
-        'inposext_cancel_sale':         ['int', ['uint32']],
-        'inposext_sale_state':          ['int', ['uint32', 'pointer', 'pointer', 'pointer']],
-        'inposext_receipt_data':        ['int', ['uint32', 'pointer', 'pointer']],
-        'inposext_section_data':        ['int', ['uint32', 'pointer']],
-        'inposext_x_report':            ['int', []],
-        'inposext_z_report':            ['int', []],
-        'inposext_current_z':           ['int', ['uint32', 'pointer']],
-        'inposext_last_z_datetime':     ['int', ['uint32', 'pointer']],
-        'inposext_ecr_datetime':        ['int', ['uint32', 'pointer']],
-        'inposext_sale_limit':          ['int', ['uint32', 'pointer']],
-        'inposext_block_ecr_keys':      ['int', []],
-        'inposext_unblock_ecr_keys':    ['int', []],
-        'inposext_ecr_key_blocking_status': ['int', ['uint32', 'pointer']],
-        'inposext_check_printer_paper': ['int', ['uint32']],
-        'inposext_set_sale_type':       ['int', ['uint32', 'int']],
-        'inposext_sale_type':           ['int', ['uint32', 'pointer']],
-        'inposext_error_detail':        ['int', []],
-        'inposext_end_sale_with_returned_items_slip': ['int', ['int']],
-      });
-      const ver = this.lib.inposext_version();
-      this.logger.log(`inPOS DLL yüklendi. Sürüm: ${ver}`);
-    } catch (err) {
+      this.lib = koffi.load(dllPath);
+
+      // Fonksiyonları tanımla (stdcall convention)
+      this.fn = {
+        version:            this.lib.stdcall('inposext_version', 'str', []),
+        initialize:         this.lib.stdcall('inposext_initialize', 'int', ['uint32', 'str', 'str', 'uint16', 'uint32']),
+        close:              this.lib.stdcall('inposext_close', 'void', []),
+        closeAll:           this.lib.stdcall('inposext_close_all', 'void', []),
+        login:              this.lib.stdcall('inposext_login', 'int', ['uint32']),
+        logout:             this.lib.stdcall('inposext_logout', 'int', ['uint32']),
+        setCashierName:     this.lib.stdcall('inposext_set_cashier_name', 'int', ['uint32', 'str']),
+        ecrState:           this.lib.stdcall('inposext_ecr_state', 'int', ['uint32', koffi.out(koffi.pointer('int'))]),
+        ecrSaleState:       this.lib.stdcall('inposext_ecr_sale_state', 'int', ['uint32', koffi.out(koffi.pointer('int')), koffi.out(koffi.pointer('int'))]),
+        startSale:          this.lib.stdcall('inposext_start_sale', 'int', ['uint32']),
+        startSaleInvoice:   this.lib.stdcall('inposext_start_sale_with_invoice', 'int', ['uint32']),
+        addSaleItem:        this.lib.stdcall('inposext_add_sale_item', 'int', ['uint32', 'void *', 'void *']),
+        addPayment:         this.lib.stdcall('inposext_add_payment', 'int', ['int', 'uint64']),
+        endSale:            this.lib.stdcall('inposext_end_sale', 'int', ['int']),
+        endSaleInvoice:     this.lib.stdcall('inposext_end_sale_with_invoice', 'int', ['void *']),
+        cancelSale:         this.lib.stdcall('inposext_cancel_sale', 'int', ['uint32']),
+        saleState:          this.lib.stdcall('inposext_sale_state', 'int', ['uint32', 'void *', 'void *', 'void *']),
+        xReport:            this.lib.stdcall('inposext_x_report', 'int', []),
+        zReport:            this.lib.stdcall('inposext_z_report', 'int', []),
+        currentZ:           this.lib.stdcall('inposext_current_z', 'int', ['uint32', koffi.out(koffi.pointer('uint32'))]),
+        lastZDatetime:      this.lib.stdcall('inposext_last_z_datetime', 'int', ['uint32', koffi.out(koffi.pointer('int32'))]),
+        ecrDatetime:        this.lib.stdcall('inposext_ecr_datetime', 'int', ['uint32', koffi.out(koffi.pointer('int32'))]),
+        saleLimit:          this.lib.stdcall('inposext_sale_limit', 'int', ['uint32', koffi.out(koffi.pointer('uint64'))]),
+        blockKeys:          this.lib.stdcall('inposext_block_ecr_keys', 'int', []),
+        unblockKeys:        this.lib.stdcall('inposext_unblock_ecr_keys', 'int', []),
+        keyBlockStatus:     this.lib.stdcall('inposext_ecr_key_blocking_status', 'int', ['uint32', koffi.out(koffi.pointer('int32'))]),
+        checkPaper:         this.lib.stdcall('inposext_check_printer_paper', 'int', ['uint32']),
+        errorDetail:        this.lib.stdcall('inposext_error_detail', 'int', []),
+      };
+
+      const ver = this.fn.version();
+      this.logger.log(`inPOS DLL yüklendi (koffi). Sürüm: ${ver}`);
+    } catch (err: any) {
       this.logger.error(`inPOS DLL yüklenemedi: ${err.message}`);
       this.lib = null;
+      this.fn = {};
     }
   }
 
-  /** DLL yüklü mü */
-  isLibraryLoaded(): boolean {
-    return this.lib !== null;
-  }
-
-  /** Bağlantı durumu */
-  isConnected(): boolean {
-    return this.connected;
-  }
+  isLibraryLoaded(): boolean { return this.lib !== null; }
+  isConnected(): boolean { return this.connected; }
 
   // ─── Bağlantı ──────────────────────────────────────────────
 
-  /** Yazarkasaya bağlan */
   async initialize(config: InposConnectionConfig): Promise<InposExtError> {
     if (!this.lib) return InposExtError.InposNotInitializedError;
-
     const appNo = config.applicationNo || 1;
     const timeout = config.timeout || 700;
-
-    const err: number = this.lib.inposext_initialize(
-      appNo,
-      config.serialNo.toUpperCase(),
-      config.listenIp,
-      config.port,
-      timeout,
-    );
-
+    const err: number = this.fn.initialize(appNo, config.serialNo.toUpperCase(), config.listenIp, config.port, timeout);
     if (err === InposExtError.InposNoError) {
       this.connected = true;
       this.activeSerialNo = config.serialNo;
@@ -127,107 +101,96 @@ export class InposBridgeService implements OnModuleDestroy {
     return err as InposExtError;
   }
 
-  /** Aktif cihaz bağlantısını kapat */
   close(): void {
     if (!this.lib) return;
-    this.lib.inposext_close();
+    this.fn.close();
     this.connected = false;
     this.logger.log('Yazarkasa bağlantısı kapatıldı.');
   }
 
-  /** Tüm bağlantıları kapat */
   closeAll(): void {
     if (!this.lib) return;
-    this.lib.inposext_close_all();
+    this.fn.closeAll();
     this.connected = false;
   }
 
   // ─── Durum Sorgu ───────────────────────────────────────────
 
-  /** Yazarkasa durumunu sorgula */
   getEcrState(timeout?: number): { error: InposExtError; ecrState: InposEcrState } {
     if (!this.lib) return { error: InposExtError.InposNotInitializedError, ecrState: InposEcrState.InposEcrInitialization };
-    const stateBuf = Buffer.alloc(4);
-    const err = this.lib.inposext_ecr_state(timeout || this.DEFAULT_TIMEOUT, stateBuf);
-    return { error: err, ecrState: stateBuf.readInt32LE(0) };
+    const stateArr = [0];
+    const err = this.fn.ecrState(timeout || this.DEFAULT_TIMEOUT, stateArr);
+    return { error: err, ecrState: stateArr[0] as InposEcrState };
   }
 
-  /** Yazarkasa ve satış durumunu sorgula */
   getEcrSaleState(timeout?: number): { error: InposExtError; ecrState: InposEcrState; saleState: InposEcrSaleState } {
     if (!this.lib) return { error: InposExtError.InposNotInitializedError, ecrState: InposEcrState.InposEcrInitialization, saleState: InposEcrSaleState.InposSaleIdle };
-    const ecrBuf = Buffer.alloc(4);
-    const saleBuf = Buffer.alloc(4);
-    const err = this.lib.inposext_ecr_sale_state(timeout || this.DEFAULT_TIMEOUT, ecrBuf, saleBuf);
-    return { error: err, ecrState: ecrBuf.readInt32LE(0), saleState: saleBuf.readInt32LE(0) };
+    const ecrArr = [0];
+    const saleArr = [0];
+    const err = this.fn.ecrSaleState(timeout || this.DEFAULT_TIMEOUT, ecrArr, saleArr);
+    return { error: err, ecrState: ecrArr[0] as InposEcrState, saleState: saleArr[0] as InposEcrSaleState };
   }
 
   // ─── Kasiyer ───────────────────────────────────────────────
 
   login(timeout?: number): InposExtError {
     if (!this.lib) return InposExtError.InposNotInitializedError;
-    return this.lib.inposext_login(timeout || this.DEFAULT_TIMEOUT);
+    return this.fn.login(timeout || this.DEFAULT_TIMEOUT);
   }
 
   logout(timeout?: number): InposExtError {
     if (!this.lib) return InposExtError.InposNotInitializedError;
-    return this.lib.inposext_logout(timeout || this.DEFAULT_TIMEOUT);
+    return this.fn.logout(timeout || this.DEFAULT_TIMEOUT);
   }
 
   setCashierName(name: string, timeout?: number): InposExtError {
     if (!this.lib) return InposExtError.InposNotInitializedError;
-    return this.lib.inposext_set_cashier_name(timeout || this.DEFAULT_TIMEOUT, name);
+    return this.fn.setCashierName(timeout || this.DEFAULT_TIMEOUT, name);
   }
 
   // ─── Satış ─────────────────────────────────────────────────
 
   startSale(timeout?: number): InposExtError {
     if (!this.lib) return InposExtError.InposNotInitializedError;
-    return this.lib.inposext_start_sale(timeout || this.DEFAULT_TIMEOUT);
+    return this.fn.startSale(timeout || this.DEFAULT_TIMEOUT);
   }
 
   startSaleWithInvoice(timeout?: number): InposExtError {
     if (!this.lib) return InposExtError.InposNotInitializedError;
-    return this.lib.inposext_start_sale_with_invoice(timeout || this.DEFAULT_TIMEOUT);
+    return this.fn.startSaleInvoice(timeout || this.DEFAULT_TIMEOUT);
   }
 
-  /** Satış kalemi ekle — C struct olarak gönderir */
   addSaleItem(item: InposSaleItemData, timeout?: number): { error: InposExtError; totals: InposSaleTotals } {
     if (!this.lib) return { error: InposExtError.InposNotInitializedError, totals: this.emptyTotals() };
 
-    // InposEcrSaleItem struct'ını oluştur (C layout ile uyumlu)
-    // unitPrice(8) + multiplier(4) + discountRate(4) + discountAmount(8) + name(97) + section(1) + unit(4) + padding
-    const itemBuf = Buffer.alloc(256); // geniş tut
+    // InposEcrSaleItem C struct'ı — Buffer olarak hazırla
+    // Layout: unitPrice(8) + multiplier(4) + discountRate(4) + discountAmount(8) + name(97) + section(1) + padding(2) + unit(4)
+    const itemBuf = Buffer.alloc(256);
     itemBuf.writeBigUInt64LE(BigInt(item.unitPrice), 0);
     itemBuf.writeUInt32LE(item.multiplier, 8);
     itemBuf.writeInt32LE(item.discountRate, 12);
     itemBuf.writeBigUInt64LE(BigInt(item.discountAmount), 16);
-    // name: 97 byte (96+1 null), offset 24
     const nameBuf = Buffer.from(item.name, 'utf-8');
     nameBuf.copy(itemBuf, 24, 0, Math.min(nameBuf.length, 96));
     itemBuf[24 + Math.min(nameBuf.length, 96)] = 0;
-    // section: offset 24+97 = 121
     itemBuf.writeUInt8(item.section, 121);
-    // unit: offset 124 (aligned)
     itemBuf.writeInt32LE(item.unit, 124);
 
     const totalsBuf = Buffer.alloc(48);
-    const err = this.lib.inposext_add_sale_item(timeout || this.DEFAULT_TIMEOUT, itemBuf, totalsBuf);
+    const err = this.fn.addSaleItem(timeout || this.DEFAULT_TIMEOUT, itemBuf, totalsBuf);
     return { error: err, totals: this.parseTotals(totalsBuf) };
   }
 
-  /** Ödeme ekle */
   addPayment(paymentType: InposPaymentType, amount: number): InposExtError {
     if (!this.lib) return InposExtError.InposNotInitializedError;
-    return this.lib.inposext_add_payment(paymentType, amount);
+    return this.fn.addPayment(paymentType, amount);
   }
 
-  /** Satışı sonlandır */
   endSale(paymentType: InposPaymentType): InposExtError {
     if (!this.lib) return InposExtError.InposNotInitializedError;
-    return this.lib.inposext_end_sale(paymentType);
+    return this.fn.endSale(paymentType);
   }
 
-  /** Faturalı satışı sonlandır */
   endSaleWithInvoice(invoiceData: InposInvoiceInfo): InposExtError {
     if (!this.lib) return InposExtError.InposNotInitializedError;
     const buf = Buffer.alloc(128);
@@ -241,22 +204,20 @@ export class InposBridgeService implements OnModuleDestroy {
     buf[20 + Math.min(invNo.length, 16)] = 0;
     buf.writeUInt32LE(invoiceData.slipCount, 40);
     buf.writeUInt32LE(invoiceData.printDeliveryNote ? 1 : 0, 44);
-    return this.lib.inposext_end_sale_with_invoice(buf);
+    return this.fn.endSaleInvoice(buf);
   }
 
-  /** Satışı iptal et */
   cancelSale(timeout?: number): InposExtError {
     if (!this.lib) return InposExtError.InposNotInitializedError;
-    return this.lib.inposext_cancel_sale(timeout || this.DEFAULT_TIMEOUT);
+    return this.fn.cancelSale(timeout || this.DEFAULT_TIMEOUT);
   }
 
-  /** Satış durumunu sorgula */
   getSaleState(timeout?: number): { error: InposExtError; saleState: InposEcrSaleState; totals: InposSaleTotals; receipt: InposSaleReceiptData } {
     if (!this.lib) return { error: InposExtError.InposNotInitializedError, saleState: InposEcrSaleState.InposSaleIdle, totals: this.emptyTotals(), receipt: { receiptNo: 0, zNo: 0 } };
     const saleBuf = Buffer.alloc(4);
     const totalsBuf = Buffer.alloc(48);
     const receiptBuf = Buffer.alloc(16);
-    const err = this.lib.inposext_sale_state(timeout || this.DEFAULT_TIMEOUT, saleBuf, totalsBuf, receiptBuf);
+    const err = this.fn.saleState(timeout || this.DEFAULT_TIMEOUT, saleBuf, totalsBuf, receiptBuf);
     return {
       error: err,
       saleState: saleBuf.readInt32LE(0),
@@ -265,87 +226,67 @@ export class InposBridgeService implements OnModuleDestroy {
     };
   }
 
-  /** Fiş bilgisi sorgula */
-  getReceiptData(receipt: InposSaleReceiptData, timeout?: number): { error: InposExtError; totals: InposSaleTotals } {
-    if (!this.lib) return { error: InposExtError.InposNotInitializedError, totals: this.emptyTotals() };
-    const rBuf = Buffer.alloc(16);
-    rBuf.writeUInt32LE(receipt.receiptNo, 0);
-    rBuf.writeUInt32LE(receipt.zNo, 4);
-    const totalsBuf = Buffer.alloc(48);
-    const err = this.lib.inposext_receipt_data(timeout || this.DEFAULT_TIMEOUT, rBuf, totalsBuf);
-    return { error: err, totals: this.parseTotals(totalsBuf) };
-  }
-
-  // ─── Satış Tipi ────────────────────────────────────────────
-
-  setSaleType(saleType: number, timeout?: number): InposExtError {
-    if (!this.lib) return InposExtError.InposNotInitializedError;
-    return this.lib.inposext_set_sale_type(timeout || this.DEFAULT_TIMEOUT, saleType);
-  }
-
   // ─── Raporlar ──────────────────────────────────────────────
 
   xReport(): InposExtError {
     if (!this.lib) return InposExtError.InposNotInitializedError;
-    return this.lib.inposext_x_report();
+    return this.fn.xReport();
   }
 
   zReport(): InposExtError {
     if (!this.lib) return InposExtError.InposNotInitializedError;
-    return this.lib.inposext_z_report();
+    return this.fn.zReport();
   }
 
   getCurrentZ(timeout?: number): { error: InposExtError; zNo: number } {
     if (!this.lib) return { error: InposExtError.InposNotInitializedError, zNo: 0 };
-    const buf = Buffer.alloc(4);
-    const err = this.lib.inposext_current_z(timeout || this.DEFAULT_TIMEOUT, buf);
-    return { error: err, zNo: buf.readUInt32LE(0) };
+    const arr = [0];
+    const err = this.fn.currentZ(timeout || this.DEFAULT_TIMEOUT, arr);
+    return { error: err, zNo: arr[0] };
   }
 
   // ─── Tarih/Saat ────────────────────────────────────────────
 
   getLastZDateTime(timeout?: number): { error: InposExtError; dateTime: Date | null } {
     if (!this.lib) return { error: InposExtError.InposNotInitializedError, dateTime: null };
-    const buf = Buffer.alloc(4);
-    const err = this.lib.inposext_last_z_datetime(timeout || this.DEFAULT_TIMEOUT, buf);
-    const secs = buf.readInt32LE(0);
-    return { error: err, dateTime: secs > 0 ? new Date(secs * 1000) : null };
+    const arr = [0];
+    const err = this.fn.lastZDatetime(timeout || this.DEFAULT_TIMEOUT, arr);
+    return { error: err, dateTime: arr[0] > 0 ? new Date(arr[0] * 1000) : null };
   }
 
   getEcrDateTime(timeout?: number): { error: InposExtError; dateTime: Date | null } {
     if (!this.lib) return { error: InposExtError.InposNotInitializedError, dateTime: null };
-    const buf = Buffer.alloc(4);
-    const err = this.lib.inposext_ecr_datetime(timeout || this.DEFAULT_TIMEOUT, buf);
-    const secs = buf.readInt32LE(0);
-    return { error: err, dateTime: secs > 0 ? new Date(secs * 1000) : null };
+    const arr = [0];
+    const err = this.fn.ecrDatetime(timeout || this.DEFAULT_TIMEOUT, arr);
+    return { error: err, dateTime: arr[0] > 0 ? new Date(arr[0] * 1000) : null };
   }
 
   // ─── Satış Limiti ──────────────────────────────────────────
 
   getSaleLimit(timeout?: number): { error: InposExtError; limit: number } {
     if (!this.lib) return { error: InposExtError.InposNotInitializedError, limit: 0 };
-    const buf = Buffer.alloc(8);
-    const err = this.lib.inposext_sale_limit(timeout || this.DEFAULT_TIMEOUT, buf);
-    return { error: err, limit: Number(buf.readBigUInt64LE(0)) };
+    const arr = [BigInt(0)];
+    const err = this.fn.saleLimit(timeout || this.DEFAULT_TIMEOUT, arr);
+    return { error: err, limit: Number(arr[0]) };
   }
 
   // ─── Tuş Kilidi ────────────────────────────────────────────
 
   blockEcrKeys(): InposExtError {
     if (!this.lib) return InposExtError.InposNotInitializedError;
-    return this.lib.inposext_block_ecr_keys();
+    return this.fn.blockKeys();
   }
 
   unblockEcrKeys(): InposExtError {
     if (!this.lib) return InposExtError.InposNotInitializedError;
-    return this.lib.inposext_unblock_ecr_keys();
+    return this.fn.unblockKeys();
   }
 
   getKeyBlockStatus(timeout?: number): { error: InposExtError; blocked: boolean } {
     if (!this.lib) return { error: InposExtError.InposNotInitializedError, blocked: false };
-    const buf = Buffer.alloc(4);
-    const err = this.lib.inposext_ecr_key_blocking_status(timeout || this.DEFAULT_TIMEOUT, buf);
-    return { error: err, blocked: buf.readInt32LE(0) !== 0 };
+    const arr = [0];
+    const err = this.fn.keyBlockStatus(timeout || this.DEFAULT_TIMEOUT, arr);
+    return { error: err, blocked: arr[0] !== 0 };
   }
 
   // ─── Kısım Bilgisi ────────────────────────────────────────
@@ -353,25 +294,32 @@ export class InposBridgeService implements OnModuleDestroy {
   getSectionData(section: number, timeout?: number): { error: InposExtError; info: InposSectionInfo } {
     if (!this.lib) return { error: InposExtError.InposNotInitializedError, info: { section, name: '', vatRate: 0 } };
     const itemBuf = Buffer.alloc(256);
-    itemBuf.writeUInt8(section, 121); // section offset
-    const err = this.lib.inposext_section_data(timeout || this.DEFAULT_TIMEOUT, itemBuf);
-    const name = itemBuf.toString('utf-8', 24, 24 + 96).replace(/\0/g, '').trim();
-    const vatRate = itemBuf.readUInt32LE(8); // multiplier alanı
-    return { error: err, info: { section, name, vatRate } };
+    itemBuf.writeUInt8(section, 121);
+    // section_data fonksiyonunu doğrudan çağırmak yerine, addSaleItem struct'ından okuyoruz
+    // Bu fonksiyon DLL'de mevcut değilse graceful fail eder
+    try {
+      if (!this.fn.sectionData) {
+        this.fn.sectionData = this.lib.stdcall('inposext_section_data', 'int', ['uint32', 'void *']);
+      }
+      const err = this.fn.sectionData(timeout || this.DEFAULT_TIMEOUT, itemBuf);
+      const name = itemBuf.toString('utf-8', 24, 24 + 96).replace(/\0/g, '').trim();
+      const vatRate = itemBuf.readUInt32LE(8);
+      return { error: err, info: { section, name, vatRate } };
+    } catch {
+      return { error: InposExtError.InposNotInitializedError, info: { section, name: '', vatRate: 0 } };
+    }
   }
 
-  // ─── Yazıcı Kağıt Kontrolü ────────────────────────────────
+  // ─── Yazıcı / Hata ────────────────────────────────────────
 
   checkPrinterPaper(timeout?: number): InposExtError {
     if (!this.lib) return InposExtError.InposNotInitializedError;
-    return this.lib.inposext_check_printer_paper(timeout || this.DEFAULT_TIMEOUT);
+    return this.fn.checkPaper(timeout || this.DEFAULT_TIMEOUT);
   }
-
-  // ─── Hata Detayı ──────────────────────────────────────────
 
   getErrorDetail(): number {
     if (!this.lib) return 0;
-    return this.lib.inposext_error_detail();
+    return this.fn.errorDetail();
   }
 
   // ─── Durum Bilgisi ─────────────────────────────────────────
