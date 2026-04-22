@@ -1,0 +1,345 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+<head>
+<title>InPOS SDK İle Yazılım Geliştirme</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<style>
+body { font:80% Verdana,Tahoma,Arial,sans-serif; }
+h1, h2, h3, h4 {  font-family: "Trebuchet MS",Georgia,"Times New Roman",serif; }
+ul.toc { padding: 4px; margin-left: 0; }
+ul.toc li { list-style-type:none; }
+ul.toc li.heading2 { margin-left: 1em; }
+ul.toc li.heading3 { margin-left: 2em; }
+a.wiki-anchor { display: none; margin-left: 6px; text-decoration: none; }
+a.wiki-anchor:hover { color: #aaa !important; text-decoration: none; }
+h1:hover a.wiki-anchor, h2:hover a.wiki-anchor, h3:hover a.wiki-anchor { display: inline; color: #ddd; }
+</style>
+</head>
+<body>
+<a name="InPOS-SDK-İle-Yazılım-Geliştirme"></a>
+<h1 >InPOS SDK İle Yazılım Geliştirme<a href="#InPOS-SDK-İle-Yazılım-Geliştirme" class="wiki-anchor">&para;</a></h1>
+
+
+	<ul class="toc right"><li><a href="#InPOS-SDK-İle-Yazılım-Geliştirme">InPOS SDK İle Yazılım Geliştirme</a><ul><li><a href="#inposext">inposext</a><ul><li><a href="#Cihaz-Eşleme">Cihaz Eşleme</a></li><li><a href="#Bulgu-Bildirme">Bulgu Bildirme</a></li><li><a href="#Cihaz-Malileştirme">Cihaz Malileştirme</a></li><li><a href="#Faturalı-Satış">Faturalı Satış</a></li><li><a href="#Yazıcı-Kullanımı">Yazıcı Kullanımı</a></li><li><a href="#Satış-Durumları">Satış Durumları</a></li><li><a href="#Bağlantı-Kontrolü">Bağlantı Kontrolü</a></li></ul></li></ul></li></ul>
+
+
+	<a name="inposext"></a>
+<h2 >inposext<a href="#inposext" class="wiki-anchor">&para;</a></h2>
+
+
+	<p>inposext kitaplığı Windows ya da Linux (32-bit) PC üzerinde çalışacak uygulamaların yazarkasa uygulamasına bağlanarak satış yapmasına olanak sağlamaktadır.</p>
+
+
+inposext kullanımına yönelik temel ilkeler:
+	<ul>
+	<li>PC - cihaz arasında TCP bağlantısı kurulur.</li>
+		<li>Bağlantı kurma aşamasında PC uygulaması (inposext) sunucu rolünü üstlenir. Cihaz ayarlanmış olan (PC uygulamasına ait) ip:port ikilisine bağlanmaya çalışır.</li>
+		<li>Bağlantı kurulduktan sonra PC uygulaması istemci rolünü üstlenir. Cihaz ile olan tüm mesajlaşmalarda her zaman önce PC uygulamasından cihaza mesaj gönderilir. Kimi mesajlara anında yanıt beklenirken diğerleri tek yönlüdür.
+	<ul>
+	<li>Asenkron cihaz durumu özelliği kullanılırsa cihazdan PC'ye mesaj gönderilebilir.</li>
+	</ul>
+	</li>
+		<li>Aradaki bağlantının kopması durumunda cihaz otomatik olarak ilgili ip:port uç noktasına bağlanmaya çalışır.</li>
+	</ul>
+
+
+	<p><strong>inposext</strong> kitaplığı C API'leri içerir. Kitaplığın çalışması için <strong>QtCore4</strong>, <strong>QtNetwork4</strong> ve <strong>libeay32</strong> kitaplıkları gerekmektedir. Windows işletim sistemi için bu kitaplık dosyaları inposext ile birlikte dağıtılmaktadır, ancak kitaplık dosyaları qt.io sitesinden indirilebilecek olan Windows 32-bit VC++2010 Qt 4.8.7 paketinde bulunanlarla aynıdır. Kitaplıkların çalışması için Windows makinelerde <a href="https://www.microsoft.com/en-us/download/details.aspx?id=8328" class="external">Visual C++ 2010 Runtime</a> 32-bit (x86) çalışma zamanı kitaplığı kurulu olmalıdır. Linux PC'lerde QtCore4, QtNetwork4 ve libcrypto kitaplıkları kurulu olmalıdır.</p>
+
+
+	<p><strong>InposExt.Net</strong> kitaplığı .Net 2.0 ve üzeri .Net sürümleri hedefleyen, inposext'teki C fonksiyonlarının .Net ortamında kolayca kullanılmasını sağlamak için geliştirilmiş bir "wrapper" kitaplıktır. inposext ve inposext için gerekli olan QtCore4, QtNetwork4 ve libeay32 kitaplıkları ile birlikte kullanılmalıdır.</p>
+
+
+	<p>QtGui4 kitaplığı exttest ve inposgmp3 uygulamaları için gereklidir. PC uygulaması ile birlikte bu kitaplıkların dağıtılmasına gerek yoktur.</p>
+
+
+	<p>inposext kullanımı için inposext.h header dosyası yeterlidir:<br /><pre>
+#include &lt;inposext.h&gt;
+</pre></p>
+
+
+	<p>inposext_types.h header dosyası inposext.h dosyasında bulunan işlevlerin kullandığı enum ve struct tanımlarını içermektedir.</p>
+
+
+	<p>Yazıcı işlevleri de kullanılacaksa inposext_printer.h header dosyası da eklenmelidir:<br /><pre>
+#include &lt;inposext_printer.h&gt;
+</pre></p>
+
+
+inposext kullanımına yönelik açıklama ve öneriler:
+	<ul>
+	<li>Uygulamayı bloklayabilecek tüm işlevler bir zaman aşımı parametresi almaktadır. Uygulama u zaman aşımı değerini kullanarak ana/GUI thread'ını uzun süreli bloklamayı engelleyecek şekilde geliştirilebilir.
+	<ul>
+	<li>ExtTest örnek uygulamasındaki inposext_initialiaze() kullanımı GUI thread'ini uzun süreli bloklamadan ilgili işlevin kullanımına bir örnektir.</li>
+	</ul>
+	</li>
+		<li>inposext API'leri cihaz içerisinde ekranlar arasında gezinmeyi sağlayan işlevler sunmamaktadır. Bu nedenle cihazı ve PC uygulamasını kullanan kişi PC uygulaması tarafından cihazı gerekli duruma getirme konusunda yönlendirilmelidir. Satış yapabilmek için cihazda herhangi bir kasiyer kullanıcına giriş yapılmış olmalı ve cihaz satışa giriş ekranında (InposEcrIdle) ya da kasiyer ana menüsüde (InposEcrMainMenu) bulunmalıdır .</li>
+		<li>inposext_end_sale() işlevi satış işleminin sonlanmasını beklemeden döner. Satış işleminin sonucu inposext_ecr_state(), inposect_sale_state() ve inposext_receipt_data() işlevleri kullanılarak belirlenebilir. Başarılı satış sonrasında cihaz durumu InposEcrSale'den InposEcrIdle'a geçecektir. Kredi kartı ile tahsilat sırasında yazarkasa durumu (inposext_ecr_state()) InposEcrSale'de olacak ancak inposext_sale_state() InposSaleWaitingForTransactionCompleted bildirecektir. Diğer bir seçenek, inposext_receipt_data()'nın döndürdüğü satış verilerinde toplam tutar ile ödeme tiplerine ait tutarları karşılaştırarak satışın sonlanıp sonlanmadığına karar vermektir.</li>
+	</ul>
+
+
+	<a name="Cihaz-Eşleme"></a>
+<h3 >Cihaz Eşleme<a href="#Cihaz-Eşleme" class="wiki-anchor">&para;</a></h3>
+
+
+	<p>inposext API'lerinin kullanılabilmesi için öncelikle cihaz ile PC eşlenmelidir. Test cihazlarında uygulama no'su 1 olan harici uygulama tanımlanmıştır. Geliştirme süresince bu uygulama no'sunu hem cihazda hem de PC uygulamalarında kullanılmalıdır. Her bir harici uygulama entegrasyonu için daha sonra inPOS SDK geliştirme ekibi tarafından tekil bir numara belirlenecektir.</p>
+
+
+	<p>Test cihazlarında Servis hesabının şifresi 4321, diğer kullanıcıların şifresi 1234'tür.</p>
+
+
+PC'de eşleme hazırlığı:
+	<ul>
+	<li>inposgmp3.exe uygulaması çalıştırılır. (<a href="https://www.dropbox.com/s/ui9e8m6m7a7b6gj/inposgmp3.zip?dl=1" class="external">Uygulama bağlantısı</a>)</li>
+		<li>IP alanında PC'de geçerli olan IPv4 IP adresleri listelenir. Bu adreslerden biri cihaza kaydedilmek üzere belirlenir.
+	<ul>
+	<li>Cihaz her zaman aynı ip:port ikilisine bağlanacağından geliştirme yapılan PC'nin her zaman aynı IP'yi alması gerekir. PC'ye statik IP tanımlanmalı.</li>
+	</ul>
+	</li>
+		<li>Bir port girilir.
+	<ul>
+	<li>/libinposext/bin/exttest.exe uygulaması öntanımlı port olarak 59000'i kullanmaktadır. Kolaylık olması için inposgmp3 uygulamasında da 59000 kullanılması önerilir.</li>
+	</ul>
+	</li>
+		<li>PC uygulaması seçilir.
+	<ul>
+	<li>Örneğin exttest.exe ya da ExtTest.Net.exe uygulamaları için bu uygulama dosyaları seçilmelidir.</li>
+	</ul>
+	</li>
+		<li>Geliştirme cihazının sicil no'su girilir.
+	<ul>
+	<li>Sicil no cihazın arkasındaki etikette, Servis veya Yönetici > Ayarlar > Sürüm Bilgileri ekranında, Servis kullanıcısı giriş ekranında ya da basılan herhangi bir fiş veya raporda görülebilir.</li>
+	</ul>
+	</li>
+		<li>Uygulama no olarak 1 girilmelidir.</li>
+	</ul>
+
+
+Cihazda eşleme hazırlığı:
+	<ul>
+	<li>Servis > 0.Diğer > 3.Harici Uygulamalar > 3.Uygulama Kapat ile 1 no'lu uygulama kapatılmalı.</li>
+		<li>Servis > 0.Diğer > 3.Harici Uygulamalar > 1.Uygulama Eşle ekranına giriş yapılır. Sırasıyla 1 uygulama numarası, PC IP adresi ve PC uygulaması portu girilir.
+	<ul>
+	<li>Eşleme işlemi tekrarlanıyorsa önceden girilmiş IP ve port bilgileri ekranda gösterilir. IP veya port değişmiyorsa Giriş tuşu ile görünen değerler onaylanabilir.</li>
+	</ul>
+	</li>
+		<li>Port girildikten sonra girilen verilerin gösterildiği ekrana gelinir.</li>
+	</ul>
+
+
+	<p>Yukarıdaki hazırlıklar yapıldıktan sonra önce PC'deki inposgmp3 uygulamasında Eşle tuşuna basılır, sonra cihazda Giriş tuşuna basarak eşleme başlatılır. Eşleme sonucu ekranda gösterilir. Eşleme başarılı ise sonraki adımda uygulama etkinleştirilir.</p>
+
+
+	<p>/libinposext/bin/exttest.exe uygulaması açılıp cihaz sicil no'su girilip, Enter'a basılıp, Cihaza Bağlan tuşuna basılarak cihazın uygulama bağlanması sağlanabilir. Eğer 59000'den farklı bir port seçildiyse Cihaza Bağlan'a basılmadan önce port doğru değere ayarlanmalıdır. ExtTest uygulamasına cihaz değil PC IP'si girilmelidir. IP alanı 0.0.0.0 olarak bırakılabilir. 0.0.0.0 PC'deki tüm arayüzlerden bağlantı kabul edilmesini sağlar.</p>
+
+
+	<a name="Bulgu-Bildirme"></a>
+<h3 >Bulgu Bildirme<a href="#Bulgu-Bildirme" class="wiki-anchor">&para;</a></h3>
+
+
+	<p>InPOS SDK kullanımı sırasında karşılaştığınız sorunları ya da diğer her türlü sorunuzu <a class="email" href="mailto:sdk@inpos.com.tr">sdk@inpos.com.tr</a> adresine gönderebilirsiniz. Karşılaştığınız sorunların inPOS geliştirme ekibi tarafından daha kolay ve doğru şekilde anlaşılabilmesi için aşağıdaki kontrol listesini belirtilen sıra ile uygulayıp başarısız olan adımları bulgu raporunuza ekleyin:</p>
+
+
+	<ul>
+	<li>inposext'in çalışması için ön koşul kontrolü: libinposext/bin klasöründeki ExtTest.exe'yi (ExtTest.Net.exe değil) çalıştırın. msvcr100.dll hatası alırsanız yukarıdaki belirtildiği üzere Microsoft Visual C++ 2010 32-bit (x86) runtime kitaplıklarını kurun.</li>
+		<li>inposext sürümü: ExtTest.exe uygulamasındaki sürümün güncel sürüm olduğunu kontrol edin. Her yeni sürüm notu ile birlikte güncel sürüm no da bildiriliyor.</li>
+		<li>InposExt.Net.dll için ön koşul kontrolü: libinposext/bin klasöründeki ExtTest.Net.exe'yi çalıştırın. ExtTest.Net.exe'yi değil ancak kendi uygulamanızı çalıştırırken hata alıyorsanız QtCore, QtNetwork, libeay32, inposext ve InposExt.Net dll'lerinin uygulama dosyanız ile aynı klasörde olduğundan emin olun. İlgili uyarılar libinposext/src/ExtTest.Net/BeniOku.txt belgesinde de bulunmaktadır.</li>
+		<li>Cihaz yazılım sürümü: Yönetici ya da Servis > Ayarlar > Sistem Güncelleme ile cihazınızın alması gereken güncelleme olup olmadığını kontrol edin. Sürüm notlarında yeni bir sürüm sonrasında hem güncelleme gerektiğini hem de güncelleme sonrasında eşleme tekrar gerektiği yer alabilir. Sürüm notlarındaki yönergeleri uygulamış olduğunuzu kontrol edin. Cihaz yazılım sürümü Yönetici ya da Servis > Ayarlar > Sürüm Bilgileri ekranında görülebilir.</li>
+		<li>Cihazda harici uygulama eşleştirme: Eşleme sırasında <strong>cihaza PC'nin IP:port'unun</strong> girildiğinden emin olun. Cihazda eşleme yapmak PC uygulamasına bağlanmak için yeterli değil. Servis > 0.Diğer > 3.Harici Uygulamalar > 4.Uygulama Bilgileri ekranından ip:port ve etkin/kapalı kontrolü yapın. Gerekiyorsa uygulamayı etkinleştirin ya da tekrar eşleme yapın.</li>
+		<li>Bağlantı kontrolü: ExtTest.exe (ExtTest.Net.exe değil) uygulamasının IP alanını 0.0.0.0 olarak bırakarak, port alanına cihaz eşleme sırasında cihaza girilen portu girerek Cihaza Bağlan ile bağlantı kontrolü yapın. Birkaç saniye içerisinde bağlantı kurulmazsa:
+	<ul>
+	<li>Cihazın ağa bağlı ve IP aldığını kontrol edin: Yönetici ya da Servis > Ayarlar > Ağ > Bağlantı Bilgileri. Cihaz IP almadıysa ethernet kablosunu söküp yakın, bağlantı arayüzünü GPRS'e ve sonra tekrar Ethernet+GPRS'e çevirin. Hala IP almazsa cihazı tekrar başlatın.</li>
+		<li>ExtTest.exe uygulamasındaki IP alanına <strong>cihaz IP'si değil PC IP'si</strong> yazılması gerekiyor. IP alanını 0.0.0.0 bırakabilirsiniz, 0.0.0.0 tüm ağ arayüzlerinden bağlantı kabul edilmesini sağlar. Eğer IP alanına PC IP'si girmek isterseniz eşleme sırasında cihza kaydedilen IP'yi girmelisiniz. inposext_initialize() fonksiyonuna da PC IP ve portu parametre olarak geçilmeli. IP adresi olarak 0.0.0.0 da geçilebilir.</li>
+	</ul>
+	</li>
+		<li>ExtTest.exe ile ExtTest.Net.exe aynı işlevleri sunmaktadır. Sorunlu işlevin her iki uygulamada da mı görüldüğünü yoksa sadece birinde mi görüldüğünü kontrol edin.</li>
+		<li>Bulgu bildirirken yukarıdaki adımların hangilerinde ne gözlemlendiğiniz yanında cihazınızın sicil numarasını da bildirin.</li>
+	</ul>
+
+
+	<a name="Cihaz-Malileştirme"></a>
+<h3 >Cihaz Malileştirme<a href="#Cihaz-Malileştirme" class="wiki-anchor">&para;</a></h3>
+
+
+	<p>Kimi güncellemelerden sonra ya da alınan kimi hatalardan sonra cihazın tekrar malileştirilmesi gerekebilir. Cihazı malileşme öncesine döndürmek için Servis > 0.Diğer > Cihazı Sıfırlama kullanılabilir.</p>
+
+
+	<p>Malileşmemiş cihaz ya da herhangi bir servis müdahalesi gerektiren bir kullanıcı mesajı görüldüğünde Giriş tuşuna basarak kullanıcı giriş ekranına geçilebilir. Malileşmemiş ya da servis müdahalesi gereken bir cihazda sadece Servis kullanıcısı görülür.</p>
+
+
+Cihazın malileşmesi için yapılması gerekli işlemlerin adlarının sonunda '*' bulunur. SCR ve MSR testleri çipli kredi kartı kullanılarak yapılabilir. Testler sırasında kart üzerinde herhangi bir işlem yapılmaz. Tarih/saat güncelleme NTP ile yapılabilir. Zorunda kalınırsa elle tarih ve saat de girilebilir. Programlama altında malileşme için yapılması zorunlu olan işlemler:
+	<ul>
+	<li>En az bir kısım girme</li>
+		<li>Fiş başlığında en az 1. ünvan ve adres satırları ile vergi dairesi ve no girme</li>
+	</ul>
+
+
+	<p>Tüm işlemler yapıldığında Servis ana menüsünde <em>Cihazı malileştir</em> seçeneği görülecektir.</p>
+
+
+	<a name="Faturalı-Satış"></a>
+<h3 >Faturalı Satış<a href="#Faturalı-Satış" class="wiki-anchor">&para;</a></h3>
+
+
+	<p>GİB'in 2 Aralık 2015 tarihinde yayımladığı <a href="http://www.gib.gov.tr/sites/default/files/fileadmin/user_upload/Yararli_Bilgiler/YNOKC_Bilgi_Fisleri.pdf" class="external">Yeni Nesil Ödeme Kaydedici Cihazlardan Bilgi Fişi Teknik Kılavuzu</a> belgesi ile YNÖKC'ler ayrıntılı bilgi fişleri düzenlemek zorunda olmuşlardır. Faturalı satış bilgi fişleri satış fişlerinde yer alan kısım bilgilerini (KDV oranı ve tutar), ödeme tipini, toplam tutar ve KDV'yi içerir duruma gelmiştir. Bunun yanında VKN/TCKN alanı ve e-fatura ya da e-arşiv fatura bilgi fişlerinin istenirse irsaliye olarak da düzenlenebilmesi öngörülmüştür.</p>
+
+
+	<p>Bilgi fişlerinin, satış kalemleri ve ödeme bilgileri balkımından satış fişleri kadar ayrıntılı olması nedeniyle faturalı satış işleminde normal satış işleminde kullanılan ekranlar ve özellikler devreye alınmıştır. inposext ile faturalı satış başlatıldığında (inposext_start_sale_with_invoice()) yazarkasa yazılımı InposEcrSale durumuna geçecek ve kalem ve ödeme ekleme boyunca bu durumda olacaktır. Bu aşamadan satış ile ilgili fonksiyonlar kullanılacaktır. Toplam tutar ödendiğinde InposEcrSaleWithInvoice durumuna geçilecek ve bilgi fişinde yer alan ek bilgiler beklenecektir. Bu noktada inposext_end_sale_with_invoice() ile ek bilgiler sağlanmalı ve faturalı satış sonlandırılmalıdır.</p>
+
+
+Faturalı satış akışı şu şekilde olacaktır:
+	<ul>
+	<li>inposext_start_sale_with_invoice(): Yazarkasa durumu InposEcrSale olacak.</li>
+		<li>inposext_add_sale_item(), inposext_add_payment() ya da inposext_end_sale() gibi satış fonksiyonlarıyla satış kalemleri ve ödeme bilgisi girilir. Bu aşamada inposext_sale_state() kullanılabilir.</li>
+		<li>Ödenmiş tutar (cashPaymentAmount + creditCardPaymentAmount) ödenmesi gereken tutara (amountToPay) ulaştığında yazarkasa kendiliğinden InposEcrSaleWithInvoice durumuna geçer. Bu durumda inposext_sale_state() kullanılamaz.</li>
+		<li>inposext_ecr_state() ile yazarkasanın InposEcrSaleWithInvoice durumuna geçtiği kontrol edildikten sonra inposext_end_sale_with_invoice() ile bilgi fişinde yer alacak ek bilgiler yazarkasaya gönderilir ve faturalı satış sonlandırılır.</li>
+	</ul>
+
+
+	<p>Gene GİB'in yayımladığı bir <a href="http://www.gib.gov.tr/sites/default/files/fileadmin/user_upload/Yararli_Bilgiler/OKCduyuru2.pdf" class="external">duyuruya</a> göre vergi mükellefi olmayan müşteriler TCKN'lerini işyeri ile paylaşmak zorunda değiller. Bu durumda TCKN alanına 11111111111 girilmeli.</p>
+
+
+	<p>E-fatura ve e-arşiv fatura bilgi fişleri irsaliye olarak düzenlenebilir. Normal faturalı satış bilgi fişi irsaliye olarak düzenlenemez.</p>
+
+
+	<a name="Yazıcı-Kullanımı"></a>
+<h3 >Yazıcı Kullanımı<a href="#Yazıcı-Kullanımı" class="wiki-anchor">&para;</a></h3>
+
+
+	<p>inposext_printer.h header dosyasında yazıcıdan basılmak üzere belge hazırlama ve belgeyi basma için fonksiyonlar bulunmaktadır.</p>
+
+
+Yazıcıdan belge basma işleminin temel adımları şunlardır:
+	<ul>
+	<li>inposext_printer_set_encoding() ile bir metin kodlama yöntemi seçilir. Bu fonksiyon basılacak her bir belge için bir kere ve ilk olarak çağrılmalıdır.</li>
+		<li>inposext_printer_add_text() ve inposext_printer_add_justified_text() ile belgeye metin parçaları eklenir. Eklenen metin parçaları inposext_printer_set_encoding() fonksiyonu ile belirtilen kodlama yöntemi ile kodlanmış olmalıdır.</li>
+		<li>inposext_printer_add_line_feed() ile belgeye boş satır eklenebilir.
+	<ul>
+	<li>Belge basıldığında belgenin son satırlarının kağıdı yırtma çizgisinin üstünde kalması için belgenin sonuna en az 4 boş satır eklenmelidir.</li>
+	</ul>
+	</li>
+		<li>Belge inposext_print_slip() ile basılır.</li>
+	</ul>
+
+
+Belge yazdırma zamanı ile ilgili olarak şu noktalara dikkat edilmelidir:
+	<ul>
+	<li>Yazarkasa şu durumlardan birinde olduğunda belge yazdırılabilir:
+	<ol>
+	<li>InposEcrIdle</li>
+		<li>InposEcrSale</li>
+		<li>InposEcrSaleWithInvoice</li>
+		<li>InposEcrMainMenu</li>
+	</ol>
+	</li>
+		<li>Belge, eğer printAfterSale parametresinin değeri 0 ise inposext_print_slip() çağrıldığında yazdırılır. printAfterSale parametresi satış ya da faturalı satış sırasında dikkate alınır. Satış ya da faturalı satış yokken bu parametre dikkate alınmaz ve belge hemen yazdırılır.</li>
+		<li>Belge yazdırılmadan önce kağıt durumunun kontrol edilmesi önerilir.</li>
+		<li>Belge içeriği satış fişine eklenmez, EKÜ'ye kaydedilmez. Yarım kalmış satış için yedeklenen verilerle birlikte kaydedilmez.</li>
+	</ul>
+
+
+Metin eklerken şu noktalara dikkat edilmelidir:
+	<ul>
+	<li>Uzun metin parçaları için satır yönetimi otomatik olarak yapılmaktadır. Eklenen bir metin tek bir satıra sığmayacaksa metin otomatik olarak alt satırdan devam eder.</li>
+		<li>Arka arkaya eklenecek 2 metin parçasının hizalaması farklı olacaksa ilk metin parçası yeni satır karakteri ('\n') ile sonlanmalıdır.</li>
+		<li>Aynı satırda farklı kalınlıkta ve büyüklükte metin parçaları kullanılabilir.</li>
+		<li>inposext_printer_add_justified_text() fonksiyonu tek bir satıra iki yana yaslı metin eklemek için kullanılabilir. Ancak metnin kalın olup olmamasına bağlı olarak bir satıra sığan karakter sayısı farklılık gösterebilmektedir. Bu nedenle zorunlu olmadıkça bu fonksiyonun kullanılması önerilmez.</li>
+		<li>Küçük karakter büyüklüğü seçildiğinde bir satıra 42, seçilmediğinde 32 karakter sığar. Ancak metin kalın olduğunda bir satıra sığan karakter sayısı belirtilen sayılardan 1 karakter az olabilir. Bu nedenle yazdırılacak metin parçalarının satır değil paragraf düzeyinde kurgulanması önerilir.</li>
+	</ul>
+
+
+	<a name="Satış-Durumları"></a>
+<h3 >Satış Durumları<a href="#Satış-Durumları" class="wiki-anchor">&para;</a></h3>
+
+
+	<p>inposext_types.h dosyasında bulunan InposEcrSaleState enum'u yazarkasa uygulaması satış (InposEcrSale) durumundayken satış iş akışının bulunabileceği 16 farklı durumu içermektedir. Bu durumların birkaçı dışındakiler farklı hata durumlarına karşılık geliyor. Hata durumları da şu anda kullanıcı müdahalesi gerektiriyor. Bu bölümde InposEcrSaleState enum'undaki değerler incelenecek ve PC uygulamalarının satış sırasında inposext_sale_state() fonksiyonunu kullanarak farklı hata durumlarını belirlemeleri ve kullanıcıları uygun müdaheleye yönlendirmeleri konusu tartışılacak.</p>
+
+
+	<p>inposext_types.h dosyasında yer alan InposEcrState ve InposEcrSaleState enum'larının farkına bu noktada tekrar değinmekte yarar var: InposEcrSaleState enum'u eğer InposEcrState enum'unun InposEcrSale değeri için anlamlı. Yani InposEcrSaleState enum'u InposEcrSale durumunun alt durumlarını listeliyor denebilir. Bu bölümde ve belgenin geri kalanında "yazarkasa durumu" ifadesi inposext_ecr_state() fonksiyonunun döndürdüğü InposEcrState değeri için kullanılacak. InposEcrSaleState değerleri için "satış durumu" ifadesi kullanılacak.</p>
+
+
+	<table>
+		<tr>
+			<td> InposSaleIdle </td>
+			<td> Yazarkasa satış durumunda değilken yazarkasa yazılımının satış akışını gerçekleştiren kısmı bu durumda bulunur. inposext_sale_satate() fonksiyonu eğer yazarkasa satış durumunda değilse InposInvalidEcrStateError hatası döndüğünden PC uygulamaları bu satış durumunu göremezler. </td>
+		</tr>
+		<tr>
+			<td> InposSaleWaitingForInput </td>
+			<td> Satış başladığında bu satış durumuna geçilir. Bu durumda iken inposext'in satış ile ilgili API'leri kullanılabilir. Ancak satış işleminin bulunduğu aşamaya göre her API her zaman kullanılamayabilir. Örneğin ara toplam üzerinden indirim/artırım yapılmışken kalem eklenemez/silinemez. Ya da parçalılş satış yapılıyorken ara toplam üzerinden indirim/artırım yapılamaz. </td>
+		</tr>
+		<tr>
+			<td> InposSaleWaitingCancelLastItemResponse ve InposSaleWaitingCancelSaleResponse </td>
+			<td> Bu durumlar inposext API'ler kullanarak satış yapıldığında PC uygulamaları tarafından görülmez. Ancak satış sırasında kasiyerin cihaz üzerinden satışa müdahale etme izni olursa (ki şu anda herhangi bir kısıtlama yok) satış bu durumu bu iki değerden birini alabilir ve PC uygulaması inposext_sale_state() ile bu değerleri görebilir. Bu durumda kullanıcı cihaz üzerinden satışa müdahelesini tamamlamaya yönlendirilmelidir. inposext üzerinden yapılacak satış iptali ya da kalem silme işlemleri için kullancı onayı almak gerekli görülürse bu onaylar PC uygulamaları tarafından alınmalı ve sonra ilgili fonksiyonlar çağrılmalıdır. </td>
+		</tr>
+		<tr>
+			<td> InposSaleWaitingForSection </td>
+			<td> Bu durum inposext API'ler kullanarak satış yapıldığında PC uygulamaları tarafından görülmez. Ancak satış sırasında kasiyerin cihaz üzerinden satışa müdahale etme izni olursa, satış sırasında Menü tuşuna basıldığında kullanıcının kısım seçmesi için mevcut kısımlar görülüyorken inposext_sale_state() bu satış durumunu dönebilir. Bu durumda PC uygulaması kasiyeri bir kısım seçmesi ya da tekrer Menü tuşuna basarak kısım seçmeden satışa devam etmesi yönünde yönlendirmeli. </td>
+		</tr>
+		<tr>
+			<td> InposSaleWaitingForCustomerId </td>
+			<td> Bu durum inposext API'ler kullanarak satış yapıldığında PC uygulamaları tarafından görülmez. Ancak satış sırasında kasiyerin cihaz üzerinden satışa müdahale etme izni olursa ve cihazda muayene katkı payı işlevi açıksa, kasiyer cihaz üzerinden katkı payı girerken bu satış durumu görülebilir. </td>
+		</tr>
+		<tr>
+			<td> InposSaleWaitingForTransactionCompleted </td>
+			<td> Kredi kartıyla tahsilat yapılıyorken işlemin sonucu bu durumda beklenir. Eğer parçalış satış yapılıyorsa ve tahsilat sonunda hala ödenmesi gereken tutar varsa InposSaleWaitingForInput durumuna geçilir. Eğer tahsilat ile tüm/kalan tutar ödenmiş olursa satış sonlandırılır. </td>
+		</tr>
+		<tr>
+			<td> InposSaleLimitReachedWithLastItem ve InposSaleLimitReachedWithAddedAmount </td>
+			<td> Bu durumlara Yönetici > Programlama > Satış Limiti ile belirlenen satış limiti eşiği aşıldığında geçilir. Satış limiti faturalı satışın zorunlu olduğu tutarlara geçilmesi engellemek için kullanılan bir işlevdir. PC uygulamasının kullanılacağı işyerleri satış limit ve faturalı satış konusunda eğitilmelidir. </td>
+		</tr>
+		<tr>
+			<td> InposSaleUndefinedPluItem </td>
+			<td> Bu durum PC uygulamalrı tarafından görülemez. </td>
+		</tr>
+		<tr>
+			<td> InposSaleInvalidSectionOfPluItem ve InposSaleInvalidVatRateOfPluItem </td>
+			<td> inposext_add_sale_item() ile eklenen kalemin kısmı ya da kısmın KDV oranı geçersiz olduğunda bu durumlardan birine geçilir. Aşağıdaki InposSaleUndefinedSection açıklamaları dikkate alınmalı. </td>
+		</tr>
+		<tr>
+			<td> InposSaleUndefinedSection </td>
+			<td> Ancak kasiyer elle satış yaparken bu durum görülebilir. inposext_section_data() ile cihazdaki geçerli kısımlar alınabilmektedir. PC uygulaması geçerli kısım göndermek için her açıldığında cihazdaki kısımları daha önce aldığı kısımlarla karşılaştırmalıdır. Cihazda kayıtlı olan kısımların PC uygulaması ile entegrasyon yapıldıktan sonra cihaz üzerinden değiştirilmemesi ya da PC uygulamasıyle eşdügüm sağlanarak değiştirilmesi, PC uygulaması geliştiricilerinin işyerleri ile beraber ele alması gereken bir konu. Diğer yandan, GİB Bilgi Sistemleri'nin devreye alınması sonrasında GİB Yeni Nesil ÖKC'lere KDV oranları gönderebili duruma gelecektir. Her bir kısım, kısım adı yanında bir KDV oranı da içerdiğinden GİB tarafından yapılacak bir KDV güncellemesi kısımların tutarsız bir duruma gelmesine yol açabilir. Yazarkasa uygulaması KDV oranları değiştiğinde kullanıcıları kısımları gözden geçirme konusunda uyarmaktadır. </td>
+		</tr>
+		<tr>
+			<td> InposSaleUndefinedVatRate </td>
+			<td> Ancak kasiyer elle satış yaparken bu durum görülebilir. </td>
+		</tr>
+		<tr>
+			<td> InposSaleInvalidAmount </td>
+			<td> Örneğin ara toplama yapılan indirim tutarı ara toplamdan büyükse, yani toplam tutar 0 TL'nin altına inecekse bu duruma geçilir. Bu duruma ayrıca kullanıcının cihazdan elle girdiği tutar geçersiz olduğunda da geçilir. </td>
+		</tr>
+		<tr>
+			<td> InposSaleDataFinalized </td>
+			<td> Satış bu durumdayken yazarkasa yazılımı satışı sonlandırmaya başlamış demektir. </td>
+		</tr>
+	</table>
+
+
+
+
+	<a name="Bağlantı-Kontrolü"></a>
+<h3 >Bağlantı Kontrolü<a href="#Bağlantı-Kontrolü" class="wiki-anchor">&para;</a></h3>
+
+
+	<p>Cihaz ile olan bağlantının etkin olduğunu kontrol edip gerektiğinde tekrar cihaza bağlanmak PC uygulamalarının sorumluluğundadır. Bu nedenle düzenli olarak bağlantı kontrolü yapmak inPOS - PC entegrasyonunun en az sorunla yönetilmesi için üzerine önemle eğinilmesi gereken bir konudur.</p>
+
+
+	<p>inposext_ecr_sale_state() ve inposext_ecr_state() fonksiyonu cihaz tarafında diğer fonksiyonlardan farklı şekilde işlenmektedir. Bu sayede, yazarkasa yazılımı örneğin satış sonlandırma ya da Z raporu basımı gibi inposext fonksiyonlarına yanıt veremediği bir işlem yapıyor olsa da inposext_ecr_sale_state() ya da inposext_ecr_state() sorgularına yanıt verilebilmektedir.</p>
+
+
+PC uygulamaları bu davranışı 2 şekilde kullanabilir:
+	<ol>
+	<li>Yazarkasa durumunu her zaman doğru şekilde alabilmek ve buna göre doğru davranışı sergileyebilmek.</li>
+		<li>Yazarkasa ile olan TCP bağlantısını etkin tutmak ve bağlantının ayakta olduğunu doğrulamak.</li>
+	</ol>
+
+
+İlk kullanım şekli temel bir zorunluluk olmakla birlikte, ikincisi 0.5.0 sonrasında eklenen yeni bir olanak. inposext_ecr_state() ya da inposext_ecr_sale_state() fonksiyonunu bağlantı kontrol amacıyla şu şekilde kullanmak değerlendirilmeli:
+	<ul>
+	<li>Düzenli olarak, örneğin dakikada bir, inposext_ecr_sale_state() çağrılarak cihaz ile olan bağlantının etkin olduğu kontrol edilmeli.</li>
+		<li>Bağlantı kontrolü amacıyla kullanıldığında inposext_ecr_sale_state()'e küçük bir zaman aşımı değeri geçilmeli. 700ms ile 1s arasında bir zaman aşımı değeri kullanılabilir.</li>
+		<li>Eğer zaman aşımı hatası ya da bağlantı hatası alınırsa sırasıyla inposext_close() ve inposext_initialize() çağrılarak cihazla tekrar bağlantı kurulmalı.</li>
+	</ul>
+
+
+	<p>Bağlantı kontrolünü bir işlem yapılacağında yapmak yerine düzenli olarak yapmak daha sorunsuz bir işleyiş sağlayacaktır. inposext_initialize() ilk çağrıldığında görece uzun sürse de sonraki çağrılarda hızlı sonlanmaktadır. Bu nedenle inposext_initialize() kullanımından çekinilmemelidir.</p>
+</body>
+</html>
