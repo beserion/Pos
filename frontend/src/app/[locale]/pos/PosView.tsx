@@ -180,7 +180,10 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     // Set table if applicable
                     if (targetTableId) {
                         const table = tables.find(t => t.id === parseInt(targetTableId));
-                        if (table) setSelectedTable(table);
+                        if (table) {
+                            setActiveSubCheckId(null);
+                            setSelectedTable(table);
+                        }
                     }
 
                     // Delete original sale (voiding it)
@@ -604,6 +607,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
 
     const handleTableSelection = (table: Table) => {
+        setActiveSubCheckId(null);
         if (selectedTable?.id === table.id) {
             setSelectedTable(null);
             return;

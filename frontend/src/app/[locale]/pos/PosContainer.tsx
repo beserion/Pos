@@ -6,7 +6,6 @@ import PosView from './PosView';
 import QuickSaleView from './QuickSaleView';
 import TakeOrderView from './TakeOrderView';
 import BusinessDayGuard from '@/components/shifts/BusinessDayGuard';
-import { PosProvider } from './PosContext';
 
 function PosContainerContent() {
     const searchParams = useSearchParams();
@@ -49,7 +48,7 @@ function PosContainerContent() {
 
             {/* POS içeriği ancak iş günü kontrolü başarılı olduktan sonra render edilir */}
             {businessDayReady && (
-                <PosProvider>
+                <>
                     {view === 'pos' && (
                         <PosView onSwitchToQuickSale={() => changeView('quicksale')} onSwitchToTakeOrder={() => changeView('takeorder')} />
                     )}
@@ -59,7 +58,7 @@ function PosContainerContent() {
                     {view === 'takeorder' && (
                         <TakeOrderView onSwitchToPos={() => changeView('pos')} />
                     )}
-                </PosProvider>
+                </>
             )}
         </div>
     );

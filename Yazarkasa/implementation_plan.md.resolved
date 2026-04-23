@@ -1,0 +1,57 @@
+# Yetki Sistemi ve Hazır Şablonlar (Roller) Geliştirme Planı
+
+Bu döküman, yetki sistemindeki "Hazır Şablonlar" özelliğinin entegrasyonu ve yeni POS / Kasa yetkilerinin eklenmesi için detaylı adımları içermektedir.
+
+## Hedef ve Mimari Yaklaşım
+Mevcut mimarimizde bir kullanıcının yetkileri `Rol Yetkileri` (rolePerms) ve `Kişisel Ekstra Yetkiler` (extraPerms) olmak üzere ikiye ayrılmaktadır. Kullanıcının bir "Rol şablonu" kullanması, aslında sistemde tanımlı olan "Garson" veya "Kasiyer" rolüne atanması anlamına gelir. Bu şablon üzerinden gelen yetkiler otomatik olarak role ait yetkiler (`rolePerms`) olarak yüklenir, kullanıcı bazında yapılan değişiklikler ise `extraPerms` üzerinden şablonu bozmadan çalışır.
+
+## Kullanıcı Gözden Geçirme ve Onay Gereksinimi
+
+> [!IMPORTANT]
+> - Rol şablonları (Garson, Kasiyer) veritabanında otomatik oluşturulacak ve sabit yetkilerle doldurulacaktır. Kullanıcı şablon seçtiğinde rolü değişecektir.
+> - **Adisyon İşlemleri** (İptal, Geri Çağırma, Kilit Kaldırma) ayrı kalemler olarak sisteme tanımlanacaktır.
+> - **Rapor ve Kapanış Yetkileri** sayfası için yeni bir grup eklenecektir.
+> - Onayınızın ardından `extraPerms` (kişisel yetki) uygulamasının şablonları ezme mantığını ve şablon uygulama arayüzünü geliştirmeye başlayacağım.
+
+## Açık Sorular (Open Questions)
+> [!NOTE]
+> 1. "Kasiyer" şablonunda bahsedilen "Yazar kasa / mali fiş / e-belge işlemleri yapabilir" yetkisini sadece bir buton/onay kutusu olarak tanımlayıp POS ekranında ilgili işlem butonlarının görünürlüğünü mü gizleyeceğiz?
+> 2. Hazır şablonlar (Garson, Kasiyer vb.) Backend `roles.service.ts` içerisinde uygulama ilk kalktığında (onModuleInit) otomatik oluşturulsun/güncellensin mi, yoksa tamamen frontend tabanlı sabit bir liste olup kullanıcının ekstra yetkilerini mi topluca güncellesin? (Mevcut yapıya en uygunu: Backend'de "Garson" adlı bir Rol oluşturup kullanıcının Rolünü ona çevirmek ve rol yetkilerini Garson şablonuyla eşitlemektir. Plan bu şekilde kurgulanmıştır.)
+
+## Önerilen Değişiklikler
+
+### 1. Backend: Rollerin Otomatik Başlatılması (Seed)
+Veritabanında "Garson" ve "Kasiyer" rollerinin her zaman sistemde bulunmasını ve varsayılan yetkilere sahip olmasını sağlamalıyız.
+#### [MODIFY] `backend/src/roles/roles.service.ts`
+- `onModuleInit()` metodu eklenecek.
+- `Garson` ve `Kasiyer` rolleri için belirtilen yetkiler (Modül + POS yetkileri) hard-coded olarak eklenecek/güncellenecek.
+  - Örneğin Garson için `OP:CAN_ORDER`, `OP:CAN_PRINT_BILL`, `OP:REPRINT_BILL`, `OP:SET_MENU_SALE`, `OP:COMBO_SALE` gibi yetkiler `permissions` array'ine eklenecek.
+  - Kasiyer için tüm finans/ödeme yetkileri, iade, indirim vb. yetkiler eklenecek.
+
+### 2. Frontend: Yeni Yetki Anahtarlarının Eklenmesi
+`PageClient.tsx` dosyasında POS Yetkileri (POS_SPECIAL) tabı güncellenerek istenen yeni alanlar eklenecektir.
+
+#### [MODIFY] `frontend/src/app/[locale]/admin/users/PageClient.tsx`
+- **Adisyon İşlemleri (Operasyon Grubu)**
+  - Mevcut `OP:CAN_CANCEL_SALE` ("Adisyon İptal") kalacak.
+  - Yeni: `OP:RECALL_CLOSED_BILL` ("Kapalı Adisyon Geri Çağır")
+  - Yeni: `OP:UNLOCK_BILL` ("Adisyon Kilidi Kaldır")
+- **Finans / Ödeme Yetkileri**
+  - Yeni: `OP:START_FISCAL` ("Mali İşlem Başlatabilir")
+  - Yeni: `OP:FISCAL_TRANSACTIONS` ("Yazar kasa / mali fiş / e-belge işlemleri")
+- **Rapor / Kapanış Yetkileri (Yeni Kutu)**
+  - Yeni kutu eklenecek: `OP:REPORT_VIEW`, `OP:REPORT_SALES_ANALYSIS`, `OP:REPORT_X`, `OP:REPORT_Z`, `OP:END_OF_DAY`, `OP:REPORT_CASH_REGISTER`, `OP:VIEW_LOGS`
+
+### 3. Frontend: Şablon Uygulama Arayüzü
+Kişisel Yetki Yönetimi (İzinler) modalının üst kısmına (Header) "Şablon Uygula" butonu ve dropdown eklenecek.
+- **Mantık**: Dropdown'dan örneğin "Kasiyer Şablonu" seçildiğinde, kullanıcının `roleId`'si Kasiyer rolüne güncellenir, `extraPerms` sıfırlanabilir veya korunabilir. Seçimin hemen ardından güncel yetkiler backend'den çekilip tabloya yansıtılır. Kasiyer rolündeki standart yetkiler (Mor renkli kilitli yetkiler) olarak görünür, yönetici dilerse şablonu bozmadan `extraPerms` üzerinden yeşil butonlarla ek yetki tanımlamaya devam edebilir.
+
+### 4. Azami İndirim Oranı
+- Şu anda kullanıcıya özel "DISCOUNT_LIMIT" (örn: `DISCOUNT_LIMIT:10`) ekstra yetkiler içine kaydediliyor.
+- Elle girilebilir bu alan zaten çalışıyor. Varsayılan Garson için `0`, Kasiyer için "sınırsız" veya manuel tanımlı olacak şekilde güncellenecektir.
+
+## Doğrulama Planı (Verification Plan)
+- **Manuel Doğrulama**:
+  1. Frontend üzerinden herhangi bir kullanıcıya girilip, "Şablon Uygula -> Garson" seçildiğinde kullanıcının otomatik olarak Garson rolüne geçmesi ve ekranda Garson'a ait varsayılan yetkilerin kilitli (Mor) olarak işaretlenmesi test edilecek.
+  2. Garson şablonu aktifken, şablonda olmayan bir yetki (Örn: Adisyon İptal) manuel olarak eklenip "Kaydet" denildiğinde, bunun sadece `extraPerms` içine yazıldığı ve şablonu bozmadan çalıştığı doğrulanacak.
+  3. Yeni eklenen yetki başlıklarının (Adisyon İşlemleri, Rapor/Kapanış vs.) ekranda doğru görüntülendiği teyit edilecek.

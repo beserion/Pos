@@ -77,6 +77,7 @@ export function PageClient() {
     // UI states
     const [showPassword, setShowPassword] = useState(false);
     const [showPin, setShowPin] = useState(false);
+    const [showTemplateMenu, setShowTemplateMenu] = useState(false);
 
     const [formData, setFormData] = useState({
         id: 0,
@@ -240,7 +241,13 @@ export function PageClient() {
     const openPermModal = (usr: User) => {
         setIsModalOpen(false);
         setPermUser(usr);
-        setRolePerms(usr.role?.permissions || []);
+        
+        // Ensure role permissions is always an array
+        const rolePermsArray = Array.isArray(usr.role?.permissions) 
+            ? usr.role.permissions 
+            : (typeof usr.role?.permissions === 'string' ? (usr.role.permissions as string).split(',').filter(Boolean) : []);
+            
+        setRolePerms(rolePermsArray);
         setExtraPerms(usr.extraPermissions || []);
         setTempCashRegisterId(usr.cashRegisterId || 0);
         setActivePermTab('MODULES');
@@ -268,9 +275,9 @@ export function PageClient() {
     const getAllKeys = () => modules.flatMap(m => m.actions.map((a: string) => permKey(m.key, a)));
 
     const getCellState = (mod: string, action: Action) => {
-        const k = permKey(mod, action);
-        if (rolePerms.includes(k)) return 'role';
-        if (extraPerms.includes(k)) return 'extra';
+        const k = permKey(mod, action).toUpperCase();
+        if (rolePerms.some(rp => rp.toUpperCase() === k)) return 'role';
+        if (extraPerms.some(ep => ep.toUpperCase() === k)) return 'extra';
         return 'none';
     };
 
@@ -333,7 +340,7 @@ export function PageClient() {
     };
 
     const getTableAccessType = () => {
-        if (extraPerms.includes('TABLE_ACCESS:ASSIGNED')) return 'ASSIGNED';
+        if (rolePerms.includes('TABLE_ACCESS:ASSIGNED') || extraPerms.includes('TABLE_ACCESS:ASSIGNED')) return 'ASSIGNED';
         return 'ALL'; // Default
     };
 
@@ -784,10 +791,84 @@ export function PageClient() {
                                         <i className="fat fa-triangle-exclamation text-xs"></i> Admin
                                     </div>
                                 )}
+                                <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 dark:bg-purple-500/10 rounded-xl border border-purple-100 dark:border-purple-500/20">
+                                    <span className="text-[9px] font-black text-purple-600 dark:text-purple-400 uppercase">Rolden Gelen:</span>
+                                    <span className="text-[10px] font-black text-purple-700 dark:text-purple-300">{rolePerms.length} Yetki</span>
+                                </div>
                             </div>
 
-                            {/* Right - Action Buttons */}
-                            <div className="flex items-center gap-3 shrink-0">
+                                 <div className="flex items-center gap-3 shrink-0">
+                                <div className="relative">
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setShowTemplateMenu(!showTemplateMenu)}
+                                        className={`px-6 py-2.5 rounded-2xl font-bold text-sm uppercase tracking-wider transition-all flex items-center justify-center gap-2 border ${showTemplateMenu ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/30' : 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100'}`}
+                                    >
+                                        <i className={`fat ${showTemplateMenu ? 'fa-circle-xmark' : 'fa-wand-magic-sparkles'}`}></i> Şablon Uygula
+                                    </button>
+                                    
+                                    {showTemplateMenu && (
+                                        <>
+                                            <div className="fixed inset-0 z-[290]" onClick={() => setShowTemplateMenu(false)}></div>
+                                            <div className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-slate-800 rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-700 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-[300]">
+                                                <div className="p-3 space-y-1">
+                                                    <div className="px-3 py-2 mb-2">
+                                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Hazır Şablonlar</p>
+                                                    </div>
+                                                    {roles.filter(r => {
+                                                        const n = r.name.toUpperCase();
+                                                        return n.includes('GARSON') || n.includes('KASİYER') || n.includes('KASIYER') || n.includes('MÜDÜR') || n.includes('MUDUR') || n.includes('PATRON');
+                                                    }).map(role => (
+                                                        <button
+                                                            key={role.id}
+                                                            onClick={async () => {
+                                                                setShowTemplateMenu(false);
+                                                                const result = await showSwal({
+                                                                    title: `${role.name} Şablonu`,
+                                                                    text: "Kullanıcının rolü ve varsayılan yetkileri bu şablona göre güncellenecektir. Devam edilsin mi?",
+                                                                    icon: 'question',
+                                                                    showCancelButton: true
+                                                                });
+                                                                if (result.isConfirmed) {
+                                                                    try {
+                                                                        const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050');
+                                                                        await axios.put(`${API_URL}/users/${permUser.id}`, {
+                                                                            role: { id: role.id },
+                                                                            extraPermissions: []
+                                                                        }, { headers: { Authorization: `Bearer ${currentUser?.token}` } });
+                                                                        
+                                                                        const rolePermsArray = Array.isArray(role.permissions) 
+                                                                            ? role.permissions 
+                                                                            : (typeof role.permissions === 'string' ? (role.permissions as string).split(',').filter(Boolean) : []);
+                                                                        
+                                                                        setPermUser({ ...permUser, role: role, extraPermissions: [] });
+                                                                        setRolePerms(rolePermsArray);
+                                                                        setExtraPerms([]);
+                                                                        
+                                                                        toastSwal({ title: 'Başarılı', text: 'Şablon başarıyla uygulandı', icon: 'success' });
+                                                                        await fetchData();
+                                                                    } catch (err) {
+                                                                        console.error("Template Apply Error:", err);
+                                                                        showSwal({ title: 'Hata', text: 'Şablon uygulanamadı', icon: 'error' });
+                                                                    }
+                                                                }
+                                                            }}
+                                                            className="w-full text-left px-4 py-3 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-2xl transition-all flex items-center gap-3 group/item hover:scale-[1.02] active:scale-95"
+                                                        >
+                                                            <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover/item:bg-indigo-600 group-hover/item:text-white transition-all shadow-sm">
+                                                                <i className={`fat ${role.name.toUpperCase() === 'GARSON' ? 'fa-hand-holding-heart' : role.name.toUpperCase() === 'KASİYER' ? 'fa-cash-register' : role.name.toUpperCase() === 'MÜDÜR' ? 'fa-user-tie' : 'fa-crown'} text-sm`}></i>
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight">{role.name}</p>
+                                                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">Varsayılan Şablon</p>
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
                                 <button type="button" onClick={savePermissions} disabled={isSuperAdmin(permUser) || permSaving} className="px-6 py-2.5 bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/20 text-purple-600 dark:text-purple-400 rounded-2xl font-bold text-sm uppercase tracking-wider hover:bg-purple-100 dark:hover:bg-purple-500/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none">
                                     {permSaving ? <i className="fas fa-spinner fa-spin"></i> : <i className="fat fa-check"></i>}
                                     Kaydet
@@ -877,7 +958,12 @@ export function PageClient() {
                                                         const state = getCellState(mod.key, action);
                                                         return (
                                                             <td key={action} className="p-1 text-center align-middle">
-                                                                <button onClick={() => togglePermission(mod.key, action)} className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center mx-auto transition-all hover:scale-110 active:scale-90 ${state === 'role' ? 'bg-purple-50 border-purple-200 text-purple-500 dark:bg-purple-900/30 dark:border-purple-500/30 shadow-none cursor-not-allowed' : state === 'extra' ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/25' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-300 hover:border-slate-400 hover:text-slate-500'}`} title={state === 'role' ? 'Rol Yetkisi' : ACTION_META[action].label}>
+                                                                <button 
+                                                                    type="button"
+                                                                    onClick={() => state !== 'role' && togglePermission(mod.key, action)} 
+                                                                    className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center mx-auto transition-all hover:scale-110 active:scale-90 ${state === 'role' ? 'bg-purple-100 border-purple-500 text-purple-600 dark:bg-purple-900/50 dark:border-purple-400 shadow-sm cursor-not-allowed ring-2 ring-purple-500/20' : state === 'extra' ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/25' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-300 hover:border-slate-400 hover:text-slate-500'}`} 
+                                                                    title={state === 'role' ? 'Bu yetki seçili rolden (şablondan) geliyor' : ACTION_META[action].label}
+                                                                >
                                                                     <i className={`fat ${state === 'role' ? 'fa-shield-check text-[10px]' : state === 'extra' ? 'fa-check text-xs' : ACTION_META[action].icon + ' text-[10px]'}`}></i>
                                                                 </button>
                                                             </td>
@@ -962,7 +1048,7 @@ export function PageClient() {
                                                             <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center"><i className="fat fa-location-dot text-xs"></i></div>
                                                             <span className="text-[9px] font-bold uppercase text-white/60">Salonlar</span>
                                                         </div>
-                                                        <span className="text-[11px] font-black text-emerald-400">{extraPerms.filter(p => p.startsWith('ZONE:')).length}</span>
+                                                        <span className="text-[11px] font-black text-emerald-400">{[...new Set([...extraPerms, ...rolePerms])].filter(p => p.startsWith('ZONE:')).length}</span>
                                                     </div>
                                                     <div className="bg-white/5 p-3 rounded-xl border border-white/5 flex items-center justify-between">
                                                         <div className="flex items-center gap-2">
@@ -1047,23 +1133,28 @@ export function PageClient() {
                                                             { key: 'OP:COMBO_SALE', label: 'Kombo Satışı', icon: 'fa-cubes', color: 'text-cyan-500' },
                                                             { key: 'OP:BOGO_CAMPAIGN', label: 'BOGO / Kampanya', icon: 'fa-ticket', color: 'text-orange-500' },
                                                         ].map((item, i) => {
-                                                            const isActive = extraPerms.includes(item.key);
+                                                            const isFromRole = rolePerms.some(rp => rp.toUpperCase() === item.key.toUpperCase());
+                                                            const isFromExtra = extraPerms.some(ep => ep.toUpperCase() === item.key.toUpperCase());
+                                                            const isActive = isFromRole || isFromExtra;
                                                             const isSuper = isSuperAdmin(permUser);
+                                                            
                                                             return (
                                                                 <button
                                                                     key={item.key}
                                                                     type="button"
-                                                                    onClick={() => !isSuper && toggleExtraPerm(item.key)}
+                                                                    onClick={() => !isSuper && !isFromRole && toggleExtraPerm(item.key)}
                                                                     disabled={isSuper}
-                                                                    className={`group flex items-center justify-between gap-3 p-3 rounded-2xl border-2 transition-all duration-300 ${isSuper ? 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-60 cursor-not-allowed' : isActive ? 'bg-rose-500/10 border-rose-500 text-rose-600 dark:text-rose-400 shadow-sm shadow-rose-500/5' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-rose-300 hover:shadow-md'}`}
+                                                                    className={`group flex items-center justify-between gap-3 p-3 rounded-2xl border-2 transition-all duration-300 ${isSuper ? 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-60 cursor-not-allowed' : isFromRole ? 'bg-purple-500/10 border-purple-500/50 text-purple-600 dark:text-purple-400 shadow-sm cursor-not-allowed ring-1 ring-purple-500/20' : isFromExtra ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/25' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-indigo-300 hover:shadow-md'}`}
                                                                 >
                                                                     <div className="flex items-center gap-2.5 min-w-0">
-                                                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors ${isActive ? 'bg-rose-500 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-400 group-hover:bg-rose-100 dark:group-hover:bg-rose-900/30'}`}>
+                                                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors ${isFromRole ? 'bg-purple-500 text-white' : isFromExtra ? 'bg-white text-emerald-500' : 'bg-slate-100 dark:bg-slate-700 text-slate-400 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/30'}`}>
                                                                             <i className={`fat ${item.icon} text-sm`}></i>
                                                                         </div>
                                                                         <span className="text-[10px] font-black uppercase tracking-tight truncate leading-tight">{item.label}</span>
                                                                     </div>
-                                                                    {!isSuper && <i className={`fat ${isActive ? 'fa-check-circle' : 'fa-circle'} text-xs ${isActive ? 'text-rose-500' : 'text-slate-200 dark:text-slate-700'}`}></i>}
+                                                                    {!isSuper && (
+                                                                        <i className={`fat ${isFromRole ? 'fa-shield-check text-purple-500' : isFromExtra ? 'fa-check-circle text-white' : 'fa-circle text-slate-200 dark:text-slate-700'} text-xs`}></i>
+                                                                    )}
                                                                 </button>
                                                             );
                                                         })}
@@ -1085,7 +1176,7 @@ export function PageClient() {
                                                                     type="number"
                                                                     min="0"
                                                                     max="100"
-                                                                    value={extraPerms.find(p => p.startsWith('DISCOUNT_LIMIT:'))?.split(':')[1] || '0'}
+                                                                    value={(extraPerms.find(p => p.startsWith('DISCOUNT_LIMIT:')) || rolePerms.find(p => p.startsWith('DISCOUNT_LIMIT:')))?.split(':')[1] || '0'}
                                                                     onChange={(e) => setDiscountLimit(e.target.value)}
                                                                     className="w-16 h-10 bg-white dark:bg-slate-800 border-2 border-rose-200 dark:border-rose-900/50 rounded-xl text-center font-black text-rose-600 dark:text-rose-400 outline-none focus:border-rose-500 transition-all font-mono"
                                                                 />
@@ -1115,9 +1206,12 @@ export function PageClient() {
                                                             { key: 'OP:CAN_PRINT_BILL', label: 'Adisyon Yazdır / Hesap İste', icon: 'fa-print', color: 'text-slate-500' },
                                                             { key: 'OP:REPRINT_BILL', label: '2. Kez / Tekrar Adisyon Yazdır', icon: 'fa-repeat', color: 'text-purple-500' },
                                                             { key: 'OP:CAN_CANCEL_SALE', label: 'Adisyon İptal', icon: 'fa-ban', color: 'text-rose-500' },
+                                                            { key: 'OP:RECALL_CLOSED_BILL', label: 'Kapalı Adisyon Geri Çağır', icon: 'fa-arrow-rotate-left', color: 'text-indigo-500' },
+                                                            { key: 'OP:UNLOCK_BILL', label: 'Adisyon Kilidi Kaldır', icon: 'fa-unlock-keyhole', color: 'text-orange-500' },
                                                             { key: 'OWN_TABLES_ONLY', label: 'Kendi Masaları', icon: 'fa-user-lock', color: 'text-indigo-500' },
                                                         ].map((item, i) => {
-                                                            const isActive = extraPerms.includes(item.key);
+                                                            const isActive = rolePerms.some(rp => rp.toUpperCase() === item.key.toUpperCase()) || 
+                                                                             extraPerms.some(ep => ep.toUpperCase() === item.key.toUpperCase());
                                                             const isSuper = isSuperAdmin(permUser);
                                                             return (
                                                                 <button
@@ -1163,28 +1257,79 @@ export function PageClient() {
                                                             { key: 'OP:FINANCE_COLLECT_CURRENT_ACCOUNT', label: 'Cari hesap tahsilatı', icon: 'fa-money-bill-transfer', color: 'text-cyan-500' },
                                                             { key: 'OP:FINANCE_PAY_CURRENT_ACCOUNT', label: 'Cari hesap ödemesi', icon: 'fa-money-bill-wave', color: 'text-orange-500' },
                                                             { key: 'OP:FINANCE_CLOSE_TO_CURRENT_ACCOUNT', label: 'Cariye hesap kapatabilir', icon: 'fa-building-columns', color: 'text-purple-500' },
+                                                            { key: 'OP:START_FISCAL', label: 'Mali İşlem Başlatabilir', icon: 'fa-play', color: 'text-rose-500' },
+                                                            { key: 'OP:FISCAL_TRANSACTIONS', label: 'Yazar Kasa İşlemleri', icon: 'fa-receipt', color: 'text-blue-600' },
                                                         ].map((item, i) => {
-                                                            const isActive = extraPerms.includes(item.key);
+                                                            const isFromRole = rolePerms.some(rp => rp.toUpperCase() === item.key.toUpperCase());
+                                                            const isFromExtra = extraPerms.some(ep => ep.toUpperCase() === item.key.toUpperCase());
+                                                            const isActive = isFromRole || isFromExtra;
                                                             const isSuper = isSuperAdmin(permUser);
+                                                            
                                                             return (
                                                                 <button
                                                                     key={item.key}
-                                                                    onClick={() => !isSuper && toggleExtraPerm(item.key)}
+                                                                    type="button"
+                                                                    onClick={() => !isSuper && !isFromRole && toggleExtraPerm(item.key)}
                                                                     disabled={isSuper}
-                                                                    className={`group flex items-center justify-between gap-3 p-3 rounded-2xl border-2 transition-all duration-300 ${isSuper ? 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-60 cursor-not-allowed' : isActive ? 'bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-sm shadow-emerald-500/5' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-emerald-300 hover:shadow-md'}`}
+                                                                    className={`group flex items-center justify-between gap-3 p-3 rounded-2xl border-2 transition-all duration-300 ${isSuper ? 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-60 cursor-not-allowed' : isFromRole ? 'bg-purple-500/10 border-purple-500/50 text-purple-600 dark:text-purple-400 shadow-sm cursor-not-allowed ring-1 ring-purple-500/20' : isFromExtra ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/25' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-indigo-300 hover:shadow-md'}`}
                                                                 >
-                                                                    <div className="flex items-center gap-3">
-                                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 shadow-sm ${isActive ? 'bg-emerald-500 text-white shadow-emerald-500/30' : 'bg-slate-100 dark:bg-slate-900 shadow-black/5'}`}>
-                                                                            <i className={`fat ${item.icon} text-sm ${isActive ? 'text-white' : item.color}`}></i>
+                                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors ${isFromRole ? 'bg-purple-500 text-white' : isFromExtra ? 'bg-white text-emerald-500' : 'bg-slate-100 dark:bg-slate-700 text-slate-400 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/30'}`}>
+                                                                            <i className={`fat ${item.icon} text-sm`}></i>
                                                                         </div>
-                                                                        <div className="flex flex-col items-start translate-y-[-1px]">
-                                                                            <span className={`text-[10px] font-black uppercase tracking-widest leading-none truncate max-w-[130px] ${isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'}`} title={item.label}>{item.label}</span>
-                                                                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter mt-1 opacity-60">{isActive ? 'AKTİF' : 'PASİF'}</span>
+                                                                        <span className="text-[10px] font-black uppercase tracking-tight truncate leading-tight">{item.label}</span>
+                                                                    </div>
+                                                                    {!isSuper && (
+                                                                        <i className={`fat ${isFromRole ? 'fa-shield-check text-purple-500' : isFromExtra ? 'fa-check-circle text-white' : 'fa-circle text-slate-200 dark:text-slate-700'} text-xs`}></i>
+                                                                    )}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Rapor / Kapanış Yetkileri */}
+                                            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden min-h-[100px] animate-in slide-in-from-bottom-5 duration-500 mt-4">
+                                                <div className="p-4 border-b border-slate-100 dark:border-slate-700">
+                                                    <h4 className="text-[9px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                                        <i className="fat fa-chart-line"></i> Rapor / Kapanış Yetkileri
+                                                    </h4>
+                                                </div>
+
+                                                <div className="p-4 relative">
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 transition-all duration-300">
+                                                        {[
+                                                            { key: 'OP:REPORT_VIEW', label: 'Rapor Görüntüleyebilir', icon: 'fa-eye', color: 'text-blue-500' },
+                                                            { key: 'OP:REPORT_SALES_ANALYSIS', label: 'Satış Analiz Raporu', icon: 'fa-chart-pie', color: 'text-indigo-500' },
+                                                            { key: 'OP:REPORT_X', label: 'X Raporu Alabilir', icon: 'fa-file-invoice', color: 'text-amber-500' },
+                                                            { key: 'OP:REPORT_Z', label: 'Z Raporu Oluşturabilir', icon: 'fa-file-invoice-dollar', color: 'text-rose-500' },
+                                                            { key: 'OP:END_OF_DAY', label: 'Gün Kapanış Yapabilir', icon: 'fa-calendar-check', color: 'text-emerald-500' },
+                                                            { key: 'OP:REPORT_CASH_REGISTER', label: 'Kasa Raporu Alabilir', icon: 'fa-cash-register', color: 'text-teal-500' },
+                                                            { key: 'OP:VIEW_LOGS', label: 'İşlem Loglarını Görebilir', icon: 'fa-list-ul', color: 'text-slate-500' },
+                                                        ].map((item, i) => {
+                                                            const isFromRole = rolePerms.some(rp => rp.toUpperCase() === item.key.toUpperCase());
+                                                            const isFromExtra = extraPerms.some(ep => ep.toUpperCase() === item.key.toUpperCase());
+                                                            const isActive = isFromRole || isFromExtra;
+                                                            const isSuper = isSuperAdmin(permUser);
+                                                            
+                                                            return (
+                                                                <button
+                                                                    key={item.key}
+                                                                    type="button"
+                                                                    onClick={() => !isSuper && !isFromRole && toggleExtraPerm(item.key)}
+                                                                    disabled={isSuper}
+                                                                    className={`group flex items-center justify-between gap-3 p-3 rounded-2xl border-2 transition-all duration-300 ${isSuper ? 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-60 cursor-not-allowed' : isFromRole ? 'bg-purple-500/10 border-purple-500/50 text-purple-600 dark:text-purple-400 shadow-sm cursor-not-allowed ring-1 ring-purple-500/20' : isFromExtra ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/25' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-indigo-300 hover:shadow-md'}`}
+                                                                >
+                                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors ${isFromRole ? 'bg-purple-500 text-white' : isFromExtra ? 'bg-white text-emerald-500' : 'bg-slate-100 dark:bg-slate-700 text-slate-400 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/30'}`}>
+                                                                            <i className={`fat ${item.icon} text-sm`}></i>
                                                                         </div>
+                                                                        <span className="text-[10px] font-black uppercase tracking-tight truncate leading-tight">{item.label}</span>
                                                                     </div>
-                                                                    <div className={`w-8 h-4 rounded-full relative transition-all duration-500 overflow-hidden shrink-0 ${isActive ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'}`}>
-                                                                        <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all duration-300 shadow-sm ${isActive ? 'left-[18px]' : 'left-0.5'}`}></div>
-                                                                    </div>
+                                                                    {!isSuper && (
+                                                                        <i className={`fat ${isFromRole ? 'fa-shield-check text-purple-500' : isFromExtra ? 'fa-check-circle text-white' : 'fa-circle text-slate-200 dark:text-slate-700'} text-xs`}></i>
+                                                                    )}
                                                                 </button>
                                                             );
                                                         })}
@@ -1200,7 +1345,7 @@ export function PageClient() {
                                                             <i className="fat fa-table-list"></i> Görevli Olduğu Masalar
                                                         </h4>
                                                         <span className="text-[10px] font-black text-purple-600 bg-purple-100 dark:bg-purple-900/40 px-3 py-1 rounded-full border border-purple-200 dark:border-purple-500/30">
-                                                            {extraPerms.filter(p => p.startsWith('TABLE:')).length} Seçili
+                                                            {[...new Set([...extraPerms, ...rolePerms])].filter(p => p.startsWith('TABLE:')).length} Seçili
                                                         </span>
                                                     </div>
                                                     <div className="divide-y divide-slate-50 dark:divide-slate-700/50 max-h-[300px] overflow-y-auto custom-scrollbar">

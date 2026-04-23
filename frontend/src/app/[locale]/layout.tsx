@@ -7,6 +7,7 @@ import { AuthProvider } from './AuthContext';
 import { LicenseProvider } from './LicenseContext';
 import { ThemeProvider as NextThemeProvider } from 'next-themes';
 import Watermark from '@/components/Watermark';
+import { PosProvider } from './pos/PosContext';
 import '../globals.css';
 
 const locales = ['tr', 'en', 'de', 'fr', 'it', 'ar', 'ru', 'el'];
@@ -49,7 +50,11 @@ export default async function RootLayout({
         <NextIntlClientProvider locale={locale} messages={messages}>
           <NextThemeProvider attribute="class" defaultTheme="light" enableSystem>
             <LicenseProvider>
-              <AuthProvider locale={locale}>{children}</AuthProvider>
+              <AuthProvider locale={locale}>
+                <PosProvider>
+                  {children}
+                </PosProvider>
+              </AuthProvider>
             </LicenseProvider>
           </NextThemeProvider>
         </NextIntlClientProvider>

@@ -132,6 +132,8 @@
         "total": "Toplam",
         "paymentCash": "Nakit",
         "paymentCreditCard": "Kredi Kartı",
+        "paymentCari": "Cari",
+        "paymentOpen": "Açık",
         "deliveryCreated": "Paket servis kaydı oluşturuldu",
         "deliveryCreateError": "Teslimat oluşturulamadı",
         "addManualOrder": "Manuel Sipariş Ekle",

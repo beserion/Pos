@@ -128,6 +128,8 @@
         "total": "Total",
         "paymentCash": "Cash",
         "paymentCreditCard": "Credit Card",
+        "paymentCari": "Current Account",
+        "paymentOpen": "Open Account",
         "deliveryCreated": "Delivery record created",
         "deliveryCreateError": "Failed to create delivery",
         "addManualOrder": "Add Manual Order",
