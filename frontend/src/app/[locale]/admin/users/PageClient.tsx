@@ -1132,6 +1132,7 @@ export function PageClient() {
                                                             { key: 'OP:SET_MENU_SALE', label: 'Set Menü Satışı', icon: 'fa-list-check', color: 'text-violet-500' },
                                                             { key: 'OP:COMBO_SALE', label: 'Kombo Satışı', icon: 'fa-cubes', color: 'text-cyan-500' },
                                                             { key: 'OP:BOGO_CAMPAIGN', label: 'BOGO / Kampanya', icon: 'fa-ticket', color: 'text-orange-500' },
+                                                            { key: 'OP:CAN_TICKET', label: 'Bilet Uygulayabilir', icon: 'fa-ticket-simple', color: 'text-blue-400' },
                                                         ].map((item, i) => {
                                                             const isFromRole = rolePerms.some(rp => rp.toUpperCase() === item.key.toUpperCase());
                                                             const isFromExtra = extraPerms.some(ep => ep.toUpperCase() === item.key.toUpperCase());

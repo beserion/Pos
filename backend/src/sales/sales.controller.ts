@@ -102,6 +102,12 @@ export class SalesController {
     return this.salesService.readyItem(+id);
   }
 
+  @Put('items/:id/transaction-type')
+  updateItemTransactionType(@Param('id') id: string, @Body() body: { type: string, reason?: string }, @Request() req: any) {
+    const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
+    return this.salesService.updateItemTransactionType(+id, body.type, body.reason, userId);
+  }
+
   // Status update: supports both POST (legacy) and PUT (new)
   @Post(':id/status')
   updateStatusPost(@Param('id') id: string, @Body('status') status: string) {

@@ -145,6 +145,7 @@ interface Product {
         stockGroup?: string;
         category?: string;
     };
+    staffPrice?: number;
     setMenu?: {
         setType: string;
         groups: {
@@ -162,11 +163,11 @@ interface Product {
     variations?: any[];
 }
 interface ProductType { id: number; name: string; }
-interface OrderItem { product: Product; quantity: number; note?: string; isWaiting?: boolean; subItems?: any[]; extraPrice?: number; uniqueId?: string; saleType?: 'STANDARD' | 'HALF' | 'DOUBLE'; saleTypeMultiplier?: number; variationId?: number; variationName?: string; }
+interface OrderItem { product: Product; quantity: number; note?: string; isWaiting?: boolean; subItems?: any[]; extraPrice?: number; uniqueId?: string; saleType?: 'STANDARD' | 'HALF' | 'DOUBLE'; saleTypeMultiplier?: number; variationId?: number; variationName?: string; transactionType?: 'SALE' | 'FREE' | 'COMPLIMENTARY' | 'PROMOTION' | 'STAFF' | 'TICKET'; transactionReason?: string; }
 interface ExistingOrder {
     id: number;
     totalAmount: number;
-    items: { id: number; product: { id: number; name: string; price: number; isSet?: boolean }; quantity: number; unitPrice: number; isPaid: boolean; isWaiting: boolean; isMarshed: boolean; parentItemId?: number; addedByName?: string; addedAt?: string; }[];
+    items: { id: number; product: { id: number; name: string; price: number; isSet?: boolean }; quantity: number; unitPrice: number; isPaid: boolean; isWaiting: boolean; isMarshed: boolean; parentItemId?: number; addedByName?: string; addedAt?: string; transactionType?: string; transactionReason?: string; }[];
 }
 interface Zone { id: number; name: string; }
 interface Table { id: number; name: string; status: string; waiterName?: string; waiterId?: number; orderStartTime?: string; currentTotal?: number; isBillRequested?: boolean; zone: { id: number } }
@@ -179,6 +180,8 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const tc = useTranslations('Common');
     const { theme, toggleTheme, setTheme } = useThemeTransition();
     const [mounted, setMounted] = useState(false);
+
+    const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
 
     const [isDesignMode, setIsDesignMode] = useState(false);
     const [activeDragItem, setActiveDragItem] = useState<Product | null>(null);
@@ -269,6 +272,13 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
     const { params } = useParameters();
+
+    // --- İşlem Tipi States ---
+    const [transactionItem, setTransactionItem] = useState<OrderItem | { id: number; type: 'EXISTING' } | null>(null);
+    const [isTransactionMenuOpen, setIsTransactionMenuOpen] = useState(false);
+    const [isReasonModalOpen, setIsReasonModalOpen] = useState(false);
+    const [tempTransactionType, setTempTransactionType] = useState<string>('SALE');
+    const [transactionMenuPos, setTransactionMenuPos] = useState({ x: 0, y: 0 });
 
     useEffect(() => {
         setMounted(true);
@@ -386,7 +396,6 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     }), [products, selectedProductTypeId, searchQuery, selectedDepartmentId, departments]);
 
     const handleTableClick = async (table: Table) => {
-        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
         const ownTablesOnly = (user?.extraPermissions || []).includes('OWN_TABLES_ONLY');
 
         if (!isSuperAdmin && ownTablesOnly && (table.status === 'DOLU' || table.status === 'REZERVE')) {
@@ -403,51 +412,47 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         setSelectedTable(table);
         setActiveTab('menu');
         setCart([]);
+        fetchTableData(table.id);
+    };
 
-        if (table.isBillRequested) {
-            // Keep the tab 'menu' but don't reset cart/subchecks yet? 
-            // Actually, we should still fetch sub-checks to show the current total if needed.
-        }
-
-        if (table.status === 'DOLU' || table.status === 'REZERVE' || table.currentTotal) {
-            try {
-                const token = localStorage.getItem('token') || (user as any)?.token;
-                const res = await fetch(`${API_URL}/sales/table/${table.id}/sub-checks`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    const flat: any[] = [];
-                    data.forEach((main: any) => {
-                        flat.push({ ...main, isSub: false });
-                        if (main.subChecks && main.subChecks.length > 0) {
-                            main.subChecks.forEach((sub: any) => {
-                                flat.push({ ...sub, isSub: true });
-                            });
-                        }
-                    });
-                    setAllFlatChecks(flat);
-
-                    if (flat.length > 0) {
-                        setActiveSubCheckId(flat[0].id);
-                        setExistingOrders(flat);
-                    } else {
-                        setAllFlatChecks([]);
-                        setActiveSubCheckId(null);
-                        setExistingOrders([]);
+    const fetchTableData = async (tableId: number) => {
+        try {
+            const token = localStorage.getItem('token') || (user as any)?.token;
+            const res = await fetch(`${API_URL}/sales/table/${tableId}/sub-checks`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                const flat: any[] = [];
+                data.forEach((main: any) => {
+                    flat.push({ ...main, isSub: false });
+                    if (main.subChecks && main.subChecks.length > 0) {
+                        main.subChecks.forEach((sub: any) => {
+                            flat.push({ ...sub, isSub: true });
+                        });
                     }
+                });
+                setAllFlatChecks(flat);
+
+                if (flat.length > 0) {
+                    // Preserve active sub check if it still exists
+                    setActiveSubCheckId(prev => {
+                        if (prev && flat.some(f => f.id === prev)) return prev;
+                        return flat[0].id;
+                    });
+                    setExistingOrders(flat);
                 } else {
                     setAllFlatChecks([]);
                     setActiveSubCheckId(null);
                     setExistingOrders([]);
                 }
-            } catch (err) {
-                console.error("Failed to fetch sub-checks", err);
+            } else {
                 setAllFlatChecks([]);
                 setActiveSubCheckId(null);
                 setExistingOrders([]);
             }
-        } else {
+        } catch (err) {
+            console.error("Failed to fetch sub-checks", err);
             setAllFlatChecks([]);
             setActiveSubCheckId(null);
             setExistingOrders([]);
@@ -623,20 +628,24 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         });
     };
 
+    const handleCancelNote = () => {
+        setNoteModalItem(null);
+    };
+
     const handleSaveNote = () => {
         if (!noteModalItem) return;
 
         let updatedCart;
         if (noteModalItem.uniqueId) {
-            updatedCart = cart.filter(i => i.uniqueId !== noteModalItem.uniqueId);
+            updatedCart = cart.filter((i: OrderItem) => i.uniqueId !== noteModalItem.uniqueId);
         } else {
-            updatedCart = cart.filter(i => !(i.product.id === noteModalItem.product.id && i.note === noteModalItem.note && i.saleType === noteModalItem.saleType && i.variationId === noteModalItem.variationId && !i.uniqueId));
+            updatedCart = cart.filter((i: OrderItem) => !(i.product.id === noteModalItem.product.id && i.note === noteModalItem.note && i.saleType === noteModalItem.saleType && i.variationId === noteModalItem.variationId && !i.uniqueId));
         }
 
         if (noteModalItem.uniqueId) {
             setCart([...updatedCart, { ...noteModalItem, note: tempNote.trim() || undefined }]);
         } else {
-            const existingWithNewNote = updatedCart.find(i => i.product.id === noteModalItem.product.id && i.note === tempNote.trim() && i.saleType === noteModalItem.saleType && i.variationId === noteModalItem.variationId && !i.uniqueId);
+            const existingWithNewNote = updatedCart.find((i: OrderItem) => i.product.id === noteModalItem.product.id && i.note === tempNote.trim() && i.saleType === noteModalItem.saleType && i.variationId === noteModalItem.variationId && !i.uniqueId);
             if (existingWithNewNote) {
                 existingWithNewNote.quantity += noteModalItem.quantity;
                 setCart([...updatedCart]);
@@ -645,6 +654,100 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             }
         }
         setNoteModalItem(null);
+    };
+
+    const handleTransactionTypeChange = (type: string) => {
+        setTempTransactionType(type);
+        if (type === 'COMPLIMENTARY' || type === 'FREE') {
+            setIsReasonModalOpen(true);
+        } else {
+            confirmTransactionType(type);
+        }
+        setIsTransactionMenuOpen(false);
+    };
+
+    const confirmTransactionType = async (type: string, reason?: string) => {
+        if (!transactionItem) return;
+
+        if ('type' in transactionItem && transactionItem.type === 'EXISTING') {
+            // Backend güncellemesi
+            try {
+                const token = localStorage.getItem('token') || (user as any)?.token;
+                const res = await fetch(`${API_URL}/sales/items/${transactionItem.id}/transaction-type`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ type, reason })
+                });
+                if (res.ok) {
+                    toastSwal({ icon: 'success', title: 'İşlem tipi güncellendi' });
+                    if (selectedTable) fetchTableData(selectedTable.id); // Sadece veriyi yenile (sepeti bozma)
+                } else {
+                    const err = await res.json();
+                    showSwal({ icon: 'error', title: 'Hata', text: err.message || 'İşlem tipi güncellenemedi' });
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        } else {
+            // Sepetteki ürünü güncelle
+            const item = transactionItem as OrderItem;
+            setCart((prev: OrderItem[]) => prev.map((i: OrderItem) => {
+                const isMatch = i.uniqueId ? i.uniqueId === item.uniqueId : (i.product.id === item.product.id && i.note === item.note && i.saleType === item.saleType && i.variationId === item.variationId);
+                if (isMatch) {
+                    return { ...i, transactionType: type as any, transactionReason: reason };
+                }
+                return i;
+            }));
+        }
+        setTransactionItem(null);
+        setIsReasonModalOpen(false);
+    };
+
+    const applyTransactionToAll = async (type: string, reason?: string) => {
+        if (cart.length > 0) {
+            setCart((prev: OrderItem[]) => prev.map((i: OrderItem) => ({ ...i, transactionType: type as any, transactionReason: reason })));
+        }
+        
+        // Eğer seçili masa ve mevcut siparişler varsa, onları da güncelle (opsiyonel ama istenmiş olabilir)
+        if (existingOrders.length > 0) {
+            const allItemIds = existingOrders.flatMap((o: any) => o.items.filter((i: any) => !i.isPaid).map((i: any) => i.id));
+            if (allItemIds.length > 0) {
+                try {
+                    const token = localStorage.getItem('token') || (user as any)?.token;
+                    await Promise.all(allItemIds.map(id => 
+                        fetch(`${API_URL}/sales/items/${id}/transaction-type`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                            body: JSON.stringify({ type, reason })
+                        })
+                    ));
+                    if (selectedTable) fetchTableData(selectedTable.id);
+                } catch (error) {
+                    console.error("Toplu güncelleme hatası:", error);
+                }
+            }
+        }
+        
+        setIsTransactionMenuOpen(false);
+        setIsReasonModalOpen(false);
+        toastSwal({ icon: 'success', title: 'Tüm ürünlere uygulandı' });
+    };
+
+    const getTransactionShortCode = (type?: string) => {
+        switch (type) {
+            case 'COMPLIMENTARY': return 'İ';
+            case 'FREE': return 'Ö';
+            case 'PROMOTION': return 'PR';
+            case 'STAFF': return 'P';
+            case 'TICKET': return 'B';
+            default: return null;
+        }
+    };
+
+    const calculateItemPrice = (item: OrderItem) => {
+        if (['COMPLIMENTARY', 'FREE', 'TICKET'].includes(item.transactionType || '')) return 0;
+        if (item.transactionType === 'STAFF') return item.product.staffPrice || item.product.price;
+        return (item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1);
     };
 
     const sendOrder = async () => {
@@ -662,17 +765,19 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
             if (activeSubCheckId) {
                 const orderPayload = {
-                    items: cart.map(item => ({
+                    items: cart.map((item: OrderItem) => ({
                         productId: item.product.id,
                         quantity: item.quantity,
-                        unitPrice: (item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1),
+                        unitPrice: calculateItemPrice(item),
                         note: item.note,
                         isWaiting: params.mars_enabled ? (item.isWaiting || false) : false,
                         subItems: item.subItems,
                         saleType: item.saleType,
                         saleTypeMultiplier: item.saleTypeMultiplier,
                         variationId: item.variationId,
-                        variationName: item.variationName
+                        variationName: item.variationName,
+                        transactionType: item.transactionType || 'SALE',
+                        transactionReason: item.transactionReason
                     }))
                 };
                 orderRes = await fetch(`${API_URL}/sales/${activeSubCheckId}/items`, {
@@ -684,23 +789,25 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                 const orderPayload = {
                     tableId: selectedTable.id,
                     userId: user?.id || user?.sub,
-                    totalAmount: cart.reduce((sum, item) => {
-                        const base = ((item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1)) * item.quantity;
+                    totalAmount: cart.reduce((sum: number, item: OrderItem) => {
+                        const base = calculateItemPrice(item) * item.quantity;
                         const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
                         return sum + base + extras;
                     }, 0),
                     status: 'NEW',
-                    items: cart.map(item => ({
+                    items: cart.map((item: OrderItem) => ({
                         productId: item.product.id,
                         quantity: item.quantity,
-                        unitPrice: (item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1),
+                        unitPrice: calculateItemPrice(item),
                         note: item.note,
                         isWaiting: params.mars_enabled ? (item.isWaiting || false) : false,
                         subItems: item.subItems,
                         saleType: item.saleType,
                         saleTypeMultiplier: item.saleTypeMultiplier,
                         variationId: item.variationId,
-                        variationName: item.variationName
+                        variationName: item.variationName,
+                        transactionType: item.transactionType || 'SALE',
+                        transactionReason: item.transactionReason
                     }))
                 };
                 orderRes = await fetch(`${API_URL}/sales`, {
@@ -778,8 +885,8 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         }
     };
 
-    const cartTotal = cart.reduce((sum, item) => {
-        const base = ((item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1)) * item.quantity;
+    const cartTotal = cart.reduce((sum: number, item: OrderItem) => {
+        const base = calculateItemPrice(item) * item.quantity;
         const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
         return sum + base + extras;
     }, 0);
@@ -1610,7 +1717,12 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                         </div>
                                         <div className="flex justify-between items-end mt-1">
                                             <div className="flex flex-col items-start gap-0.5">
-                                                <span className="text-xs font-bold text-slate-400">Birim: ₺{item.unitPrice} &nbsp;·&nbsp; {item.quantity} Adet</span>
+                                                <span className="text-xs font-bold text-slate-400">
+                                                    Birim: ₺{item.unitPrice} &nbsp;·&nbsp; {item.quantity} Adet 
+                                                    {getTransactionShortCode(item.transactionType) && (
+                                                        <span className="ml-1 text-indigo-500 bg-indigo-50 dark:bg-indigo-500/20 px-1.5 rounded-md">-{getTransactionShortCode(item.transactionType)}</span>
+                                                    )}
+                                                </span>
                                                 {item.addedByName && (
                                                     <span className="text-[9px] font-bold text-rose-500 dark:text-rose-400 flex items-center gap-1">
                                                         <i className="fat fa-user-clock text-[8px]"></i>
@@ -1623,17 +1735,30 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 {!item.isPaid && (
-                                                    <button
-                                                        onClick={() => {
-                                                            setTransferSourceSubCheckId(item.saleId);
-                                                            setTransferSelectedItemIds([item.id]);
-                                                            setTransferMode('ITEM_TO_TABLE');
-                                                            setIsTransferModalOpen(true);
-                                                        }}
-                                                        className="text-[10px] font-black uppercase text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 border border-yellow-200 dark:border-yellow-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1"
-                                                    >
-                                                        <i className="fat fa-arrow-right-arrow-left text-[10px]"></i> Transfer
-                                                    </button>
+                                                    <>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                                setTransactionMenuPos({ x: rect.left, y: rect.bottom });
+                                                                setTransactionItem({ id: item.id, type: 'EXISTING' });
+                                                                setIsTransactionMenuOpen(true);
+                                                            }}
+                                                            className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1"
+                                                        >
+                                                            <i className="fat fa-tag text-[10px]"></i> Tip
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setTransferSourceSubCheckId(item.saleId);
+                                                                setTransferSelectedItemIds([item.id]);
+                                                                setTransferMode('ITEM_TO_TABLE');
+                                                                setIsTransferModalOpen(true);
+                                                            }}
+                                                            className="text-[10px] font-black uppercase text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 border border-yellow-200 dark:border-yellow-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1"
+                                                        >
+                                                            <i className="fat fa-arrow-right-arrow-left text-[10px]"></i> Transfer
+                                                        </button>
+                                                    </>
                                                 )}
                                                 {params.mars_enabled && item.isWaiting && !item.isMarshed && (
                                                     <button
@@ -1679,6 +1804,9 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                         <span className="block font-medium text-slate-800 dark:text-slate-200 flex flex-col">
                                             <span className="flex items-center">
                                                 {item.product.name}
+                                                {getTransactionShortCode(item.transactionType) && (
+                                                    <span className="ml-1 text-indigo-500 bg-indigo-50 dark:bg-indigo-500/20 px-1.5 py-0.5 rounded-md font-black text-[9px] border border-indigo-200 dark:border-indigo-500/30">-{getTransactionShortCode(item.transactionType)}</span>
+                                                )}
                                                 {item.saleType && item.saleType !== 'STANDARD' && (
                                                     <span className={`text-[10px] ml-1 px-2 py-0.5 rounded-full inline-block font-bold border opacity-90 ${item.saleType === 'HALF' ? 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/20 dark:text-orange-400' : 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-400'}`}>
                                                         {item.saleType === 'HALF' ? 'YARIM' : 'DUBLE'}
@@ -1688,11 +1816,11 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                             </span>
                                             {item.variationName && <span className="text-[11px] text-indigo-500 font-bold tracking-widest mt-0.5">{item.variationName}</span>}
                                         </span>
-                                        <span className="font-bold text-slate-800 dark:text-slate-100">₺{(((item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1)) * item.quantity).toFixed(2)}</span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-100">₺{(calculateItemPrice(item) * item.quantity).toFixed(2)}</span>
                                     </div>
                                     <div className="flex justify-between items-center mt-1">
                                         <div className="flex flex-col gap-1 w-full max-w-[150px]">
-                                            <span className="text-xs font-bold text-slate-400">Birim: ₺{((item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1)).toFixed(2)}</span>
+                                            <span className="text-xs font-bold text-slate-400">Birim: ₺{calculateItemPrice(item).toFixed(2)}</span>
                                             {item.subItems && item.subItems.length > 0 && (
                                                 <div className="mt-1 flex flex-col gap-0.5 max-h-[60px] overflow-y-auto custom-scrollbar">
                                                     {item.subItems.map((sub: any, sIdx: number) => {
@@ -1723,6 +1851,17 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                                 className="w-8 h-8 flex items-center justify-center text-amber-500 hover:text-amber-600 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded-md transition-colors" title="Not / Özellik Ekle"
                                             >
                                                 <i className="fat fa-pen-to-square"></i>
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    const rect = e.currentTarget.getBoundingClientRect();
+                                                    setTransactionMenuPos({ x: rect.left, y: rect.bottom });
+                                                    setTransactionItem(item);
+                                                    setIsTransactionMenuOpen(true);
+                                                }}
+                                                className="w-8 h-8 flex items-center justify-center text-indigo-500 hover:text-indigo-600 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 rounded-md transition-colors" title="İşlem Tipi"
+                                            >
+                                                <i className="fat fa-tag"></i>
                                             </button>
                                             <button onClick={() => removeEntireItem(item)} className="w-8 h-8 flex items-center justify-center text-rose-500 hover:text-rose-600 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 rounded-md transition-colors" title="Ürünü İptal Et">
                                                 <i className="fat fa-trash"></i>
@@ -2088,6 +2227,113 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                     setActiveTab('tables');
                 }}
             />
+
+            {/* --- İşlem Tipi Seçim Menüsü (Floating) --- */}
+            {isTransactionMenuOpen && (
+                <div 
+                    className="fixed inset-0 z-[200]" 
+                    onClick={() => setIsTransactionMenuOpen(false)}
+                >
+                    <div 
+                        className="absolute bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 p-2 min-w-[200px] animate-in zoom-in-95 duration-200"
+                        style={{ 
+                            left: Math.min(transactionMenuPos.x, typeof window !== 'undefined' ? window.innerWidth - 220 : transactionMenuPos.x), 
+                            top: Math.min(transactionMenuPos.y, typeof window !== 'undefined' ? window.innerHeight - 300 : transactionMenuPos.y) 
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest p-2 border-b border-slate-100 dark:border-slate-700 mb-1 flex justify-between items-center">
+                            <span>İşlem Tipi</span>
+                            <button onClick={() => setIsTransactionMenuOpen(false)} className="text-slate-400 hover:text-rose-500"><i className="fat fa-xmark"></i></button>
+                        </div>
+                        <div className="grid grid-cols-1 gap-1">
+                            <button onClick={() => handleTransactionTypeChange('SALE')} className="flex items-center gap-3 w-full p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-sm font-bold text-slate-700 dark:text-slate-200">
+                                <i className="fat fa-receipt text-slate-400 w-5"></i> Satış (Normal)
+                            </button>
+                            {(isSuperAdmin || (user?.extraPermissions || []).includes('OP:CAN_COMPLIMENTARY')) && (
+                                <button onClick={() => handleTransactionTypeChange('COMPLIMENTARY')} className="flex items-center gap-3 w-full p-2.5 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors text-sm font-bold text-indigo-600 dark:text-indigo-400">
+                                    <i className="fat fa-gift w-5"></i> İkram
+                                </button>
+                            )}
+                            {(isSuperAdmin || (user?.extraPermissions || []).includes('OP:NON_PAYMENT')) && (
+                                <button onClick={() => handleTransactionTypeChange('FREE')} className="flex items-center gap-3 w-full p-2.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors text-sm font-bold text-rose-600 dark:text-rose-400">
+                                    <i className="fat fa-hand-holding-heart w-5"></i> Ödenmez (Bedelsiz)
+                                </button>
+                            )}
+                            {(isSuperAdmin || (user?.extraPermissions || []).includes('OP:CAN_PROMOTION')) && (
+                                <button onClick={() => handleTransactionTypeChange('PROMOTION')} className="flex items-center gap-3 w-full p-2.5 rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                                    <i className="fat fa-percentage w-5"></i> Promosyon
+                                </button>
+                            )}
+                            {(isSuperAdmin || (user?.extraPermissions || []).includes('OP:STAFF_SALE')) && (
+                                <button onClick={() => handleTransactionTypeChange('STAFF')} className="flex items-center gap-3 w-full p-2.5 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors text-sm font-bold text-amber-600 dark:text-amber-400">
+                                    <i className="fat fa-user-tie w-5"></i> Personel
+                                </button>
+                            )}
+                            {(isSuperAdmin || (user?.extraPermissions || []).includes('OP:CAN_TICKET')) && (
+                                <button onClick={() => handleTransactionTypeChange('TICKET')} className="flex items-center gap-3 w-full p-2.5 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors text-sm font-bold text-blue-600 dark:text-blue-400">
+                                    <i className="fat fa-ticket w-5"></i> Bilet
+                                </button>
+                            )}
+                        </div>
+                        
+                        <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                            <button 
+                                onClick={() => {
+                                    if (tempTransactionType === 'COMPLIMENTARY' || tempTransactionType === 'FREE') {
+                                        setIsReasonModalOpen(true);
+                                    } else {
+                                        applyTransactionToAll(tempTransactionType);
+                                    }
+                                }}
+                                className="flex items-center justify-center gap-2 w-full p-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 transition-all text-xs font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 shadow-lg"
+                            >
+                                <i className="fat fa-list-check"></i> Tümüne Uygula
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- Zorunlu Sebep Seçim Modalı --- */}
+            {isReasonModalOpen && (
+                <div className="fixed inset-0 z-[250] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
+                    <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 p-8 animate-in fade-in zoom-in duration-300">
+                        <div className="text-center mb-8">
+                            <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl ${tempTransactionType === 'COMPLIMENTARY' ? 'bg-indigo-100 text-indigo-600 shadow-indigo-500/20' : 'bg-rose-100 text-rose-600 shadow-rose-500/20'}`}>
+                                <i className={`fat ${tempTransactionType === 'COMPLIMENTARY' ? 'fa-gift' : 'fa-hand-holding-heart'} text-3xl`}></i>
+                            </div>
+                            <h2 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tight">İşlem Nedeni</h2>
+                            <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 font-medium">Lütfen bu işlem için geçerli bir sebep seçin veya yazın.</p>
+                        </div>
+
+                        <div className="space-y-3 mb-8">
+                            {['Müşteri Memnuniyeti', 'Gecikme Telafisi', 'Yönetici İkramı', 'Mutfak Hatası', 'Tanıtım / PR', 'Yanlış Sipariş', 'Personel Hatası'].map(reason => (
+                                <button
+                                    key={reason}
+                                    onClick={() => confirmTransactionType(tempTransactionType, reason)}
+                                    className="w-full p-4 text-left rounded-2xl border-2 border-slate-100 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500/50 hover:bg-emerald-50 dark:hover:bg-emerald-500/5 transition-all group"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <span className="font-bold text-slate-700 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">{reason}</span>
+                                        <i className="fat fa-chevron-right text-slate-300 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all"></i>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="flex gap-4">
+                            <button
+                                onClick={() => setIsReasonModalOpen(false)}
+                                className="flex-1 py-4 rounded-2xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
+                            >
+                                Vazgeç
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {selectedSetMenuProduct && (
                 <SetMenuSelectionModal
                     isOpen={isSetMenuModalOpen}
@@ -2097,7 +2343,6 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                     onConfirm={handleSetMenuConfirm}
                 />
             )}
-
         </div>
     );
 }

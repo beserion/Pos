@@ -44,6 +44,9 @@ export class Product {
   @Column('decimal', { precision: 10, scale: 2, default: 0 })
   price: number;
 
+  @Column('decimal', { precision: 10, scale: 2, default: 0, nullable: true })
+  staffPrice: number;
+
   @Column('decimal', { precision: 10, scale: 2, default: 0 })
   vatRate: number;
 

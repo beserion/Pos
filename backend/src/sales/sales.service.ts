@@ -64,6 +64,19 @@ export class SalesService implements OnModuleInit {
         } as any);
       }
 
+      const productsTable = await queryRunner.getTable('products');
+      if (productsTable && !productsTable.columns.find(c => c.name === 'staffPrice')) {
+        this.logger.log('Adding staffPrice column to products table...');
+        await queryRunner.addColumn('products', {
+          name: 'staffPrice',
+          type: 'decimal',
+          precision: 10,
+          scale: 2,
+          isNullable: true,
+          default: 0
+        } as any);
+      }
+
       const tablesTable = await queryRunner.getTable('tables');
       if (tablesTable && !tablesTable.columns.find(c => c.name === 'waiterId')) {
         this.logger.log('Adding waiterId column to tables table...');
@@ -102,6 +115,28 @@ export class SalesService implements OnModuleInit {
             type: 'bit',
             isNullable: false,
             default: 0
+          } as any);
+        }
+
+        if (!itemsTable.columns.find(c => c.name === 'transactionType')) {
+          this.logger.log('Adding transactionType column to sale_items table...');
+          await queryRunner.addColumn('sale_items', {
+            name: 'transactionType',
+            type: 'nvarchar',
+            length: '20',
+            isNullable: false,
+            default: "'SALE'"
+          } as any);
+        }
+
+        if (!itemsTable.columns.find(c => c.name === 'transactionReason')) {
+          this.logger.log('Adding transactionReason column to sale_items table...');
+          await queryRunner.addColumn('sale_items', {
+            name: 'transactionReason',
+            type: 'nvarchar',
+            length: '500',
+            isNullable: true,
+            default: null
           } as any);
         }
       }
@@ -443,14 +478,44 @@ export class SalesService implements OnModuleInit {
               }
             }
 
+            const tType = item.transactionType || 'SALE';
+            const tReason = item.transactionReason || null;
+            
+            // İşlem Tipi Yetki Kontrolleri
+            if (addedByUserId && tType !== 'SALE') {
+              const cached = getCachedPerms(addedByUserId);
+              const up = cached?.allUserPerms || [];
+              const isSuper = cached?.roleName === 'ADMIN' || cached?.roleName === 'ADMINISTRATOR';
+              
+              if (!isSuper) {
+                if (tType === 'COMPLIMENTARY' && !up.includes('OP:CAN_COMPLIMENTARY')) throw new BadRequestException('İkram yapma yetkiniz bulunmamaktadır.');
+                if (tType === 'FREE' && !up.includes('OP:NON_PAYMENT')) throw new BadRequestException('Bedelsiz işlem yapma yetkiniz bulunmamaktadır.');
+                if (tType === 'PROMOTION' && !up.includes('OP:CAN_PROMOTION')) throw new BadRequestException('Promosyon uygulama yetkiniz bulunmamaktadır.');
+                if (tType === 'STAFF' && !up.includes('OP:STAFF_SALE')) throw new BadRequestException('Personel satışı yapma yetkiniz bulunmamaktadır.');
+                if (tType === 'TICKET' && !up.includes('OP:CAN_TICKET')) throw new BadRequestException('Bilet işlemi yapma yetkiniz bulunmamaktadır.');
+              }
+            }
+
+            let finalUnitPrice = Number(item.unitPrice);
+            if (['COMPLIMENTARY', 'FREE', 'TICKET'].includes(tType)) {
+              finalUnitPrice = 0;
+            } else if (tType === 'STAFF') {
+              const prod = await manager.query(`SELECT staffPrice, price FROM products WHERE id = ${item.productId}`);
+              if (prod && prod.length > 0) {
+                finalUnitPrice = (prod[0].staffPrice && Number(prod[0].staffPrice) > 0) ? Number(prod[0].staffPrice) : Number(prod[0].price);
+              }
+            }
+
             const parentItem = manager.create(SaleItem, {
               productId: item.productId,
               quantity: item.quantity,
-              unitPrice: item.unitPrice,
+              unitPrice: finalUnitPrice,
+              transactionType: tType,
+              transactionReason: tReason,
               saleType: item.saleType || 'STANDARD',
               saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
               costPrice: item.costPrice || 0,
-              total: item.total || (Number(item.quantity) * Number(item.unitPrice)),
+              total: item.total || (Number(item.quantity) * finalUnitPrice),
               note: item.note,
               isWaiting: item.isWaiting || false,
               isMarshed: false,
@@ -728,6 +793,63 @@ export class SalesService implements OnModuleInit {
     }
 
     return updated;
+  }
+
+  async updateItemTransactionType(itemId: number, type: string, reason?: string, userId: number = 0): Promise<SaleItem> {
+    return await this.saleItemRepository.manager.transaction(async (manager) => {
+      const item = await manager.findOne(SaleItem, {
+        where: { id: itemId },
+        relations: ['sale', 'sale.table']
+      });
+      if (!item) throw new NotFoundException('Ürün bulunamadı');
+
+      const oldTotal = Number(item.total);
+      item.transactionType = type;
+      item.transactionReason = reason || null;
+
+      let finalUnitPrice = item.unitPrice;
+      const product = await manager.query(`SELECT price, staffPrice FROM products WHERE id = ${item.productId}`);
+      const basePrice = product[0]?.price || 0;
+      const staffPrice = product[0]?.staffPrice || 0;
+
+      if (['COMPLIMENTARY', 'FREE', 'TICKET'].includes(type)) {
+        finalUnitPrice = 0;
+      } else if (type === 'STAFF') {
+        finalUnitPrice = (staffPrice && Number(staffPrice) > 0) ? Number(staffPrice) : Number(basePrice);
+      } else {
+        finalUnitPrice = Number(basePrice);
+      }
+
+      item.unitPrice = finalUnitPrice;
+      item.total = Number(item.quantity) * finalUnitPrice;
+      const updated = await manager.save(SaleItem, item);
+
+      // Update Sale and Table totals
+      const diff = Number(item.total) - oldTotal;
+      if (diff !== 0 && item.sale) {
+        await manager.update(Sale, item.sale.id, {
+          totalAmount: Number(item.sale.totalAmount) + diff
+        });
+        if (item.sale.tableId) {
+          const table = await manager.findOne(Table, { where: { id: item.sale.tableId } });
+          if (table) {
+            await manager.update(Table, item.sale.tableId, {
+              currentTotal: Number(table.currentTotal) + diff
+            });
+          }
+        }
+      }
+
+      // Audit Log
+      try {
+        await manager.query(`
+          INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId)
+          VALUES (GETDATE(), @0, 'TRANSACTION_TYPE_CHANGE', @1, @2, @3, @4, @5)
+        `, [userId, item.sale?.id, item.sale?.tableName, diff, `İşlem tipi değiştirildi: ${type} (${reason || ''})`, (item.sale as any)?.companyId || 1]);
+      } catch {}
+
+      return updated;
+    });
   }
 
   async payItem(itemId: number, paymentMethod: string, partnerId?: number): Promise<void> {
@@ -1493,14 +1615,44 @@ export class SalesService implements OnModuleInit {
            // Opsiyonel: Fiyat değişikliği loglanabilir veya hata fırlatılabilir
         }
 
+        const tType = item.transactionType || 'SALE';
+        const tReason = item.transactionReason || null;
+
+        // İşlem Tipi Yetki Kontrolleri
+        if (addedByUserId && tType !== 'SALE') {
+          const cached = getCachedPerms(addedByUserId);
+          const up = cached?.allUserPerms || [];
+          const isSuper = cached?.roleName === 'ADMIN' || cached?.roleName === 'ADMINISTRATOR';
+          
+          if (!isSuper) {
+            if (tType === 'COMPLIMENTARY' && !up.includes('OP:CAN_COMPLIMENTARY')) throw new BadRequestException('İkram yapma yetkiniz bulunmamaktadır.');
+            if (tType === 'FREE' && !up.includes('OP:NON_PAYMENT')) throw new BadRequestException('Bedelsiz işlem yapma yetkiniz bulunmamaktadır.');
+            if (tType === 'PROMOTION' && !up.includes('OP:CAN_PROMOTION')) throw new BadRequestException('Promosyon uygulama yetkiniz bulunmamaktadır.');
+            if (tType === 'STAFF' && !up.includes('OP:STAFF_SALE')) throw new BadRequestException('Personel satışı yapma yetkiniz bulunmamaktadır.');
+            if (tType === 'TICKET' && !up.includes('OP:CAN_TICKET')) throw new BadRequestException('Bilet işlemi yapma yetkiniz bulunmamaktadır.');
+          }
+        }
+
+        let finalUnitPrice = Number(item.unitPrice);
+        if (['COMPLIMENTARY', 'FREE', 'TICKET'].includes(tType)) {
+          finalUnitPrice = 0;
+        } else if (tType === 'STAFF') {
+          const prod = await manager.query(`SELECT staffPrice, price FROM products WHERE id = ${item.productId}`);
+          if (prod && prod.length > 0) {
+            finalUnitPrice = (prod[0].staffPrice && Number(prod[0].staffPrice) > 0) ? Number(prod[0].staffPrice) : Number(prod[0].price);
+          }
+        }
+
         const parentItem = manager.create(SaleItem, {
           productId: item.productId,
           quantity: item.quantity,
-          unitPrice: item.unitPrice,
+          unitPrice: finalUnitPrice,
+          transactionType: tType,
+          transactionReason: tReason,
           saleType: item.saleType || 'STANDARD',
           saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
           costPrice: item.costPrice || 0,
-          total: item.total || (Number(item.quantity) * Number(item.unitPrice)),
+          total: item.total || (Number(item.quantity) * finalUnitPrice),
           note: item.note,
           isWaiting: item.isWaiting || false,
           isMarshed: false,

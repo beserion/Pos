@@ -96,6 +96,13 @@ export class SaleItem {
   @Column({ type: 'nvarchar', length: 200, nullable: true })
   variationName: string;
 
+  // --- İşlem Tipi (İkram, Ödenmez, vb.) ---
+  @Column({ length: 20, default: 'SALE' })
+  transactionType: string;
+
+  @Column({ type: 'nvarchar', length: 500, nullable: true })
+  transactionReason: string | null;
+
   // --- Kim Ekledi / Ne Zaman ---
   @Column({ nullable: true })
   addedByUserId: number;

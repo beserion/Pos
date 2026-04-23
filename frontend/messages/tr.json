@@ -649,5 +649,13 @@
         "loading": "Menü Hazırlanıyor...",
         "footer": "Menü Sistemi by PosNetX",
         "priceSymbol": "₺"
+    },
+    "TransactionTypes": {
+        "SALE": "Satış",
+        "COMPLIMENTARY": "İkram",
+        "FREE": "Ödenmez",
+        "PROMOTION": "Promosyon",
+        "STAFF": "Personel",
+        "TICKET": "Bilet"
     }
 }
