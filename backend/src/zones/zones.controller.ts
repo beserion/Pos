@@ -43,4 +43,14 @@ export class ZonesController {
   remove(@Param('id') id: string) {
     return this.zonesService.remove(+id);
   }
+
+  @Get(':id/mappings')
+  getMappings(@Param('id') id: string) {
+    return this.zonesService.getMappings(+id);
+  }
+
+  @Put(':id/mappings')
+  saveMappings(@Param('id') id: string, @Body() mappingsData: any[]) {
+    return this.zonesService.saveMappings(+id, mappingsData);
+  }
 }

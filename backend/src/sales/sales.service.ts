@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, Not } from 'typeorm';
 import { Recipe } from '../recipes/recipe.entity';
 import { Sale } from './sale.entity';
 import { SaleItem } from './sale-item.entity';
@@ -367,8 +367,17 @@ export class SalesService implements OnModuleInit {
     if (addedByUserId) {
         const cached = getCachedPerms(addedByUserId);
         const isSuper = cached?.roleName === 'ADMIN' || cached?.roleName === 'ADMINISTRATOR';
-        if (!isSuper && !cached?.allUserPerms?.includes('OP:CAN_ORDER')) {
-            throw new BadRequestException('Sipariş alma yetkiniz bulunmamaktadır.');
+        
+        if (!isSuper) {
+            const up = cached?.allUserPerms || [];
+            const hasOrderPerm = up.includes('OP:CAN_ORDER');
+            const hasPaymentPerm = up.includes('OP:FINANCE_CLOSE_ACCOUNT');
+            const isCompleted = saleData.status === 'COMPLETED';
+
+            // Sipariş alma yetkisi yoksa ve (işlem bir ödeme kapatma değilse VEYA ödeme kapatma yetkisi de yoksa) engelle
+            if (!hasOrderPerm && !(isCompleted && hasPaymentPerm)) {
+                throw new BadRequestException('Sipariş alma veya ödeme kapatma yetkiniz bulunmamaktadır.');
+            }
         }
     }
 
@@ -591,15 +600,41 @@ export class SalesService implements OnModuleInit {
           const table = await manager.findOne(Table, { where: { id: data.tableId, isDeleted: false } });
           if (table) {
             const waiter = await manager.findOne(User, { where: { id: data.waiterId || (data as any).userId } });
-            // items henüz savedSale.totalAmount'a yansımamış olabilir; o yüzden doğrudan items üzerinden hesapla
-            const itemsTotal = (savedSale.items || []).reduce((sum, i: any) => sum + Number(i.total || 0), 0);
-            const effectiveTotal = itemsTotal > 0 ? itemsTotal : Number(savedSale.totalAmount || 0);
+            
+            // Masaya ait diğer aktif adisyonları kontrol et (şu an kapatılacak/birleştirilecek olanlar hariç)
+            const otherActiveSales = await manager.find(Sale, {
+              where: {
+                tableId: data.tableId,
+                status: In(['NEW', 'PREPARATION', 'READY', 'SERVED']),
+                id: mergeSaleIds && mergeSaleIds.length > 0 ? Not(In(mergeSaleIds)) : undefined
+              },
+              relations: ['items']
+            });
+
+            // Yeni satış COMPLETED ise ve başka aktif adisyon yoksa masayı boşalt
+            const isTableEmpty = (savedSale.status === 'COMPLETED' && otherActiveSales.length === 0);
+            
+            // currentTotal hesapla
+            let newTotal = 0;
+            if (savedSale.status !== 'COMPLETED') {
+               // Yeni bir sipariş ekleniyorsa (veya sipariş güncelleniyorsa): mevcut toplam + yeni sipariş toplamı
+               const itemsTotal = (savedSale.items || []).reduce((sum, i: any) => sum + Number(i.total || 0), 0);
+               const effectiveTotal = itemsTotal > 0 ? itemsTotal : Number(savedSale.totalAmount || 0);
+               newTotal = Number(table.currentTotal || 0) + effectiveTotal;
+            } else {
+               // Bir ödeme alındıysa: kalan aktif adisyonların toplamı
+               newTotal = otherActiveSales.reduce((sum, s) => {
+                 const sTotal = (s.items || []).reduce((isum, i) => isum + Number(i.total || 0), 0);
+                 return sum + (sTotal > 0 ? sTotal : Number(s.totalAmount || 0));
+               }, 0);
+            }
+
             await manager.update(Table, data.tableId, {
-              status: savedSale.status === 'COMPLETED' ? 'BOŞ' : 'DOLU',
-              waiterName: savedSale.status === 'COMPLETED' ? '' : (waiter ? `${waiter.firstName} ${waiter.lastName}` : (table.waiterName || 'Sistem')),
-              waiterId: savedSale.status === 'COMPLETED' ? (null as any) : (waiter ? waiter.id : (table.waiterId || null)),
-              currentTotal: savedSale.status === 'COMPLETED' ? 0 : (Number(table.currentTotal || 0) + effectiveTotal),
-              orderStartTime: table.status === 'BOŞ' ? new Date() : (savedSale.status === 'COMPLETED' ? null as any : table.orderStartTime),
+              status: isTableEmpty ? 'BOŞ' : 'DOLU',
+              waiterName: isTableEmpty ? '' : (waiter ? `${waiter.firstName} ${waiter.lastName}` : (table.waiterName || 'Sistem')),
+              waiterId: isTableEmpty ? (null as any) : (waiter ? waiter.id : (table.waiterId || null)),
+              currentTotal: Number(newTotal.toFixed(2)),
+              orderStartTime: table.status === 'BOŞ' ? new Date() : (isTableEmpty ? null as any : table.orderStartTime),
               isBillRequested: false
             });
           }
@@ -1365,17 +1400,41 @@ export class SalesService implements OnModuleInit {
     );
     const defaultWarehouseId = warehouseResult[0]?.value ? parseInt(warehouseResult[0].value) : undefined;
 
+    // Zone ID'sini sale üzerinden bulmaya çalışalım (Eğer masalı satışsa)
+    let saleZoneId: number | undefined;
+    if (sale.tableId) {
+      const tableResult = await manager.query(`SELECT zoneId FROM tables WHERE id = ${sale.tableId}`);
+      if (tableResult && tableResult.length > 0) {
+        saleZoneId = tableResult[0].zoneId;
+      }
+    }
+
     for (const item of items) {
       if (!item.productId) continue;
 
-      // Ürün bilgilerini ve stok bağı tipini taze çek (entity'de henüz güncellenmiş olmayabilir)
+      // Ürün bilgilerini ve stok bağı tipini taze çek
       const productResults = await manager.query(`
-        SELECT inventoryLinkType, linkedStockItemId, directStockQty, directStockUnit, name, costPrice
+        SELECT inventoryLinkType, linkedStockItemId, directStockQty, directStockUnit, name, costPrice, productTypeId
         FROM products WHERE id = ${item.productId}
       `);
       
       if (!productResults || productResults.length === 0) continue;
       const product = productResults[0];
+
+      // Zone ve ProductType bazlı depo haritasını çek
+      let mappedWarehouseId: number | undefined;
+      if (saleZoneId && product.productTypeId) {
+        const mappingResult = await manager.query(`
+          SELECT warehouseId FROM zone_mappings 
+          WHERE zoneId = ${saleZoneId} AND productTypeId = ${product.productTypeId}
+        `);
+        if (mappingResult && mappingResult.length > 0 && mappingResult[0].warehouseId) {
+          mappedWarehouseId = mappingResult[0].warehouseId;
+        }
+      }
+
+      // Eğer maplenmiş depo varsa onu kullan, yoksa varsayılan depo
+      const targetWarehouseId = mappedWarehouseId || defaultWarehouseId;
 
       // --- YENİ: Varyant bilgisi çek ---
       let variation = null;
@@ -1426,7 +1485,7 @@ export class SalesService implements OnModuleInit {
               'SALE',
               sale.id,
               sale.userId || sale.waiterId,
-              defaultWarehouseId,
+              targetWarehouseId,
               manager
             );
 
@@ -1450,7 +1509,7 @@ export class SalesService implements OnModuleInit {
                 'SALE',
                 sale.id,
                 sale.userId || sale.waiterId,
-                defaultWarehouseId,
+                targetWarehouseId,
                 manager,
               );
             } else {
@@ -1468,7 +1527,7 @@ export class SalesService implements OnModuleInit {
                'SALE',
                sale.id,
                sale.userId || sale.waiterId,
-               defaultWarehouseId,
+               targetWarehouseId,
                manager,
              );
           }

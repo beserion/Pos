@@ -834,6 +834,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                     receiptNumber: `SİP-${orderData?.id || '00'}`,
                     date: new Date(),
                     tableName: selectedTable?.name,
+                    zoneId: selectedTable?.zoneId || selectedTable?.zone?.id,
                     waiterName: (user as any)?.firstName || (user as any)?.name || (user as any)?.username || (user as any)?.email?.split('@')[0] || 'Garson',
                     items: cart.map(item => ({
                         name: item.product.name + (item.variationName ? ` (${item.variationName})` : ''),

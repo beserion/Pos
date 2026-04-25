@@ -38,7 +38,7 @@ export class InposBridgeService implements OnModuleDestroy {
       return;
     }
 
-    const dllPath = path.resolve(__dirname, '..', '..', 'lib', 'inpos', 'inposext.dll');
+    const dllPath = path.resolve(process.cwd(), 'lib', 'inpos', 'inposext.dll');
     try {
       this.lib = koffi.load(dllPath);
 

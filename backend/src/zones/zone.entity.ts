@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { Location } from '../locations/location.entity';
 import { Table } from '../tables/table.entity';
+import { ZoneMapping } from './zone-mapping.entity';
 
 @Entity('zones')
 export class Zone {
@@ -28,6 +29,9 @@ export class Zone {
 
   @OneToMany(() => Table, (table) => table.zone)
   tables: Table[];
+
+  @OneToMany(() => ZoneMapping, (mapping) => mapping.zone, { cascade: true })
+  mappings: ZoneMapping[];
 
   @Column({ default: true })
   isActive: boolean;

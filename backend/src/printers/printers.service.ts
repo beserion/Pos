@@ -198,7 +198,7 @@ export class PrintersService {
       }
 
       // Yeni Nesil Yönlendirme Algoritması Devreye Giriyor
-      const routedGroups = await this.orderRoutingService.routeOrderItems(itemsToPrint);
+      const routedGroups = await this.orderRoutingService.routeOrderItems(itemsToPrint, data.zoneId);
       
       const { ThermalPrinter, PrinterTypes, CharacterSet, BreakLine } =
         await import('node-thermal-printer');
@@ -207,17 +207,25 @@ export class PrintersService {
 
       for (const group of routedGroups) {
         const profile = group.profile;
-        if (!profile) continue;
+        const mapping = group.zoneMapping;
+        if (!profile && !mapping) continue;
 
         const targetPrinters = [];
-        if (profile.mainPrinter) targetPrinters.push({ printer: profile.mainPrinter, type: 'MAIN' });
-        if (profile.infoPrinter) targetPrinters.push({ printer: profile.infoPrinter, type: 'INFO' });
+        
+        if (mapping) {
+          if (mapping.printer1) targetPrinters.push({ printer: mapping.printer1, type: 'MAIN', profileName: 'Zone Ana Yazıcı' });
+          if (mapping.printer2) targetPrinters.push({ printer: mapping.printer2, type: 'INFO', profileName: 'Zone Bilgi 1' });
+          if (mapping.printer3) targetPrinters.push({ printer: mapping.printer3, type: 'INFO', profileName: 'Zone Bilgi 2' });
+        } else if (profile) {
+          if (profile.mainPrinter) targetPrinters.push({ printer: profile.mainPrinter, type: 'MAIN', profileName: profile.name });
+          if (profile.infoPrinter) targetPrinters.push({ printer: profile.infoPrinter, type: 'INFO', profileName: profile.name });
+        }
 
         for (const target of targetPrinters) {
           const printer = target.printer;
           if (!printer || !printer.isActive || !printer.ipAddress) continue;
           
-          const copyCount = target.type === 'MAIN' ? (profile.copyCount || 1) : 1;
+          const copyCount = target.type === 'MAIN' ? (profile?.copyCount || 1) : 1;
           
           for (let c = 0; c < copyCount; c++) {
             try {
@@ -279,7 +287,7 @@ export class PrintersService {
                   thermalPrinter.bold(false);
                 }
                 if (target.type === 'MAIN') {
-                  thermalPrinter.println(`Profil: ${trASCII(profile.name)}`);
+                  thermalPrinter.println(`Profil: ${trASCII(target.profileName)}`);
                 }
                 thermalPrinter.drawLine();
 

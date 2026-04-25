@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, Fragment } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
@@ -49,6 +49,14 @@ export function PageClient() {
     const [allTables, setAllTables] = useState<Table[]>([]);
     const [newTableData, setNewTableData] = useState({ name: '', capacity: 4 });
 
+    // Mappings States
+    const [expandedZoneId, setExpandedZoneId] = useState<number | null>(null);
+    const [productTypes, setProductTypes] = useState<any[]>([]);
+    const [warehouses, setWarehouses] = useState<any[]>([]);
+    const [printers, setPrinters] = useState<any[]>([]);
+    const [zoneMappings, setZoneMappings] = useState<any[]>([]);
+    const [loadingMappings, setLoadingMappings] = useState(false);
+
     useEffect(() => {
         if (user?.token) {
             fetchData();
@@ -59,14 +67,21 @@ export function PageClient() {
         if (!user?.token) return;
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const [zonesRes, locsRes, tablesRes] = await Promise.all([
-                axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/zones', config),
-                axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/locations', config),
-                axios.get((typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050')) + '/tables', config)
+            const apiUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050');
+            const [zonesRes, locsRes, tablesRes, ptRes, whRes, prRes] = await Promise.all([
+                axios.get(`${apiUrl}/zones`, config),
+                axios.get(`${apiUrl}/locations`, config),
+                axios.get(`${apiUrl}/tables`, config),
+                axios.get(`${apiUrl}/product-types`, config),
+                axios.get(`${apiUrl}/warehouses`, config),
+                axios.get(`${apiUrl}/printers`, config)
             ]);
             setZones(zonesRes.data);
             setLocations(locsRes.data);
             setAllTables(tablesRes.data);
+            setProductTypes(ptRes.data || []);
+            setWarehouses(whRes.data || []);
+            setPrinters(prRes.data || []);
         } catch (error) {
             console.error('Error fetching data', error);
             showSwal({ title: tc('error'), text: tc('loadingError'), icon: 'error' });
@@ -136,6 +151,74 @@ export function PageClient() {
         setSelectedZone(zone);
         setNewTableData({ name: '', capacity: 4 });
         setIsTablesModalOpen(true);
+    };
+
+    const handleManageMappings = async (zone: Zone) => {
+        if (expandedZoneId === zone.id) {
+            setExpandedZoneId(null);
+            return;
+        }
+        
+        setExpandedZoneId(zone.id);
+        setLoadingMappings(true);
+        if (!user?.token) return;
+        
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const apiUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050');
+            const res = await axios.get(`${apiUrl}/zones/${zone.id}/mappings`, config);
+            
+            // Veriyi productType'lara göre eşleştir
+            const currentMappings = res.data || [];
+            
+            const formMappings = productTypes.map(pt => {
+                const existing = currentMappings.find((m: any) => m.productTypeId === pt.id);
+                return {
+                    productTypeId: pt.id,
+                    warehouseId: existing?.warehouse?.id || existing?.warehouseId || 0,
+                    printer1Id: existing?.printer1?.id || existing?.printer1Id || 0,
+                    printer2Id: existing?.printer2?.id || existing?.printer2Id || 0,
+                    printer3Id: existing?.printer3?.id || existing?.printer3Id || 0,
+                };
+            });
+            
+            setZoneMappings(formMappings);
+        } catch (error) {
+            console.error('Error fetching mappings', error);
+            showSwal({ title: tc('error'), text: 'Eşleşmeler yüklenemedi', icon: 'error' });
+        } finally {
+            setLoadingMappings(false);
+        }
+    };
+
+    const handleMappingChange = (productTypeId: number, field: string, value: number) => {
+        setZoneMappings(prev => prev.map(m => 
+            m.productTypeId === productTypeId ? { ...m, [field]: value } : m
+        ));
+    };
+
+    const handleSaveMappings = async (zoneId: number) => {
+        if (!user?.token) return;
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const apiUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050');
+            
+            // Yalnızca geçerli değerleri (0 olmayan) yolla
+            const payload = zoneMappings.map(m => ({
+                productTypeId: m.productTypeId,
+                warehouseId: m.warehouseId === 0 ? null : m.warehouseId,
+                printer1Id: m.printer1Id === 0 ? null : m.printer1Id,
+                printer2Id: m.printer2Id === 0 ? null : m.printer2Id,
+                printer3Id: m.printer3Id === 0 ? null : m.printer3Id,
+            }));
+
+            await axios.put(`${apiUrl}/zones/${zoneId}/mappings`, payload, config);
+            toastSwal({ title: tc('success'), text: 'Eşleşmeler başarıyla kaydedildi.', icon: 'success' });
+            setExpandedZoneId(null);
+        } catch (error) {
+            console.error('Error saving mappings', error);
+            showSwal({ title: tc('error'), text: 'Eşleşmeler kaydedilemedi.', icon: 'error' });
+        }
     };
 
     const handleAddTable = async (e: React.FormEvent) => {
@@ -269,7 +352,8 @@ export function PageClient() {
                                 </thead>
                                 <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
                                     {zones.map(z => (
-                                        <tr key={z.id} className="hover:bg-indigo-500/5 dark:hover:bg-indigo-500/10 transition-all group">
+                                        <Fragment key={z.id}>
+                                        <tr className="hover:bg-indigo-500/5 dark:hover:bg-indigo-500/10 transition-all group">
                                             <td className="px-8 py-3">
                                                 <span className="text-sm font-black text-slate-400">#{z.id}</span>
                                             </td>
@@ -309,9 +393,9 @@ export function PageClient() {
                                             </td>
                                             <td className="px-5 py-3 text-right">
                                                 <div className="flex gap-2 justify-end transition-all">
-                                                    {/* <button onClick={() => handleManageTables(z)} className="w-10 h-10 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 hover:text-white hover:bg-indigo-600 rounded-xl shadow-sm border border-indigo-100 dark:border-indigo-500/20 transition-all flex items-center justify-center" title="Masaları Yönet">
-                                                        <i className="fat fa-table-cells text-lg"></i>
-                                                    </button> */}
+                                                    <button onClick={() => handleManageMappings(z)} className={`w-10 h-10 ${expandedZoneId === z.id ? 'bg-indigo-600 text-white shadow-md' : 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600'} hover:text-white hover:bg-indigo-600 rounded-xl shadow-sm border border-indigo-100 dark:border-indigo-500/20 transition-all flex items-center justify-center`} title="Hedef Eşleşmeleri">
+                                                        <i className="fat fa-network-wired text-lg"></i>
+                                                    </button>
                                                     <button onClick={() => openModal(z)} className="w-10 h-10 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 hover:text-white hover:bg-emerald-600 rounded-xl shadow-sm border border-emerald-100 dark:border-emerald-500/20 transition-all flex items-center justify-center">
                                                         <i className="fat fa-pen-field text-lg"></i>
                                                     </button>
@@ -321,6 +405,103 @@ export function PageClient() {
                                                 </div>
                                             </td>
                                         </tr>
+                                        {expandedZoneId === z.id && (
+                                            <tr className="bg-slate-50/80 dark:bg-slate-900/80 border-t border-slate-100 dark:border-slate-700/50">
+                                                <td colSpan={7} className="p-6">
+                                                    <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
+                                                        <div className="flex justify-between items-center mb-6 border-b border-slate-100 dark:border-slate-700 pb-4">
+                                                            <div>
+                                                                <h4 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+                                                                    <i className="fat fa-network-wired text-indigo-500"></i> Zone - Hedef Eşleşmeleri
+                                                                </h4>
+                                                                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">
+                                                                    {z.name} alanından verilen siparişlerin ürün cinsine göre gideceği hedefler.
+                                                                </p>
+                                                            </div>
+                                                            <div className="flex gap-2">
+                                                                <button onClick={() => setExpandedZoneId(null)} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-slate-200 transition-all">
+                                                                    Kapat
+                                                                </button>
+                                                                <button onClick={() => handleSaveMappings(z.id)} className="px-5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-indigo-700 shadow-lg shadow-indigo-500/30 transition-all flex items-center gap-2">
+                                                                    <i className="fat fa-floppy-disk"></i> Kaydet
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        {loadingMappings ? (
+                                                            <div className="flex justify-center p-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div></div>
+                                                        ) : (
+                                                            <div className="overflow-x-auto">
+                                                                <table className="w-full text-left">
+                                                                    <thead>
+                                                                        <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-slate-700">
+                                                                            <th className="pb-3 pl-2">Ürün Cinsi</th>
+                                                                            <th className="pb-3 px-2">Kaynak Depo</th>
+                                                                            <th className="pb-3 px-2 text-indigo-500">Yazıcı 1 (Ana Üretim)</th>
+                                                                            <th className="pb-3 px-2 text-amber-500">Yazıcı 2 (Bilgi)</th>
+                                                                            <th className="pb-3 pr-2 text-emerald-500">Yazıcı 3 (Bilgi)</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                                                                        {productTypes.map(pt => {
+                                                                            const mapRow = zoneMappings.find(m => m.productTypeId === pt.id) || {};
+                                                                            return (
+                                                                                <tr key={pt.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-all">
+                                                                                    <td className="py-3 pl-2">
+                                                                                        <div className="font-bold text-sm text-slate-700 dark:text-slate-300">{pt.name}</div>
+                                                                                    </td>
+                                                                                    <td className="py-3 px-2">
+                                                                                        <select 
+                                                                                            value={mapRow.warehouseId || 0}
+                                                                                            onChange={(e) => handleMappingChange(pt.id, 'warehouseId', parseInt(e.target.value))}
+                                                                                            className="w-full text-xs font-bold bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500/20 outline-none text-slate-700 dark:text-slate-300"
+                                                                                        >
+                                                                                            <option value={0}>Varsayılan Depo</option>
+                                                                                            {warehouses.map(wh => <option key={wh.id} value={wh.id}>{wh.name}</option>)}
+                                                                                        </select>
+                                                                                    </td>
+                                                                                    <td className="py-3 px-2">
+                                                                                        <select 
+                                                                                            value={mapRow.printer1Id || 0}
+                                                                                            onChange={(e) => handleMappingChange(pt.id, 'printer1Id', parseInt(e.target.value))}
+                                                                                            className="w-full text-xs font-bold bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-800 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500/20 outline-none text-indigo-700 dark:text-indigo-300"
+                                                                                        >
+                                                                                            <option value={0}>Yok</option>
+                                                                                            {printers.map(pr => <option key={pr.id} value={pr.id}>{pr.name}</option>)}
+                                                                                        </select>
+                                                                                    </td>
+                                                                                    <td className="py-3 px-2">
+                                                                                        <select 
+                                                                                            value={mapRow.printer2Id || 0}
+                                                                                            onChange={(e) => handleMappingChange(pt.id, 'printer2Id', parseInt(e.target.value))}
+                                                                                            className="w-full text-xs font-bold bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800 rounded-lg p-2 focus:ring-2 focus:ring-amber-500/20 outline-none text-amber-700 dark:text-amber-300"
+                                                                                        >
+                                                                                            <option value={0}>Yok</option>
+                                                                                            {printers.map(pr => <option key={pr.id} value={pr.id}>{pr.name}</option>)}
+                                                                                        </select>
+                                                                                    </td>
+                                                                                    <td className="py-3 pr-2">
+                                                                                        <select 
+                                                                                            value={mapRow.printer3Id || 0}
+                                                                                            onChange={(e) => handleMappingChange(pt.id, 'printer3Id', parseInt(e.target.value))}
+                                                                                            className="w-full text-xs font-bold bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800 rounded-lg p-2 focus:ring-2 focus:ring-emerald-500/20 outline-none text-emerald-700 dark:text-emerald-300"
+                                                                                        >
+                                                                                            <option value={0}>Yok</option>
+                                                                                            {printers.map(pr => <option key={pr.id} value={pr.id}>{pr.name}</option>)}
+                                                                                        </select>
+                                                                                    </td>
+                                                                                </tr>
+                                                                            );
+                                                                        })}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                        </Fragment>
                                     ))}
                                     {zones.length === 0 && (
                                         <tr>

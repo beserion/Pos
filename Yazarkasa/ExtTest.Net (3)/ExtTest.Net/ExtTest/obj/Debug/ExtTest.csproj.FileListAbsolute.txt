@@ -35,3 +35,15 @@ C:\Users\eren.ozdemir\Desktop\updatedExtTest\ExtTest.Net\ExtTest\obj\Debug\ExtTe
 C:\Users\eren.ozdemir\Desktop\updatedExtTest\ExtTest.Net\ExtTest\obj\Debug\ExtTest.csproj.Up2Date
 C:\Users\eren.ozdemir\Desktop\updatedExtTest\ExtTest.Net\ExtTest\obj\Debug\ExtTest.Net.exe
 C:\Users\eren.ozdemir\Desktop\updatedExtTest\ExtTest.Net\ExtTest\obj\Debug\ExtTest.Net.pdb
+C:\Github\Pos\Yazarkasa\ExtTest.Net (3)\ExtTest.Net\ExtTest\bin\Debug\ExtTest.Net.exe.config
+C:\Github\Pos\Yazarkasa\ExtTest.Net (3)\ExtTest.Net\ExtTest\bin\Debug\ExtTest.Net.exe
+C:\Github\Pos\Yazarkasa\ExtTest.Net (3)\ExtTest.Net\ExtTest\bin\Debug\ExtTest.Net.pdb
+C:\Github\Pos\Yazarkasa\ExtTest.Net (3)\ExtTest.Net\ExtTest\bin\Debug\InposExt.Net.dll
+C:\Github\Pos\Yazarkasa\ExtTest.Net (3)\ExtTest.Net\ExtTest\obj\Debug\ExtTest.csproj.AssemblyReference.cache
+C:\Github\Pos\Yazarkasa\ExtTest.Net (3)\ExtTest.Net\ExtTest\obj\Debug\InposExtTest.ExtTest.resources
+C:\Github\Pos\Yazarkasa\ExtTest.Net (3)\ExtTest.Net\ExtTest\obj\Debug\ExtTest.Net.Properties.Resources.resources
+C:\Github\Pos\Yazarkasa\ExtTest.Net (3)\ExtTest.Net\ExtTest\obj\Debug\ExtTest.csproj.GenerateResource.cache
+C:\Github\Pos\Yazarkasa\ExtTest.Net (3)\ExtTest.Net\ExtTest\obj\Debug\ExtTest.csproj.CoreCompileInputs.cache
+C:\Github\Pos\Yazarkasa\ExtTest.Net (3)\ExtTest.Net\ExtTest\obj\Debug\ExtTest.csproj.Up2Date
+C:\Github\Pos\Yazarkasa\ExtTest.Net (3)\ExtTest.Net\ExtTest\obj\Debug\ExtTest.Net.exe
+C:\Github\Pos\Yazarkasa\ExtTest.Net (3)\ExtTest.Net\ExtTest\obj\Debug\ExtTest.Net.pdb

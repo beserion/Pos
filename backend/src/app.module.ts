@@ -45,6 +45,7 @@ import { Table } from './tables/table.entity';
 import { Employee } from './employees/employee.entity';
 import { EmployeeDocument } from './employees/employee-document.entity';
 import { Zone } from './zones/zone.entity';
+import { ZoneMapping } from './zones/zone-mapping.entity';
 import { Partner } from './partners/partner.entity';
 import { Warehouse } from './warehouses/warehouse.entity';
 import { AccountTransaction } from './finance/account-transaction.entity';
@@ -138,6 +139,7 @@ import { ScheduleModule } from '@nestjs/schedule';
             Table,
             Location,
             Zone,
+            ZoneMapping,
             AccountTransaction,
             CompanyAccount,
             Partner,

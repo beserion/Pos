@@ -7,6 +7,7 @@ import { OutputProfile } from '../output-profiles/output-profile.entity';
 import { Department } from '../departments/department.entity';
 import { SaleItem } from '../sales/sale-item.entity';
 import { StockCard } from '../stock-cards/stock-card.entity';
+import { ZoneMapping } from '../zones/zone-mapping.entity';
 
 export interface ResolvedRoute {
   profile: OutputProfile | null;
@@ -16,7 +17,8 @@ export interface ResolvedRoute {
 }
 
 export interface RoutedGroup {
-  profile: OutputProfile;
+  profile: OutputProfile | null;
+  zoneMapping: ZoneMapping | null;
   items: any[];
   source: string;
 }
@@ -54,6 +56,9 @@ export class OrderRoutingService {
 
     @InjectRepository(StockCard)
     private readonly stockCardRepo: Repository<StockCard>,
+
+    @InjectRepository(ZoneMapping)
+    private readonly zoneMappingRepo: Repository<ZoneMapping>,
   ) {}
 
   /**
@@ -178,36 +183,59 @@ export class OrderRoutingService {
    * Sipariş satırlarını hedeflerine göre gruplar.
    * Her grup: yazıcı hedefi, KDS hedefi, bilgi yazıcısı bilgisi
    */
-  async routeOrderItems(items: any[]): Promise<RoutedGroup[]> {
-    const groupMap = new Map<number | string, RoutedGroup>();
+  async routeOrderItems(items: any[], zoneId?: number): Promise<RoutedGroup[]> {
+    const groupMap = new Map<string, RoutedGroup>();
+
+    // Eğer zoneId varsa, mappingleri baştan çekelim
+    let zoneMappings: ZoneMapping[] = [];
+    if (zoneId) {
+      zoneMappings = await this.zoneMappingRepo.find({
+        where: { zoneId },
+        relations: ['printer1', 'printer2', 'printer3', 'productType'],
+      });
+    }
 
     for (const item of items) {
       const resolved = await this.resolveOutputProfile(item.productId);
+      
+      let mapping: ZoneMapping | null = null;
 
-      if (!resolved.profile) {
+      // 1. Ürün Cinsi bul
+      const product = await this.productRepo.findOne({ where: { id: item.productId } });
+      const pTypeId = product?.productTypeId;
+
+      // 2. ZoneMapping kontrolü yap (sadece zoneId varsa ve bu ürünün cinsi varsa)
+      if (zoneId && pTypeId && zoneMappings.length > 0) {
+        mapping = zoneMappings.find(m => m.productTypeId === pTypeId) || null;
+      }
+
+      if (!resolved.profile && !mapping) {
         // Tanımsız profil — uyarı loglandı, skip
         continue;
       }
 
-      if (resolved.profile.noOutput) {
+      if (resolved.profile && resolved.profile.noOutput && !mapping) {
         // Çıktı dışı profil — hiçbir yere gönderilmez
         this.logger.log(`Product "${resolved.productName}" → noOutput, atlanıyor`);
         continue;
       }
 
-      const key = resolved.profile.id;
+      // Gruplama anahtarı: Eşleşen mapping varsa mapping ID'si, yoksa profil ID'si
+      const key = mapping ? `mapping_${mapping.id}` : `profile_${resolved.profile?.id}`;
+
       if (!groupMap.has(key)) {
         groupMap.set(key, {
-          profile: resolved.profile,
+          profile: mapping ? null : (resolved.profile || null),
+          zoneMapping: mapping,
           items: [],
-          source: resolved.source,
+          source: mapping ? 'ZONE_MAPPING' : resolved.source,
         });
       }
 
       groupMap.get(key)!.items.push({
         ...item,
         productName: resolved.productName,
-        routeSource: resolved.source,
+        routeSource: mapping ? 'ZONE_MAPPING' : resolved.source,
       });
     }
 

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Zone } from './zone.entity';
+import { ZoneMapping } from './zone-mapping.entity';
 import { UsersService } from '../users/users.service';
 import { getCachedPerms } from '../auth/permissions.guard';
 
@@ -10,6 +11,8 @@ export class ZonesService {
   constructor(
     @InjectRepository(Zone)
     private zoneRepository: Repository<Zone>,
+    @InjectRepository(ZoneMapping)
+    private zoneMappingRepository: Repository<ZoneMapping>,
     @Inject(forwardRef(() => UsersService))
     private usersService: UsersService,
   ) {}
@@ -98,5 +101,38 @@ export class ZonesService {
     await this.findOne(id);
     await this.zoneRepository.delete(id);
     this.clearCache();
+  }
+
+  async getMappings(zoneId: number): Promise<ZoneMapping[]> {
+    return this.zoneMappingRepository.find({
+      where: { zoneId },
+      relations: ['productType', 'warehouse', 'printer1', 'printer2', 'printer3'],
+    });
+  }
+
+  async saveMappings(zoneId: number, mappingsData: Partial<ZoneMapping>[]): Promise<ZoneMapping[]> {
+    await this.findOne(zoneId); // Ensure zone exists
+    
+    // Begin transaction to replace mappings
+    return await this.zoneMappingRepository.manager.transaction(async (manager) => {
+      // Delete existing mappings
+      await manager.delete(ZoneMapping, { zoneId });
+      
+      if (!mappingsData || mappingsData.length === 0) {
+        return [];
+      }
+
+      // Create new mappings
+      const newMappings = manager.create(ZoneMapping, mappingsData.map(data => ({
+        zoneId,
+        productTypeId: data.productTypeId,
+        warehouseId: data.warehouseId || null,
+        printer1Id: data.printer1Id || null,
+        printer2Id: data.printer2Id || null,
+        printer3Id: data.printer3Id || null,
+      } as any)));
+
+      return await manager.save(ZoneMapping, newMappings);
+    });
   }
 }
