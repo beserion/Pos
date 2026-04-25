@@ -6,6 +6,7 @@ import { useLocale } from 'next-intl';
 import Cookies from 'js-cookie';
 import axios from 'axios';
 import { ArrowLeft, ShieldCheck, Search, RefreshCw, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
+import SearchableSelect from '@/components/SearchableSelect';
 
 const API_URL = (typeof window !== 'undefined' && window.location.hostname === 'localhost')
   ? 'http://localhost:3050'
@@ -104,10 +105,16 @@ export function PageClient() {
             </div>
             <div>
               <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">İşlem Tipi</label>
-              <select value={filters.actionType} onChange={e => setFilters(f => ({ ...f, actionType: e.target.value }))} className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-sm outline-none focus:ring-2 focus:ring-rose-500">
-                <option value="">Tümü</option>
-                {Object.entries(ACTION_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-              </select>
+              <div className="-m-2 w-full mt-1">
+                <SearchableSelect
+                    value={filters.actionType}
+                    onChange={(val) => setFilters(f => ({ ...f, actionType: val.toString() }))}
+                    options={[
+                        { value: '', label: 'Tümü' },
+                        ...Object.entries(ACTION_LABELS).map(([k, v]) => ({ value: k, label: v.label }))
+                    ]}
+                />
+              </div>
             </div>
             <div>
               <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Masa No</label>

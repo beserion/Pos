@@ -6,46 +6,22 @@ import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface StockCard {
     id: number;
     name: string;
     code: string;
     barcode?: string;
-<<<<<<< HEAD
-    sku?: string;
-    isActive: boolean;
-    stockNature: string;
-=======
     category?: string;
->>>>>>> upstream/server
     stockGroup?: string;
     stockSubgroup?: string;
     brand?: string;
     baseUnit: string;
     purchaseUnit?: string;
-    transferUnit?: string;
     conversionRate: number;
-    primaryVendorId?: number | null;
-    purchaseVat: number;
-    lastPurchasePrice: number;
-    averageCost: number;
     costPerBaseUnit: number;
-    currency: string;
-    stockTrackingEnabled: boolean;
     currentStock: number;
-<<<<<<< HEAD
-    criticalStock: number;
-    minStock: number;
-    maxStock: number;
-    warehouseId?: number | null;
-    shelf?: string;
-    outputProfileId?: number | null;
-    lotTracking: boolean;
-    batchTracking: boolean;
-    expiryTracking: boolean;
-    serialTracking: boolean;
-=======
     minStockLevel: number;
     maxStockLevel?: number;
     isActive: boolean;
@@ -57,7 +33,6 @@ interface StockCard {
     averageCost: number;
     sku?: string;
     outputProfileId?: number | null;
->>>>>>> upstream/server
     note?: string;
 }
 
@@ -94,40 +69,15 @@ export function PageClient() {
         name: '',
         code: '',
         barcode: '',
-<<<<<<< HEAD
-        sku: '',
-        isActive: true,
-        stockNature: 'traded_good',
-=======
         category: '',
->>>>>>> upstream/server
         stockGroup: '',
         stockSubgroup: '',
         brand: '',
         baseUnit: 'adet',
         purchaseUnit: '',
-        transferUnit: '',
         conversionRate: 1,
-        primaryVendorId: null,
-        purchaseVat: 0,
-        lastPurchasePrice: 0,
-        averageCost: 0,
         costPerBaseUnit: 0,
-        currency: 'TRY',
-        stockTrackingEnabled: true,
         currentStock: 0,
-<<<<<<< HEAD
-        criticalStock: 0,
-        minStock: 0,
-        maxStock: 0,
-        warehouseId: null,
-        shelf: '',
-        outputProfileId: null,
-        lotTracking: false,
-        batchTracking: false,
-        expiryTracking: false,
-        serialTracking: false,
-=======
         minStockLevel: 0,
         maxStockLevel: 0,
         isActive: true,
@@ -139,7 +89,6 @@ export function PageClient() {
         averageCost: 0,
         sku: '',
         outputProfileId: null,
->>>>>>> upstream/server
         note: ''
     });
 
@@ -162,9 +111,8 @@ export function PageClient() {
                 axios.get(`${API_URL}/output-profiles`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: [] }))
             ]);
 
-            const dbCards = cardsRes.data.data || [];
-            setStockCards(dbCards);
-            setFilteredCards(dbCards);
+            setStockCards(cardsRes.data.data || []);
+            setFilteredCards(cardsRes.data.data || []);
             setCategories(catRes.data || []);
             setWarehouses(whRes.data || []);
             setOutputProfiles(opRes.data || []);
@@ -179,12 +127,12 @@ export function PageClient() {
     useEffect(() => {
         const lowerQuery = searchQuery.toLowerCase();
         const filtered = stockCards.filter(c =>
-            (selectedCategory === '' || c.stockGroup === selectedCategory) &&
+            (selectedCategory === '' || c.category === selectedCategory) &&
             (
                 c.name.toLowerCase().includes(lowerQuery) ||
                 c.code.toLowerCase().includes(lowerQuery) ||
                 (c.barcode && c.barcode.toLowerCase().includes(lowerQuery)) ||
-                (c.stockGroup && c.stockGroup.toLowerCase().includes(lowerQuery))
+                (c.category && c.category.toLowerCase().includes(lowerQuery))
             )
         );
         setFilteredCards(filtered);
@@ -197,10 +145,8 @@ export function PageClient() {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
-            const payload: any = { ...formData };
+            const payload = { ...formData };
             if (!payload.warehouseId) payload.warehouseId = null;
-            if (!payload.outputProfileId) payload.outputProfileId = null;
-            if (!payload.primaryVendorId) payload.primaryVendorId = null;
 
             if (formData.id === 0) {
                 const { id, ...postData } = payload;
@@ -247,7 +193,7 @@ export function PageClient() {
         if (!categoryName) return '';
         const prefix = categoryName.substring(0, 3).toLocaleUpperCase('tr');
         const sameCategoryCodes = stockCards
-            .filter((c: StockCard) => c.code && c.code.toLocaleUpperCase('tr').startsWith(`${prefix}-`))
+            .filter(c => c.code && c.code.toLocaleUpperCase('tr').startsWith(`${prefix}-`))
             .map(c => {
                 const parts = c.code.split('-');
                 return parseInt(parts[1]) || 0;
@@ -263,7 +209,7 @@ export function PageClient() {
         if (formData.id === 0 && val) {
             newCode = generateStockCode(val);
         }
-        setFormData({ ...formData, stockGroup: val, code: newCode });
+        setFormData({ ...formData, category: val, code: newCode });
     };
 
     const openModal = (card?: StockCard) => {
@@ -276,40 +222,15 @@ export function PageClient() {
                 name: '',
                 code: '',
                 barcode: '',
-<<<<<<< HEAD
-                sku: '',
-                isActive: true,
-                stockNature: 'traded_good',
-=======
                 category: '',
->>>>>>> upstream/server
                 stockGroup: '',
                 stockSubgroup: '',
                 brand: '',
                 baseUnit: 'adet',
                 purchaseUnit: '',
-                transferUnit: '',
                 conversionRate: 1,
-                primaryVendorId: null,
-                purchaseVat: 0,
-                lastPurchasePrice: 0,
-                averageCost: 0,
                 costPerBaseUnit: 0,
-                currency: 'TRY',
-                stockTrackingEnabled: true,
                 currentStock: 0,
-<<<<<<< HEAD
-                criticalStock: 0,
-                minStock: 0,
-                maxStock: 0,
-                warehouseId: null,
-                shelf: '',
-                outputProfileId: null,
-                lotTracking: false,
-                batchTracking: false,
-                expiryTracking: false,
-                serialTracking: false,
-=======
                 minStockLevel: 0,
                 maxStockLevel: 0,
                 isActive: true,
@@ -321,7 +242,6 @@ export function PageClient() {
                 averageCost: 0,
                 sku: '',
                 outputProfileId: null,
->>>>>>> upstream/server
                 note: ''
             });
         }
@@ -331,7 +251,7 @@ export function PageClient() {
     // KPI Hesaplamaları
     const totalCards = stockCards.length;
     const activeCards = stockCards.filter(c => c.isActive).length;
-    const lowStockCards = stockCards.filter(c => c.isActive && c.currentStock <= c.minStock && c.minStock > 0).length;
+    const lowStockCards = stockCards.filter(c => c.isActive && c.currentStock <= c.minStockLevel && c.minStockLevel > 0).length;
     const zeroStockCards = stockCards.filter(c => c.isActive && c.currentStock <= 0).length;
 
     const unitOptions = [
@@ -380,17 +300,20 @@ export function PageClient() {
                                 className="w-64 pl-12 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold text-sm focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow"
                             />
                         </div>
-                        <div className="relative">
-                            <i className="fat fa-filter absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                            <select
-                                value={selectedCategory}
-                                onChange={(e) => setSelectedCategory(e.target.value)}
-                                className="w-48 pl-12 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold text-sm focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer"
-                            >
-                                <option value="">Tüm Kategoriler</option>
-                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                            <i className="fat fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+                        <div className="relative w-48">
+                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10 pointer-events-none">
+                                <i className="fat fa-filter"></i>
+                            </div>
+                            <div className="-m-2 w-[calc(100%+16px)]">
+                                <SearchableSelect
+                                    value={selectedCategory}
+                                    onChange={(val) => setSelectedCategory(val.toString())}
+                                    options={[
+                                        { value: '', label: 'Tüm Kategoriler' },
+                                        ...categories.map(c => ({ value: c, label: c }))
+                                    ]}
+                                />
+                            </div>
                         </div>
                         <button onClick={() => openModal()} className="px-6 py-3 bg-teal-50 dark:bg-teal-500/10 border border-teal-200 dark:border-teal-500/20 text-teal-600 dark:text-teal-400 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:bg-teal-100 dark:hover:bg-teal-500/20 transition-all flex items-center gap-2 hover:scale-105 active:scale-95">
                             <i className="fat fa-plus-circle text-lg"></i> Yeni Kart
@@ -454,9 +377,8 @@ export function PageClient() {
                                     <tr>
                                         <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest rounded-tl-[40px]">KOD / BARKOD</th>
                                         <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">STOK ADI</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">DOĞASI</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">STOK GRUBU</th>
-                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">BİRİMLER</th>
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">KATEGORİ</th>
+                                        <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">BİRİMLER (TEMEL / ALIŞ)</th>
                                         <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">GÜNCEL STOK</th>
                                         <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">BİRİM MALİYET</th>
                                         <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right rounded-tr-[40px]">İŞLEMLER</th>
@@ -464,7 +386,7 @@ export function PageClient() {
                                 </thead>
                                 <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
                                     {filteredCards.map(card => {
-                                        const isLowStock = card.currentStock <= card.minStock && card.minStock > 0;
+                                        const isLowStock = card.currentStock <= card.minStockLevel && card.minStockLevel > 0;
                                         const isOutOfStock = card.currentStock <= 0;
 
                                         return (
@@ -488,27 +410,10 @@ export function PageClient() {
                                                     </div>
                                                 </td>
                                                 <td className="px-8 py-4">
-                                                    <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg border inline-flex items-center gap-1 ${
-                                                        card.stockNature === 'raw_material' ? 'bg-emerald-50 border-emerald-200 text-emerald-600 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400' :
-                                                        card.stockNature === 'traded_good' ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-500/10 dark:border-blue-500/20 dark:text-blue-400' :
-                                                        card.stockNature === 'semi_finished' ? 'bg-amber-50 border-amber-200 text-amber-600 dark:bg-amber-500/10 dark:border-amber-500/20 dark:text-amber-400' :
-                                                        card.stockNature === 'consumable' ? 'bg-purple-50 border-purple-200 text-purple-600 dark:bg-purple-500/10 dark:border-purple-500/20 dark:text-purple-400' :
-                                                        'bg-slate-50 border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'
-                                                    }`}>
-                                                        {{
-                                                            'raw_material': 'Hammadde',
-                                                            'traded_good': 'Ticari Mal',
-                                                            'semi_finished': 'Yarı Mamul',
-                                                            'consumable': 'Sarf',
-                                                            'packaging': 'Ambalaj'
-                                                        }[card.stockNature] || card.stockNature}
-                                                    </span>
-                                                </td>
-                                                <td className="px-8 py-4">
                                                     <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-700">
                                                         <i className="fat fa-folder-tree text-teal-500 text-[10px]"></i>
                                                         <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                                                            {card.stockGroup || '-'}
+                                                            {card.category || '-'}
                                                         </span>
                                                     </div>
                                                 </td>
@@ -532,7 +437,7 @@ export function PageClient() {
                                                         </span>
                                                         <span className="text-[10px] font-bold uppercase opacity-60 tracking-widest">{card.baseUnit}</span>
 
-                                                        {isLowStock && !isOutOfStock && <i className="fat fa-triangle-exclamation text-xs ml-1" title={`Kritik seviye: ${card.minStock}`}></i>}
+                                                        {isLowStock && !isOutOfStock && <i className="fat fa-triangle-exclamation text-xs ml-1" title={`Kritik seviye: ${card.minStockLevel}`}></i>}
                                                         {isOutOfStock && <i className="fat fa-ban text-xs ml-1"></i>}
                                                     </div>
                                                 </td>
@@ -623,38 +528,11 @@ export function PageClient() {
                                                 </div>
                                             </div>
                                         </div>
-<<<<<<< HEAD
-                                        <div>
-                                            <label className="block text-[10px] font-black text-teal-600 uppercase tracking-widest mb-2 px-1">Stok Doğası (Zorunlu)</label>
-                                            <div className="relative">
-                                                <i className="fat fa-shapes absolute left-4 top-4 text-teal-500/50"></i>
-                                                <select required value={formData.stockNature} onChange={(e) => setFormData({ ...formData, stockNature: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-teal-50/50 dark:bg-teal-900/10 border border-teal-200 dark:border-teal-700/50 rounded-2xl text-teal-800 dark:text-teal-300 font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                    <option value="raw_material">Hammadde</option>
-                                                    <option value="traded_good">Ticari Mal</option>
-                                                    <option value="semi_finished">Yarı Mamul</option>
-                                                    <option value="consumable">Sarf Malzemesi</option>
-                                                    <option value="packaging">Ambalaj</option>
-                                                </select>
-                                                <i className="fat fa-chevron-down absolute right-4 top-4 text-teal-400 pointer-events-none"></i>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Stok Grubu</label>
-                                            <div className="relative">
-                                                <i className="fat fa-folder-tree absolute left-4 top-4 text-teal-500/50"></i>
-                                                <input type="text" value={formData.stockGroup || ''} onChange={(e) => handleCategoryChange(e.target.value)} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: Alkoller, Sarf, Meşrubat" list="categoryList" />
-                                                <datalist id="categoryList">
-                                                    {categories.map(c => <option key={c} value={c} />)}
-                                                </datalist>
-=======
 
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Stok Kodu</label>
                                                 <input type="text" required value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold uppercase font-mono focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" />
->>>>>>> upstream/server
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Barkod</label>
@@ -662,13 +540,19 @@ export function PageClient() {
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Stok Doğası (Nature)</label>
-                                                <select value={formData.stockNature} onChange={(e) => setFormData({ ...formData, stockNature: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                    <option value="raw_material">Hammadde</option>
-                                                    <option value="traded_good">Ticari Mal (Al-Sat)</option>
-                                                    <option value="semi_finished">Yarı Mamul</option>
-                                                    <option value="consumable">Sarf Malzeme</option>
-                                                    <option value="packaging">Paketleme</option>
-                                                </select>
+                                                <div className="-m-2 w-full">
+                                                    <SearchableSelect
+                                                        value={formData.stockNature}
+                                                        onChange={(val) => setFormData({ ...formData, stockNature: val.toString() })}
+                                                        options={[
+                                                            { value: 'raw_material', label: 'Hammadde' },
+                                                            { value: 'traded_good', label: 'Ticari Mal (Al-Sat)' },
+                                                            { value: 'semi_finished', label: 'Yarı Mamul' },
+                                                            { value: 'consumable', label: 'Sarf Malzeme' },
+                                                            { value: 'packaging', label: 'Paketleme' }
+                                                        ]}
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
 
@@ -691,72 +575,21 @@ export function PageClient() {
                                             <input type="checkbox" checked={formData.isActive} onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })} className="w-5 h-5 accent-emerald-500" id="activeCheck" />
                                             <label htmlFor="activeCheck" className="text-xs font-black text-emerald-600 uppercase tracking-widest cursor-pointer">Stok Kartı Aktif / Kullanımda</label>
                                         </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Alt Grup</label>
-                                            <div className="relative">
-                                                <i className="fat fa-folder absolute left-4 top-4 text-teal-500/50"></i>
-                                                <input type="text" value={formData.stockSubgroup || ''} onChange={(e) => setFormData({ ...formData, stockSubgroup: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Alt grup..." />
-                                            </div>
-                                        </div>
                                     </div>
-<<<<<<< HEAD
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Stok Kodu</label>
-                                            <div className="relative">
-                                                <i className="fat fa-barcode-read absolute left-4 top-4 text-teal-500/50"></i>
-                                                <input type="text" required value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold uppercase font-mono focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Örn: ALK-0001" />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">SKU / Ref. Kodu</label>
-                                            <div className="relative">
-                                                <i className="fat fa-hashtag absolute left-4 top-4 text-teal-500/50"></i>
-                                                <input type="text" value={formData.sku || ''} onChange={(e) => setFormData({ ...formData, sku: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold font-mono focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Referans kodu..." />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Marka</label>
-                                            <div className="relative">
-                                                <i className="fat fa-award absolute left-4 top-4 text-teal-500/50"></i>
-                                                <input type="text" value={formData.brand || ''} onChange={(e) => setFormData({ ...formData, brand: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Marka adı..." />
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Barkod</label>
-                                            <div className="relative">
-                                                <i className="fat fa-barcode absolute left-4 top-4 text-teal-500/50"></i>
-                                                <input type="text" value={formData.barcode || ''} onChange={(e) => setFormData({ ...formData, barcode: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold font-mono focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Barkod okutun..." />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Para Birimi</label>
-                                            <div className="relative">
-                                                <i className="fat fa-coins absolute left-4 top-4 text-teal-500/50"></i>
-                                                <select value={formData.currency} onChange={(e) => setFormData({ ...formData, currency: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                    <option value="TRY">TRY (₺)</option>
-                                                    <option value="USD">USD ($)</option>
-                                                    <option value="EUR">EUR (€)</option>
-                                                </select>
-                                                <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-=======
                                 )}
->>>>>>> upstream/server
 
                                 {activeTab === 'stock' && (
                                     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1 text-teal-600">Takip Birimi (Base Unit)</label>
-                                                <select value={formData.baseUnit} onChange={(e) => setFormData({ ...formData, baseUnit: e.target.value })} className="w-full px-4 py-3.5 bg-teal-50 dark:bg-teal-900/10 border border-teal-200 dark:border-teal-700 rounded-2xl text-teal-800 dark:text-teal-300 font-bold outline-none appearance-none">
-                                                    {unitOptions.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
-                                                </select>
+                                                <div className="-m-2 w-full">
+                                                    <SearchableSelect
+                                                        value={formData.baseUnit}
+                                                        onChange={(val) => setFormData({ ...formData, baseUnit: val.toString() })}
+                                                        options={unitOptions}
+                                                    />
+                                                </div>
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Alış Birimi (Purchase Unit)</label>
@@ -767,84 +600,6 @@ export function PageClient() {
                                                 <input type="number" step="0.0001" value={formData.conversionRate} onChange={(e) => setFormData({ ...formData, conversionRate: parseFloat(e.target.value) || 1 })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold" />
                                             </div>
                                         </div>
-<<<<<<< HEAD
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Dönüşüm Çarpanı</label>
-                                            <div className="relative">
-                                                <input type="number" step="0.0001" disabled={!formData.purchaseUnit} value={formData.conversionRate} onChange={(e) => setFormData({ ...formData, conversionRate: parseFloat(e.target.value) || 1 })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow disabled:opacity-50" />
-                                            </div>
-                                            {formData.purchaseUnit && (
-                                                <p className="text-[9px] text-indigo-500 mt-1.5 px-1 font-bold bg-indigo-50 dark:bg-indigo-900/20 py-1 rounded">1 {formData.purchaseUnit} = {formData.conversionRate} {formData.baseUnit}</p>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-6">
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Birim Maliyet (₺ / {formData.baseUnit || 'Birim'})</label>
-                                            <div className="relative">
-                                                <i className="fat fa-money-bill absolute left-4 top-4 text-teal-500/50"></i>
-                                                <input type="number" step="0.0001" required value={formData.costPerBaseUnit} onChange={(e) => setFormData({ ...formData, costPerBaseUnit: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0.0000" />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Son Alış Fiyatı</label>
-                                            <div className="relative">
-                                                <i className="fat fa-receipt absolute left-4 top-4 text-teal-500/50"></i>
-                                                <input type="number" step="0.0001" value={formData.lastPurchasePrice} onChange={(e) => setFormData({ ...formData, lastPurchasePrice: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0.0000" />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">KDV Oranı (%)</label>
-                                            <div className="relative">
-                                                <i className="fat fa-percent absolute left-4 top-4 text-teal-500/50"></i>
-                                                <input type="number" step="1" value={formData.purchaseVat} onChange={(e) => setFormData({ ...formData, purchaseVat: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0" />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Min. Stok Uyarı ({formData.baseUnit})</label>
-                                            <div className="relative">
-                                                <i className="fat fa-bell absolute left-4 top-4 text-amber-500/50"></i>
-                                                <input type="number" step="1" value={formData.minStock} onChange={(e) => setFormData({ ...formData, minStock: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-amber-500/10 outline-none transition-shadow" placeholder="0" />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Envanter & Ekstra */}
-                                <div>
-                                    <h4 className="text-xs font-black text-teal-600 dark:text-teal-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                        <i className="fat fa-sliders"></i> Envanter & Ek Ayarlar
-                                    </h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Kritik Stok</label>
-                                            <div className="relative">
-                                                <i className="fat fa-triangle-exclamation absolute left-4 top-4 text-amber-500/50"></i>
-                                                <input type="number" step="1" value={formData.criticalStock} onChange={(e) => setFormData({ ...formData, criticalStock: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0" />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Maks. Stok</label>
-                                            <div className="relative">
-                                                <i className="fat fa-arrow-up-to-line absolute left-4 top-4 text-teal-500/50"></i>
-                                                <input type="number" step="1" value={formData.maxStock} onChange={(e) => setFormData({ ...formData, maxStock: parseFloat(e.target.value) || 0 })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="0" />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Raf Bilgisi</label>
-                                            <div className="relative">
-                                                <i className="fat fa-shelves absolute left-4 top-4 text-teal-500/50"></i>
-                                                <input type="text" value={formData.shelf || ''} onChange={(e) => setFormData({ ...formData, shelf: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow" placeholder="Raf A-01..." />
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Varsayılan Depo</label>
-                                            <div className="relative">
-                                                <select value={formData.warehouseId || ''} onChange={(e) => setFormData({ ...formData, warehouseId: e.target.value ? parseInt(e.target.value) : null })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                    <option value="">Depo Seçilmedi (Genel)</option>
-=======
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div>
@@ -860,65 +615,17 @@ export function PageClient() {
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Varsayılan Depo</label>
-                                                <select value={formData.warehouseId || ''} onChange={(e) => setFormData({ ...formData, warehouseId: e.target.value ? parseInt(e.target.value) : null })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold appearance-none">
-                                                    <option value="">Depo Seçilmedi</option>
->>>>>>> upstream/server
-                                                    {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                                                </select>
+                                                <div className="-m-2 w-full">
+                                                    <SearchableSelect
+                                                        value={formData.warehouseId || ''}
+                                                        onChange={(val) => setFormData({ ...formData, warehouseId: val ? parseInt(val.toString()) : null })}
+                                                        options={[
+                                                            { value: '', label: 'Depo Seçilmedi' },
+                                                            ...warehouses.map(w => ({ value: w.id, label: w.name }))
+                                                        ]}
+                                                    />
+                                                </div>
                                             </div>
-<<<<<<< HEAD
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Çıktı Profili (Yazıcı)</label>
-                                            <div className="relative">
-                                                <i className="fat fa-route absolute left-4 top-4 text-teal-500/50"></i>
-                                                <select value={formData.outputProfileId || ''} onChange={(e) => setFormData({ ...formData, outputProfileId: e.target.value ? parseInt(e.target.value) : null })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                                    <option value="">Varsayılanı Kullan</option>
-                                                    {outputProfiles.map(op => <option key={op.id} value={op.id}>{op.name}</option>)}
-                                                </select>
-                                                <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Durum & İleri Takip */}
-                                    <div className="mt-6">
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">DURUM & İLERİ ENVANTER TAKİP</label>
-                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                            {[
-                                                { key: 'isActive', label: 'Aktif Kart', icon: 'fa-check', color: 'emerald' },
-                                                { key: 'stockTrackingEnabled', label: 'Stok Takibi', icon: 'fa-chart-line', color: 'teal' },
-                                                { key: 'lotTracking', label: 'Lot Takibi', icon: 'fa-layer-group', color: 'blue' },
-                                                { key: 'batchTracking', label: 'Parti Takibi', icon: 'fa-boxes-stacked', color: 'indigo' },
-                                                { key: 'expiryTracking', label: 'SKT Takibi', icon: 'fa-calendar-clock', color: 'amber' },
-                                                { key: 'serialTracking', label: 'Seri No Takibi', icon: 'fa-fingerprint', color: 'purple' },
-                                            ].map(toggle => {
-                                                const val = (formData as any)[toggle.key];
-                                                return (
-                                                    <div key={toggle.key}
-                                                        onClick={() => setFormData({ ...formData, [toggle.key]: !val })}
-                                                        className={`cursor-pointer flex items-center p-3 rounded-xl border-2 transition-all duration-300 ${val ? `bg-${toggle.color}-50 border-${toggle.color}-500 dark:bg-${toggle.color}-500/10` : 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800'}`}
-                                                    >
-                                                        <div className={`w-7 h-7 shrink-0 rounded-lg flex items-center justify-center transition-colors ${val ? `bg-white text-${toggle.color}-600` : 'bg-slate-200 dark:bg-slate-800 text-slate-400'}`}>
-                                                            <i className={`fat ${toggle.icon} text-xs`}></i>
-                                                        </div>
-                                                        <span className={`ml-3 text-xs font-black tracking-tight ${val ? `text-${toggle.color}-900 dark:text-${toggle.color}-400` : 'text-slate-500'}`}>{toggle.label}</span>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-
-                                    <div className="mt-6">
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Kısa Not</label>
-                                        <textarea
-                                            value={formData.note || ''}
-                                            onChange={(e) => setFormData({ ...formData, note: e.target.value })}
-                                            rows={2}
-                                            className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow resize-none"
-                                            placeholder="Gerekirse not ekleyin..."
-                                        ></textarea>
-=======
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">SKU / Referans No</label>
                                                 <input type="text" value={formData.sku || ''} onChange={(e) => setFormData({ ...formData, sku: e.target.value })} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold" />
@@ -951,10 +658,16 @@ export function PageClient() {
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1 text-blue-600">Yazıcı Profili</label>
-                                                <select value={formData.outputProfileId || ''} onChange={(e) => setFormData({ ...formData, outputProfileId: e.target.value ? parseInt(e.target.value) : null })} className="w-full px-4 py-3.5 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-700 rounded-2xl text-blue-800 dark:text-blue-300 font-bold appearance-none">
-                                                    <option value="">Profil Seçilmedi (Varsayılan)</option>
-                                                    {outputProfiles.map(op => <option key={op.id} value={op.id}>{op.name}</option>)}
-                                                </select>
+                                                <div className="-m-2 w-full">
+                                                    <SearchableSelect
+                                                        value={formData.outputProfileId || ''}
+                                                        onChange={(val) => setFormData({ ...formData, outputProfileId: val ? parseInt(val.toString()) : null })}
+                                                        options={[
+                                                            { value: '', label: 'Profil Seçilmedi (Varsayılan)' },
+                                                            ...outputProfiles.map(op => ({ value: op.id, label: op.name }))
+                                                        ]}
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
 
@@ -962,7 +675,6 @@ export function PageClient() {
                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Kısa Not / Açıklama</label>
                                             <textarea value={formData.note || ''} onChange={(e) => setFormData({ ...formData, note: e.target.value })} rows={3} className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold resize-none"></textarea>
                                         </div>
->>>>>>> upstream/server
                                     </div>
                                 )}
                             </form>

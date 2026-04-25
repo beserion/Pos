@@ -5,6 +5,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { showSwal } from '../../utils/swal';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { useParameters, invalidateParameterCache } from '../../utils/useParameters';
+import SearchableSelect from '@/components/SearchableSelect';
 
 // ─── Parametre tipleri ────────────────────────────────────────────
 type ParamType = 'text' | 'number' | 'boolean' | 'select' | 'color' | 'date';
@@ -355,9 +356,16 @@ export function PageClient() {
                 );
             case 'select':
                 return (
-                    <select value={param.value} onChange={e => updateParam(mod.id, param.key, e.target.value)} className={`${baseClass} w-52`}>
-                        {param.options?.map(opt => <option key={opt} value={opt}>{param.optionLabels?.[opt] || opt}</option>)}
-                    </select>
+                    <div className="w-52">
+                        <SearchableSelect
+                            value={String(param.value)}
+                            onChange={(val) => updateParam(mod.id, param.key, val)}
+                            options={param.options?.map(opt => ({
+                                value: opt,
+                                label: param.optionLabels?.[opt] || opt
+                            })) || []}
+                        />
+                    </div>
                 );
             default:
                 return null;

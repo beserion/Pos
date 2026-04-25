@@ -77,8 +77,9 @@ export class SalesController {
   }
 
   @Post()
-  create(@Body() saleData: Partial<Sale>) {
-    return this.salesService.create(saleData);
+  create(@Body() saleData: Partial<Sale>, @Request() req: any) {
+    const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
+    return this.salesService.create(saleData, userId);
   }
 
   @Put('items/pay-batch')
@@ -173,8 +174,9 @@ export class SalesController {
   }
 
   @Post(':id/items')
-  appendItems(@Param('id') id: string, @Body('items') items: any[]) {
-    return this.salesService.appendItems(+id, items);
+  appendItems(@Param('id') id: string, @Body('items') items: any[], @Request() req: any) {
+    const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
+    return this.salesService.appendItems(+id, items, userId);
   }
 
   // --- Transfer Endpointleri ---

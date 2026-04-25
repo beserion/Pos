@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface InventorySession {
     id: number;
@@ -53,17 +54,37 @@ export function PageClient() {
 
     const fetchData = async () => {
         if (!user?.token) return;
-        try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
-            const [sessionsRes, whRes] = await Promise.all([
-                axios.get(`${API_URL}/inventory-sessions?limit=100`, { headers: { Authorization: `Bearer ${user.token}` } }),
-                axios.get(`${API_URL}/warehouses`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: [] }))
-            ]);
+        
+        // Dynamic API URL based on current browser address to prevent CORS issues
+        const API_URL = (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3050` : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
 
-            setSessions(sessionsRes.data.data || []);
+        try {
+            // Fetch warehouses first as it's typically more public
+            const whRes = await axios.get(`${API_URL}/warehouses`, { 
+                headers: { Authorization: `Bearer ${user.token}` } 
+            }).catch(err => {
+                console.error('Warehouses fetch error:', err);
+                return { data: [] };
+            });
             setWarehouses(whRes.data || []);
+
+            // Then fetch sessions which might be restricted by license (FeatureGuard)
+            const sessionsRes = await axios.get(`${API_URL}/inventory-sessions?limit=100`, { 
+                headers: { Authorization: `Bearer ${user.token}` } 
+            }).catch(err => {
+                if (err.response?.status === 403) {
+                    showSwal({ 
+                        title: 'Yetki Hatası', 
+                        text: 'Sayım modülüne erişim yetkiniz veya lisansınız bulunmuyor.', 
+                        icon: 'warning' 
+                    });
+                }
+                return { data: { data: [] } };
+            });
+            setSessions(sessionsRes.data.data || []);
+
         } catch (error) {
-            console.error('Error fetching inventory sessions', error);
+            console.error('Error fetching inventory data', error);
             showSwal({ title: tc('error'), text: tc('loadingError'), icon: 'error' });
         } finally {
             setLoading(false);
@@ -75,12 +96,12 @@ export function PageClient() {
         if (!user?.token) return;
 
         if (formData.warehouseId === -1) {
-            showSwal({ title: 'Hata', text: 'Lütfen bir depo seçin (ya da "Tüm Depolar" seçeneğini belirleyin).', icon: 'warning' });
+            showSwal({ title: 'Hata', text: 'Lütfen sayım yapılacak depoyu seçin.', icon: 'warning' });
             return;
         }
 
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+            const API_URL = (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3050` : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
             const payload = {
                 ...formData,
                 warehouseId: Number(formData.warehouseId)
@@ -137,7 +158,7 @@ export function PageClient() {
         if (result.isConfirmed) {
             try {
                 setLoading(true);
-                const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
+                const API_URL = (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3050` : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
                 await axios.post(`${API_URL}/inventory-sessions/${sessionId}/reopen`, {}, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
@@ -352,18 +373,16 @@ export function PageClient() {
                                     <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Sayılacak Depo / Konum</label>
                                         <div className="relative">
-                                            <i className="fat fa-building absolute left-4 top-4 text-indigo-500/50 pointer-events-none"></i>
-                                            <select
-                                                value={formData.warehouseId}
-                                                onChange={(e) => setFormData(prev => ({ ...prev, warehouseId: Number(e.target.value) }))}
-                                                className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow appearance-none cursor-pointer"
-                                            >
-                                                <option value={-1} disabled>Lütfen Sayılacak Depoyu Seçin</option>
-                                                {warehouses.map(w => (
-                                                    <option key={w.id} value={w.id}>{w.name}</option>
-                                                ))}
-                                            </select>
-                                            <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
+                                            <div className="-m-2 w-[calc(100%+16px)]">
+                                                <SearchableSelect
+                                                    value={formData.warehouseId.toString()}
+                                                    onChange={(val) => setFormData(prev => ({ ...prev, warehouseId: Number(val) }))}
+                                                    options={[
+                                                        { value: '-1', label: 'Lütfen Sayılacak Depoyu Seçin' },
+                                                        ...warehouses.map(w => ({ value: w.id.toString(), label: w.name }))
+                                                    ]}
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

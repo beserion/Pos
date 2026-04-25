@@ -4,6 +4,7 @@ import axios from 'axios';
 import Cookies from 'js-cookie';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useAuth } from '@/app/[locale]/AuthContext';
+import SearchableSelect from '@/components/SearchableSelect';
 import { useTranslations, useLocale } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { io } from 'socket.io-client';
@@ -299,66 +300,54 @@ export function PageClient() {
                     </div>
                 </div>
 
-                <style jsx>{`
-                    select {
-                        -webkit-appearance: none;
-                        -moz-appearance: none;
-                        appearance: none;
-                        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23334155' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-                        background-repeat: no-repeat;
-                        background-position: right 1rem center;
-                        background-size: 1em;
-                    }
-                    /* Dark mode icon ayarı için varsayılan dropdown ok rengi */
-                    .dark select {
-                        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23CBD5E1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-                    }
-                `}</style>
+
 
                 {/* Filters */}
                 <div className="mb-6 flex flex-wrap gap-4 items-center bg-white/40 dark:bg-slate-800/40 p-3 rounded-[32px] border border-white dark:border-slate-700/50 backdrop-blur-md w-full justify-between">
                     <div className="flex items-center gap-2">
                         <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">{tc('status')}:</label>
-                        <select
-                            value={filterStatus}
-                            onChange={(e) => setFilterStatus(e.target.value)}
-                            className="bg-white dark:bg-slate-800 border-none rounded-xl shadow-sm text-sm font-bold pl-4 pr-12 py-2.5 outline-none cursor-pointer text-slate-700 dark:text-slate-300 w-[250px]"
-                        >
-                            <option value="ALL">{tc('all')}</option>
-                            <option value="NEW">{t('statusNew') || 'Yeni'}</option>
-                            <option value="PREPARATION">{t('statusPreparing') || 'Hazırlanıyor'}</option>
-                            <option value="READY">{t('statusReady') || 'Hazır'}</option>
-                            <option value="SERVED">{t('statusServed') || 'Servis Edildi'}</option>
-                            <option value="CANCELLED">{t('statusCancelled') || 'İptal'}</option>
-                        </select>
+                        <div className="w-[180px]">
+                            <SearchableSelect
+                                value={filterStatus}
+                                onChange={(val) => setFilterStatus(val.toString())}
+                                options={[
+                                    { value: 'ALL', label: tc('all') },
+                                    { value: 'NEW', label: t('statusNew') || 'Yeni' },
+                                    { value: 'PREPARATION', label: t('statusPreparing') || 'Hazırlanıyor' },
+                                    { value: 'READY', label: t('statusReady') || 'Hazır' },
+                                    { value: 'SERVED', label: t('statusServed') || 'Servis Edildi' },
+                                    { value: 'CANCELLED', label: t('statusCancelled') || 'İptal' }
+                                ]}
+                            />
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-2">
                         <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">{t('table')}:</label>
-                        <select
-                            value={filterTable}
-                            onChange={(e) => setFilterTable(e.target.value)}
-                            className="bg-white dark:bg-slate-800 border-none rounded-xl shadow-sm text-sm font-bold pl-4 pr-12 py-2.5 outline-none cursor-pointer text-slate-700 dark:text-slate-300 w-[250px]"
-                        >
-                            <option value="ALL">{tc('all')}</option>
-                            {allTables.map((t) => (
-                                <option key={t.id} value={t.id}>{t.name}</option>
-                            ))}
-                        </select>
+                        <div className="w-[180px]">
+                            <SearchableSelect
+                                value={filterTable}
+                                onChange={(val) => setFilterTable(val.toString())}
+                                options={[
+                                    { value: 'ALL', label: tc('all') },
+                                    ...allTables.map((tab) => ({ value: tab.id.toString(), label: tab.name }))
+                                ]}
+                            />
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-2">
                         <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">Personel:</label>
-                        <select
-                            value={filterWaiter}
-                            onChange={(e) => setFilterWaiter(e.target.value)}
-                            className="bg-white dark:bg-slate-800 border-none rounded-xl shadow-sm text-sm font-bold px-4 pr-12 py-2.5 outline-none cursor-pointer text-slate-700 dark:text-slate-300 min-w-[150px]"
-                        >
-                            <option value="ALL">{tc('all')}</option>
-                            {allWaiters.map((w) => (
-                                <option key={w.id} value={w.id}>{w.firstName} {w.lastName}</option>
-                            ))}
-                        </select>
+                        <div className="w-[180px]">
+                            <SearchableSelect
+                                value={filterWaiter}
+                                onChange={(val) => setFilterWaiter(val.toString())}
+                                options={[
+                                    { value: 'ALL', label: tc('all') },
+                                    ...allWaiters.map((w) => ({ value: w.id.toString(), label: `${w.firstName} ${w.lastName}` }))
+                                ]}
+                            />
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-2">

@@ -5,6 +5,7 @@ import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
 import { useRouter } from 'next/navigation';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface ProductTransaction {
     id: number;
@@ -109,16 +110,18 @@ export function PageClient() {
                                 className="w-64 pl-12 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold text-sm focus:ring-4 focus:ring-teal-500/10 outline-none transition-shadow"
                             />
                         </div>
-                        <select 
-                            value={typeFilter}
-                            onChange={(e) => setTypeFilter(e.target.value)}
-                            className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold text-sm outline-none cursor-pointer"
-                        >
-                            <option value="all">Tüm Tipler</option>
-                            <option value="sale">Satış</option>
-                            <option value="void">İptal</option>
-                            <option value="return">İade</option>
-                        </select>
+                        <div className="w-40">
+                            <SearchableSelect
+                                value={typeFilter}
+                                onChange={(val) => setTypeFilter(val)}
+                                options={[
+                                    { value: 'all', label: 'Tüm Tipler' },
+                                    { value: 'sale', label: 'Satış' },
+                                    { value: 'void', label: 'İptal' },
+                                    { value: 'return', label: 'İade' }
+                                ]}
+                            />
+                        </div>
                         <button onClick={() => router.push(`/${locale}/admin/products`)} className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center gap-2">
                             <i className="fat fa-reply"></i> {tc('back')}
                         </button>

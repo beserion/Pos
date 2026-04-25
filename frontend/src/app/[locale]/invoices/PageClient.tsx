@@ -6,6 +6,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
+import SearchableSelect from '@/components/SearchableSelect';
 
 const API = (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3050' : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3050'));
 
@@ -147,8 +148,12 @@ export function PageClient() {
             setInvoices(res.data.data);
             setTotalItems(res.data.total);
             setStats(res.data.stats);
-        } catch {
-            showSwal({ title: 'Hata', text: 'Faturalar yüklenemedi.', icon: 'error' });
+        } catch (err: any) {
+            showSwal({ 
+                title: 'Hata', 
+                text: err.response?.data?.message || 'Faturalar yüklenemedi.', 
+                icon: 'error' 
+            });
         } finally {
             setLoading(false);
         }
@@ -199,8 +204,12 @@ export function PageClient() {
             });
             setFormItems([]);
             setView('form');
-        } catch {
-            showSwal({ title: 'Hata', text: 'Fatura numarası alınamadı.', icon: 'error' });
+        } catch (err: any) {
+            showSwal({ 
+                title: 'Hata', 
+                text: err.response?.data?.message || 'Fatura numarası alınamadı.', 
+                icon: 'error' 
+            });
         }
     };
 
@@ -444,11 +453,14 @@ export function PageClient() {
                         </div>
                         <div>
                             <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Fatura Tipi *</label>
-                            <select value={formData.invoiceType} onChange={e => setFormData({ ...formData, invoiceType: e.target.value })}
-                                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-xs focus:ring-4 focus:ring-indigo-500/10 outline-none">
-                                <option value="PURCHASE" className="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200">Alış Faturası</option>
-                                <option value="SALE" className="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200">Satış Faturası</option>
-                            </select>
+                            <SearchableSelect 
+                                value={formData.invoiceType} 
+                                onChange={val => setFormData({ ...formData, invoiceType: val })}
+                                options={[
+                                    { value: 'PURCHASE', label: 'Alış Faturası' },
+                                    { value: 'SALE', label: 'Satış Faturası' }
+                                ]}
+                            />
                         </div>
                         <div>
                             <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Fatura Tarihi *</label>
@@ -466,20 +478,26 @@ export function PageClient() {
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
                         <div>
                             <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Tedarikçi / Cari</label>
-                            <select value={formData.partnerId} onChange={e => setFormData({ ...formData, partnerId: Number(e.target.value) })}
-                                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-xs focus:ring-4 focus:ring-indigo-500/10 outline-none">
-                                <option value={0} className="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200">Seçiniz...</option>
-                                {partners.map(p => <option key={p.id} value={p.id} className="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200">{p.name} {p.taxNumber ? `(${p.taxNumber})` : ''}</option>)}
-                            </select>
+                            <SearchableSelect 
+                                value={formData.partnerId} 
+                                onChange={val => setFormData({ ...formData, partnerId: Number(val) || 0 })}
+                                options={[
+                                    { value: 0, label: 'Seçiniz...' },
+                                    ...partners.map(p => ({ value: p.id, label: `${p.name} ${p.taxNumber ? `(${p.taxNumber})` : ''}`.trim() }))
+                                ]}
+                            />
                         </div>
                         <div>
                             <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Ödeme Yöntemi</label>
-                            <select value={formData.paymentMethod} onChange={e => setFormData({ ...formData, paymentMethod: e.target.value })}
-                                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-bold text-xs focus:ring-4 focus:ring-indigo-500/10 outline-none">
-                                <option value="CASH" className="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200">Nakit</option>
-                                <option value="BANK" className="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200">Havale/EFT</option>
-                                <option value="CARD" className="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200">Kredi Kartı</option>
-                            </select>
+                            <SearchableSelect 
+                                value={formData.paymentMethod} 
+                                onChange={val => setFormData({ ...formData, paymentMethod: val })}
+                                options={[
+                                    { value: 'CASH', label: 'Nakit' },
+                                    { value: 'BANK', label: 'Havale/EFT' },
+                                    { value: 'CARD', label: 'Kredi Kartı' }
+                                ]}
+                            />
                         </div>
                         <div>
                             <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Depo / Lokasyon</label>
@@ -528,31 +546,42 @@ export function PageClient() {
                                     <tr key={idx} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                                         <td className="px-4 py-2 text-slate-400 font-bold">{idx + 1}</td>
                                         <td className="px-4 py-2">
-                                            <select value={item.stockCardId} onChange={e => updateItem(idx, 'stockCardId', Number(e.target.value))}
-                                                className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500/20">
-                                                <option value={0} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">Stok kartı seçin...</option>
-                                                {stockCards.map(c => <option key={c.id} value={c.id} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">{c.name} ({c.code || c.sku})</option>)}
-                                            </select>
+                                            <div className="-m-2">
+                                                <SearchableSelect 
+                                                    value={item.stockCardId} 
+                                                    onChange={val => updateItem(idx, 'stockCardId', Number(val) || 0)}
+                                                    options={[
+                                                        { value: 0, label: 'Stok kartı seçin...' },
+                                                        ...stockCards.map(c => ({ value: c.id, label: `${c.name} (${c.code || c.sku})` }))
+                                                    ]}
+                                                />
+                                            </div>
                                         </td>
                                         <td className="px-4 py-2">
                                             <input type="number" value={item.quantity} min={0.01} step={0.01} onChange={e => updateItem(idx, 'quantity', Number(e.target.value))}
                                                 className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-center text-slate-800 dark:text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500/20" />
                                         </td>
                                         <td className="px-4 py-2">
-                                            <select value={item.unit} onChange={e => updateItem(idx, 'unit', e.target.value)}
-                                                className="w-full px-2 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-center text-slate-800 dark:text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500/20">
-                                                {['adet', 'kg', 'gr', 'lt', 'ml', 'porsiyon'].map(u => <option key={u} value={u} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">{u}</option>)}
-                                            </select>
+                                            <div className="-m-2">
+                                                <SearchableSelect 
+                                                    value={item.unit} 
+                                                    onChange={val => updateItem(idx, 'unit', val)}
+                                                    options={['adet', 'kg', 'gr', 'lt', 'ml', 'porsiyon'].map(u => ({ value: u, label: u }))}
+                                                />
+                                            </div>
                                         </td>
                                         <td className="px-4 py-2">
                                             <input type="number" value={item.unitPrice} min={0} step={0.01} onChange={e => updateItem(idx, 'unitPrice', Number(e.target.value))}
                                                 className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-center text-slate-800 dark:text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500/20" />
                                         </td>
                                         <td className="px-4 py-2">
-                                            <select value={item.vatRate} onChange={e => updateItem(idx, 'vatRate', Number(e.target.value))}
-                                                className="w-full px-2 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-center text-slate-800 dark:text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500/20">
-                                                {VAT_RATES.map(r => <option key={r} value={r} className="bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200">%{r}</option>)}
-                                            </select>
+                                            <div className="-m-2">
+                                                <SearchableSelect 
+                                                    value={item.vatRate} 
+                                                    onChange={val => updateItem(idx, 'vatRate', Number(val) || 0)}
+                                                    options={VAT_RATES.map(r => ({ value: r, label: `%${r}` }))}
+                                                />
+                                            </div>
                                         </td>
                                         <td className="px-4 py-2 text-right font-bold text-slate-700 dark:text-slate-200">₺{fmt(calcLineTotal(item))}</td>
                                         <td className="px-4 py-2 text-right font-black text-slate-800 dark:text-white">₺{fmt(calcLineTotalWithVat(item))}</td>
@@ -695,25 +724,35 @@ export function PageClient() {
                         {/* Type Select Group */}
                         <div className="flex items-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-2.5 shadow-sm">
                             <i className="fat fa-tags text-indigo-500 text-lg"></i>
-                            <select value={filterType} onChange={e => setFilterType(e.target.value)}
-                                className="bg-transparent border-none text-sm font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer min-w-[120px]">
-                                <option value="ALL" className="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold py-1">Tüm Tipler</option>
-                                <option value="PURCHASE" className="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold py-1">Alış Faturası</option>
-                                <option value="SALE" className="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold py-1">Satış Faturası</option>
-                            </select>
+                            <div className="w-48">
+                                <SearchableSelect 
+                                    value={filterType} 
+                                    onChange={val => setFilterType(val)}
+                                    options={[
+                                        { value: 'ALL', label: 'Tüm Tipler' },
+                                        { value: 'PURCHASE', label: 'Alış Faturası' },
+                                        { value: 'SALE', label: 'Satış Faturası' }
+                                    ]}
+                                />
+                            </div>
                         </div>
 
                         {/* Status Select Group */}
                         <div className="flex items-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-2.5 shadow-sm">
                             <i className="fat fa-circle-check text-indigo-500 text-lg"></i>
-                            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-                                className="bg-transparent border-none text-sm font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer min-w-[130px]">
-                                <option value="ALL" className="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold py-1">Tüm Durumlar</option>
-                                <option value="DRAFT" className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold py-1">Taslak</option>
-                                <option value="ISSUED" className="bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold py-1">Kesildi</option>
-                                <option value="PAID" className="bg-emerald-50 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 font-bold py-1">Ödendi</option>
-                                <option value="CANCELLED" className="bg-rose-50 dark:bg-slate-800 text-rose-600 dark:text-rose-400 font-bold py-1">İptal</option>
-                            </select>
+                            <div className="w-48">
+                                <SearchableSelect 
+                                    value={filterStatus} 
+                                    onChange={val => setFilterStatus(val)}
+                                    options={[
+                                        { value: 'ALL', label: 'Tüm Durumlar' },
+                                        { value: 'DRAFT', label: 'Taslak' },
+                                        { value: 'ISSUED', label: 'Kesildi' },
+                                        { value: 'PAID', label: 'Ödendi' },
+                                        { value: 'CANCELLED', label: 'İptal' }
+                                    ]}
+                                />
+                            </div>
                         </div>
                     </div>
 

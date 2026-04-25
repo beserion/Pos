@@ -159,6 +159,16 @@ export class SalesService implements OnModuleInit {
         await queryRunner.addColumn('sale_items', { name: 'saleTypeMultiplier', type: 'decimal', precision: 5, scale: 2, isNullable: false, default: 1.00 } as any);
       }
 
+      // --- Kim Ekledi / Ne Zaman (SaleItem) ---
+      if (itemsTable && !itemsTable.columns.find(c => c.name === 'addedByUserId')) {
+        this.logger.log('Adding addedByUserId column to sale_items table...');
+        await queryRunner.addColumn('sale_items', { name: 'addedByUserId', type: 'int', isNullable: true, default: null } as any);
+      }
+      if (itemsTable && !itemsTable.columns.find(c => c.name === 'addedAt')) {
+        this.logger.log('Adding addedAt column to sale_items table...');
+        await queryRunner.addColumn('sale_items', { name: 'addedAt', type: 'datetime2', isNullable: true, default: null } as any);
+      }
+
       // transfer_logs tablosu synchronize: true tarafından otomatik oluşturulur
 
       await queryRunner.release();
@@ -300,7 +310,7 @@ export class SalesService implements OnModuleInit {
     return updated;
   }
 
-  async create(saleData: Partial<Sale>): Promise<Sale> {
+  async create(saleData: Partial<Sale>, addedByUserId: number = 0): Promise<Sale> {
     return await this.saleRepository.manager.transaction(async (manager) => {
       try {
         const { items, ...dataRaw } = saleData;
@@ -347,7 +357,9 @@ export class SalesService implements OnModuleInit {
               isWaiting: item.isWaiting || false,
               isMarshed: false,
               sale: savedSale,
-              isPaid: savedSale.status === 'COMPLETED'
+              isPaid: savedSale.status === 'COMPLETED',
+              addedByUserId: addedByUserId || (data as any).waiterId || (data as any).userId || undefined,
+              addedAt: new Date(),
             });
             const savedParent = await manager.save(SaleItem, parentItem);
             saleItems.push(savedParent);
@@ -1224,7 +1236,7 @@ export class SalesService implements OnModuleInit {
   /**
    * Varolan bir adisyona (veya alt-adisyona) yeni ürünler ekler
    */
-  async appendItems(saleId: number, items: any[]): Promise<Sale> {
+  async appendItems(saleId: number, items: any[], addedByUserId: number = 0): Promise<Sale> {
     return await this.saleRepository.manager.transaction(async (manager) => {
       const sale = await manager.findOne(Sale, {
         where: { id: saleId },
@@ -1256,7 +1268,9 @@ export class SalesService implements OnModuleInit {
           isWaiting: item.isWaiting || false,
           isMarshed: false,
           sale: sale,
-          isPaid: sale.status === 'COMPLETED'
+          isPaid: sale.status === 'COMPLETED',
+          addedByUserId: addedByUserId || undefined,
+          addedAt: new Date(),
         });
         const savedParent = await manager.save(SaleItem, parentItem);
         newSaleItems.push(savedParent);
@@ -1530,6 +1544,34 @@ export class SalesService implements OnModuleInit {
       if (s.subChecks) allSales.push(...s.subChecks);
     });
     await this.mapProductsToSales(allSales);
+
+    // Item'lara kimin eklediği (addedByName) ve ne zaman (addedAt) bilgisini inject et
+    const allItemIds = allSales.flatMap(s => s.items?.map(i => i.id) || []);
+    if (allItemIds.length > 0) {
+      try {
+        const userMap: any[] = await this.saleRepository.manager.query(`
+          SELECT si.id as itemId, u.firstName, u.lastName, si.addedAt
+          FROM sale_items si
+          LEFT JOIN users u ON u.id = si.addedByUserId
+          WHERE si.id IN (${allItemIds.join(',')})
+        `);
+        allSales.forEach(s => {
+          s.items?.forEach((item: any) => {
+            const u = userMap.find(x => Number(x.itemId) === Number(item.id));
+            if (u && u.firstName) {
+              (item as any).addedByName = u.firstName || null;
+              (item as any).addedAt = u.addedAt || s.createdAt || null;
+            } else {
+              // Fallback for old records without item-level tracking
+              (item as any).addedByName = s.waiter?.firstName || null;
+              (item as any).addedAt = s.createdAt || null;
+            }
+          });
+        });
+      } catch (e) {
+        this.logger.warn('addedByName inject failed (non-critical): ' + e?.message);
+      }
+    }
 
     return rootSales;
   }

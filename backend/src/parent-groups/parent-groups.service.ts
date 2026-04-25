@@ -11,7 +11,7 @@ export class ParentGroupsService {
   ) {}
 
   async findAll(): Promise<ParentGroup[]> {
-    return this.repository.find({ order: { name: 'ASC' } });
+    return this.repository.find({ order: { orderIndex: 'ASC', name: 'ASC' } });
   }
 
   async findOne(id: number): Promise<ParentGroup> {
@@ -36,5 +36,12 @@ export class ParentGroupsService {
   async remove(id: number): Promise<void> {
     const group = await this.findOne(id);
     await this.repository.delete(id);
+  }
+
+  async reorder(items: { id: number, orderIndex: number }[]): Promise<void> {
+    if (!items || items.length === 0) return;
+    for (const item of items) {
+      await this.repository.update(item.id, { orderIndex: item.orderIndex });
+    }
   }
 }

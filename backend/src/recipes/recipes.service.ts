@@ -242,9 +242,11 @@ export class RecipesService {
     const costData = await this.calculateCost(productId);
 
     const salePrice = Number(product.price);
+    const vatRate = Number(product.vatRate || 0);
+    const netSalePrice = salePrice / (1 + (vatRate / 100));
     const foodCost = costData.totalCost;
-    const profit = salePrice - foodCost;
-    const costRatio = salePrice > 0 ? (foodCost / salePrice) * 100 : 0;
+    const profit = netSalePrice - foodCost;
+    const costRatio = netSalePrice > 0 ? (foodCost / netSalePrice) * 100 : 0;
 
     return {
       productName: product.name,

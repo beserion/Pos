@@ -6,6 +6,7 @@ import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
+import SearchableSelect from '@/components/SearchableSelect';
 import dynamic from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
 
@@ -261,17 +262,15 @@ export function PageClient() {
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{t('assignCourier') || 'Kurye Ata'}</label>
-                                    <div className="relative">
-                                        <i className="fat fa-user-helmet-safety absolute left-4 top-4 text-indigo-500/50"></i>
-                                        <select value={formData.courierId} onChange={(e) => setFormData({ ...formData, courierId: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none transition-shadow appearance-none cursor-pointer">
-                                            <option value="">{t('waitingAssignment') || 'Atama Bekliyor'}</option>
-                                            {couriers.map(c => (
-                                                <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
-                                            ))}
-                                        </select>
-                                        <i className="fat fa-chevron-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                    </div>
+                                    <SearchableSelect
+                                        value={formData.courierId}
+                                        onChange={(val) => setFormData({ ...formData, courierId: val })}
+                                        options={[
+                                            { value: '', label: t('waitingAssignment') || 'Atama Bekliyor' },
+                                            ...couriers.map(c => ({ value: c.id.toString(), label: `${c.firstName} ${c.lastName}` }))
+                                        ]}
+                                        icon="fat fa-user-helmet-safety"
+                                    />
                                 </div>
                             </div>
 

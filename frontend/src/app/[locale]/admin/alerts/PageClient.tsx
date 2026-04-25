@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
+import SearchableSelect from '@/components/SearchableSelect';
 import { showSwal } from '../../utils/swal';
 
 interface AlertRule {
@@ -285,17 +286,15 @@ export function AlertRulesPageClient() {
                         <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
                             {/* Olay */}
                             <div>
-                                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Olay Tipi *</label>
-                                <select id="alert-form-event" value={form.eventKey} onChange={e => setForm(p => ({ ...p, eventKey: e.target.value }))}
-                                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/30">
-                                    {Array.from(new Set(EVENT_OPTIONS.map(e => e.category))).map(category => (
-                                        <optgroup key={category} label={`── ${category}`}>
-                                            {EVENT_OPTIONS.filter(e => e.category === category).map(e => (
-                                                <option key={e.key} value={e.key}>{e.label}</option>
-                                            ))}
-                                        </optgroup>
-                                    ))}
-                                </select>
+                                <SearchableSelect
+                                    value={form.eventKey}
+                                    onChange={val => setForm(p => ({ ...p, eventKey: val }))}
+                                    options={EVENT_OPTIONS.map(e => ({
+                                        value: e.key,
+                                        label: e.label,
+                                        category: e.category
+                                    }))}
+                                />
                             </div>
 
                             {/* Eşik (opsiyonel) */}
@@ -311,47 +310,59 @@ export function AlertRulesPageClient() {
                             {/* Seviye + Görüntüleme */}
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Seviye *</label>
-                                    <select id="alert-form-severity" value={form.severity} onChange={e => setForm(p => ({ ...p, severity: e.target.value as any }))}
-                                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/30">
-                                        <option value="CRITICAL">🔴 Kritik</option>
-                                        <option value="WARNING">🟡 Uyarı</option>
-                                        <option value="INFO">🔵 Bilgi</option>
-                                    </select>
+                                    <SearchableSelect
+                                        value={form.severity}
+                                        onChange={val => setForm(p => ({ ...p, severity: val as any }))}
+                                        options={[
+                                            { value: 'CRITICAL', label: '🔴 Kritik' },
+                                            { value: 'WARNING', label: '🟡 Uyarı' },
+                                            { value: 'INFO', label: '🔵 Bilgi' }
+                                        ]}
+                                    />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Görüntüleme *</label>
-                                    <select id="alert-form-displaymode" value={form.displayMode} onChange={e => setForm(p => ({ ...p, displayMode: e.target.value as any }))}
-                                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/30">
-                                        <option value="POPUP">Popup</option>
-                                        <option value="LIST">Liste</option>
-                                        <option value="SILENT">Sessiz</option>
-                                    </select>
+                                    <SearchableSelect
+                                        value={form.displayMode}
+                                        onChange={val => setForm(p => ({ ...p, displayMode: val as any }))}
+                                        options={[
+                                            { value: 'POPUP', label: 'Popup' },
+                                            { value: 'LIST', label: 'Liste' },
+                                            { value: 'SILENT', label: 'Sessiz' }
+                                        ]}
+                                    />
                                 </div>
                             </div>
 
                             {/* Hedef */}
                             <div>
-                                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Bildirim Hedefi *</label>
-                                <select id="alert-form-targettype" value={form.targetType} onChange={e => setForm(p => ({ ...p, targetType: e.target.value as any, targetId: '' }))}
-                                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/30 mb-2">
-                                    <option value="ALL">Herkes (Tüm yetkili kullanıcılar)</option>
-                                    <option value="ROLE">Role Göre</option>
-                                    <option value="USER">Belirli Kullanıcı</option>
-                                </select>
+                                <SearchableSelect
+                                    value={form.targetType}
+                                    onChange={val => setForm(p => ({ ...p, targetType: val as any, targetId: '' }))}
+                                    options={[
+                                        { value: 'ALL', label: 'Herkes (Tüm yetkili kullanıcılar)' },
+                                        { value: 'ROLE', label: 'Role Göre' },
+                                        { value: 'USER', label: 'Belirli Kullanıcı' }
+                                    ]}
+                                />
                                 {form.targetType === 'ROLE' && (
-                                    <select id="alert-form-role" value={form.targetId} onChange={e => setForm(p => ({ ...p, targetId: e.target.value }))}
-                                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/30">
-                                        <option value="">Rol Seç...</option>
-                                        {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                                    </select>
+                                    <SearchableSelect
+                                        value={form.targetId.toString()}
+                                        onChange={val => setForm(p => ({ ...p, targetId: val }))}
+                                        options={[
+                                            { value: '', label: 'Rol Seç...' },
+                                            ...roles.map(r => ({ value: r.id.toString(), label: r.name }))
+                                        ]}
+                                    />
                                 )}
                                 {form.targetType === 'USER' && (
-                                    <select id="alert-form-user" value={form.targetId} onChange={e => setForm(p => ({ ...p, targetId: e.target.value }))}
-                                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/30">
-                                        <option value="">Kullanıcı Seç...</option>
-                                        {users.map(u => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
-                                    </select>
+                                    <SearchableSelect
+                                        value={form.targetId.toString()}
+                                        onChange={val => setForm(p => ({ ...p, targetId: val }))}
+                                        options={[
+                                            { value: '', label: 'Kullanıcı Seç...' },
+                                            ...users.map(u => ({ value: u.id.toString(), label: `${u.firstName} ${u.lastName}` }))
+                                        ]}
+                                    />
                                 )}
                             </div>
 

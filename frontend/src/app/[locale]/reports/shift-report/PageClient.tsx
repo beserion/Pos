@@ -6,6 +6,7 @@ import { useLocale } from 'next-intl';
 import Cookies from 'js-cookie';
 import axios from 'axios';
 import { ArrowLeft, Clock, Search, AlertTriangle, Users } from 'lucide-react';
+import SearchableSelect from '@/components/SearchableSelect';
 
 const API_URL = (typeof window !== 'undefined' && window.location.hostname === 'localhost')
   ? 'http://localhost:3050'
@@ -94,16 +95,16 @@ export function PageClient() {
               <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2 flex items-center gap-1.5">
                 <Users size={12} /> Personel
               </label>
-              <select
-                value={selectedUserId}
-                onChange={e => setSelectedUserId(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-medium outline-none focus:ring-2 focus:ring-amber-500 text-sm"
-              >
-                <option value="">— Personel Seçin —</option>
-                {allUsers.map(u => (
-                  <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
-                ))}
-              </select>
+              <div className="-m-2 w-full mt-1">
+                <SearchableSelect
+                  value={selectedUserId}
+                  onChange={(val) => setSelectedUserId(val.toString())}
+                  options={[
+                    { value: '', label: '— Personel Seçin —' },
+                    ...allUsers.map((u) => ({ value: u.id.toString(), label: `${u.firstName} ${u.lastName}` }))
+                  ]}
+                />
+              </div>
             </div>
 
             {/* Başlangıç Tarihi */}

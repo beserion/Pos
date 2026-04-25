@@ -16,7 +16,7 @@ const KNOWN_MODULES: Feature[] = [
     { key: 'core_v1',        label: 'Ana Yazılım Lisansı', description: 'Kasa (POS), sipariş yönetimi, temel satış ve raporlar.',         icon: 'fa-cash-register',       color: 'text-blue-500' },
     { key: 'kds',            label: 'Mutfak Ekranı (KDS)',  description: 'Görsel sipariş hazırlık ekranı ve pişirme süreleri takibi.',       icon: 'fa-fire-burner',         color: 'text-rose-500' },
     { key: 'qr_menu',        label: 'QR Menü',              description: 'Müşterilerin telefonuyla tarayıp sipariş verdiği dijital menü.',   icon: 'fa-qrcode',              color: 'text-emerald-500' },
-    { key: 'accounting',     label: 'Ön Muhasebe Modülü',   description: 'Fatura yönetimi, cari hesap takibi ve finansal raporlar.',         icon: 'fa-building-columns',    color: 'text-blue-500' },
+    { key: 'finance_system', label: 'Ön Muhasebe Modülü',   description: 'Fatura yönetimi, cari hesap takibi ve finansal raporlar.',         icon: 'fa-building-columns',    color: 'text-blue-500' },
     { key: 'recipe_system',  label: 'Reçete / Yarı Mamul',  description: 'Ürün reçeteleri, hammadde takibi ve maliyet analizi.',            icon: 'fa-blender',             color: 'text-lime-500' },
     { key: 'waiter_app',     label: 'Garson Uygulaması',    description: 'Tablet/Mobil üzerinden sipariş alma ve masa yönetimi.',           icon: 'fa-tablet-screen-button',color: 'text-violet-500' },
     { key: 'delivery',       label: 'Paket Servis & Kurye', description: 'Dış servis siparişleri, kurye takibi ve harita entegrasyonu.',    icon: 'fa-truck-fast',          color: 'text-orange-500' },

@@ -7,6 +7,7 @@ import axios from 'axios';
 import Cookies from 'js-cookie';
 import { useTranslations, useLocale } from 'next-intl';
 import { showSwal, toastSwal } from '../utils/swal';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface Transaction {
     id: number;
@@ -488,10 +489,16 @@ export function PageClient() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">{tFinance('labelType')} *</label>
-                                    <select value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value })} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-yellow-500/20 outline-none">
-                                        <option value="INCOME">{tFinance('income')}</option>
-                                        <option value="EXPENSE">{tFinance('expense')}</option>
-                                    </select>
+                                    <div className="-m-2 w-full">
+                                        <SearchableSelect
+                                            value={formData.type}
+                                            onChange={(val) => setFormData({ ...formData, type: val.toString() })}
+                                            options={[
+                                                { value: 'INCOME', label: tFinance('income') },
+                                                { value: 'EXPENSE', label: tFinance('expense') }
+                                            ]}
+                                        />
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">{tFinance('labelAmount')} *</label>
@@ -505,23 +512,35 @@ export function PageClient() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">{tFinance('labelPaymentMethod')}</label>
-                                    <select value={formData.paymentMethod} onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-yellow-500/20 outline-none">
-                                        <option value="KASA">{tFinance('kasa')}</option>
-                                        <option value="BANKA">{tFinance('banka')}</option>
-                                        <option value="KREDI_KARTI">{tFinance('creditCard')}</option>
-                                    </select>
+                                    <div className="-m-2 w-full">
+                                        <SearchableSelect
+                                            value={formData.paymentMethod}
+                                            onChange={(val) => setFormData({ ...formData, paymentMethod: val.toString() })}
+                                            options={[
+                                                { value: 'KASA', label: tFinance('kasa') },
+                                                { value: 'BANKA', label: tFinance('banka') },
+                                                { value: 'KREDI_KARTI', label: tFinance('creditCard') }
+                                            ]}
+                                        />
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">{tFinance('labelCategory')}</label>
-                                    <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-yellow-500/20 outline-none">
-                                        <option value="Satış">{tFinance('catSale')}</option>
-                                        <option value="Tahsilat">{tFinance('catCollection')}</option>
-                                        <option value="Alım">{tFinance('catPurchase')}</option>
-                                        <option value="Gider">{tFinance('catExpense')}</option>
-                                        <option value="Maaş">{tFinance('catSalary')}</option>
-                                        <option value="Kira">{tFinance('catRent')}</option>
-                                        <option value="Diğer">{tFinance('catOther')}</option>
-                                    </select>
+                                    <div className="-m-2 w-full">
+                                        <SearchableSelect
+                                            value={formData.category}
+                                            onChange={(val) => setFormData({ ...formData, category: val.toString() })}
+                                            options={[
+                                                { value: 'Satış', label: tFinance('catSale') },
+                                                { value: 'Tahsilat', label: tFinance('catCollection') },
+                                                { value: 'Alım', label: tFinance('catPurchase') },
+                                                { value: 'Gider', label: tFinance('catExpense') },
+                                                { value: 'Maaş', label: tFinance('catSalary') },
+                                                { value: 'Kira', label: tFinance('catRent') },
+                                                { value: 'Diğer', label: tFinance('catOther') }
+                                            ]}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>

@@ -6,6 +6,7 @@ import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface Product {
     id: number;
@@ -435,18 +436,15 @@ export function PageClient() {
                                                         {(currentRecipe.lines || []).map((line, idx) => (
                                                             <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                                                                 <td className="px-6 py-3">
-                                                                    <div className="relative">
-                                                                        <select 
-                                                                            value={line.stockCardId || ''} 
-                                                                            onChange={(e) => handleLineChange(idx, 'stockCardId', e.target.value ? parseInt(e.target.value) : 0)} 
-                                                                            className="w-full pl-3 pr-8 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-800 dark:text-white font-bold text-sm focus:border-orange-500 outline-none transition-colors appearance-none"
-                                                                        >
-                                                                            <option value="">Stok Kartı Seçin...</option>
-                                                                            {stockCards.map(c => (
-                                                                                <option key={c.id} value={c.id}>{c.name} ({c.baseUnit})</option>
-                                                                            ))}
-                                                                        </select>
-                                                                        <i className="fat fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] pointer-events-none"></i>
+                                                                    <div className="-m-1.5 w-full">
+                                                                        <SearchableSelect
+                                                                            value={(line.stockCardId || '').toString()}
+                                                                            onChange={(val) => handleLineChange(idx, 'stockCardId', val ? parseInt(val.toString()) : 0)}
+                                                                            options={[
+                                                                                { value: '', label: 'Stok Kartı Seçin...' },
+                                                                                ...stockCards.map(c => ({ value: c.id.toString(), label: `${c.name} (${c.baseUnit})` }))
+                                                                            ]}
+                                                                        />
                                                                     </div>
                                                                 </td>
                                                                 <td className="px-6 py-3">

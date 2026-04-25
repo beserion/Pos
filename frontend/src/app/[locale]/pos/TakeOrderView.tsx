@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
 import { useRouter } from 'next/navigation';
 import { showSwal, toastSwal } from '../utils/swal';
@@ -9,7 +9,8 @@ import { useThemeTransition } from '@/hooks/useThemeTransition';
 import { useParameters } from '../utils/useParameters';
 import TransferModal from './TransferModal';
 import SetMenuSelectionModal from './SetMenuSelectionModal';
-import { io, Socket } from 'socket.io-client';
+import { Socket } from 'socket.io-client';
+import { usePos } from './PosContext';
 import {
     DndContext,
     closestCenter,
@@ -84,6 +85,42 @@ function SortableProductCard({ product, onClick, isDesignMode }: { product: Prod
         </button>
     );
 }
+
+function SortableGroupCard({ id, name, imageUrl, iconClass, onClick, isDesignMode, colorClass }: { id: string | number, name: string, imageUrl?: string, iconClass: string, onClick: () => void, isDesignMode: boolean, colorClass: { bg: string, text: string, hover: string } }) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+        id: id,
+        disabled: !isDesignMode,
+        transition: {
+            duration: 250,
+            easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
+        }
+    });
+
+    const style = {
+        transform: CSS.Translate.toString(transform),
+        transition,
+        opacity: isDragging ? 0.3 : 1,
+    };
+
+    return (
+        <button
+            ref={setNodeRef}
+            style={style}
+            {...(isDesignMode ? { ...attributes, ...listeners } : {})}
+            onClick={() => { if (!isDesignMode) onClick(); }}
+            className={`group relative flex flex-col items-center justify-start p-2 pb-1 bg-white/70 dark:bg-slate-800/70 rounded-xl border-2 border-transparent shadow-sm hover:shadow-xl ${colorClass.hover} hover:-translate-y-1 transition-all duration-300 w-full ${isDesignMode ? 'cursor-grab active:cursor-grabbing ring-2 ring-indigo-500/50' : ''}`}
+        >
+            <div className={`w-full h-20 shrink-0 rounded-lg ${colorClass.bg} flex items-center justify-center mb-1 group-hover:scale-105 transition-transform overflow-hidden shadow-sm pointer-events-none`}>
+                {imageUrl ? (
+                    <img src={imageUrl.startsWith('http') || imageUrl.startsWith('data:') || imageUrl.startsWith('/') ? imageUrl : `/uploads/${imageUrl}`} alt={name} className="w-full h-full object-cover" />
+                ) : (
+                    <i className={`fat ${iconClass} text-2xl ${colorClass.text}`}></i>
+                )}
+            </div>
+            <span className="text-[10px] leading-tight mt-auto font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider truncate w-full px-1 pointer-events-none">{name}</span>
+        </button>
+    );
+}
 interface Modifier {
     id: number;
     name: string;
@@ -103,10 +140,12 @@ interface Product {
     stockGroup?: string;
     stockGroupId?: number;
     sku?: string;
+    posVisible?: boolean;
     linkedStockCard?: {
         stockGroup?: string;
         category?: string;
     };
+    staffPrice?: number;
     setMenu?: {
         setType: string;
         groups: {
@@ -124,14 +163,14 @@ interface Product {
     variations?: any[];
 }
 interface ProductType { id: number; name: string; }
-interface OrderItem { product: Product; quantity: number; note?: string; isWaiting?: boolean; subItems?: any[]; extraPrice?: number; uniqueId?: string; saleType?: 'STANDARD' | 'HALF' | 'DOUBLE'; saleTypeMultiplier?: number; variationId?: number; variationName?: string; }
+interface OrderItem { product: Product; quantity: number; note?: string; isWaiting?: boolean; subItems?: any[]; extraPrice?: number; uniqueId?: string; saleType?: 'STANDARD' | 'HALF' | 'DOUBLE'; saleTypeMultiplier?: number; variationId?: number; variationName?: string; transactionType?: 'SALE' | 'FREE' | 'COMPLIMENTARY' | 'PROMOTION' | 'STAFF' | 'TICKET'; transactionReason?: string; }
 interface ExistingOrder {
     id: number;
     totalAmount: number;
-    items: { id: number; product: { id: number; name: string; price: number; isSet?: boolean }; quantity: number; unitPrice: number; isPaid: boolean; isWaiting: boolean; isMarshed: boolean; parentItemId?: number; }[];
+    items: { id: number; product: { id: number; name: string; price: number; isSet?: boolean }; quantity: number; unitPrice: number; isPaid: boolean; isWaiting: boolean; isMarshed: boolean; parentItemId?: number; addedByName?: string; addedAt?: string; transactionType?: string; transactionReason?: string; }[];
 }
 interface Zone { id: number; name: string; }
-interface Table { id: number; name: string; status: string; waiterName?: string; orderStartTime?: string; currentTotal?: number; isBillRequested?: boolean; zone: { id: number } }
+interface Table { id: number; name: string; status: string; waiterName?: string; waiterId?: number; orderStartTime?: string; currentTotal?: number; isBillRequested?: boolean; zone: { id: number } }
 
 export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => void }) {
     const { user, loginPinOnly, logout, loading } = useAuth();
@@ -142,27 +181,54 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const { theme, toggleTheme, setTheme } = useThemeTransition();
     const [mounted, setMounted] = useState(false);
 
+    const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+
     const [isDesignMode, setIsDesignMode] = useState(false);
     const [activeDragItem, setActiveDragItem] = useState<Product | null>(null);
+    const [activeDragGroup, setActiveDragGroup] = useState<any | null>(null);
 
     const [activeTab, setActiveTab] = useState<'tables' | 'menu'>('tables');
+    const { 
+        products: contextProducts, 
+        tables: contextTables, 
+        zones, 
+        departments: contextDepartments, 
+        parentGroups: contextParentGroups, 
+        productTypes, 
+        dataLoading: posDataLoading, 
+        refreshDynamicData 
+    } = usePos();
+
     const [products, setProducts] = useState<Product[]>([]);
-    const [tables, setTables] = useState<Table[]>([]);
-    const [zones, setZones] = useState<Zone[]>([]);
     const [departments, setDepartments] = useState<any[]>([]);
     const [parentGroups, setParentGroups] = useState<any[]>([]);
+    const [tables, setTables] = useState<Table[]>([]);
+
+    useEffect(() => {
+        if (contextProducts.length > 0) setProducts(contextProducts);
+        if (contextDepartments.length > 0) setDepartments(contextDepartments);
+        if (contextParentGroups.length > 0) setParentGroups(contextParentGroups);
+        if (contextTables.length > 0) setTables(contextTables);
+    }, [contextProducts, contextDepartments, contextParentGroups, contextTables]);
+
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
     const [selectedZone, setSelectedZone] = useState<number | null>(null);
     const [cart, setCart] = useState<OrderItem[]>([]);
     const [activeSaleType, setActiveSaleType] = useState<'STANDARD' | 'HALF' | 'DOUBLE'>('STANDARD');
     const [existingOrders, setExistingOrders] = useState<ExistingOrder[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
-    const [dataLoading, setDataLoading] = useState(true);
+    const [dataLoading, setDataLoading] = useState(false); 
 
-    const [productTypes, setProductTypes] = useState<ProductType[]>([]);
     const [selectedProductTypeId, setSelectedProductTypeId] = useState<number | 'all'>('all');
     const [selectedParentGroupId, setSelectedParentGroupId] = useState<number | 'all' | 'unassigned' | null>(null);
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<number | 'all' | null>(null);
+
+    // Initial zone select
+    useEffect(() => {
+        if (zones.length > 0 && selectedZone === null) {
+            setSelectedZone(zones[0].id);
+        }
+    }, [zones, selectedZone]);
 
     // --- Ekstra Popup State ---
     const [extraPopupOpen, setExtraPopupOpen] = useState(false);
@@ -207,31 +273,12 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3050';
     const { params } = useParameters();
 
-    const fetchData = useCallback(async () => {
-        try {
-            const token = Cookies.get('token') || localStorage.getItem('token');
-            if (!token) return;
-            const [productsRes, tablesRes, zonesRes, depsRes, typesRes, pGroupsRes] = await Promise.all([
-                fetch(`${API_URL}/products`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-                fetch(`${API_URL}/tables`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-                fetch(`${API_URL}/zones`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-                fetch(`${API_URL}/departments`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => []),
-                fetch(`${API_URL}/product-types`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => []),
-                fetch(`${API_URL}/parent-groups`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).catch(() => [])
-            ]);
-            setProducts(Array.isArray(productsRes) ? productsRes : []);
-            setTables(Array.isArray(tablesRes) ? tablesRes : []);
-            setZones(Array.isArray(zonesRes) ? zonesRes : []);
-            setDepartments(Array.isArray(depsRes) ? depsRes : []);
-            setProductTypes(Array.isArray(typesRes) ? typesRes : []);
-            setParentGroups(Array.isArray(pGroupsRes) ? pGroupsRes : []);
-            if (Array.isArray(zonesRes) && zonesRes.length > 0) setSelectedZone(zonesRes[0].id);
-        } catch (error) {
-            console.error('Error fetching POS data:', error);
-        } finally {
-            setDataLoading(false);
-        }
-    }, [API_URL]);
+    // --- İşlem Tipi States ---
+    const [transactionItem, setTransactionItem] = useState<OrderItem | { id: number; type: 'EXISTING' } | null>(null);
+    const [isTransactionMenuOpen, setIsTransactionMenuOpen] = useState(false);
+    const [isReasonModalOpen, setIsReasonModalOpen] = useState(false);
+    const [tempTransactionType, setTempTransactionType] = useState<string>('SALE');
+    const [transactionMenuPos, setTransactionMenuPos] = useState({ x: 0, y: 0 });
 
     useEffect(() => {
         setMounted(true);
@@ -239,35 +286,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     useEffect(() => {
         if (!loading && !user) router.push(`/${locale}/login`);
-        if (!loading && user) {
-            fetchData();
-        }
     }, [user, loading]);
-
-    // ── WebSocket: Garson veya başka kaynaktan gelen anlık güncellemeler ──
-    useEffect(() => {
-        const socket: Socket = io(API_URL, {
-            transports: ['websocket', 'polling'],
-            reconnection: true,
-            reconnectionAttempts: Infinity,
-            reconnectionDelay: 1000,
-            reconnectionDelayMax: 5000,
-            withCredentials: false,
-        });
-        socket.on('connect', () => {
-            console.log('[POS Socket] Bağlandı:', socket.id, '| Transport:', socket.io.engine.transport.name);
-        });
-        socket.on('disconnect', (reason) => {
-            console.warn('[POS Socket] Bağlantı kesildi:', reason);
-        });
-        socket.on('connect_error', (err) => {
-            console.error('[POS Socket] Bağlantı hatası:', err.message);
-        });
-        socket.on('salesUpdate', () => { fetchData(); });
-        socket.on('newOrder', () => { fetchData(); });
-        socket.on('orderUpdated', () => { fetchData(); });
-        return () => { socket.disconnect(); };
-    }, [API_URL, fetchData]);
 
     const sensors = useSensors(
         useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
@@ -277,19 +296,46 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     const handleDragStart = (event: DragStartEvent) => {
         const { active } = event;
-        const card = products.find(c => c.id === active.id);
-        if (card) setActiveDragItem(card);
+        const activeIdStr = String(active.id);
+        if (activeIdStr.startsWith('pg-')) {
+            const card = parentGroups.find(c => `pg-${c.id}` === activeIdStr);
+            if (card) setActiveDragGroup({ ...card, dragType: 'pg' });
+        } else if (activeIdStr.startsWith('dept-')) {
+            const card = departments.find(c => `dept-${c.id}` === activeIdStr);
+            if (card) setActiveDragGroup({ ...card, dragType: 'dept' });
+        } else {
+            const card = products.find(c => c.id === active.id);
+            if (card) setActiveDragItem(card);
+        }
     };
 
     const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event;
         setActiveDragItem(null);
+        setActiveDragGroup(null);
         if (over && active.id !== over.id) {
-            setProducts((items) => {
-                const oldIndex = items.findIndex(i => i.id === active.id);
-                const newIndex = items.findIndex(i => i.id === over.id);
-                return arrayMove(items, oldIndex, newIndex);
-            });
+            const activeIdStr = String(active.id);
+            const overIdStr = String(over.id);
+            
+            if (activeIdStr.startsWith('pg-') && overIdStr.startsWith('pg-')) {
+                setParentGroups((items: any[]) => {
+                    const oldIndex = items.findIndex(i => `pg-${i.id}` === activeIdStr);
+                    const newIndex = items.findIndex(i => `pg-${i.id}` === overIdStr);
+                    return arrayMove(items, oldIndex, newIndex);
+                });
+            } else if (activeIdStr.startsWith('dept-') && overIdStr.startsWith('dept-')) {
+                setDepartments((items: any[]) => {
+                    const oldIndex = items.findIndex(i => `dept-${i.id}` === activeIdStr);
+                    const newIndex = items.findIndex(i => `dept-${i.id}` === overIdStr);
+                    return arrayMove(items, oldIndex, newIndex);
+                });
+            } else if (!activeIdStr.startsWith('pg-') && !activeIdStr.startsWith('dept-') && !overIdStr.startsWith('pg-') && !overIdStr.startsWith('dept-')) {
+                setProducts((items: Product[]) => {
+                    const oldIndex = items.findIndex(i => i.id === active.id);
+                    const newIndex = items.findIndex(i => i.id === over.id);
+                    return arrayMove(items, oldIndex, newIndex);
+                });
+            }
         }
     };
 
@@ -301,7 +347,32 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     const productTypeOptions = [{ id: 'all', name: 'Tümü' }, ...productTypes];
 
-    const filteredProducts = products.filter(p => {
+    const filteredParentGroups = useMemo(() => parentGroups.filter(pg => {
+        if (selectedProductTypeId === 'all') return true;
+        const pgDepts = departments.filter(d => d.parentGroupId === pg.id);
+        return products.some(p => p.productTypeId === selectedProductTypeId && pgDepts.some(d => d.name === p.category));
+    }), [parentGroups, selectedProductTypeId, departments, products]);
+
+    const filteredRootDepartments = useMemo(() => departments.filter(d => !d.parentGroupId).filter(d => {
+        if (selectedProductTypeId === 'all') return true;
+        return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
+    }), [departments, selectedProductTypeId, products]);
+
+    const filteredSubDepartments = useMemo(() => selectedParentGroupId ? departments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
+        if (selectedProductTypeId === 'all') return true;
+        return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
+    }) : [], [selectedParentGroupId, departments, selectedProductTypeId, products]);
+
+    const sortableGroupIds = selectedParentGroupId 
+        ? filteredSubDepartments.map(d => `dept-${d.id}`)
+        : [
+            ...filteredParentGroups.map(pg => `pg-${pg.id}`),
+            ...filteredRootDepartments.map(d => `dept-${d.id}`)
+        ];
+
+    const filteredProducts = useMemo(() => products.filter(p => {
+        if (p.posVisible === false) return false;
+
         const matchesType = selectedProductTypeId === 'all' || p.productTypeId === selectedProductTypeId;
 
         // Arama yapılıyorsa hiyerarşiyi baypas et
@@ -322,57 +393,66 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
         const matchesCategory = p.category === dept.name || (!p.category && dept.name === 'Diğer');
         return matchesType && matchesCategory;
-    });
+    }), [products, selectedProductTypeId, searchQuery, selectedDepartmentId, departments]);
 
     const handleTableClick = async (table: Table) => {
+        const ownTablesOnly = (user?.extraPermissions || []).includes('OWN_TABLES_ONLY');
+
+        if (!isSuperAdmin && ownTablesOnly && (table.status === 'DOLU' || table.status === 'REZERVE')) {
+            if (table.waiterId && table.waiterId !== user.id) {
+                showSwal({
+                    icon: 'warning',
+                    title: 'Erişim Engellendi',
+                    text: `Bu masa ${table.waiterName || 'başka bir personel'} üzerine açılmıştır. Sadece kendi masalarınıza sipariş ekleyebilirsiniz.`
+                });
+                return;
+            }
+        }
+
         setSelectedTable(table);
         setActiveTab('menu');
         setCart([]);
+        fetchTableData(table.id);
+    };
 
-        if (table.isBillRequested) {
-            // Keep the tab 'menu' but don't reset cart/subchecks yet? 
-            // Actually, we should still fetch sub-checks to show the current total if needed.
-        }
-
-        if (table.status === 'DOLU' || table.status === 'REZERVE' || table.currentTotal) {
-            try {
-                const token = localStorage.getItem('token') || (user as any)?.token;
-                const res = await fetch(`${API_URL}/sales/table/${table.id}/sub-checks`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    const flat: any[] = [];
-                    data.forEach((main: any) => {
-                        flat.push({ ...main, isSub: false });
-                        if (main.subChecks && main.subChecks.length > 0) {
-                            main.subChecks.forEach((sub: any) => {
-                                flat.push({ ...sub, isSub: true });
-                            });
-                        }
-                    });
-                    setAllFlatChecks(flat);
-
-                    if (flat.length > 0) {
-                        setActiveSubCheckId(flat[0].id);
-                        setExistingOrders(flat);
-                    } else {
-                        setAllFlatChecks([]);
-                        setActiveSubCheckId(null);
-                        setExistingOrders([]);
+    const fetchTableData = async (tableId: number) => {
+        try {
+            const token = localStorage.getItem('token') || (user as any)?.token;
+            const res = await fetch(`${API_URL}/sales/table/${tableId}/sub-checks`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                const flat: any[] = [];
+                data.forEach((main: any) => {
+                    flat.push({ ...main, isSub: false });
+                    if (main.subChecks && main.subChecks.length > 0) {
+                        main.subChecks.forEach((sub: any) => {
+                            flat.push({ ...sub, isSub: true });
+                        });
                     }
+                });
+                setAllFlatChecks(flat);
+
+                if (flat.length > 0) {
+                    // Preserve active sub check if it still exists
+                    setActiveSubCheckId(prev => {
+                        if (prev && flat.some(f => f.id === prev)) return prev;
+                        return flat[0].id;
+                    });
+                    setExistingOrders(flat);
                 } else {
                     setAllFlatChecks([]);
                     setActiveSubCheckId(null);
                     setExistingOrders([]);
                 }
-            } catch (err) {
-                console.error("Failed to fetch sub-checks", err);
+            } else {
                 setAllFlatChecks([]);
                 setActiveSubCheckId(null);
                 setExistingOrders([]);
             }
-        } else {
+        } catch (err) {
+            console.error("Failed to fetch sub-checks", err);
             setAllFlatChecks([]);
             setActiveSubCheckId(null);
             setExistingOrders([]);
@@ -381,6 +461,19 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
     const reopenTable = async () => {
         if (!selectedTable) return;
+
+        // --- Yetki Kontrolü ---
+        const perms = user?.extraPermissions || [];
+        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+        if (!isSuperAdmin && !perms.includes('OP:ORDER_AFTER_BILL')) {
+            showSwal({
+                icon: 'warning',
+                title: 'Yetki Yetersiz',
+                text: 'Hesap istendikten sonra masayı geri açma yetkiniz bulunmamaktadır.'
+            });
+            return;
+        }
+
         try {
             const token = localStorage.getItem('token') || (user as any)?.token;
             const res = await fetch(`${API_URL}/tables/${selectedTable.id}`, {
@@ -393,7 +486,8 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                 // Proced with normal flow
                 const updatedTable = { ...selectedTable, isBillRequested: false };
                 setSelectedTable(updatedTable);
-                setTables(prev => prev.map(t => t.id === updatedTable.id ? updatedTable : t));
+                setTables((prev: Table[]) => prev.map(t => t.id === updatedTable.id ? updatedTable : t));
+                refreshDynamicData();
             }
         } catch (err) {
             console.error("Failed to reopen table", err);
@@ -401,6 +495,14 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     };
 
     const addToCart = (product: Product, note?: string, skipExtraCheck?: boolean, forceVariationId?: number) => {
+        // --- Yetki Kontrolü ---
+        const perms = user?.extraPermissions || [];
+        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+        if (!isSuperAdmin && !perms.includes('OP:CAN_ORDER')) {
+            toastSwal({ icon: 'warning', title: 'Sipariş alma yetkiniz bulunmamaktadır.' });
+            return;
+        }
+
         if (!forceVariationId && product.variations && product.variations.filter(v => v.isActive !== false).length > 0) {
             setSelectedProductForVariation(product);
             setPendingAddToCartArgs({ note, skipExtraCheck });
@@ -526,20 +628,24 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         });
     };
 
+    const handleCancelNote = () => {
+        setNoteModalItem(null);
+    };
+
     const handleSaveNote = () => {
         if (!noteModalItem) return;
 
         let updatedCart;
         if (noteModalItem.uniqueId) {
-            updatedCart = cart.filter(i => i.uniqueId !== noteModalItem.uniqueId);
+            updatedCart = cart.filter((i: OrderItem) => i.uniqueId !== noteModalItem.uniqueId);
         } else {
-            updatedCart = cart.filter(i => !(i.product.id === noteModalItem.product.id && i.note === noteModalItem.note && i.saleType === noteModalItem.saleType && i.variationId === noteModalItem.variationId && !i.uniqueId));
+            updatedCart = cart.filter((i: OrderItem) => !(i.product.id === noteModalItem.product.id && i.note === noteModalItem.note && i.saleType === noteModalItem.saleType && i.variationId === noteModalItem.variationId && !i.uniqueId));
         }
 
         if (noteModalItem.uniqueId) {
             setCart([...updatedCart, { ...noteModalItem, note: tempNote.trim() || undefined }]);
         } else {
-            const existingWithNewNote = updatedCart.find(i => i.product.id === noteModalItem.product.id && i.note === tempNote.trim() && i.saleType === noteModalItem.saleType && i.variationId === noteModalItem.variationId && !i.uniqueId);
+            const existingWithNewNote = updatedCart.find((i: OrderItem) => i.product.id === noteModalItem.product.id && i.note === tempNote.trim() && i.saleType === noteModalItem.saleType && i.variationId === noteModalItem.variationId && !i.uniqueId);
             if (existingWithNewNote) {
                 existingWithNewNote.quantity += noteModalItem.quantity;
                 setCart([...updatedCart]);
@@ -548,6 +654,100 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             }
         }
         setNoteModalItem(null);
+    };
+
+    const handleTransactionTypeChange = (type: string) => {
+        setTempTransactionType(type);
+        if (type === 'COMPLIMENTARY' || type === 'FREE') {
+            setIsReasonModalOpen(true);
+        } else {
+            confirmTransactionType(type);
+        }
+        setIsTransactionMenuOpen(false);
+    };
+
+    const confirmTransactionType = async (type: string, reason?: string) => {
+        if (!transactionItem) return;
+
+        if ('type' in transactionItem && transactionItem.type === 'EXISTING') {
+            // Backend güncellemesi
+            try {
+                const token = localStorage.getItem('token') || (user as any)?.token;
+                const res = await fetch(`${API_URL}/sales/items/${transactionItem.id}/transaction-type`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ type, reason })
+                });
+                if (res.ok) {
+                    toastSwal({ icon: 'success', title: 'İşlem tipi güncellendi' });
+                    if (selectedTable) fetchTableData(selectedTable.id); // Sadece veriyi yenile (sepeti bozma)
+                } else {
+                    const err = await res.json();
+                    showSwal({ icon: 'error', title: 'Hata', text: err.message || 'İşlem tipi güncellenemedi' });
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        } else {
+            // Sepetteki ürünü güncelle
+            const item = transactionItem as OrderItem;
+            setCart((prev: OrderItem[]) => prev.map((i: OrderItem) => {
+                const isMatch = i.uniqueId ? i.uniqueId === item.uniqueId : (i.product.id === item.product.id && i.note === item.note && i.saleType === item.saleType && i.variationId === item.variationId);
+                if (isMatch) {
+                    return { ...i, transactionType: type as any, transactionReason: reason };
+                }
+                return i;
+            }));
+        }
+        setTransactionItem(null);
+        setIsReasonModalOpen(false);
+    };
+
+    const applyTransactionToAll = async (type: string, reason?: string) => {
+        if (cart.length > 0) {
+            setCart((prev: OrderItem[]) => prev.map((i: OrderItem) => ({ ...i, transactionType: type as any, transactionReason: reason })));
+        }
+        
+        // Eğer seçili masa ve mevcut siparişler varsa, onları da güncelle (opsiyonel ama istenmiş olabilir)
+        if (existingOrders.length > 0) {
+            const allItemIds = existingOrders.flatMap((o: any) => o.items.filter((i: any) => !i.isPaid).map((i: any) => i.id));
+            if (allItemIds.length > 0) {
+                try {
+                    const token = localStorage.getItem('token') || (user as any)?.token;
+                    await Promise.all(allItemIds.map(id => 
+                        fetch(`${API_URL}/sales/items/${id}/transaction-type`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                            body: JSON.stringify({ type, reason })
+                        })
+                    ));
+                    if (selectedTable) fetchTableData(selectedTable.id);
+                } catch (error) {
+                    console.error("Toplu güncelleme hatası:", error);
+                }
+            }
+        }
+        
+        setIsTransactionMenuOpen(false);
+        setIsReasonModalOpen(false);
+        toastSwal({ icon: 'success', title: 'Tüm ürünlere uygulandı' });
+    };
+
+    const getTransactionShortCode = (type?: string) => {
+        switch (type) {
+            case 'COMPLIMENTARY': return 'İ';
+            case 'FREE': return 'Ö';
+            case 'PROMOTION': return 'PR';
+            case 'STAFF': return 'P';
+            case 'TICKET': return 'B';
+            default: return null;
+        }
+    };
+
+    const calculateItemPrice = (item: OrderItem) => {
+        if (['COMPLIMENTARY', 'FREE', 'TICKET'].includes(item.transactionType || '')) return 0;
+        if (item.transactionType === 'STAFF') return item.product.staffPrice || item.product.price;
+        return (item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1);
     };
 
     const sendOrder = async () => {
@@ -565,17 +765,19 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
 
             if (activeSubCheckId) {
                 const orderPayload = {
-                    items: cart.map(item => ({
+                    items: cart.map((item: OrderItem) => ({
                         productId: item.product.id,
                         quantity: item.quantity,
-                        unitPrice: (item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1),
+                        unitPrice: calculateItemPrice(item),
                         note: item.note,
                         isWaiting: params.mars_enabled ? (item.isWaiting || false) : false,
                         subItems: item.subItems,
                         saleType: item.saleType,
                         saleTypeMultiplier: item.saleTypeMultiplier,
                         variationId: item.variationId,
-                        variationName: item.variationName
+                        variationName: item.variationName,
+                        transactionType: item.transactionType || 'SALE',
+                        transactionReason: item.transactionReason
                     }))
                 };
                 orderRes = await fetch(`${API_URL}/sales/${activeSubCheckId}/items`, {
@@ -587,23 +789,25 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                 const orderPayload = {
                     tableId: selectedTable.id,
                     userId: user?.id || user?.sub,
-                    totalAmount: cart.reduce((sum, item) => {
-                        const base = ((item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1)) * item.quantity;
+                    totalAmount: cart.reduce((sum: number, item: OrderItem) => {
+                        const base = calculateItemPrice(item) * item.quantity;
                         const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
                         return sum + base + extras;
                     }, 0),
                     status: 'NEW',
-                    items: cart.map(item => ({
+                    items: cart.map((item: OrderItem) => ({
                         productId: item.product.id,
                         quantity: item.quantity,
-                        unitPrice: (item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1),
+                        unitPrice: calculateItemPrice(item),
                         note: item.note,
                         isWaiting: params.mars_enabled ? (item.isWaiting || false) : false,
                         subItems: item.subItems,
                         saleType: item.saleType,
                         saleTypeMultiplier: item.saleTypeMultiplier,
                         variationId: item.variationId,
-                        variationName: item.variationName
+                        variationName: item.variationName,
+                        transactionType: item.transactionType || 'SALE',
+                        transactionReason: item.transactionReason
                     }))
                 };
                 orderRes = await fetch(`${API_URL}/sales`, {
@@ -630,6 +834,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                     receiptNumber: `SİP-${orderData?.id || '00'}`,
                     date: new Date(),
                     tableName: selectedTable?.name,
+                    zoneId: selectedTable?.zoneId || selectedTable?.zone?.id,
                     waiterName: (user as any)?.firstName || (user as any)?.name || (user as any)?.username || (user as any)?.email?.split('@')[0] || 'Garson',
                     items: cart.map(item => ({
                         name: item.product.name + (item.variationName ? ` (${item.variationName})` : ''),
@@ -668,7 +873,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             setCart([]);
             setSelectedTable(null);
             setActiveTab('tables');
-            fetchData(); // Refresh table status
+            refreshDynamicData(); // Only refresh table status - much faster
         } catch (error) {
             showSwal({
                 icon: 'error',
@@ -681,8 +886,8 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         }
     };
 
-    const cartTotal = cart.reduce((sum, item) => {
-        const base = ((item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1)) * item.quantity;
+    const cartTotal = cart.reduce((sum: number, item: OrderItem) => {
+        const base = calculateItemPrice(item) * item.quantity;
         const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
         return sum + base + extras;
     }, 0);
@@ -693,6 +898,13 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
     const remainingTotal = unpaidItems.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0) + cartTotal;
 
     const payItem = async (itemId: number) => {
+        const perms = user?.extraPermissions || [];
+        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+        if (!isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_ACCOUNT')) {
+            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Ödeme alma yetkiniz bulunmamaktadır.' });
+            return;
+        }
+
         const token = localStorage.getItem('token') || (user as any)?.token;
 
         // Fetch partners first
@@ -720,6 +932,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                 <option value="KASA">Nakit (Kasa)</option>
                                 <option value="KREDI_KARTI">Kredi Kartı</option>
                                 <option value="BANKA">Banka</option>
+                                <option value="OPEN">Açık Hesap</option>
                             </select>
                         </div>
                     </div>
@@ -756,6 +969,16 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         if (!formValues) return;
         const { paymentMethod, partnerId } = formValues;
 
+        if (partnerId !== '0' && !isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_TO_CURRENT_ACCOUNT')) {
+            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Cariye hesap kapatma yetkiniz bulunmamaktadır.' });
+            return;
+        }
+
+        if (paymentMethod === 'OPEN' && !isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_OPEN_ACCOUNT')) {
+            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Açık hesap kapatma yetkiniz bulunmamaktadır.' });
+            return;
+        }
+
         try {
             const res = await fetch(`${API_URL}/sales/items/${itemId}/pay`, {
                 method: 'PUT',
@@ -786,6 +1009,13 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         }
     };
     const handleCheckout = async (paymentMethod: 'Nakit' | 'Kart' | 'Parçalı', cashAmount: number = 0, creditAmount: number = 0) => {
+        const perms = user?.extraPermissions || [];
+        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+        if (!isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_ACCOUNT')) {
+            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Ödeme alma yetkiniz bulunmamaktadır.' });
+            return;
+        }
+
         if (!selectedTable) return;
         const unpaidItems = existingOrders.flatMap(o => o.items).filter(i => !i.isPaid);
         const itemsToPay = unpaidItems.filter(item => selectedPosItems.includes(item.id));
@@ -824,8 +1054,12 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
         } catch (e) {
             showSwal({ title: 'Hata', text: 'Sistem hatası oluştu.', icon: 'error' });
         }
-    };    // Auth ve data yüklenirken erken dönmeyip (return null YERINE), UI'ı çizip loading overlay göstereceğiz.
-    
+    };
+
+
+
+    if (loading || !user) return null;
+
     return (
         <div className="flex h-screen bg-slate-50 dark:bg-slate-800 font-sans overflow-hidden transition-colors duration-300 relative">
             {/* Dekoratif Glassmorphism Arka Planlar */}
@@ -833,14 +1067,6 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
             <div className="absolute bottom-[20%] left-[20%] w-[40%] h-[40%] rounded-full bg-teal-500/10 dark:bg-teal-600/10 blur-[100px] z-0 pointer-events-none transition-colors duration-500"></div>
 
             <div className="flex-1 flex flex-col p-6 overflow-hidden w-full md:w-auto relative z-10 transition-all">
-                {/* Safe Loading Overlay */}
-                {(dataLoading || loading || !user) && (
-                    <div className="absolute inset-0 z-50 bg-slate-50/80 dark:bg-slate-800/80 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-none">
-                        <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-emerald-500 mb-4"></div>
-                        <p className="text-emerald-600 dark:text-emerald-400 font-black text-sm uppercase tracking-widest animate-pulse">Menü Yükleniyor...</p>
-                    </div>
-                )}
-
                 {selectedTable?.isBillRequested ? (
                     <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
                         <div className="w-32 h-32 bg-amber-100 dark:bg-amber-500/10 rounded-full flex items-center justify-center mb-8 animate-pulse shadow-xl shadow-amber-500/20">
@@ -979,70 +1205,70 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                                 }}
                                             >
                                                 {zoneTables.map(table => (
-                                            <div
-                                                key={table.id}
-                                                onClick={() => handleTableClick(table)}
-                                                className={`relative p-3 rounded-2xl cursor-pointer shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border flex flex-col items-center justify-center text-center gap-1 group ${selectedTable?.id === table.id ? 'ring-4 ring-emerald-500 scale-105 ' : ''}${table.isBillRequested
-                                                    ? 'bg-yellow-100 dark:bg-yellow-500/20 border-yellow-400 dark:border-yellow-500/50 shadow-yellow-500/30 animate-[pulse_3s_ease-in-out_infinite]'
-                                                    : table.status === 'BOŞ' ? 'bg-white/60 dark:bg-slate-800/60 border-white dark:border-slate-700' :
-                                                        table.status === 'REZERVE' ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30' :
-                                                            'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30'}`}
-                                            >
-                                                <div className="absolute top-4 right-4 animate-pulse">
-                                                    <div className={`w-2 h-2 rounded-full ${table.status === 'BOŞ' ? 'bg-emerald-500' : table.status === 'REZERVE' ? 'bg-amber-500' : 'bg-rose-500'}`}></div>
-                                                </div>
-
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        if (table.status !== 'DOLU') {
-                                                            toastSwal({ icon: 'warning', title: 'Boş masa transfer edilemez!' });
-                                                            return;
-                                                        }
-                                                        setTransferSourceTableId(table.id);
-                                                        setTransferSourceTableName(table.name);
-                                                        setTransferMode('TABLE_TRANSFER');
-                                                        setTransferSelectedItemIds([]);
-                                                        setIsTransferModalOpen(true);
-                                                    }}
-                                                    className="absolute top-3 left-3 w-8 h-8 flex items-center justify-center rounded-xl bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-500/30 transition-all opacity-70 hover:opacity-100"
-                                                    title="Masa Transfer"
-                                                >
-                                                    <i className="fat fa-arrow-right-arrow-left text-xs"></i>
-                                                </button>
-
-                                                <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">
-                                                    {table.status === 'BOŞ' ? '🪑' : table.status === 'REZERVE' ? '📅' : '🍽️'}
-                                                </span>
-                                                <span className="font-extrabold text-slate-800 dark:text-white uppercase tracking-tighter text-sm">{table.name}</span>
-
-                                                {table.status === 'DOLU' ? (
-                                                    <div className="flex flex-col items-center gap-1 mt-1 border-t border-rose-200 dark:border-rose-500/20 pt-3 w-full">
-                                                        <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">
-                                                            <span className="opacity-70">👤</span>
-                                                            <span>{table.waiterName || 'POS / Garson'}</span>
+                                                    <div
+                                                        key={table.id}
+                                                        onClick={() => handleTableClick(table)}
+                                                        className={`relative p-3 rounded-2xl cursor-pointer shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 border flex flex-col items-center justify-center text-center gap-1 group ${selectedTable?.id === table.id ? 'ring-4 ring-emerald-500 scale-105 ' : ''}${table.isBillRequested
+                                                            ? 'bg-yellow-100 dark:bg-yellow-500/20 border-yellow-400 dark:border-yellow-500/50 shadow-yellow-500/30 animate-[pulse_3s_ease-in-out_infinite]'
+                                                            : table.status === 'BOŞ' ? 'bg-white/60 dark:bg-slate-800/60 border-white dark:border-slate-700' :
+                                                                table.status === 'REZERVE' ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30' :
+                                                                    'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30'}`}
+                                                    >
+                                                        <div className="absolute top-4 right-4 animate-pulse">
+                                                            <div className={`w-2 h-2 rounded-full ${table.status === 'BOŞ' ? 'bg-emerald-500' : table.status === 'REZERVE' ? 'bg-amber-500' : 'bg-rose-500'}`}></div>
                                                         </div>
-                                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
-                                                            <span className="opacity-70">🕒</span>
-                                                            <span>{formatTime(table.orderStartTime)}</span>
-                                                        </div>
-                                                        <div className="mt-2 text-rose-700 dark:text-rose-300 font-extrabold text-sm drop-shadow-sm">
-                                                            ₺{Number(table.currentTotal || 0).toFixed(2)}
-                                                        </div>
+
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (table.status !== 'DOLU') {
+                                                                    toastSwal({ icon: 'warning', title: 'Boş masa transfer edilemez!' });
+                                                                    return;
+                                                                }
+                                                                setTransferSourceTableId(table.id);
+                                                                setTransferSourceTableName(table.name);
+                                                                setTransferMode('TABLE_TRANSFER');
+                                                                setTransferSelectedItemIds([]);
+                                                                setIsTransferModalOpen(true);
+                                                            }}
+                                                            className="absolute top-3 left-3 w-8 h-8 flex items-center justify-center rounded-xl bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-500/30 transition-all opacity-70 hover:opacity-100"
+                                                            title="Masa Transfer"
+                                                        >
+                                                            <i className="fat fa-arrow-right-arrow-left text-xs"></i>
+                                                        </button>
+
+                                                        <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">
+                                                            {table.status === 'BOŞ' ? '🪑' : table.status === 'REZERVE' ? '📅' : '🍽️'}
+                                                        </span>
+                                                        <span className="font-extrabold text-slate-800 dark:text-white uppercase tracking-tighter text-sm">{table.name}</span>
+
+                                                        {table.status === 'DOLU' ? (
+                                                            <div className="flex flex-col items-center gap-1 mt-1 border-t border-rose-200 dark:border-rose-500/20 pt-3 w-full">
+                                                                <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">
+                                                                    <span className="opacity-70">👤</span>
+                                                                    <span>{table.waiterName || 'POS / Garson'}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                                                                    <span className="opacity-70">🕒</span>
+                                                                    <span>{formatTime(table.orderStartTime)}</span>
+                                                                </div>
+                                                                <div className="mt-2 text-rose-700 dark:text-rose-300 font-extrabold text-sm drop-shadow-sm">
+                                                                    ₺{Number(table.currentTotal || 0).toFixed(2)}
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex flex-col items-center gap-1 mt-1 opacity-40">
+                                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('emptyTable') || 'BOŞ MASA'}</span>
+                                                            </div>
+                                                        )}
+
+                                                        <span className={`text-[9px] font-black px-3 py-1 rounded-full mt-2 uppercase tracking-tighter ${table.status === 'BOŞ' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' :
+                                                            table.status === 'REZERVE' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' :
+                                                                'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'}`}>
+                                                            {table.status}
+                                                        </span>
                                                     </div>
-                                                ) : (
-                                                    <div className="flex flex-col items-center gap-1 mt-1 opacity-40">
-                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('emptyTable') || 'BOŞ MASA'}</span>
-                                                    </div>
-                                                )}
-
-                                                <span className={`text-[9px] font-black px-3 py-1 rounded-full mt-2 uppercase tracking-tighter ${table.status === 'BOŞ' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' :
-                                                    table.status === 'REZERVE' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' :
-                                                        'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'}`}>
-                                                    {table.status}
-                                                </span>
-                                            </div>
-                                        ))}
+                                                ))}
                                             </div>
                                         );
                                     })()}
@@ -1077,15 +1303,39 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                             {isDesignMode ? (
                                                 <button
                                                     onClick={async () => {
-                                                        const newOrder = filteredProducts.map((p, i) => ({ id: p.id, orderIndex: i }));
                                                         const token = localStorage.getItem('token') || Cookies.get('token');
                                                         try {
-                                                            const res = await fetch(`${API_URL}/products/reorder`, {
+                                                            const requests = [];
+                                                            if (!selectedDepartmentId && !selectedParentGroupId) {
+                                                                const pgOrder = parentGroups.map((pg, i) => ({ id: pg.id, orderIndex: i }));
+                                                                const deptOrder = departments.map((d, i) => ({ id: d.id, orderIndex: i }));
+                                                                requests.push(fetch(`${API_URL}/parent-groups/reorder`, {
+                                                                    method: 'PUT',
+                                                                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                                                    body: JSON.stringify({ items: pgOrder })
+                                                                }));
+                                                                requests.push(fetch(`${API_URL}/departments/reorder`, {
+                                                                    method: 'PUT',
+                                                                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                                                    body: JSON.stringify({ items: deptOrder })
+                                                                }));
+                                                            } else if (selectedParentGroupId && !selectedDepartmentId) {
+                                                                const deptOrder = departments.filter(d => d.parentGroupId === selectedParentGroupId).map((d, i) => ({ id: d.id, orderIndex: i }));
+                                                                requests.push(fetch(`${API_URL}/departments/reorder`, {
+                                                                    method: 'PUT',
+                                                                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                                                    body: JSON.stringify({ items: deptOrder })
+                                                                }));
+                                                            }
+                                                            const newOrder = filteredProducts.map((p, i) => ({ id: p.id, orderIndex: i }));
+                                                            requests.push(fetch(`${API_URL}/products/reorder`, {
                                                                 method: 'PUT',
                                                                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                                                                 body: JSON.stringify({ items: newOrder })
-                                                            });
-                                                            if (res.ok) {
+                                                            }));
+                                                            
+                                                            const results = await Promise.all(requests);
+                                                            if (results.every(r => r.ok)) {
                                                                 toastSwal({ icon: 'success', title: 'Tasarım Kaydedildi' });
                                                             } else {
                                                                 throw new Error('Hata');
@@ -1094,6 +1344,7 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                                             toastSwal({ icon: 'error', title: 'Hata', text: 'Sıra kaydedilemedi.' });
                                                         }
                                                         setIsDesignMode(false);
+                                                        refreshDynamicData();
                                                     }}
                                                     className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 bg-indigo-500 text-white shadow-md shadow-indigo-500/30 animate-pulse"
                                                 >
@@ -1184,61 +1435,80 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                 <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-280px)]">
                                     {!selectedDepartmentId && !searchQuery ? (
                                         <>
-                                            <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-4 mb-6 mt-2 p-2">
-                                                {/* SEVİYE 1: Üst Gruplar ve Bağımsız Kategoriler */}
-                                                {!selectedParentGroupId && (
-                                                    <>
-                                                        {parentGroups.filter(pg => {
-                                                            if (selectedProductTypeId === 'all') return true;
-                                                            const pgDepts = departments.filter(d => d.parentGroupId === pg.id);
-                                                            return products.some(p => p.productTypeId === selectedProductTypeId && pgDepts.some(d => d.name === p.category));
-                                                        }).map(pg => (
-                                                            <button
-                                                                key={`pg-${pg.id}`}
-                                                                onClick={() => setSelectedParentGroupId(pg.id)}
-                                                                className="group relative flex flex-col items-center justify-center p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-indigo-400 hover:-translate-y-1 transition-all duration-300"
-                                                            >
-                                                                <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
-                                                                    <i className="fat fa-folder-tree text-lg text-indigo-500"></i>
-                                                                </div>
-                                                                <span className="text-[10px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{pg.name}</span>
-                                                            </button>
-                                                        ))}
-                                                        {departments.filter(d => !d.parentGroupId).filter(d => {
-                                                            if (selectedProductTypeId === 'all') return true;
-                                                            return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
-                                                        }).map(d => (
-                                                            <button
-                                                                key={`dept-${d.id}`}
-                                                                onClick={() => setSelectedDepartmentId(d.id)}
-                                                                className="group relative flex flex-col items-center justify-center p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-400 hover:-translate-y-1 transition-all duration-300"
-                                                            >
-                                                                <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
-                                                                    <i className="fat fa-tags text-lg text-emerald-500"></i>
-                                                                </div>
-                                                                <span className="text-[10px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
-                                                            </button>
-                                                        ))}
-                                                    </>
-                                                )}
+                                            <DndContext
+                                                sensors={sensors}
+                                                collisionDetection={closestCenter}
+                                                onDragStart={handleDragStart}
+                                                onDragEnd={handleDragEnd}
+                                                onDragCancel={() => { setActiveDragItem(null); setActiveDragGroup(null); }}
+                                            >
+                                                <SortableContext items={sortableGroupIds} strategy={rectSortingStrategy}>
+                                                    <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-4 mb-6 mt-2 p-2 relative">
+                                                        {/* SEVİYE 1: Üst Gruplar ve Bağımsız Kategoriler */}
+                                                        {!selectedParentGroupId && (
+                                                            <>
+                                                                {filteredParentGroups.map(pg => (
+                                                                    <SortableGroupCard
+                                                                        key={`pg-${pg.id}`}
+                                                                        id={`pg-${pg.id}`}
+                                                                        name={pg.name}
+                                                                        iconClass="fa-folder-tree"
+                                                                        imageUrl={(pg as any).imageUrl}
+                                                                        colorClass={{ bg: "bg-indigo-100 dark:bg-indigo-900/30", text: "text-indigo-500", hover: "hover:border-indigo-400" }}
+                                                                        onClick={() => setSelectedParentGroupId(pg.id)}
+                                                                        isDesignMode={isDesignMode}
+                                                                    />
+                                                                ))}
+                                                                {filteredRootDepartments.map(d => (
+                                                                    <SortableGroupCard
+                                                                        key={`dept-${d.id}`}
+                                                                        id={`dept-${d.id}`}
+                                                                        name={d.name}
+                                                                        iconClass="fa-tags"
+                                                                        imageUrl={(d as any).imageUrl}
+                                                                        colorClass={{ bg: "bg-emerald-100 dark:bg-emerald-900/30", text: "text-emerald-500", hover: "hover:border-emerald-400" }}
+                                                                        onClick={() => setSelectedDepartmentId(d.id)}
+                                                                        isDesignMode={isDesignMode}
+                                                                    />
+                                                                ))}
+                                                            </>
+                                                        )}
 
-                                                {/* SEVİYE 2: Seçili Üst Gruba Bağlı Kategoriler */}
-                                                {selectedParentGroupId && departments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
-                                                    if (selectedProductTypeId === 'all') return true;
-                                                    return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
-                                                }).map(d => (
-                                                    <button
-                                                        key={`dept-sub-${d.id}`}
-                                                        onClick={() => setSelectedDepartmentId(d.id)}
-                                                        className="group relative flex flex-col items-center justify-center p-3 bg-white/70 dark:bg-slate-800/70 rounded-xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-400 hover:-translate-y-1 transition-all duration-300"
-                                                    >
-                                                        <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-1 group-hover:scale-110 transition-transform">
-                                                            <i className="fat fa-tags text-lg text-emerald-500"></i>
-                                                        </div>
-                                                        <span className="text-[10px] font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider">{d.name}</span>
-                                                    </button>
-                                                ))}
-                                            </div>
+                                                        {/* SEVİYE 2: Seçili Üst Gruba Bağlı Kategoriler */}
+                                                        {selectedParentGroupId && filteredSubDepartments.map(d => (
+                                                            <SortableGroupCard
+                                                                key={`dept-${d.id}`}
+                                                                id={`dept-${d.id}`}
+                                                                name={d.name}
+                                                                iconClass="fa-tags"
+                                                                imageUrl={(d as any).imageUrl}
+                                                                colorClass={{ bg: "bg-emerald-100 dark:bg-emerald-900/30", text: "text-emerald-500", hover: "hover:border-emerald-400" }}
+                                                                onClick={() => setSelectedDepartmentId(d.id)}
+                                                                isDesignMode={isDesignMode}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </SortableContext>
+                                                <DragOverlay dropAnimation={{
+                                                    duration: 300,
+                                                    easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+                                                    sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.4' } } })
+                                                }}>
+                                                    {activeDragGroup ? (
+                                                        <SortableGroupCard
+                                                            id={activeDragGroup.dragType === 'pg' ? `pg-${activeDragGroup.id}` : `dept-${activeDragGroup.id}`}
+                                                            name={activeDragGroup.name}
+                                                            imageUrl={activeDragGroup.imageUrl}
+                                                            iconClass={activeDragGroup.dragType === 'pg' ? "fa-folder-tree" : "fa-tags"}
+                                                            colorClass={activeDragGroup.dragType === 'pg' 
+                                                                ? { bg: "bg-indigo-100 dark:bg-indigo-900/30", text: "text-indigo-500", hover: "hover:border-indigo-400" } 
+                                                                : { bg: "bg-emerald-100 dark:bg-emerald-900/30", text: "text-emerald-500", hover: "hover:border-emerald-400" }}
+                                                            onClick={() => {}}
+                                                            isDesignMode={true}
+                                                        />
+                                                    ) : null}
+                                                </DragOverlay>
+                                            </DndContext>
 
                                             {/* Kategorisi olmayan ürünleri doğrudan göster */}
                                             {filteredProducts.length > 0 && (
@@ -1446,34 +1716,65 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                                 ₺{(item.quantity * item.unitPrice).toFixed(2)}
                                             </span>
                                         </div>
-                                        <div className="flex justify-between items-center mt-1">
-                                            <span className="text-xs font-bold text-slate-400">Birim: ₺{item.unitPrice} &nbsp;·&nbsp; {item.quantity} Adet</span>
-                                            {!item.isPaid && (
-                                                <button
-                                                    onClick={() => {
-                                                        setTransferSourceSubCheckId(item.saleId);
-                                                        setTransferSelectedItemIds([item.id]);
-                                                        setTransferMode('ITEM_TO_TABLE');
-                                                        setIsTransferModalOpen(true);
-                                                    }}
-                                                    className="text-[10px] font-black uppercase text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 border border-yellow-200 dark:border-yellow-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1"
-                                                >
-                                                    <i className="fat fa-arrow-right-arrow-left text-[10px]"></i> Transfer
-                                                </button>
-                                            )}
-                                            {params.mars_enabled && item.isWaiting && !item.isMarshed && (
-                                                <button
-                                                    onClick={() => marsItem(item.id)}
-                                                    className="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400 hover:text-rose-700 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 border border-rose-200 dark:border-rose-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1 animate-pulse"
-                                                >
-                                                    <i className="fat fa-fire-flame-curved text-[10px]"></i> MARŞ VER
-                                                </button>
-                                            )}
-                                            {params.mars_enabled && item.isWaiting && item.isMarshed && (
-                                                <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-full flex items-center gap-1">
-                                                    <i className="fat fa-check text-[10px]"></i> Marshed
+                                        <div className="flex justify-between items-end mt-1">
+                                            <div className="flex flex-col items-start gap-0.5">
+                                                <span className="text-xs font-bold text-slate-400">
+                                                    Birim: ₺{item.unitPrice} &nbsp;·&nbsp; {item.quantity} Adet 
+                                                    {getTransactionShortCode(item.transactionType) && (
+                                                        <span className="ml-1 text-indigo-500 bg-indigo-50 dark:bg-indigo-500/20 px-1.5 rounded-md">-{getTransactionShortCode(item.transactionType)}</span>
+                                                    )}
                                                 </span>
-                                            )}
+                                                {item.addedByName && (
+                                                    <span className="text-[9px] font-bold text-rose-500 dark:text-rose-400 flex items-center gap-1">
+                                                        <i className="fat fa-user-clock text-[8px]"></i>
+                                                        {item.addedByName}
+                                                        {item.addedAt && (
+                                                            <span className="opacity-75">· {formatTime(item.addedAt)}</span>
+                                                        )}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {!item.isPaid && (
+                                                    <>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                                setTransactionMenuPos({ x: rect.left, y: rect.bottom });
+                                                                setTransactionItem({ id: item.id, type: 'EXISTING' });
+                                                                setIsTransactionMenuOpen(true);
+                                                            }}
+                                                            className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1"
+                                                        >
+                                                            <i className="fat fa-tag text-[10px]"></i> Tip
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setTransferSourceSubCheckId(item.saleId);
+                                                                setTransferSelectedItemIds([item.id]);
+                                                                setTransferMode('ITEM_TO_TABLE');
+                                                                setIsTransferModalOpen(true);
+                                                            }}
+                                                            className="text-[10px] font-black uppercase text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 border border-yellow-200 dark:border-yellow-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1"
+                                                        >
+                                                            <i className="fat fa-arrow-right-arrow-left text-[10px]"></i> Transfer
+                                                        </button>
+                                                    </>
+                                                )}
+                                                {params.mars_enabled && item.isWaiting && !item.isMarshed && (
+                                                    <button
+                                                        onClick={() => marsItem(item.id)}
+                                                        className="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400 hover:text-rose-700 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 border border-rose-200 dark:border-rose-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1 animate-pulse"
+                                                    >
+                                                        <i className="fat fa-fire-flame-curved text-[10px]"></i> MARŞ VER
+                                                    </button>
+                                                )}
+                                                {params.mars_enabled && item.isWaiting && item.isMarshed && (
+                                                    <span className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-full flex items-center gap-1">
+                                                        <i className="fat fa-check text-[10px]"></i> Marshed
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                     {/* Sub-items for existing orders */}
@@ -1504,6 +1805,9 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                         <span className="block font-medium text-slate-800 dark:text-slate-200 flex flex-col">
                                             <span className="flex items-center">
                                                 {item.product.name}
+                                                {getTransactionShortCode(item.transactionType) && (
+                                                    <span className="ml-1 text-indigo-500 bg-indigo-50 dark:bg-indigo-500/20 px-1.5 py-0.5 rounded-md font-black text-[9px] border border-indigo-200 dark:border-indigo-500/30">-{getTransactionShortCode(item.transactionType)}</span>
+                                                )}
                                                 {item.saleType && item.saleType !== 'STANDARD' && (
                                                     <span className={`text-[10px] ml-1 px-2 py-0.5 rounded-full inline-block font-bold border opacity-90 ${item.saleType === 'HALF' ? 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/20 dark:text-orange-400' : 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-400'}`}>
                                                         {item.saleType === 'HALF' ? 'YARIM' : 'DUBLE'}
@@ -1513,11 +1817,11 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                             </span>
                                             {item.variationName && <span className="text-[11px] text-indigo-500 font-bold tracking-widest mt-0.5">{item.variationName}</span>}
                                         </span>
-                                        <span className="font-bold text-slate-800 dark:text-slate-100">₺{(((item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1)) * item.quantity).toFixed(2)}</span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-100">₺{(calculateItemPrice(item) * item.quantity).toFixed(2)}</span>
                                     </div>
                                     <div className="flex justify-between items-center mt-1">
                                         <div className="flex flex-col gap-1 w-full max-w-[150px]">
-                                            <span className="text-xs font-bold text-slate-400">Birim: ₺{((item.product.price + (item.extraPrice || 0)) * (item.saleTypeMultiplier || 1)).toFixed(2)}</span>
+                                            <span className="text-xs font-bold text-slate-400">Birim: ₺{calculateItemPrice(item).toFixed(2)}</span>
                                             {item.subItems && item.subItems.length > 0 && (
                                                 <div className="mt-1 flex flex-col gap-0.5 max-h-[60px] overflow-y-auto custom-scrollbar">
                                                     {item.subItems.map((sub: any, sIdx: number) => {
@@ -1548,6 +1852,17 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                                                 className="w-8 h-8 flex items-center justify-center text-amber-500 hover:text-amber-600 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded-md transition-colors" title="Not / Özellik Ekle"
                                             >
                                                 <i className="fat fa-pen-to-square"></i>
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    const rect = e.currentTarget.getBoundingClientRect();
+                                                    setTransactionMenuPos({ x: rect.left, y: rect.bottom });
+                                                    setTransactionItem(item);
+                                                    setIsTransactionMenuOpen(true);
+                                                }}
+                                                className="w-8 h-8 flex items-center justify-center text-indigo-500 hover:text-indigo-600 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 rounded-md transition-colors" title="İşlem Tipi"
+                                            >
+                                                <i className="fat fa-tag"></i>
                                             </button>
                                             <button onClick={() => removeEntireItem(item)} className="w-8 h-8 flex items-center justify-center text-rose-500 hover:text-rose-600 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 rounded-md transition-colors" title="Ürünü İptal Et">
                                                 <i className="fat fa-trash"></i>
@@ -1908,11 +2223,118 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                 tables={tables}
                 zones={zones}
                 onTransferComplete={() => {
-                    fetchData();
+                    refreshDynamicData();
                     setSelectedTable(null);
                     setActiveTab('tables');
                 }}
             />
+
+            {/* --- İşlem Tipi Seçim Menüsü (Floating) --- */}
+            {isTransactionMenuOpen && (
+                <div 
+                    className="fixed inset-0 z-[200]" 
+                    onClick={() => setIsTransactionMenuOpen(false)}
+                >
+                    <div 
+                        className="absolute bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 p-2 min-w-[200px] animate-in zoom-in-95 duration-200"
+                        style={{ 
+                            left: Math.min(transactionMenuPos.x, typeof window !== 'undefined' ? window.innerWidth - 220 : transactionMenuPos.x), 
+                            top: Math.min(transactionMenuPos.y, typeof window !== 'undefined' ? window.innerHeight - 300 : transactionMenuPos.y) 
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest p-2 border-b border-slate-100 dark:border-slate-700 mb-1 flex justify-between items-center">
+                            <span>İşlem Tipi</span>
+                            <button onClick={() => setIsTransactionMenuOpen(false)} className="text-slate-400 hover:text-rose-500"><i className="fat fa-xmark"></i></button>
+                        </div>
+                        <div className="grid grid-cols-1 gap-1">
+                            <button onClick={() => handleTransactionTypeChange('SALE')} className="flex items-center gap-3 w-full p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-sm font-bold text-slate-700 dark:text-slate-200">
+                                <i className="fat fa-receipt text-slate-400 w-5"></i> Satış (Normal)
+                            </button>
+                            {(isSuperAdmin || (user?.extraPermissions || []).includes('OP:CAN_COMPLIMENTARY')) && (
+                                <button onClick={() => handleTransactionTypeChange('COMPLIMENTARY')} className="flex items-center gap-3 w-full p-2.5 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors text-sm font-bold text-indigo-600 dark:text-indigo-400">
+                                    <i className="fat fa-gift w-5"></i> İkram
+                                </button>
+                            )}
+                            {(isSuperAdmin || (user?.extraPermissions || []).includes('OP:NON_PAYMENT')) && (
+                                <button onClick={() => handleTransactionTypeChange('FREE')} className="flex items-center gap-3 w-full p-2.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors text-sm font-bold text-rose-600 dark:text-rose-400">
+                                    <i className="fat fa-hand-holding-heart w-5"></i> Ödenmez (Bedelsiz)
+                                </button>
+                            )}
+                            {(isSuperAdmin || (user?.extraPermissions || []).includes('OP:CAN_PROMOTION')) && (
+                                <button onClick={() => handleTransactionTypeChange('PROMOTION')} className="flex items-center gap-3 w-full p-2.5 rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                                    <i className="fat fa-percentage w-5"></i> Promosyon
+                                </button>
+                            )}
+                            {(isSuperAdmin || (user?.extraPermissions || []).includes('OP:STAFF_SALE')) && (
+                                <button onClick={() => handleTransactionTypeChange('STAFF')} className="flex items-center gap-3 w-full p-2.5 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors text-sm font-bold text-amber-600 dark:text-amber-400">
+                                    <i className="fat fa-user-tie w-5"></i> Personel
+                                </button>
+                            )}
+                            {(isSuperAdmin || (user?.extraPermissions || []).includes('OP:CAN_TICKET')) && (
+                                <button onClick={() => handleTransactionTypeChange('TICKET')} className="flex items-center gap-3 w-full p-2.5 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors text-sm font-bold text-blue-600 dark:text-blue-400">
+                                    <i className="fat fa-ticket w-5"></i> Bilet
+                                </button>
+                            )}
+                        </div>
+                        
+                        <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                            <button 
+                                onClick={() => {
+                                    if (tempTransactionType === 'COMPLIMENTARY' || tempTransactionType === 'FREE') {
+                                        setIsReasonModalOpen(true);
+                                    } else {
+                                        applyTransactionToAll(tempTransactionType);
+                                    }
+                                }}
+                                className="flex items-center justify-center gap-2 w-full p-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 transition-all text-xs font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 shadow-lg"
+                            >
+                                <i className="fat fa-list-check"></i> Tümüne Uygula
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- Zorunlu Sebep Seçim Modalı --- */}
+            {isReasonModalOpen && (
+                <div className="fixed inset-0 z-[250] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
+                    <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 p-8 animate-in fade-in zoom-in duration-300">
+                        <div className="text-center mb-8">
+                            <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl ${tempTransactionType === 'COMPLIMENTARY' ? 'bg-indigo-100 text-indigo-600 shadow-indigo-500/20' : 'bg-rose-100 text-rose-600 shadow-rose-500/20'}`}>
+                                <i className={`fat ${tempTransactionType === 'COMPLIMENTARY' ? 'fa-gift' : 'fa-hand-holding-heart'} text-3xl`}></i>
+                            </div>
+                            <h2 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tight">İşlem Nedeni</h2>
+                            <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 font-medium">Lütfen bu işlem için geçerli bir sebep seçin veya yazın.</p>
+                        </div>
+
+                        <div className="space-y-3 mb-8">
+                            {['Müşteri Memnuniyeti', 'Gecikme Telafisi', 'Yönetici İkramı', 'Mutfak Hatası', 'Tanıtım / PR', 'Yanlış Sipariş', 'Personel Hatası'].map(reason => (
+                                <button
+                                    key={reason}
+                                    onClick={() => confirmTransactionType(tempTransactionType, reason)}
+                                    className="w-full p-4 text-left rounded-2xl border-2 border-slate-100 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500/50 hover:bg-emerald-50 dark:hover:bg-emerald-500/5 transition-all group"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <span className="font-bold text-slate-700 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">{reason}</span>
+                                        <i className="fat fa-chevron-right text-slate-300 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all"></i>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="flex gap-4">
+                            <button
+                                onClick={() => setIsReasonModalOpen(false)}
+                                className="flex-1 py-4 rounded-2xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
+                            >
+                                Vazgeç
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {selectedSetMenuProduct && (
                 <SetMenuSelectionModal
                     isOpen={isSetMenuModalOpen}
@@ -1922,7 +2344,6 @@ export default function TakeOrderView({ onSwitchToPos }: { onSwitchToPos: () => 
                     onConfirm={handleSetMenuConfirm}
                 />
             )}
-
         </div>
     );
 }

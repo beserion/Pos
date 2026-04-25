@@ -11,7 +11,10 @@ export class DepartmentsService {
   ) {}
 
   findAll() {
-    return this.repository.find({ relations: ['location', 'parentGroup', 'extraDepartment', 'outputProfile'] });
+    return this.repository.find({ 
+      relations: ['location', 'parentGroup', 'extraDepartment', 'outputProfile'],
+      order: { orderIndex: 'ASC', name: 'ASC' }
+    });
   }
 
   findOne(id: number) {
@@ -32,5 +35,12 @@ export class DepartmentsService {
 
   async remove(id: number) {
     return this.repository.delete(id);
+  }
+
+  async reorder(items: { id: number, orderIndex: number }[]): Promise<void> {
+    if (!items || items.length === 0) return;
+    for (const item of items) {
+      await this.repository.update(item.id, { orderIndex: item.orderIndex });
+    }
   }
 }

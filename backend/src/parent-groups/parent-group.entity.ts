@@ -12,6 +12,12 @@ export class ParentGroup {
   @Column({ nullable: true })
   description: string;
 
+  @Column({ type: 'nvarchar', length: 'MAX', nullable: true })
+  imageUrl: string;
+
+  @Column({ default: 0 })
+  orderIndex: number;
+
   @OneToMany(() => Department, (department) => department.parentGroup)
   departments: Department[];
 

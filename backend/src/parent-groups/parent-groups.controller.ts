@@ -23,6 +23,11 @@ export class ParentGroupsController {
     return this.service.create(body);
   }
 
+  @Put('reorder')
+  reorder(@Body('items') items: { id: number, orderIndex: number }[]): Promise<void> {
+    return this.service.reorder(items);
+  }
+
   @Put(':id')
   update(
     @Param('id', ParseIntPipe) id: number,

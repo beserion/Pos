@@ -7,6 +7,7 @@ import axios from 'axios';
 import Cookies from 'js-cookie';
 import { useLocale } from 'next-intl';
 import { showSwal, toastSwal } from '../utils/swal';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface Partner {
     id: number;
@@ -297,10 +298,16 @@ export function PageClient() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tür *</label>
-                                    <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white outline-none focus:ring-2 ring-indigo-500/30">
-                                        <option value="INCOME">Gelir / Tahsilat</option>
-                                        <option value="EXPENSE">Gider / Ödeme</option>
-                                    </select>
+                                    <div className="-m-2 w-full">
+                                        <SearchableSelect
+                                            value={form.type}
+                                            onChange={(val) => setForm({ ...form, type: val.toString() })}
+                                            options={[
+                                                { value: 'INCOME', label: 'Gelir / Tahsilat' },
+                                                { value: 'EXPENSE', label: 'Gider / Ödeme' }
+                                            ]}
+                                        />
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tutar (₺) *</label>
@@ -314,22 +321,34 @@ export function PageClient() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Ödeme Yöntemi</label>
-                                    <select value={form.paymentMethod} onChange={e => setForm({ ...form, paymentMethod: e.target.value })} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white outline-none focus:ring-2 ring-indigo-500/30">
-                                        <option value="KASA">Kasa</option>
-                                        <option value="BANKA">Banka</option>
-                                        <option value="KREDI_KARTI">Kredi Kartı</option>
-                                    </select>
+                                    <div className="-m-2 w-full">
+                                        <SearchableSelect
+                                            value={form.paymentMethod}
+                                            onChange={(val) => setForm({ ...form, paymentMethod: val.toString() })}
+                                            options={[
+                                                { value: 'KASA', label: 'Kasa' },
+                                                { value: 'BANKA', label: 'Banka' },
+                                                { value: 'KREDI_KARTI', label: 'Kredi Kartı' }
+                                            ]}
+                                        />
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Kategori</label>
-                                    <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white outline-none focus:ring-2 ring-indigo-500/30">
-                                        <option value="Tahsilat">Tahsilat</option>
-                                        <option value="Satış">Satış</option>
-                                        <option value="Ödeme">Ödeme</option>
-                                        <option value="Alım">Alım</option>
-                                        <option value="Gider">Gider</option>
-                                        <option value="Diğer">Diğer</option>
-                                    </select>
+                                    <div className="-m-2 w-full">
+                                        <SearchableSelect
+                                            value={form.category}
+                                            onChange={(val) => setForm({ ...form, category: val.toString() })}
+                                            options={[
+                                                { value: 'Tahsilat', label: 'Tahsilat' },
+                                                { value: 'Satış', label: 'Satış' },
+                                                { value: 'Ödeme', label: 'Ödeme' },
+                                                { value: 'Alım', label: 'Alım' },
+                                                { value: 'Gider', label: 'Gider' },
+                                                { value: 'Diğer', label: 'Diğer' }
+                                            ]}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>

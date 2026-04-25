@@ -7,6 +7,7 @@ import { useAuth } from '../AuthContext';
 import { showSwal } from '../utils/swal';
 import { useLocale, useTranslations } from 'next-intl';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
+import SearchableSelect from '@/components/SearchableSelect';
 
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -351,30 +352,47 @@ export function PageClient() {
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Lokasyon</label>
-                                    <select value={formData.locationId} onChange={e => setFormData({ ...formData, locationId: +e.target.value, tableId: 0 })} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-sm font-bold focus:ring-2 ring-indigo-500/20 transition-all outline-none appearance-none">
-                                        <option value="0">Lokasyon Seçin</option>
-                                        {locations.map(l => (
-                                            <option key={l.id} value={l.id}>{l.name}</option>
-                                        ))}
-                                    </select>
+                                    <div className="-m-2 w-full">
+                                        <SearchableSelect
+                                            value={formData.locationId.toString()}
+                                            onChange={(val) => setFormData({ ...formData, locationId: parseInt(val), tableId: 0 })}
+                                            options={[
+                                                { value: '0', label: 'Lokasyon Seçin' },
+                                                ...locations.map(l => ({ value: l.id.toString(), label: l.name }))
+                                            ]}
+                                        />
+                                    </div>
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Masa Seçimi</label>
-                                    <select value={formData.tableId} onChange={e => setFormData({ ...formData, tableId: +e.target.value })} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-sm font-bold focus:ring-2 ring-indigo-500/20 transition-all outline-none appearance-none">
-                                        <option value="0">Masa Seçilmedi</option>
-                                        {tables.filter(t => !formData.locationId || t.zone?.location?.id === formData.locationId).map(t => (
-                                            <option key={t.id} value={t.id}>{t.name} ({t.zone?.name})</option>
-                                        ))}
-                                    </select>
+                                    <div className="-m-2 w-full">
+                                        <SearchableSelect
+                                            value={formData.tableId.toString()}
+                                            onChange={(val) => setFormData({ ...formData, tableId: parseInt(val) })}
+                                            options={[
+                                                { value: '0', label: 'Masa Seçilmedi' },
+                                                ...tables.filter(t => !formData.locationId || t.zone?.location?.id === formData.locationId).map(t => ({
+                                                    value: t.id.toString(),
+                                                    label: `${t.name} (${t.zone?.name})`
+                                                }))
+                                            ]}
+                                        />
+                                    </div>
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Durum</label>
-                                    <select value={formData.status} onChange={e => setFormData({ ...formData, status: e.target.value })} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-sm font-bold focus:ring-2 ring-indigo-500/20 transition-all outline-none appearance-none">
-                                        <option value="PENDING">Bekliyor</option>
-                                        <option value="CONFIRMED">Onaylandı</option>
-                                        <option value="CANCELLED">İptal Edildi</option>
-                                        <option value="ARRIVED">Giriş Yapıldı</option>
-                                    </select>
+                                    <div className="-m-2 w-full">
+                                        <SearchableSelect
+                                            value={formData.status}
+                                            onChange={(val) => setFormData({ ...formData, status: val.toString() })}
+                                            options={[
+                                                { value: 'PENDING', label: 'Bekliyor' },
+                                                { value: 'CONFIRMED', label: 'Onaylandı' },
+                                                { value: 'CANCELLED', label: 'İptal Edildi' },
+                                                { value: 'ARRIVED', label: 'Giriş Yapıldı' }
+                                            ]}
+                                        />
+                                    </div>
                                 </div>
                                 <div className="col-span-2 space-y-1">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Notlar</label>
