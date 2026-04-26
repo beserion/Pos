@@ -19,6 +19,17 @@ export class StocksService {
     private alertsService: AlertsService,
   ) {}
 
+  /**
+   * Find all stock records for a specific location (e.g. "Warehouse #1").
+   * Used by InventoryService to get warehouse-based stock levels for counting.
+   */
+  async findByLocation(location: string): Promise<Stock[]> {
+    return this.stockRepository.find({
+      where: { location },
+      relations: ['stockCard'],
+    });
+  }
+
   async findAll(
     page: number = 1,
     limit: number = 10,

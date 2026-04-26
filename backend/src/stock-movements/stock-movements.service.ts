@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Inject, forwardRef, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between } from 'typeorm';
+import { Repository, Between, DataSource } from 'typeorm';
 import { StockMovement } from './stock-movement.entity';
 import { StockCardsService } from '../stock-cards/stock-cards.service';
 import { RecipesService } from '../recipes/recipes.service';
@@ -17,6 +17,7 @@ export class StockMovementsService {
     private recipesService: RecipesService,
     private parametersService: ParametersService,
     private stocksService: StocksService,
+    private dataSource: DataSource,
   ) {}
 
   private readonly logger = new Logger(StockMovementsService.name);
@@ -111,7 +112,10 @@ export class StockMovementsService {
       );
     }
 
-    const totalCost = data.quantity * unitCostValue;
+    // NaN / Infinity koruması: geçersiz maliyet değerlerini 0 olarak sabitle
+    if (!isFinite(unitCostValue) || isNaN(unitCostValue)) unitCostValue = 0;
+
+    const totalCost = isFinite(data.quantity * unitCostValue) ? data.quantity * unitCostValue : 0;
 
     // Update the stock card's currentStock and costs atomically
     const newStockLevel = await this.stockCardsService.updateStockAndCost(
@@ -396,28 +400,32 @@ export class StockMovementsService {
   }): Promise<{ out: StockMovement; in: StockMovement }> {
     const qty = Math.abs(data.quantity);
 
-    const out = await this.createMovement({
-      stockCardId: data.stockCardId,
-      movementType: 'TRANSFER_OUT',
-      quantity: -qty,
-      warehouseId: data.fromWarehouseId,
-      sourceType: 'TRANSFER',
-      description: data.description || 'Depolar arası transfer',
-      userId: data.userId,
-    });
+    // Her iki hareketi (çıkış + giriş) atomik bir transaksiyon içinde yap.
+    // Herhangi bir adım başarısız olursa tamamı otomatik geri alınır.
+    return this.dataSource.transaction(async (manager) => {
+      const out = await this.createMovement({
+        stockCardId: data.stockCardId,
+        movementType: 'TRANSFER_OUT',
+        quantity: -qty,
+        warehouseId: data.fromWarehouseId,
+        sourceType: 'TRANSFER',
+        description: data.description || 'Depolar arası transfer',
+        userId: data.userId,
+      }, manager);
 
-    const inMovement = await this.createMovement({
-      stockCardId: data.stockCardId,
-      movementType: 'TRANSFER_IN',
-      quantity: qty,
-      warehouseId: data.toWarehouseId,
-      sourceType: 'TRANSFER',
-      sourceId: out.id,
-      description: data.description || 'Depolar arası transfer',
-      userId: data.userId,
-    });
+      const inMovement = await this.createMovement({
+        stockCardId: data.stockCardId,
+        movementType: 'TRANSFER_IN',
+        quantity: qty,
+        warehouseId: data.toWarehouseId,
+        sourceType: 'TRANSFER',
+        sourceId: out.id,
+        description: data.description || 'Depolar arası transfer',
+        userId: data.userId,
+      }, manager);
 
-    return { out, in: inMovement };
+      return { out, in: inMovement };
+    });
   }
 
   // ─── Queries ─────────────────────────────────────────

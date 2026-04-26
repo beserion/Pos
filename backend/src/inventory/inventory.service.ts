@@ -5,6 +5,7 @@ import { InventorySession } from './inventory-session.entity';
 import { InventorySessionLine } from './inventory-session-line.entity';
 import { StockCardsService } from '../stock-cards/stock-cards.service';
 import { StockMovementsService } from '../stock-movements/stock-movements.service';
+import { StocksService } from '../stocks/stocks.service';
 
 @Injectable()
 export class InventoryService {
@@ -15,6 +16,7 @@ export class InventoryService {
     private lineRepository: Repository<InventorySessionLine>,
     private stockCardsService: StockCardsService,
     private stockMovementsService: StockMovementsService,
+    private stocksService: StocksService,
   ) {}
 
   // ─── Session CRUD ────────────────────────────────────
@@ -92,11 +94,45 @@ export class InventoryService {
       stockCards = await this.stockCardsService.findAllNoPagination();
     }
 
-    // Optionally filter by warehouse
+    // ─── Warehouse-based filtering using stocks table ─────
+    // Instead of filtering by stockCard.warehouseId (which is the card's
+    // "assigned" warehouse and doesn't change on transfer), we look at the
+    // stocks table to find which cards actually have inventory in this warehouse.
+    let warehouseStockMap: Map<number, number> | null = null;
+
     if (data.warehouseId !== undefined && data.warehouseId !== null && Number(data.warehouseId) > 0) {
-      stockCards = stockCards.filter(
-        (c) => c.warehouseId === Number(data.warehouseId),
-      );
+      const warehouseLocation = `Warehouse #${data.warehouseId}`;
+      const warehouseStocks = await this.stocksService.findByLocation(warehouseLocation);
+
+      // Build a map of stockCardId -> quantity in this warehouse
+      warehouseStockMap = new Map<number, number>();
+      for (const s of warehouseStocks) {
+        const cardId = s.stockCard?.id;
+        if (cardId) {
+          warehouseStockMap.set(cardId, Number(s.quantity));
+        }
+      }
+
+      // Collect IDs of cards that have non-zero stock in this warehouse
+      const stockCardIdsInWarehouse = new Set<number>();
+      for (const [cardId, qty] of warehouseStockMap.entries()) {
+        if (qty !== 0) {
+          stockCardIdsInWarehouse.add(cardId);
+        }
+      }
+
+      // Also include cards that are assigned to this warehouse (warehouseId match)
+      for (const card of stockCards) {
+        if (card.warehouseId === Number(data.warehouseId)) {
+          stockCardIdsInWarehouse.add(card.id);
+          // If this card doesn't have a stocks record yet, default to its currentStock
+          if (!warehouseStockMap.has(card.id)) {
+            warehouseStockMap.set(card.id, Number(card.currentStock));
+          }
+        }
+      }
+
+      stockCards = stockCards.filter((c) => stockCardIdsInWarehouse.has(c.id));
     }
 
     // Create session
@@ -114,13 +150,17 @@ export class InventoryService {
     const savedSession = await this.sessionRepository.save(session);
 
     // Create lines with theoretical snapshots
+    // Use warehouse-specific stock from stocks table when available,
+    // otherwise fall back to the card's global currentStock.
     const lines: InventorySessionLine[] = [];
     for (const card of stockCards) {
       const line = new InventorySessionLine();
       line.sessionId = savedSession.id;
       line.stockCardId = card.id;
       line.unit = card.baseUnit;
-      line.theoreticalQty = Number(card.currentStock);
+      line.theoreticalQty = warehouseStockMap
+        ? (warehouseStockMap.get(card.id) ?? 0)
+        : Number(card.currentStock);
       line.countedQty = undefined as any;
       line.differenceQty = 0;
       line.unitCost = Number(card.costPerBaseUnit);

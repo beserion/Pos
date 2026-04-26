@@ -6,12 +6,14 @@ import { InventoryService } from './inventory.service';
 import { InventoryController } from './inventory.controller';
 import { StockCardsModule } from '../stock-cards/stock-cards.module';
 import { StockMovementsModule } from '../stock-movements/stock-movements.module';
+import { StocksModule } from '../stocks/stocks.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([InventorySession, InventorySessionLine]),
     StockCardsModule,
     StockMovementsModule,
+    StocksModule,
   ],
   controllers: [InventoryController],
   providers: [InventoryService],
