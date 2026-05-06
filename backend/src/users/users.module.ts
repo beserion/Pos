@@ -1,0 +1,17 @@
+import { Module, forwardRef } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { UsersService } from './users.service';
+import { UsersController } from './users.controller';
+import { User } from './user.entity';
+import { PushSubscriptionEntity } from './push-subscription.entity';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([User, PushSubscriptionEntity]),
+  ],
+  providers: [UsersService],
+  controllers: [UsersController],
+  exports: [UsersService],
+})
+export class UsersModule { }
+

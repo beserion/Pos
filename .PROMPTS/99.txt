@@ -1,0 +1,260 @@
+*Zone Bazlı Sipariş Yazdırma ve Reçete Kaynak Depo İşleyişi – Son Karar Metni*
+
+Sistemde mevcut yapı korunacaktır.
+Yani sipariş yönlendirme mantığında şu öncelik aynen devam edecektir:
+
+Ürün Kartı Override > Ürün Grubu Override > Ürün Cinsi
+
+Ayrıca mevcut Çıktı Profilleri sayfası ve Ürün Cinsleri sayfası kaldırılmayacaktır. Bunlar sistemin genel varsayılan tanım ekranları olarak çalışmaya devam edecektir.
+
+1) Mevcut yapının korunması
+Çıktı Profilleri sayfası sistemde kalacaktır.
+Ürün Cinsleri sayfası sistemde kalacaktır.
+Ürün cinslerinde tanımlı çıktı profilleri, sistemin genel varsayılanı olacaktır.
+Ürün kartı override ve ürün grubu override mantığı aynen korunacaktır.
+Yeni geliştirme, mevcut yapıyı bozmayacak; bunun üstüne Zone bazlı gerçek hedef çözümleme eklenecektir.
+2) Yeni geliştirme nereye eklenecek
+
+Yeni yapı Zone Yönetimi ekranına eklenecektir.
+
+Ayrı modal açılmayacaktır.
+Ayrı yeni ekran açılmayacaktır.
+Zone listesi içinde, ilgili Zone satırının altında / Zone alanının içinde inline şekilde yönetilecektir.
+
+Zone detayında, açıklama alanının yerine veya aynı bölüm içinde aşağıdaki gibi bir tablo gösterilecektir.
+
+Her Zoneda satırlar otomatik olarak Ürün Cinsleri sayfasındaki cinslerden gelecektir.
+
+Örnek satırlar:
+
+Yiyecek
+İçecek
+Tatlı
+Nargile
+Alkol
+Diğer
+
+Her satırda şu alanlar olacaktır:
+
+Ürün Cinsi
+Kaynak Depo
+Yazıcı 1
+Yazıcı 2
+Yazıcı 3
+
+Burada mantık şu olacaktır:
+
+Yazıcı 1 = ana üretim yazıcısı
+Yazıcı 2 = bilgi yazıcısı
+Yazıcı 3 = ikinci bilgi yazıcısı
+
+Yazıcı 2 ve Yazıcı 3 aynı anda bilgi fişi basabilmelidir.
+
+İstenirse ileride KDS alanı da bu yapıya eklenebilir; ancak ilk aşamada odak depo ve yazıcı hedefleridir.
+
+3) Zone bazlı sipariş yazdırma mantığı
+
+Sipariş yazdırma kararı iki aşamalı çalışacaktır.
+
+Aşama 1: Etkin kuralın bulunması
+
+Sipariş satırı için önce mevcut hiyerarşiye göre hangi yönlendirme kuralının geçerli olduğu bulunacaktır:
+
+Ürün Kartı Override
+Ürün Grubu Override
+Ürün Cinsi
+
+Bu kısım mevcut yapıda olduğu gibi çalışmaya devam edecektir.
+
+Aşama 2: Aktif Zonea göre gerçek hedefin çözülmesi
+
+Sipariş hangi Zonedaki masadan verilmişse, o Zone baz alınacaktır.
+
+Yani aynı ürün cinsi, farklı Zoneda farklı yazıcıya gidebilecektir.
+
+Örnek:
+
+Bira ürünü, ürün cinsi = İçecek
+Sipariş BAR1 Zoneından geldiyse → BAR1 için tanımlı içecek yazıcısına gidecek
+Sipariş BAR2 Zoneından geldiyse → BAR2 için tanımlı içecek yazıcısına gidecek
+
+Aynı şekilde:
+
+Cola BAR1’den verilirse BAR1 bar yazıcısından çıkacak
+Cola BAR2’den verilirse BAR2 bar yazıcısından çıkacak
+
+Bu sayede aynı ürün, aynı ürün cinsi ile çalışsa bile, siparişin geldiği Zonea göre farklı fiziksel yazıcıya yönlendirilebilecektir.
+
+4) Ürün grubu / ürün kartı override ile Zone yapısının birlikte çalışması
+
+Mevcut override mantığı korunacaktır.
+
+Yani:
+
+bir ürün kartında özel yönlendirme varsa önce o dikkate alınacaktır
+ürün kartında yoksa, ürün grubunda özel yönlendirme varsa o dikkate alınacaktır
+ikisi de yoksa ürün cinsi baz alınacaktır
+
+Ancak nihai fiziksel hedef, siparişin geldiği Zonea göre çözülecektir.
+
+Özet akış:
+
+Ürün için hangi yönlendirme kuralı geçerli bulunur
+Siparişin geldiği aktif Zone bulunur
+O Zone için ilgili cins / kural satırındaki yazıcı hedefleri kullanılır
+5) Ürün kartı – stok kartı – reçete yapısında depo mantığı
+
+Sistemde ürün kartı ile stok kartı ayrı yapıdadır.
+Ürün satış kartıdır.
+Stok kartı gerçek depodaki malzeme kartıdır.
+Ürün ile stok kartı ilişkisi reçete üzerinden kurulmaktadır.
+
+Bu nedenle stok düşümü ürün kartından değil, reçetedeki stok satırlarından yapılacaktır.
+
+Kaynak depo seçimi ise siparişin verildiği Zonea göre belirlenecektir.
+
+Yani:
+
+Zone içinde ilgili ürün cinsi için hangi depo seçildiyse
+o Zoneda satılan ürünün reçetesine bağlı stok satırları
+o depodan düşecektir
+
+Örnek:
+
+Cola ürünü, reçetede “Cola 330 ml” stok kartına bağlı
+Sipariş BAR1 Zoneından geldi
+BAR1 Zoneında İçecek cinsi için seçilmiş depo = BAR1 Bar Deposu
+
+Sonuç:
+
+Cola 330 ml stok kartından BAR1 Bar Deposundan 1 adet düşülecektir
+
+Aynı cola BAR2’de satılırsa:
+
+BAR2 için tanımlı içecek deposundan düşecektir
+6) Reçete satırlarının düşüm mantığı
+
+İlk aşamada bir ürünün reçetesindeki tüm stok satırları aynı depodan düşecektir.
+
+Yani:
+
+ürün hangi Zoneda satıldıysa
+o Zoneda ilgili ürün cinsi için hangi depo seçildiyse
+reçetedeki tüm stok hareketleri o depodan düşecektir
+
+Örnek:
+Ürün: Cin Tonik
+Reçete:
+
+4 cl cin
+1 şişe tonik
+1 dilim limon
+
+Sipariş:
+
+BAR1 Zoneında verildi
+İçecek deposu = BAR1 Bar Deposu
+
+Sonuç:
+
+reçetedeki tüm stok satırları BAR1 Bar Deposundan düşecektir
+
+Şimdilik aynı reçetede bazı satırların başka depodan düşmesi gibi ileri seviye ayrıştırma yapılmayacaktır. Buna şu an ihtiyaç yoktur.
+
+7) Eksik stokta davranış
+
+Sistem hiçbir koşulda başka depodan otomatik düşüm yapmayacaktır.
+
+Örnek:
+
+BAR1 Bar Deposunda cola yok
+BAR2’de cola var
+
+Sistem BAR2’den otomatik düşmeyecektir.
+
+Stok hareketi, siparişin geldiği Zone için tanımlı depoda çalışacaktır.
+Gerekirse o depoda stok eksiye düşecektir.
+Sessizce başka depoya geçiş yapılmayacaktır.
+
+8) Set menü ve fix menüde depo ve yazdırma mantığı
+
+Set menü ve fix menülerde işlem ana ürün üzerinden değil, içindeki gerçek alt ürünler üzerinden yapılacaktır.
+
+Yazdırma
+
+Alt ürünlerin her biri kendi geçerli yönlendirme kuralına göre ilgili yazıcıya gider.
+
+Stok düşümü
+
+Alt ürünlerin her biri kendi reçetesine göre, kendi ürün cinsi ve aktif Zone için seçilmiş depodan düşer.
+
+Örnek:
+Fix Menü içeriği:
+
+Hamburger
+Cola
+Tatlı
+
+Sipariş BAR1’de verildiğinde:
+
+Hamburger → yiyecek yazıcısına gider, yiyecek deposundan düşer
+Cola → içecek yazıcısına gider, içecek deposundan düşer
+Tatlı → tatlı / yiyecek için tanımlı yazıcı ve depodan düşer
+
+Yani set menü ve fix menüde hem yazdırma hem stok tarafı alt ürün bazlı çalışacaktır.
+
+9) Yazıcı 2 ve Yazıcı 3 bilgi fişi mantığı
+
+Zone bazlı tabloda:
+
+Yazıcı 1 ana üretim içindir
+Yazıcı 2 bilgi amaçlıdır
+Yazıcı 3 ikinci bilgi amaçlıdır
+
+İstenirse aynı sipariş için:
+
+ana üretim fişi Yazıcı 1’den
+bilgi fişi Yazıcı 2’den
+ikinci bilgi fişi Yazıcı 3’ten
+
+aynı anda çıkabilmelidir.
+
+Bu özellikle kasa, hesap yazıcısı, expo veya kontrol amaçlı bilgi çıktıları için kullanılacaktır.
+
+10) Son sistem özeti
+
+Sistem şu mantıkla çalışacaktır:
+
+Yazdırma tarafında
+Ürün Kartı Override varsa onu kullan
+Yoksa Ürün Grubu Override kullan
+Yoksa Ürün Cinsi kullan
+Sonra siparişin geldiği aktif Zonea göre ilgili cins için tanımlı Yazıcı 1 / Yazıcı 2 / Yazıcı 3 hedeflerini uygula
+Stok düşüm tarafında
+Satılan ürünün reçetesini aç
+Reçetedeki stok satırlarını bul
+Siparişin geldiği aktif Zoneda, ilgili ürün cinsi için tanımlı depoyu bul
+Tüm reçete satırlarını o depodan düş
+Başka depodan otomatik düşüm yapma
+Gerekirse aynı depoda stok eksiye düşebilir
+11) Uygulama hedefi
+
+Bu geliştirme ile:
+
+aynı ürün farklı Zonelarda farklı yazıcılardan çıkabilecek
+aynı ürün farklı Zonelarda farklı depolardan düşebilecek
+mevcut ürün kartı override / ürün grubu override / ürün cinsi yapısı bozulmayacak
+reçete yapısı mevcut sistem mantığıyla uyumlu çalışacak
+set menü ve fix menüler doğru şekilde alt ürün bazlı işlenecek
+bilgi fişi için aynı anda birden fazla yazıcı kullanılabilecek
+12) Kabul kriterleri
+Zone yönetimi ekranında, modal olmadan inline ürün cinsi bazlı tablo bulunmalı
+Her Zoneda ürün cinsleri otomatik satır olarak gelmeli
+Her cins için depo ve 3 yazıcı alanı tanımlanabilmeli
+Aynı ürün farklı Zoneda farklı yazıcıya gidebilmeli
+Aynı ürün farklı Zoneda farklı depodan düşebilmeli
+Reçete stok düşümü ürün kartından değil reçete stok satırlarından yapılmalı
+Tüm reçete satırları ilk aşamada tek depodan düşmeli
+Sistem başka depoya otomatik geçmemeli
+Eksik stokta tanımlı depoda eksi stok çalışabilmeli
+Set menü ve fix menüde alt ürün bazlı yazdırma ve stok düşümü doğru çalışmalı

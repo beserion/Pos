@@ -1,0 +1,266 @@
+@import url('https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+.dark {
+  --background: #0f172a;
+  /* Lighter dark background (slate-900) instead of black */
+  --foreground: #f8fafc;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Soft Scrollbar — theme-aware */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+.dark * {
+  scrollbar-color: rgba(71, 85, 105, 0.4) transparent;
+}
+
+.dark *::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.4);
+}
+
+.dark *::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 0.6);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+#title {
+  font-family: 'Josefin Sans', sans-serif !important;
+}
+
+/* Modal Rule Utilities */
+.wd-130 {
+  width: 130px !important;
+  min-width: 130px;
+}
+
+.wd-50 {
+  width: 50px !important;
+  min-width: 50px;
+}
+
+.font-bold {
+  font-weight: 700 !important;
+}
+
+.input-group {
+  height: 38px;
+}
+
+.input-group .input-group-text,
+.form-control,
+.form-select {
+  height: 38px;
+}
+
+/* Light mode button shadow enhancement */
+@media (prefers-color-scheme: light) {
+
+  :root[class~="light"] button:not(.dark *),
+  html:not(.dark) button {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  }
+}
+
+/* FullCalendar Premium Styling */
+.custom-calendar-wrapper {
+  --fc-border-color: rgba(226, 232, 240, 0.5);
+  --fc-daygrid-event-dot-width: 8px;
+  --fc-list-event-dot-width: 10px;
+  --fc-button-bg-color: transparent;
+  --fc-button-border-color: rgba(226, 232, 240, 0.8);
+  --fc-button-text-color: #64748b;
+  --fc-button-active-bg-color: #4f46e5;
+  --fc-button-active-border-color: #4f46e5;
+  --fc-button-hover-bg-color: rgba(79, 70, 229, 0.1);
+  --fc-button-hover-border-color: #4f46e5;
+  --fc-today-bg-color: rgba(79, 70, 229, 0.05);
+}
+
+.dark .custom-calendar-wrapper {
+  --fc-border-color: rgba(51, 65, 85, 0.5);
+  --fc-button-border-color: rgba(51, 65, 85, 0.8);
+  --fc-button-text-color: #94a3b8;
+  --fc-today-bg-color: rgba(79, 70, 229, 0.1);
+}
+
+.fc {
+  font-family: 'Josefin Sans', sans-serif !important;
+}
+
+.fc-toolbar-title {
+  font-size: 1.25rem !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.1em !important;
+  color: #4f46e5 !important;
+}
+
+.fc-button {
+  border-radius: 12px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  font-size: 10px !important;
+  letter-spacing: 0.05em !important;
+  padding: 8px 16px !important;
+  transition: all 0.2s !important;
+}
+
+.fc-button-primary:not(:disabled).fc-button-active,
+.fc-button-primary:not(:disabled):active {
+  background-color: #4f46e5 !important;
+  border-color: #4f46e5 !important;
+  color: white !important;
+  box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3) !important;
+}
+
+.fc-event {
+  border: none !important;
+  border-radius: 6px !important;
+  padding: 2px 6px !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  transition: transform 0.1s !important;
+}
+
+.fc-event:hover {
+  transform: scale(1.02);
+}
+
+.fc-event-pending {
+  background-color: #f59e0b !important;
+  color: white !important;
+}
+
+.fc-event-confirmed {
+  background-color: #10b981 !important;
+  color: white !important;
+}
+
+.fc-event-cancelled {
+  background-color: #ef4444 !important;
+  color: white !important;
+}
+
+.fc-event-arrived {
+  background-color: #6366f1 !important;
+  color: white !important;
+}
+
+.fc-v-event {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+}
+
+.dark .fc-col-header-cell {
+  background-color: rgba(30, 41, 59, 0.5) !important;
+}
+
+.dark .fc-timegrid-slot {
+  border-bottom: 1px solid rgba(51, 65, 85, 0.3) !important;
+}
+
+/* Watermark Background - Global Centered Overlay */
+.watermark-bg {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 70vw;
+  max-width: 1000px;
+  height: auto;
+  opacity: 0.045;
+  /* Çok hafif, metinleri engellemez */
+  z-index: 9999;
+  /* Tüm içerik ve arka planların üzerinde ama etkileşimsiz */
+  pointer-events: none;
+  user-select: none;
+  filter: grayscale(100%);
+}
+
+.dark .watermark-bg {
+  opacity: 0.008;
+  /* Daha saydam yapıldı */
+  filter: brightness(0) invert(1) grayscale(100%);
+}
+
+/* --- Theme Change View Transition API Overrides --- */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+html.theme-light-to-dark::view-transition-old(root) {
+  z-index: 1;
+}
+html.theme-light-to-dark::view-transition-new(root) {
+  z-index: 2;
+}
+
+html.theme-dark-to-light::view-transition-old(root) {
+  z-index: 2;
+}
+html.theme-dark-to-light::view-transition-new(root) {
+  z-index: 1;
+}
+
+::view-transition-group(root) {
+  animation: none;
+}
+
+::view-transition-image-pair(root) {
+  isolation: auto;
+}
+
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning::before,
+html.theme-transitioning::after {
+  transition: none !important;
+}
