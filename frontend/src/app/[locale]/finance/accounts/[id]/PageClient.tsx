@@ -1,11 +1,12 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../../../AuthContext';
+import { useAuth } from '@/app/[locale]/AuthContext';
 import { useRouter, useParams } from 'next/navigation';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { useTranslations, useLocale } from 'next-intl';
-import { showSwal } from '../../../utils/swal';
+import { showSwal } from '@/app/[locale]/utils/swal';
+import { API_URL } from '@/lib/apiConfig';
 
 interface CompanyAccount {
     id: number;
@@ -40,7 +41,6 @@ export function PageClient() {
     const locale = useLocale();
     const tCommon = useTranslations('Common');
     const tFinance = useTranslations('Finance');
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
     const [account, setAccount] = useState<CompanyAccount | null>(null);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -252,7 +252,7 @@ export function PageClient() {
                         {/* Record Count - Right */}
                         <div className="flex-1 flex justify-end min-w-[200px]">
                             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                {total} {tFinance('recordCount')}
+                                {total} Kayıt
                             </div>
                         </div>
                     </div>

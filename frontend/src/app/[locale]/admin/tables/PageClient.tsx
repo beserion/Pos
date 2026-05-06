@@ -1,12 +1,12 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { io } from 'socket.io-client';
 import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
 import SearchableSelect from '@/components/SearchableSelect';
+import { API_URL, createSocket } from '@/lib/apiConfig';
 
 interface Zone {
     id: number;
@@ -56,8 +56,7 @@ export function PageClient() {
     // WebSocket listener for real-time updates
     useEffect(() => {
         if (!user) return;
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
-        const socket = io(API_URL, { transports: ['websocket', 'polling'] });
+        const socket = createSocket();
 
         socket.on('salesUpdate', () => {
             fetchData();
@@ -73,9 +72,9 @@ export function PageClient() {
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const [tablesRes, zonesRes, locationsRes] = await Promise.all([
-                axios.get(process.env.NEXT_PUBLIC_API_URL + '/tables', config),
-                axios.get(process.env.NEXT_PUBLIC_API_URL + '/zones', config),
-                axios.get(process.env.NEXT_PUBLIC_API_URL + '/locations', config)
+                axios.get(API_URL + '/tables', config),
+                axios.get(API_URL + '/zones', config),
+                axios.get(API_URL + '/locations', config)
             ]);
             setTables(tablesRes.data);
             setZones(zonesRes.data);
@@ -102,10 +101,10 @@ export function PageClient() {
             };
 
             if (formData.id === 0) {
-                await axios.post(process.env.NEXT_PUBLIC_API_URL + '/tables', payload, config);
+                await axios.post(API_URL + '/tables', payload, config);
                 toastSwal({ title: tc('success'), text: t('deleteSuccess').replace('silindi', 'eklendi'), icon: 'success' });
             } else {
-                await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/tables/${formData.id}`, payload, config);
+                await axios.put(`${API_URL}/tables/${formData.id}`, payload, config);
                 toastSwal({ title: tc('success'), text: t('deleteSuccess').replace('silindi', 'güncellendi'), icon: 'success' });
             }
             setIsModalOpen(false);
@@ -125,7 +124,7 @@ export function PageClient() {
         }
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            await axios.post(process.env.NEXT_PUBLIC_API_URL + '/tables/bulk', bulkFormData, config);
+            await axios.post(API_URL + '/tables/bulk', bulkFormData, config);
             toastSwal({ title: tc('success'), text: t('bulkAddSuccess'), icon: 'success' });
             setIsBulkModalOpen(false);
             fetchData();
@@ -146,7 +145,7 @@ export function PageClient() {
 
         if (result.isConfirmed && user?.token) {
             try {
-                await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/tables/${id}`, {
+                await axios.delete(`${API_URL}/tables/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
                 toastSwal({ title: tc('success'), text: t('deleteSuccess'), icon: 'success' });

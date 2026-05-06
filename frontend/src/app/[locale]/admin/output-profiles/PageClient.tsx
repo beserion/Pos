@@ -7,6 +7,7 @@ import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useLocale } from 'next-intl';
 import SearchableSelect from '@/components/SearchableSelect';
 import { useParameters } from '../../utils/useParameters';
+import { API_URL } from '@/lib/apiConfig';
 
 interface Printer { id: number; name: string; }
 
@@ -75,11 +76,10 @@ export function PageClient() {
     const fetchData = async () => {
         if (!user?.token) return;
         try {
-            const API = process.env.NEXT_PUBLIC_API_URL;
             const h = { headers: { Authorization: `Bearer ${user.token}` } };
             const [res, pRes] = await Promise.all([
-                axios.get(`${API}/output-profiles`, h),
-                axios.get(`${API}/printers`, h),
+                axios.get(`${API_URL}/output-profiles`, h),
+                axios.get(`${API_URL}/printers`, h),
             ]);
             setItems(res.data);
             setPrinters(pRes.data);
@@ -91,16 +91,15 @@ export function PageClient() {
         e.preventDefault();
         if (!user?.token) return;
         try {
-            const API = process.env.NEXT_PUBLIC_API_URL;
             const h = { headers: { Authorization: `Bearer ${user.token}` } };
             const payload = { ...formData };
             if (payload.id === 0) {
                 const { id, mainPrinter, infoPrinter, ...data } = payload as any;
-                await axios.post(`${API}/output-profiles`, data, h);
+                await axios.post(`${API_URL}/output-profiles`, data, h);
                 toastSwal({ title: 'Başarılı', text: 'Kaydedildi', icon: 'success' });
             } else {
                 const { mainPrinter, infoPrinter, ...data } = payload as any;
-                await axios.put(`${API}/output-profiles/${payload.id}`, data, h);
+                await axios.put(`${API_URL}/output-profiles/${payload.id}`, data, h);
                 toastSwal({ title: 'Başarılı', text: 'Güncellendi', icon: 'success' });
             }
             setIsModalOpen(false);
@@ -114,8 +113,7 @@ export function PageClient() {
         const result = await showSwal({ title: 'Emin misiniz?', text: 'Bu çıktı profili silinecek.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Sil', cancelButtonText: 'İptal' });
         if (result.isConfirmed && user?.token) {
             try {
-                const API = process.env.NEXT_PUBLIC_API_URL;
-                await axios.delete(`${API}/output-profiles/${id}`, { headers: { Authorization: `Bearer ${user.token}` } });
+                await axios.delete(`${API_URL}/output-profiles/${id}`, { headers: { Authorization: `Bearer ${user.token}` } });
                 toastSwal({ title: 'Silindi', text: 'Profil silindi', icon: 'success' });
                 fetchData();
             } catch { showSwal({ title: 'Hata', text: 'Silme hatası', icon: 'error' }); }

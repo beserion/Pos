@@ -7,6 +7,7 @@ import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import SearchableSelect from '@/components/SearchableSelect';
 import { useTranslations, useLocale } from 'next-intl';
 import { getUnitName } from '@/app/[locale]/utils/units';
+import { API_URL } from '@/lib/apiConfig';
 
 interface Product {
     id: number;
@@ -153,7 +154,6 @@ export function PageClient() {
     const fetchData = async () => {
         if (!user?.token) return;
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const [prodRes, printRes, modRes, typesRes, profilesRes, depRes, stocksRes, stockGroupsRes, recipesRes, paramsRes] = await Promise.all([
                 axios.get(`${API_URL}/products`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/printers`, { headers: { Authorization: `Bearer ${user.token}` } }),
@@ -232,7 +232,6 @@ export function PageClient() {
         e.preventDefault();
         if (!user?.token) return;
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const payload = { ...formData, price: Number(formData.price), vatRate: Number(formData.vatRate) };
 
@@ -309,7 +308,6 @@ export function PageClient() {
 
         if (result.isConfirmed && user?.token) {
             try {
-                const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
                 await axios.delete(`${API_URL}/products/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
@@ -367,7 +365,6 @@ export function PageClient() {
         setRecipeSummary(null);
 
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const [recipeRes, summaryRes] = await Promise.all([
                 axios.get(`${API_URL}/recipes/by-product/${productId}`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: null })),
                 axios.get(`${API_URL}/recipes/summary/${productId}`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: null }))
@@ -452,7 +449,6 @@ export function PageClient() {
         }
 
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
             // Veriyi temizle: Reçete satırlarındaki stockCard nesnesini ve ana nesnedeki product nesnesini çıkar
@@ -496,7 +492,7 @@ export function PageClient() {
 
         if (result.isConfirmed) {
             try {
-                const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+
                 await axios.delete(`${API_URL}/recipes/${currentRecipe.id}`, { headers: { Authorization: `Bearer ${user.token}` } });
                 toastSwal({ title: tc('success'), text: 'Reçete başarıyla silindi.', icon: 'success' });
                 fetchRecipeForProduct(currentRecipe.productId);

@@ -6,6 +6,7 @@ import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
 import SearchableSelect from '@/components/SearchableSelect';
+import { API_URL } from '@/lib/apiConfig';
 
 interface Location {
     id: number;
@@ -50,8 +51,8 @@ export function PageClient() {
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const [empRes, locsRes] = await Promise.all([
-                axios.get(process.env.NEXT_PUBLIC_API_URL + '/employees', config),
-                axios.get(process.env.NEXT_PUBLIC_API_URL + '/locations', config)
+                axios.get(`${API_URL}/employees`, config),
+                axios.get(`${API_URL}/locations`, config)
             ]);
             setEmployees(empRes.data);
             setLocations(locsRes.data);
@@ -79,10 +80,10 @@ export function PageClient() {
             };
 
             if (formData.id === 0) {
-                await axios.post(process.env.NEXT_PUBLIC_API_URL + '/employees', payload, config);
+                await axios.post(`${API_URL}/employees`, payload, config);
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             } else {
-                await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/employees/${formData.id}`, payload, config);
+                await axios.put(`${API_URL}/employees/${formData.id}`, payload, config);
                 toastSwal({ title: tc('success'), text: tc('updated'), icon: 'success' });
             }
             setIsModalOpen(false);
@@ -105,7 +106,7 @@ export function PageClient() {
 
         if (result.isConfirmed && user?.token) {
             try {
-                await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/employees/${id}`, {
+                await axios.delete(`${API_URL}/employees/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });

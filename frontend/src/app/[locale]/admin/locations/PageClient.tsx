@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import { API_URL } from '@/lib/apiConfig';
 
 interface Location {
     id: number;
@@ -37,7 +38,7 @@ export function PageClient() {
     const fetchLocations = async () => {
         if (!user?.token) return;
         try {
-            const res = await axios.get(process.env.NEXT_PUBLIC_API_URL + '/locations', {
+            const res = await axios.get(API_URL + '/locations', {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
             setLocations(res.data);
@@ -56,10 +57,10 @@ export function PageClient() {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             if (formData.id === 0) {
                 const { id, ...postData } = formData;
-                await axios.post(process.env.NEXT_PUBLIC_API_URL + '/locations', postData, config);
+                await axios.post(API_URL + '/locations', postData, config);
                 toastSwal({ title: tCommon('success'), text: tLoc('newLocation'), icon: 'success' });
             } else {
-                await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/locations/${formData.id}`, formData, config);
+                await axios.put(`${API_URL}/locations/${formData.id}`, formData, config);
                 toastSwal({ title: tCommon('success'), text: tCommon('success'), icon: 'success' });
             }
             setIsModalOpen(false);
@@ -82,7 +83,7 @@ export function PageClient() {
 
         if (result.isConfirmed && user?.token) {
             try {
-                await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/locations/${id}`, {
+                await axios.delete(`${API_URL}/locations/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
                 toastSwal({ title: tCommon('delete'), text: tLoc('deleteSuccess'), icon: 'success' });

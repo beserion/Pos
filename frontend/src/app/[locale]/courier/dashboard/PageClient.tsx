@@ -4,6 +4,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
+import { API_URL } from '@/lib/apiConfig';
 
 interface Delivery {
     id: number;
@@ -30,7 +31,7 @@ export function PageClient() {
     const fetchAssignedDeliveries = async () => {
         if (!user?.id || !user?.token) return;
         try {
-            const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/deliveries/courier/${user.id}`, {
+            const res = await axios.get(`${API_URL}/deliveries/courier/${user.id}`, {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
             setDeliveries(res.data);
@@ -50,7 +51,7 @@ export function PageClient() {
             for (const d of deliveries) {
                 if (d.status === 'IN_TRANSIT') {
                     try {
-                        await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/deliveries/${d.id}/location`,
+                        await axios.put(`${API_URL}/deliveries/${d.id}/location`,
                             { lat: latitude, lng: longitude },
                             { headers: { Authorization: `Bearer ${user.token}` } }
                         );
@@ -70,7 +71,7 @@ export function PageClient() {
                 (payload as any).actualDeliveryTime = new Date();
             }
 
-            await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/deliveries/${id}`, payload, {
+            await axios.put(`${API_URL}/deliveries/${id}`, payload, {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
 

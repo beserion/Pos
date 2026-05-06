@@ -1,6 +1,5 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { io } from 'socket.io-client';
 import { useAuth } from '../AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { showSwal, toastSwal } from '../utils/swal';

@@ -6,6 +6,7 @@ import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
 import SearchableSelect from '@/components/SearchableSelect';
+import { API_URL } from '@/lib/apiConfig';
 
 interface Role {
     id: number;
@@ -101,8 +102,6 @@ export function PageClient() {
     const fetchData = async () => {
         try {
             const config = { headers: { Authorization: `Bearer ${currentUser?.token}` } };
-            const isLocalhost = false;
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
             const [usersRes, rolesRes, modulesRes, cashRegsRes, zonesRes, tablesRes] = await Promise.all([
                 axios.get(`${API_URL}/users`, config),
@@ -138,8 +137,6 @@ export function PageClient() {
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const isLocalhost = false;
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const config = { headers: { Authorization: `Bearer ${currentUser?.token}` } };
 
             const payload = {
@@ -188,7 +185,6 @@ export function PageClient() {
 
         if (result.isConfirmed) {
             try {
-                const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL;
                 await axios.delete(`${API_URL}/users/${id}`, {
                     headers: { Authorization: `Bearer ${currentUser?.token}` }
                 });
@@ -407,8 +403,6 @@ export function PageClient() {
         if (!permUser) return;
         setPermSaving(true);
         try {
-            const isLocalhost = false;
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const config = { headers: { Authorization: `Bearer ${currentUser?.token}` } };
             // Hit the standard PUT /users/:id endpoint which accepts Partial<User>
             await axios.put(`${API_URL}/users/${permUser.id}`, {
@@ -831,7 +825,7 @@ export function PageClient() {
                                                                 });
                                                                 if (result.isConfirmed) {
                                                                     try {
-                                                                        const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+
                                                                         await axios.put(`${API_URL}/users/${permUser.id}`, {
                                                                             role: { id: role.id },
                                                                             extraPermissions: []

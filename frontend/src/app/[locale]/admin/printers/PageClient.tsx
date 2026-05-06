@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import { API_URL } from '@/lib/apiConfig';
 
 interface Printer {
     id: number;
@@ -42,7 +43,7 @@ export function PageClient() {
     const fetchPrinters = async () => {
         if (!user?.token) return;
         try {
-            const res = await axios.get(process.env.NEXT_PUBLIC_API_URL + '/printers', {
+            const res = await axios.get(API_URL + '/printers', {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
             setPrinters(res.data);
@@ -58,7 +59,7 @@ export function PageClient() {
         setIsScannerOpen(true);
         setIsScanning(true);
         try {
-            const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/printers/discover`, {
+            const res = await axios.get(`${API_URL}/printers/discover`, {
                 headers: { Authorization: `Bearer ${user?.token}` }
             });
             if (res.data?.success) {
@@ -100,11 +101,11 @@ export function PageClient() {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             if (formData.id === 0) {
                 const { id, ...postData } = formData;
-                await axios.post(process.env.NEXT_PUBLIC_API_URL + '/printers', postData, config);
+                await axios.post(API_URL + '/printers', postData, config);
                 toastSwal({ title: tc('success'), text: t('deleteSuccess'), icon: 'success' });
             } else {
                 const { id, ...putData } = formData;
-                await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/printers/${id}`, putData, config);
+                await axios.put(`${API_URL}/printers/${id}`, putData, config);
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             }
             setIsModalOpen(false);
@@ -127,7 +128,7 @@ export function PageClient() {
 
         if (result.isConfirmed && user?.token) {
             try {
-                await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/printers/${id}`, {
+                await axios.delete(`${API_URL}/printers/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
                 toastSwal({ title: tc('delete'), text: t('deleteSuccess'), icon: 'success' });

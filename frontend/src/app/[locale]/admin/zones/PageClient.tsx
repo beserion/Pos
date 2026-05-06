@@ -6,6 +6,7 @@ import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
 import SearchableSelect from '@/components/SearchableSelect';
+import { API_URL } from '@/lib/apiConfig';
 
 interface Location {
     id: number;
@@ -67,14 +68,13 @@ export function PageClient() {
         if (!user?.token) return;
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
             const [zonesRes, locsRes, tablesRes, ptRes, whRes, prRes] = await Promise.all([
-                axios.get(`${apiUrl}/zones`, config),
-                axios.get(`${apiUrl}/locations`, config),
-                axios.get(`${apiUrl}/tables`, config),
-                axios.get(`${apiUrl}/product-types`, config),
-                axios.get(`${apiUrl}/warehouses`, config),
-                axios.get(`${apiUrl}/output-profiles`, config)
+                axios.get(`${API_URL}/zones`, config),
+                axios.get(`${API_URL}/locations`, config),
+                axios.get(`${API_URL}/tables`, config),
+                axios.get(`${API_URL}/product-types`, config),
+                axios.get(`${API_URL}/warehouses`, config),
+                axios.get(`${API_URL}/output-profiles`, config)
             ]);
             setZones(zonesRes.data);
             setLocations(locsRes.data);
@@ -103,10 +103,10 @@ export function PageClient() {
             };
 
             if (formData.id === 0) {
-                await axios.post(process.env.NEXT_PUBLIC_API_URL + '/zones', payload, config);
+                await axios.post(API_URL + '/zones', payload, config);
                 toastSwal({ title: tc('success'), text: t('deleteSuccess').replace('silindi', 'eklendi'), icon: 'success' });
             } else {
-                await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/zones/${formData.id}`, payload, config);
+                await axios.put(`${API_URL}/zones/${formData.id}`, payload, config);
                 toastSwal({ title: tc('success'), text: t('deleteSuccess').replace('silindi', 'güncellendi'), icon: 'success' });
             }
             setIsModalOpen(false);
@@ -129,7 +129,7 @@ export function PageClient() {
 
         if (result.isConfirmed && user?.token) {
             try {
-                await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/zones/${id}`, {
+                await axios.delete(`${API_URL}/zones/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
                 toastSwal({ title: tc('success'), text: t('deleteSuccess'), icon: 'success' });
@@ -165,8 +165,7 @@ export function PageClient() {
         
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
-            const res = await axios.get(`${apiUrl}/zones/${zone.id}/mappings`, config);
+            const res = await axios.get(`${API_URL}/zones/${zone.id}/mappings`, config);
             
             // Veriyi productType'lara göre eşleştir
             const currentMappings = res.data || [];
@@ -199,7 +198,6 @@ export function PageClient() {
         if (!user?.token) return;
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
             
             // Yalnızca geçerli değerleri (0 olmayan) yolla
             const payload = zoneMappings.map(m => ({
@@ -208,7 +206,7 @@ export function PageClient() {
                 outputProfileId: m.outputProfileId === 0 ? null : m.outputProfileId,
             }));
 
-            await axios.put(`${apiUrl}/zones/${zoneId}/mappings`, payload, config);
+            await axios.put(`${API_URL}/zones/${zoneId}/mappings`, payload, config);
             toastSwal({ title: tc('success'), text: 'Eşleşmeler başarıyla kaydedildi.', icon: 'success' });
             setExpandedZoneId(null);
         } catch (error) {
@@ -229,7 +227,7 @@ export function PageClient() {
                 isActive: true,
                 zone: { id: selectedZone.id }
             };
-            await axios.post(process.env.NEXT_PUBLIC_API_URL + '/tables', payload, config);
+            await axios.post(API_URL + '/tables', payload, config);
             toastSwal({ title: tc('success'), text: tc('saved'), icon: 'success' });
             setNewTableData({ name: '', capacity: 4 });
             fetchData(); // Refresh both zones and tables
@@ -250,7 +248,7 @@ export function PageClient() {
         if (result.isConfirmed) {
             try {
                 const config = { headers: { Authorization: `Bearer ${user.token}` } };
-                await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/tables/${id}`, config);
+                await axios.delete(`${API_URL}/tables/${id}`, config);
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
                 fetchData();
             } catch (error) {

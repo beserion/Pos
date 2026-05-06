@@ -1,10 +1,10 @@
 'use client';
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import Cookies from 'js-cookie';
-import { io, Socket } from 'socket.io-client';
+import { Socket } from 'socket.io-client';
 import { useAuth } from '../AuthContext';
 import { toastSwal } from '../utils/swal';
-import { API_URL } from '@/lib/apiConfig';
+import { API_URL, createSocket } from '@/lib/apiConfig';
 
 interface PosContextType {
     products: any[];
@@ -87,12 +87,7 @@ export function PosProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         if (!user) return;
 
-        const socket: Socket = io(API_URL, {
-            transports: ['websocket', 'polling'],
-            reconnection: true,
-            reconnectionAttempts: Infinity,
-            reconnectionDelay: 1000,
-        });
+        const socket: Socket = createSocket();
 
         const handleRealtimeUpdate = () => {
             // Only refresh Tables/Sales on standard updates to keep it fast

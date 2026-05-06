@@ -8,6 +8,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import SearchableSelect from '@/components/SearchableSelect';
 import { UBL_UNITS } from '@/app/[locale]/utils/units';
+import { API_URL } from '@/lib/apiConfig';
 
 interface StockCard {
     id: number;
@@ -104,7 +105,6 @@ export function PageClient() {
     const fetchData = async () => {
         if (!user?.token) return;
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const [cardsRes, catRes, whRes, opRes] = await Promise.all([
                 axios.get(`${API_URL}/stock-cards?limit=1000`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/stock-cards/categories`, { headers: { Authorization: `Bearer ${user.token}` } }),
@@ -143,7 +143,6 @@ export function PageClient() {
         e.preventDefault();
         if (!user?.token) return;
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
             const payload = { ...formData };
@@ -203,7 +202,6 @@ export function PageClient() {
 
         if (result.isConfirmed && user?.token) {
             try {
-                const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
                 await axios.delete(`${API_URL}/stock-cards/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });

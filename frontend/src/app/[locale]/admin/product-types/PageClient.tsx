@@ -6,6 +6,7 @@ import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useLocale } from 'next-intl';
 import SearchableSelect from '@/components/SearchableSelect';
+import { API_URL } from '@/lib/apiConfig';
 
 interface OutputProfile {
     id: number;
@@ -38,11 +39,10 @@ export function PageClient() {
     const fetchData = async () => {
         if (!user?.token) return;
         try {
-            const API = process.env.NEXT_PUBLIC_API_URL;
             const h = { headers: { Authorization: `Bearer ${user.token}` } };
             const [res, profRes] = await Promise.all([
-                axios.get(`${API}/product-types`, h),
-                axios.get(`${API}/output-profiles`, h),
+                axios.get(`${API_URL}/product-types`, h),
+                axios.get(`${API_URL}/output-profiles`, h),
             ]);
             setItems(res.data);
             setProfiles(profRes.data);
@@ -68,14 +68,13 @@ export function PageClient() {
         }
 
         try {
-            const API = process.env.NEXT_PUBLIC_API_URL;
             const h = { headers: { Authorization: `Bearer ${user.token}` } };
             if (formData.id === 0) {
                 const { id, ...data } = formData;
-                await axios.post(`${API}/product-types`, data, h);
+                await axios.post(`${API_URL}/product-types`, data, h);
                 toastSwal({ title: 'Başarılı', text: 'Kaydedildi', icon: 'success' });
             } else {
-                await axios.put(`${API}/product-types/${formData.id}`, formData, h);
+                await axios.put(`${API_URL}/product-types/${formData.id}`, formData, h);
                 toastSwal({ title: 'Başarılı', text: 'Güncellendi', icon: 'success' });
             }
             setIsModalOpen(false);
@@ -89,8 +88,7 @@ export function PageClient() {
         const result = await showSwal({ title: 'Emin misiniz?', text: 'Bu ürün cinsi silinecek.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Sil', cancelButtonText: 'İptal' });
         if (result.isConfirmed && user?.token) {
             try {
-                const API = process.env.NEXT_PUBLIC_API_URL;
-                await axios.delete(`${API}/product-types/${id}`, { headers: { Authorization: `Bearer ${user.token}` } });
+                await axios.delete(`${API_URL}/product-types/${id}`, { headers: { Authorization: `Bearer ${user.token}` } });
                 toastSwal({ title: 'Silindi', text: 'Ürün cinsi silindi', icon: 'success' });
                 fetchData();
             } catch { showSwal({ title: 'Hata', text: 'Silme hatası', icon: 'error' }); }

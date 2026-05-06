@@ -8,6 +8,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { showSwal, toastSwal } from '../../utils/swal';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import SearchableSelect from '@/components/SearchableSelect';
+import { API_URL } from '@/lib/apiConfig';
 
 interface Product {
     id: number;
@@ -61,7 +62,6 @@ export function PageClient() {
 
     const locale = useLocale();
     const t = useTranslations('Admin');
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
     const [activeTab, setActiveTab] = useState<'LIST' | 'LOW_STOCK'>('LIST');
     const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -798,82 +798,35 @@ export function PageClient() {
                         </div>
                         <div className="p-8 space-y-5">
                             <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-800 flex justify-between">
-                                <span className="text-[10px] font-black text-slate-400 uppercase">Firma:</span>
-                                <span className="text-[10px] font-black text-emerald-500 uppercase">{selectedOrder.supplier?.name}</span>
+                                <div className="text-[10px] font-black text-slate-400 uppercase">Sipariş Toplamı</div>
+                                <div className="text-sm font-black text-slate-800 dark:text-white">₺{Number(selectedOrder.totalAmount).toLocaleString()}</div>
                             </div>
                             <div>
-                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Fatura No *</label>
-                                <input type="text" value={invoiceForm.invoiceNumber} onChange={e => setInvoiceForm({ ...invoiceForm, invoiceNumber: e.target.value })} className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl outline-none focus:border-emerald-500 text-xs font-bold shadow-sm" placeholder="..." />
+                                <label className="text-[9px] font-black text-slate-400 uppercase mb-2 block tracking-widest px-1">Fatura Numarası</label>
+                                <input type="text" value={invoiceForm.invoiceNumber} onChange={e => setInvoiceForm({ ...invoiceForm, invoiceNumber: e.target.value })} className="w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs font-black outline-none focus:border-emerald-500 transition-all shadow-inner" placeholder="..." />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Tarih</label>
-                                    <input type="date" value={invoiceForm.invoiceDate} onChange={e => setInvoiceForm({ ...invoiceForm, invoiceDate: e.target.value })} className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl outline-none text-[10px] font-bold shadow-sm" />
+                                    <label className="text-[9px] font-black text-slate-400 uppercase mb-2 block tracking-widest px-1">Ödeme Yöntemi</label>
+                                    <select value={invoiceForm.paymentMethod} onChange={e => setInvoiceForm({ ...invoiceForm, paymentMethod: e.target.value })} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-[10px] font-black outline-none cursor-pointer">
+                                        <option value="KASA">NAKİT / KASA</option>
+                                        <option value="BANKA">BANKA / HAVALE</option>
+                                        <option value="CARI">CARİ HESAP</option>
+                                    </select>
                                 </div>
                                 <div>
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Ödenen (₺)</label>
-                                    <input type="number" value={invoiceForm.invoiceAmount} onChange={e => setInvoiceForm({ ...invoiceForm, invoiceAmount: parseFloat(e.target.value) || 0 })} className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl outline-none text-xs font-black text-emerald-600 shadow-sm" />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Ödeme</label>
-                                    <SearchableSelect
-                                        value={invoiceForm.paymentMethod}
-                                        onChange={val => setInvoiceForm({ ...invoiceForm, paymentMethod: val } as any)}
-                                        options={[
-                                            { value: 'KASA', label: 'KASA' },
-                                            { value: 'BANKA', label: 'BANKA' },
-                                            { value: 'KREDI_KARTI', label: 'KREDİ KARTI' }
-                                        ]}
-                                        icon="fat fa-credit-card"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Durum</label>
-                                    <SearchableSelect
-                                        value={invoiceForm.paymentStatus}
-                                        onChange={val => setInvoiceForm({ ...invoiceForm, paymentStatus: val })}
-                                        options={[
-                                            { value: 'PAID', label: 'ÖDENDİ' },
-                                            { value: 'UNPAID', label: 'ÖDENMEDİ' }
-                                        ]}
-                                        icon="fat fa-circle-check"
-                                    />
+                                    <label className="text-[9px] font-black text-slate-400 uppercase mb-2 block tracking-widest px-1">Fatura Tarihi</label>
+                                    <input type="date" value={invoiceForm.invoiceDate} onChange={e => setInvoiceForm({ ...invoiceForm, invoiceDate: e.target.value })} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-[10px] font-black outline-none cursor-pointer" />
                                 </div>
                             </div>
                         </div>
-                        <div className="p-8 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex gap-3">
-                            <button onClick={() => setIsInvoiceOpen(false)} className="flex-1 py-3 bg-white dark:bg-slate-800 text-slate-400 font-black rounded-[14px] text-[10px] uppercase shadow-sm border border-slate-100 dark:border-slate-700 active:scale-95 transition-all">Vazgeç</button>
-                            <button onClick={handleSaveInvoice} className="flex-[2] py-3 bg-emerald-500 text-white font-black rounded-[14px] text-[10px] uppercase shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">Stoka İşle & Kaydet</button>
+                        <div className="p-8 pt-0 flex gap-4">
+                            <button onClick={() => setIsInvoiceOpen(false)} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 text-slate-500 font-black text-[10px] uppercase tracking-widest rounded-2xl hover:bg-slate-200 transition-colors">Vazgeç</button>
+                            <button onClick={handleSaveInvoice} className="flex-[2] py-4 bg-emerald-500 text-white font-black text-[10px] uppercase tracking-widest rounded-2xl shadow-xl shadow-emerald-500/20 hover:scale-105 active:scale-95 transition-all">Siparişi Tamamla</button>
                         </div>
                     </div>
                 </div>
             )}
-
-            <style jsx global>{`
-                .custom-scrollbar::-webkit-scrollbar {
-                    width: 5px;
-                    height: 5px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-track {
-                    background: transparent;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb {
-                    background: #e2e8f0;
-                    border-radius: 10px;
-                }
-                .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-                    background: #1e293b;
-                }
-                @keyframes pulse {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: 0.5; }
-                }
-                .animate-pulse {
-                    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-                }
-            `}</style>
         </div>
     );
 }

@@ -7,6 +7,7 @@ import { showSwal } from '@/app/[locale]/utils/swal';
 import { useLocale } from 'next-intl';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import SearchableSelect from '@/components/SearchableSelect';
+import { API_URL } from '@/lib/apiConfig';
 
 interface RoutingEntry {
     productId: number;
@@ -48,8 +49,7 @@ export function PageClient() {
     const fetchData = async () => {
         if (!user?.token) return;
         try {
-            const API = process.env.NEXT_PUBLIC_API_URL;
-            const res = await axios.get(`${API}/order-routing/control-list`, { headers: { Authorization: `Bearer ${user.token}` } });
+            const res = await axios.get(`${API_URL}/order-routing/control-list`, { headers: { Authorization: `Bearer ${user.token}` } });
             setItems(res.data);
             setFiltered(res.data);
         } catch { showSwal({ title: 'Hata', text: 'Veri yüklenemedi', icon: 'error' }); }

@@ -6,6 +6,7 @@ import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
 import SearchableSelect from '@/components/SearchableSelect';
+import { API_URL } from '@/lib/apiConfig';
 
 interface Courier {
     id: number;
@@ -93,7 +94,7 @@ export function PageClient() {
     const fetchCouriers = async () => {
         if (!user?.token) return;
         try {
-            const res = await axios.get(process.env.NEXT_PUBLIC_API_URL + '/employees', {
+            const res = await axios.get(`${API_URL}/employees`, {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
             // Filter only couriers
@@ -147,7 +148,7 @@ export function PageClient() {
         setIsModalOpen(true);
         if (user?.token) {
             try {
-                const docRes = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/employees/${courier.id}/documents`, {
+                const docRes = await axios.get(`${API_URL}/employees/${courier.id}/documents`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
                 setEmployeeDocuments(docRes.data);
@@ -164,7 +165,7 @@ export function PageClient() {
         }
         setIsUploadingDoc(true);
         try {
-            const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/employees/${formData.id}/documents`, {
+            const res = await axios.post(`${API_URL}/employees/${formData.id}/documents`, {
                 documentType: newDocType,
                 documentData: newDocData
             }, {
@@ -183,7 +184,7 @@ export function PageClient() {
 
     const handleRemoveDocument = async (docId: number) => {
         try {
-            await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/employees/${formData.id}/documents/${docId}`, {
+            await axios.delete(`${API_URL}/employees/${formData.id}/documents/${docId}`, {
                 headers: { Authorization: `Bearer ${user?.token}` }
             });
             setEmployeeDocuments(employeeDocuments.filter(d => d.id !== docId));
@@ -196,7 +197,7 @@ export function PageClient() {
     const viewHistory = async (courier: Courier) => {
         setSelectedCourier(courier);
         try {
-            const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/deliveries/courier/${courier.id}/history`, {
+            const res = await axios.get(`${API_URL}/deliveries/courier/${courier.id}/history`, {
                 headers: { Authorization: `Bearer ${user?.token}` }
             });
             setDeliveryHistory(res.data);
@@ -216,13 +217,13 @@ export function PageClient() {
                 // Create
                 const payload = { ...formData, isActive: true };
                 delete (payload as any).id;
-                await axios.post(process.env.NEXT_PUBLIC_API_URL + '/employees', payload, {
+                await axios.post(`${API_URL}/employees`, payload, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
                 toastSwal({ title: tc('success'), text: t('courierAdded') || 'Yeni kurye eklendi.', icon: 'success' });
             } else {
                 // Update
-                await axios.patch(`${process.env.NEXT_PUBLIC_API_URL}/employees/${formData.id}`, formData, {
+                await axios.patch(`${API_URL}/employees/${formData.id}`, formData, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
                 toastSwal({ title: tc('success'), text: t('courierUpdated') || 'Kurye bilgileri güncellendi.', icon: 'success' });

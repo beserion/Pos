@@ -6,6 +6,7 @@ import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useLocale } from 'next-intl';
 import SearchableSelect from '@/components/SearchableSelect';
+import { API_URL } from '@/lib/apiConfig';
 
 interface OutputProfile {
     id: number;
@@ -54,12 +55,11 @@ export function PageClient() {
     const fetchData = async () => {
         if (!user?.token) return;
         try {
-            const API = process.env.NEXT_PUBLIC_API_URL;
             const h = { headers: { Authorization: `Bearer ${user.token}` } };
             const [depRes, opRes, pgRes] = await Promise.all([
-                axios.get(`${API}/departments`, h),
-                axios.get(`${API}/output-profiles`, h),
-                axios.get(`${API}/parent-groups`, h).catch(() => ({ data: [] }))
+                axios.get(`${API_URL}/departments`, h),
+                axios.get(`${API_URL}/output-profiles`, h),
+                axios.get(`${API_URL}/parent-groups`, h).catch(() => ({ data: [] }))
             ]);
             setItems(depRes.data);
             setOutputProfiles(opRes.data);
@@ -84,16 +84,15 @@ export function PageClient() {
         }
 
         try {
-            const API = process.env.NEXT_PUBLIC_API_URL;
             const h = { headers: { Authorization: `Bearer ${user.token}` } };
             const payload = { ...formData };
             if (payload.id === 0) {
                 const { id, outputProfile, extraDepartment, parentGroup, ...data } = payload as any;
-                await axios.post(`${API}/departments`, data, h);
+                await axios.post(`${API_URL}/departments`, data, h);
                 toastSwal({ title: 'Başarılı', text: 'Kaydedildi', icon: 'success' });
             } else {
                 const { outputProfile, extraDepartment, parentGroup, ...data } = payload as any;
-                await axios.put(`${API}/departments/${payload.id}`, data, h);
+                await axios.put(`${API_URL}/departments/${payload.id}`, data, h);
                 toastSwal({ title: 'Başarılı', text: 'Güncellendi', icon: 'success' });
             }
             setIsModalOpen(false);
@@ -107,8 +106,7 @@ export function PageClient() {
         const result = await showSwal({ title: 'Emin misiniz?', text: 'Bu kategori silinecek.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Sil', cancelButtonText: 'İptal' });
         if (result.isConfirmed && user?.token) {
             try {
-                const API = process.env.NEXT_PUBLIC_API_URL;
-                await axios.delete(`${API}/departments/${id}`, { headers: { Authorization: `Bearer ${user.token}` } });
+                await axios.delete(`${API_URL}/departments/${id}`, { headers: { Authorization: `Bearer ${user.token}` } });
                 toastSwal({ title: 'Silindi', text: 'Kategori silindi', icon: 'success' });
                 fetchData();
             } catch { showSwal({ title: 'Hata', text: 'Silme hatası', icon: 'error' }); }
@@ -131,12 +129,11 @@ export function PageClient() {
         }
 
         try {
-            const API = process.env.NEXT_PUBLIC_API_URL;
             const h = { headers: { Authorization: `Bearer ${user.token}` } };
             if (parentGroupFormData.id === 0) {
-                await axios.post(`${API}/parent-groups`, { name: parentGroupFormData.name, description: parentGroupFormData.description, imageUrl: parentGroupFormData.imageUrl }, h);
+                await axios.post(`${API_URL}/parent-groups`, { name: parentGroupFormData.name, description: parentGroupFormData.description, imageUrl: parentGroupFormData.imageUrl }, h);
             } else {
-                await axios.put(`${API}/parent-groups/${parentGroupFormData.id}`, { name: parentGroupFormData.name, description: parentGroupFormData.description, imageUrl: parentGroupFormData.imageUrl }, h);
+                await axios.put(`${API_URL}/parent-groups/${parentGroupFormData.id}`, { name: parentGroupFormData.name, description: parentGroupFormData.description, imageUrl: parentGroupFormData.imageUrl }, h);
             }
             toastSwal({ title: 'Başarılı', text: 'Üst grup kaydedildi', icon: 'success' });
             setParentGroupFormData({ ...EMPTY_PARENT_GROUP });
@@ -150,8 +147,7 @@ export function PageClient() {
         const result = await showSwal({ title: 'Emin misiniz?', text: 'Bu üst grup silinecek.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Sil', cancelButtonText: 'İptal' });
         if (result.isConfirmed && user?.token) {
             try {
-                const API = process.env.NEXT_PUBLIC_API_URL;
-                await axios.delete(`${API}/parent-groups/${id}`, { headers: { Authorization: `Bearer ${user.token}` } });
+                await axios.delete(`${API_URL}/parent-groups/${id}`, { headers: { Authorization: `Bearer ${user.token}` } });
                 toastSwal({ title: 'Silindi', text: 'Üst grup silindi', icon: 'success' });
                 fetchData();
             } catch { showSwal({ title: 'Hata', text: 'Silme hatası', icon: 'error' }); }

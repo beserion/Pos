@@ -40,7 +40,7 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
             onMarkAsRead={markAsRead}
             onMarkAllAsRead={markAllAsRead}
         />
-    ) : null;
+    ) : null;
 
     useEffect(() => {
         const fetchProfile = async () => {
@@ -48,14 +48,18 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
             if (token) {
                 try {
                     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-                    const res = await axios.get(`${API_URL}/auth/me`);
+                    // Timeout ekleyerek uzak sunucuya ulaşılamadığında uygulamanın kilitlenmesini engelliyoruz
+                    const res = await axios.get(`${API_URL}/auth/me`, { timeout: 5000 });
                     setUser({ ...res.data, token });
                     if (!localStorage.getItem('token')) {
                         localStorage.setItem('token', token);
                     }
                 } catch (error) {
-                    console.error('Failed to fetch profile:', error);
-                    logout();
+                    console.error('Failed to fetch profile (Offline or Server Down):', error);
+                    // Sadece gerçek bir 401 hatasında logout yap, bağlantı hatasında oturumu kapatma
+                    if (axios.isAxiosError(error) && error.response?.status === 401) {
+                        logout();
+                    }
                 }
             }
             setLoading(false);
@@ -137,8 +141,7 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
 
     const loginPin = async (userId: number, pin: string) => {
         try {
-            const apiBase = process.env.NEXT_PUBLIC_API_URL || API_URL;
-            const response = await axios.post(`${apiBase}/auth/login-pin`, { userId, pinCode: pin });
+            const response = await axios.post(`${API_URL}/auth/login-pin`, { userId, pinCode: pin });
             if (response.data.access_token) {
                 const token = response.data.access_token;
                 Cookies.set('token', token, { expires: 1 });
@@ -153,8 +156,7 @@ export const AuthProvider = ({ children, locale }: { children: React.ReactNode, 
 
     const loginPinOnly = async (pin: string) => {
         try {
-            const apiBase = process.env.NEXT_PUBLIC_API_URL || API_URL;
-            const response = await axios.post(`${apiBase}/auth/login-pin-only`, { pinCode: pin });
+            const response = await axios.post(`${API_URL}/auth/login-pin-only`, { pinCode: pin });
             if (response.data.access_token) {
                 const token = response.data.access_token;
                 Cookies.set('token', token, { expires: 1 });

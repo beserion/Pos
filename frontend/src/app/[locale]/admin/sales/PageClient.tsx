@@ -7,8 +7,8 @@ import { useAuth } from '@/app/[locale]/AuthContext';
 import SearchableSelect from '@/components/SearchableSelect';
 import { useTranslations, useLocale } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import { io } from 'socket.io-client';
 import { useCallback } from 'react';
+import { API_URL, createSocket } from '@/lib/apiConfig';
 
 interface SaleItem {
     id: number;
@@ -50,8 +50,6 @@ export function PageClient() {
     const [endDate, setEndDate] = useState('');
     const containerRef = useRef<HTMLDivElement>(null);
     const [limit, setLimit] = useState(10);
-
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
     const fetchInitialData = async () => {
         try {
@@ -96,7 +94,7 @@ export function PageClient() {
 
     // WebSocket for real-time updates
     useEffect(() => {
-        const socket = io(API_URL);
+        const socket = createSocket();
 
         socket.on('connect', () => {
             console.log('Admin Sales: Connected to WebSocket');

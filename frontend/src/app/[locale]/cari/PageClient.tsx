@@ -1,13 +1,14 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { useAuth } from '../AuthContext';
+import { useAuth } from '@/app/[locale]/AuthContext';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { useLocale } from 'next-intl';
-import { showSwal, toastSwal } from '../utils/swal';
+import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import SearchableSelect from '@/components/SearchableSelect';
+import { API_URL } from '@/lib/apiConfig';
 
 interface Partner {
     id: number;
@@ -34,7 +35,6 @@ export function PageClient() {
     const { user, loading, hasFeature } = useAuth();
     const router = useRouter();
     const locale = useLocale();
-    const API_URL = false ? process.env.NEXT_PUBLIC_API_URL : (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL);
 
     const [partners, setPartners] = useState<Partner[]>([]);
     const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
@@ -298,7 +298,7 @@ export function PageClient() {
             {/* Add Transaction Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xl">
-                    <div className="bg-white dark:bg-slate-800 rounded-[32px] w-full max-w-md shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700">
+                    <div className="bg-white dark:bg-slate-800 rounded-[32px] w-full max-md shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700">
                         <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
                             <h2 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2">
                                 <i className="fat fa-plus-circle text-indigo-500"></i>

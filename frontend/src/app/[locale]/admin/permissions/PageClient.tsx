@@ -5,6 +5,7 @@ import { useLocale } from 'next-intl';
 import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
+import { API_URL } from '@/lib/apiConfig';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -84,8 +85,6 @@ export function PageClient() {
     const router = useRouter();
     const locale = useLocale();
     const { user: currentUser } = useAuth();
-
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
     const [modules, setModules] = useState<PermModule[]>([]);
     const [loading, setLoading] = useState(true);

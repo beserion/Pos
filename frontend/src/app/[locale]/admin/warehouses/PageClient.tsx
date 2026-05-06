@@ -7,6 +7,7 @@ import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import WarehouseUpsert from './_WarehouseUpsert';
+import { API_URL } from '@/lib/apiConfig';
 
 interface Location {
     id: number;
@@ -49,8 +50,8 @@ export function PageClient() {
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const [wareRes, locsRes] = await Promise.all([
-                axios.get(process.env.NEXT_PUBLIC_API_URL + '/warehouses', config),
-                axios.get(process.env.NEXT_PUBLIC_API_URL + '/locations', config)
+                axios.get(API_URL + '/warehouses', config),
+                axios.get(API_URL + '/locations', config)
             ]);
             setWarehouses(wareRes.data);
             setLocations(locsRes.data);
@@ -75,10 +76,10 @@ export function PageClient() {
             if (formData.id === 0) {
                 const postPayload = { ...payload };
                 delete (postPayload as any).id;
-                await axios.post(process.env.NEXT_PUBLIC_API_URL + '/warehouses', postPayload, config);
+                await axios.post(API_URL + '/warehouses', postPayload, config);
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             } else {
-                await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/warehouses/${formData.id}`, payload, config);
+                await axios.put(`${API_URL}/warehouses/${formData.id}`, payload, config);
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             }
             setIsModalOpen(false);
@@ -102,7 +103,7 @@ export function PageClient() {
 
         if (result.isConfirmed && user?.token) {
             try {
-                await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/warehouses/${id}`, {
+                await axios.delete(`${API_URL}/warehouses/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
                 toastSwal({ title: tc('success'), text: t('deleteSuccess'), icon: 'success' });

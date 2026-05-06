@@ -6,11 +6,10 @@ import Cookies from 'js-cookie';
 import { useAuth } from '../AuthContext';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import { showSwal, toastSwal } from '../utils/swal';
-import { io } from 'socket.io-client';
 import { useTranslations, useLocale } from 'next-intl';
 import { useThemeTransition } from '@/hooks/useThemeTransition';
 import SetMenuSelectionModal from '../pos/SetMenuSelectionModal';
-import { API_URL } from '@/lib/apiConfig';
+import { API_URL, createSocket } from '@/lib/apiConfig';
 
 interface Product { id: number; name: string; price: number; category: string; imageUrl?: string; printerId?: number; variations?: any[]; isSet?: boolean; setMenu?: any; sku: string; }
 interface OrderItem { product: Product; quantity: number; variationId?: number; variationName?: string; extraPrice?: number; subItems?: any[]; uniqueId?: string; }
@@ -97,7 +96,7 @@ export function PageClient() {
 
             // WebSocket Connection for Real-time alerts
             // (AlertsBell dinlemeleri AuthContext üzerinden yürütülür)
-            const socket = io(API_URL);
+            const socket = createSocket();
 
             socket.on('connect', () => console.log('Connected to Waiter WebSocket'));
 

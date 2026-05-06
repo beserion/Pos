@@ -48,17 +48,21 @@ async function bootstrap() {
   app.use(bodyParser.json({ limit: '50mb' }));
   app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
-  // Enable CORS - Tüm originlere ve headerlara tam izin ver (CORS kısıtlamalarını tamamen kaldırmak için)
-  app.enableCors({
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      // Her türlü origin'e (localhost, production domainleri vs.) izin ver
-      callback(null, true);
-    },
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    credentials: true,
-    allowedHeaders: '*',
-    exposedHeaders: '*', // Client tarafında tüm headerların okunabilmesi için
+  // En agresif CORS müdahalesi: Manuel Middleware
+  app.use((req: any, res: any, next: any) => {
+    const origin = req.headers.origin;
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-api-key, token');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+    next();
   });
+
+  app.enableCors();
 
   const config = new DocumentBuilder()
     .setTitle('Antigravity POS API')

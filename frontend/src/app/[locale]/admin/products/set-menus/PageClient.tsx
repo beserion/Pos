@@ -6,6 +6,7 @@ import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
 import SearchableSelect from '@/components/SearchableSelect';
+import { API_URL } from '@/lib/apiConfig';
 
 interface SetGroupItem {
     id?: number;
@@ -94,7 +95,6 @@ export function PageClient() {
     const fetchData = async () => {
         if (!user?.token) return;
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const [prodRes, depRes] = await Promise.all([
                 axios.get(`${API_URL}/products`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/departments`, { headers: { Authorization: `Bearer ${user.token}` } })
@@ -114,7 +114,6 @@ export function PageClient() {
         e.preventDefault();
         if (!user?.token) return;
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const payload = { ...formData, price: Number(formData.price), isSet: true };
 
@@ -145,7 +144,6 @@ export function PageClient() {
 
         if (result.isConfirmed && user?.token) {
             try {
-                const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
                 await axios.delete(`${API_URL}/products/${id}`, { headers: { Authorization: `Bearer ${user.token}` } });
                 toastSwal({ title: tc('deleted'), text: t('deleteSuccess'), icon: 'success' });
                 fetchData();
@@ -321,7 +319,7 @@ export function PageClient() {
                                 </h2>
                                 <p className="text-xs font-bold text-slate-400 dark:text-slate-500 flex uppercase tracking-widest mt-1 mb-0">Kurallar ve içerikler</p>
                             </div>
-                            <button onClick={() => setIsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 shadow-sm transition-all">&times;</button>
+                            <button onClick={() => setIsModalOpen(false)} className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 shadow-sm transition-all">&times;</button>
                         </div>
 
                         <div className="flex bg-slate-100 dark:bg-slate-900/50 p-1 mx-8 mt-8 rounded-2xl shrink-0">
@@ -361,7 +359,7 @@ export function PageClient() {
                                         <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 px-1">Stok Kodu (SKU)</label>
                                         <div className="relative">
                                             <i className="fat fa-barcode-read absolute left-4 top-4 text-teal-500/50 dark:text-teal-400/50"></i>
-                                            <input type="text" value={formData.sku} onChange={e => setFormData({ ...formData, sku: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-500 dark:text-slate-400 font-bold font-mono focus:ring-4 focus:ring-teal-500/10 outline-none uppercase" />
+                                            <input type="text" value={formData.sku} onChange={e => setFormData({ ...formData, sku: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-50 dark:text-slate-400 font-bold font-mono focus:ring-4 focus:ring-teal-500/10 outline-none uppercase" />
                                         </div>
                                     </div>
                                     <div className="col-span-2">

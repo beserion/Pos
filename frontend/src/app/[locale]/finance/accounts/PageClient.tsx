@@ -1,11 +1,12 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
-import { useAuth } from '../../AuthContext';
+import { useAuth } from '@/app/[locale]/AuthContext';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { useTranslations, useLocale } from 'next-intl';
-import { showSwal, toastSwal } from '../../utils/swal';
+import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
+import { API_URL } from '@/lib/apiConfig';
 
 interface CompanyAccount {
     id: number;
@@ -34,7 +35,6 @@ export function PageClient() {
     const tCommon = useTranslations('Common');
     const tFinance = useTranslations('Finance');
     const tAdmin = useTranslations('Admin');
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
     const [accounts, setAccounts] = useState<CompanyAccount[]>([]);
     const [dataLoading, setDataLoading] = useState(true);

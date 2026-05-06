@@ -1,7 +1,9 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useLocale } from 'next-intl';
+import { useAuth } from '@/app/[locale]/AuthContext';
+import { useTranslations, useLocale } from 'next-intl';
+import { API_URL } from '@/lib/apiConfig';
 import SearchableSelect from '@/components/SearchableSelect';
 import { showSwal } from '../../utils/swal';
 
@@ -64,7 +66,7 @@ const EMPTY_FORM = {
 export function AlertRulesPageClient() {
     const router = useRouter();
     const locale = useLocale();
-    const API = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL;
+    const { user: currentUser } = useAuth();
 
     const [rules, setRules] = useState<AlertRule[]>([]);
     const [users, setUsers] = useState<User[]>([]);
@@ -75,30 +77,35 @@ export function AlertRulesPageClient() {
     const [form, setForm] = useState({ ...EMPTY_FORM });
     const [saving, setSaving] = useState(false);
 
-    const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` });
+    const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${currentUser?.token || localStorage.getItem('token')}` });
 
     const selectedEvent = EVENT_OPTIONS.find(e => e.key === form.eventKey);
 
     const fetchRules = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await fetch(`${API}/alerts/rules`, { headers: headers() });
+            const res = await fetch(`${API_URL}/alerts/rules`, { headers: headers() });
             if (res.ok) setRules(await res.json());
         } finally { setLoading(false); }
-    }, []);
+    }, [currentUser]);
 
     const fetchUsersRoles = useCallback(async () => {
         try {
             const [ur, rr] = await Promise.all([
-                fetch(`${API}/users`, { headers: headers() }),
-                fetch(`${API}/roles`, { headers: headers() }),
+                fetch(`${API_URL}/users`, { headers: headers() }),
+                fetch(`${API_URL}/roles`, { headers: headers() }),
             ]);
             if (ur.ok) setUsers(await ur.json());
             if (rr.ok) setRoles(await rr.json());
         } catch { }
-    }, []);
+    }, [currentUser]);
 
-    useEffect(() => { fetchRules(); fetchUsersRoles(); }, []);
+    useEffect(() => { 
+        if (currentUser?.token || localStorage.getItem('token')) {
+            fetchRules(); 
+            fetchUsersRoles(); 
+        }
+    }, [currentUser]);
 
     const openNew = () => { setEditingId(null); setForm({ ...EMPTY_FORM }); setShowModal(true); };
     const openEdit = (r: AlertRule) => {
@@ -120,7 +127,7 @@ export function AlertRulesPageClient() {
                 thresholdValue: form.thresholdValue !== '' ? Number(form.thresholdValue) : null,
                 targetId: form.targetId !== '' ? Number(form.targetId) : null,
             };
-            const url = editingId ? `${API}/alerts/rules/${editingId}` : `${API}/alerts/rules`;
+            const url = editingId ? `${API_URL}/alerts/rules/${editingId}` : `${API_URL}/alerts/rules`;
             const method = editingId ? 'PUT' : 'POST';
             const res = await fetch(url, { method, headers: headers(), body: JSON.stringify(body) });
             if (!res.ok) throw new Error('Kayıt başarısız');
@@ -133,14 +140,14 @@ export function AlertRulesPageClient() {
     };
 
     const handleToggle = async (id: number) => {
-        await fetch(`${API}/alerts/rules/${id}/toggle`, { method: 'PATCH', headers: headers() });
+        await fetch(`${API_URL}/alerts/rules/${id}/toggle`, { method: 'PATCH', headers: headers() });
         fetchRules();
     };
 
     const handleDelete = async (id: number) => {
         const r = await showSwal({ icon: 'warning', title: 'Kuralı sil?', text: 'Bu işlem geri alınamaz.', showCancelButton: true, confirmButtonText: 'Sil' });
         if (!r.isConfirmed) return;
-        await fetch(`${API}/alerts/rules/${id}`, { method: 'DELETE', headers: headers() });
+        await fetch(`${API_URL}/alerts/rules/${id}`, { method: 'DELETE', headers: headers() });
         fetchRules();
     };
 

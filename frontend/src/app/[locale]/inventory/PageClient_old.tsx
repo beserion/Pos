@@ -1,12 +1,13 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../AuthContext';
+import { useAuth } from '@/app/[locale]/AuthContext';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { useLocale, useTranslations } from 'next-intl';
-import { showSwal, toastSwal } from '../utils/swal';
+import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import StockUpsert from './_StockUpsert';
+import { API_URL } from '@/lib/apiConfig';
 
 interface AppStock {
     id: number;
@@ -58,7 +59,7 @@ export function PageClient() {
         try {
             setIsFetching(true);
             const token = Cookies.get('token');
-            const res = await axios.get(process.env.NEXT_PUBLIC_API_URL + '/stocks', {
+            const res = await axios.get(API_URL + '/stocks', {
                 headers: { Authorization: `Bearer ${token}` },
                 params: {
                     page,
@@ -107,7 +108,7 @@ export function PageClient() {
     const fetchWarehouses = async () => {
         try {
             const token = Cookies.get('token');
-            const res = await axios.get(process.env.NEXT_PUBLIC_API_URL + '/warehouses', {
+            const res = await axios.get(API_URL + '/warehouses', {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setWarehouses(res.data);
@@ -126,11 +127,11 @@ export function PageClient() {
             };
 
             if (formData.id === 0) {
-                await axios.post(process.env.NEXT_PUBLIC_API_URL + '/stocks', data, {
+                await axios.post(API_URL + '/stocks', data, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
             } else {
-                await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/stocks/${formData.id}`, data, {
+                await axios.put(`${API_URL}/stocks/${formData.id}`, data, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
             }
@@ -156,7 +157,7 @@ export function PageClient() {
         if (result.isConfirmed) {
             try {
                 const token = Cookies.get('token');
-                await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/stocks/${id}`, {
+                await axios.delete(`${API_URL}/stocks/${id}`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 toastSwal({ icon: 'success', title: tc('success') });

@@ -6,6 +6,8 @@ import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
 import SearchableSelect from '@/components/SearchableSelect';
+import { API_URL } from '@/lib/apiConfig';
+
 interface CashRegister {
     id: number;
     name: string;
@@ -50,7 +52,6 @@ export function PageClient() {
     const fetchZones = async () => {
         if (!user?.token) return;
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const res = await axios.get(`${API_URL}/zones`, {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
@@ -63,7 +64,6 @@ export function PageClient() {
     const fetchPrinters = async () => {
         if (!user?.token) return;
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const res = await axios.get(`${API_URL}/printers`, {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
@@ -76,7 +76,6 @@ export function PageClient() {
     const fetchRegisters = async () => {
         if (!user?.token) return;
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const res = await axios.get(`${API_URL}/cash-registers`, {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
@@ -92,7 +91,6 @@ export function PageClient() {
         if (e) e.preventDefault();
         if (!user?.token) return;
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
             if (formData.id === 0) {
@@ -114,7 +112,6 @@ export function PageClient() {
     const handleToggleStatus = async (reg: CashRegister) => {
         if (!user?.token) return;
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             await axios.put(`${API_URL}/cash-registers/${reg.id}`, { ...reg, isActive: !reg.isActive }, {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
@@ -136,7 +133,6 @@ export function PageClient() {
 
         if (result.isConfirmed && user?.token) {
             try {
-                const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
                 await axios.delete(`${API_URL}/cash-registers/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });

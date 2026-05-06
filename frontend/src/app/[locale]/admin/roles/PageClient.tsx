@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import { API_URL } from '@/lib/apiConfig';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -82,8 +83,6 @@ export function PageClient() {
     
     // Dynamic permissions modules from backend
     const [modules, setModules] = useState<ModuleDefinition[]>([]);
-
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
     useEffect(() => {
         if (!loading && !user) router.push(`/${locale}/login`);

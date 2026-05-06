@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import { API_URL } from '@/lib/apiConfig';
 
 export function PageClient() {
     const tc = useTranslations('Common');
@@ -31,7 +32,6 @@ export function PageClient() {
         formData.append('file', file);
 
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const res = await axios.post(`${API_URL}${endpoint}`, formData, {
                 headers: {
                     Authorization: `Bearer ${user.token}`,

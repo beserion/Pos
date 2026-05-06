@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useAuth } from '@/app/[locale]/AuthContext';
 import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
+import { API_URL } from '@/lib/apiConfig';
 
 interface Modifier {
     id: number;
@@ -45,11 +46,10 @@ export function PageClient() {
         if (!user?.token) return;
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const baseUrl = process.env.NEXT_PUBLIC_API_URL;
             
             const [modifiersRes, groupsRes] = await Promise.all([
-                axios.get(`${baseUrl}/modifiers`, config),
-                axios.get(`${baseUrl}/modifier-groups`, config)
+                axios.get(`${API_URL}/modifiers`, config),
+                axios.get(`${API_URL}/modifier-groups`, config)
             ]);
             
             setModifiers(modifiersRes.data);
@@ -67,7 +67,6 @@ export function PageClient() {
         if (!user?.token) return;
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const baseUrl = process.env.NEXT_PUBLIC_API_URL;
             
             const selectedGroup = modifierGroups.find(g => g.id === Number(formData.modifierGroupId));
             const payload = {
@@ -77,10 +76,10 @@ export function PageClient() {
             };
 
             if (formData.id === 0) {
-                await axios.post(`${baseUrl}/modifiers`, payload, config);
+                await axios.post(`${API_URL}/modifiers`, payload, config);
                 toastSwal({ title: tc('success'), text: 'Özellik başarıyla eklendi.', icon: 'success' });
             } else {
-                await axios.put(`${baseUrl}/modifiers/${formData.id}`, payload, config);
+                await axios.put(`${API_URL}/modifiers/${formData.id}`, payload, config);
                 toastSwal({ title: tc('success'), text: 'Özellik başarıyla güncellendi.', icon: 'success' });
             }
             setIsModalOpen(false);
@@ -96,13 +95,12 @@ export function PageClient() {
         if (!user?.token) return;
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const baseUrl = process.env.NEXT_PUBLIC_API_URL;
             
             if (groupFormData.id === 0) {
-                await axios.post(`${baseUrl}/modifier-groups`, { name: groupFormData.name }, config);
+                await axios.post(`${API_URL}/modifier-groups`, { name: groupFormData.name }, config);
                 toastSwal({ title: tc('success'), text: 'Grup başarıyla oluşturuldu.', icon: 'success' });
             } else {
-                await axios.put(`${baseUrl}/modifier-groups/${groupFormData.id}`, { name: groupFormData.name }, config);
+                await axios.put(`${API_URL}/modifier-groups/${groupFormData.id}`, { name: groupFormData.name }, config);
                 toastSwal({ title: tc('success'), text: 'Grup başarıyla güncellendi.', icon: 'success' });
             }
             setIsGroupModalOpen(false);
@@ -126,8 +124,7 @@ export function PageClient() {
         if (result.isConfirmed && user?.token) {
             try {
                 const config = { headers: { Authorization: `Bearer ${user.token}` } };
-                const baseUrl = process.env.NEXT_PUBLIC_API_URL;
-                await axios.delete(`${baseUrl}/modifier-groups/${id}`, config);
+                await axios.delete(`${API_URL}/modifier-groups/${id}`, config);
                 toastSwal({ title: tc('success'), text: 'Grup silindi.', icon: 'success' });
                 fetchData();
             } catch (error) {
@@ -149,7 +146,7 @@ export function PageClient() {
 
         if (result.isConfirmed && user?.token) {
             try {
-                await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/modifiers/${id}`, {
+                await axios.delete(`${API_URL}/modifiers/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
                 toastSwal({ title: tc('success'), text: 'Silme işlemi başarılı', icon: 'success' });

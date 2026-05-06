@@ -7,6 +7,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import SearchableSelect from '@/components/SearchableSelect';
+import { API_URL } from '@/lib/apiConfig';
 
 interface StockMovement {
     id: number;
@@ -64,7 +65,6 @@ export function PageClient() {
 
     const fetchInitialData = async () => {
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const [scRes, whRes] = await Promise.all([
                 axios.get(`${API_URL}/stock-cards?limit=1000`, { headers: { Authorization: `Bearer ${user?.token}` } }),
                 axios.get(`${API_URL}/warehouses`, { headers: { Authorization: `Bearer ${user?.token}` } })
@@ -79,7 +79,6 @@ export function PageClient() {
     const fetchMovements = async () => {
         setLoading(true);
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const params = new URLSearchParams({
                 page: page.toString(),
                 limit: limit.toString(),
@@ -104,7 +103,6 @@ export function PageClient() {
     const handleSaveManual = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             await axios.post(`${API_URL}/stock-movements/manual`, formData, {
                 headers: { Authorization: `Bearer ${user?.token}` }
             });

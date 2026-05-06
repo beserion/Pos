@@ -7,10 +7,9 @@ import { useAuth } from '../AuthContext';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import { useLocale } from 'next-intl';
 import { toastSwal, showSwal } from '../utils/swal';
-import { io } from 'socket.io-client';
 import { useThemeTransition } from '@/hooks/useThemeTransition';
 import { useParameters } from '../utils/useParameters';
-import { API_URL } from '@/lib/apiConfig';
+import { API_URL, createSocket } from '@/lib/apiConfig';
 
 interface OrderItem {
     id: number;
@@ -125,7 +124,7 @@ export function PageClient() {
     useEffect(() => {
         if (!loading && !user) router.push(`/${locale}/login`);
         if (user) {
-            const socket = io(API_URL);
+            const socket = createSocket();
             socket.on('connect', () => console.log('Connected to Kitchen WebSocket'));
 
             socket.on('newOrder', (order: any) => {

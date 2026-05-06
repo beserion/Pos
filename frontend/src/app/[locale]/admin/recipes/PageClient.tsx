@@ -8,6 +8,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import SearchableSelect from '@/components/SearchableSelect';
 import { getUnitName } from '@/app/[locale]/utils/units';
+import { API_URL } from '@/lib/apiConfig';
 
 interface Product {
     id: number;
@@ -82,7 +83,6 @@ export function PageClient() {
     const fetchInitialData = async () => {
         if (!user?.token) return;
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const [prodRes, cardsRes, recipesRes] = await Promise.all([
                 axios.get(`${API_URL}/products`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/stock-cards?limit=1000`, { headers: { Authorization: `Bearer ${user.token}` } }),
@@ -134,7 +134,6 @@ export function PageClient() {
         setRecipeSummary(null);
 
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const [recipeRes, summaryRes] = await Promise.all([
                 axios.get(`${API_URL}/recipes/by-product/${product.id}`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: null })),
                 axios.get(`${API_URL}/recipes/summary/${product.id}`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: null }))
@@ -215,7 +214,6 @@ export function PageClient() {
         }
 
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
             if (currentRecipe.id === 0) {
@@ -260,7 +258,6 @@ export function PageClient() {
 
         if (result.isConfirmed) {
             try {
-                const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
                 await axios.delete(`${API_URL}/recipes/${currentRecipe.id}`, { headers: { Authorization: `Bearer ${user.token}` } });
                 toastSwal({ title: tc('success'), text: 'Reçete başarıyla silindi.', icon: 'success' });
 
@@ -285,7 +282,6 @@ export function PageClient() {
         setLoadingReport(true);
         setReportModalOpen(true);
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const res = await axios.get(`${API_URL}/recipes/report`, { headers: { Authorization: `Bearer ${user.token}` } });
             setReportData(res.data || []);
         } catch (error) {
@@ -798,24 +794,6 @@ export function PageClient() {
                     /* Parent containers must be visible for children to show up in some browsers */
                     .fixed, .bg-white, .flex-1 {
                         visibility: visible !important;
-                        background: transparent !important;
-                        border: none !important;
-                        box-shadow: none !important;
-                    }
-                    table {
-                        width: 100% !important;
-                        border-collapse: collapse !important;
-                    }
-                    th, td {
-                        border: 2px solid #000 !important;
-                        padding: 4px 6px !important;
-                        font-size: 8.5px !important;
-                    }
-                    tr {
-                        break-inside: avoid !important;
-                    }
-                    img {
-                        max-height: 80px !important;
                     }
                 }
             `}</style>

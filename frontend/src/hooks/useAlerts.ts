@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { io, Socket } from 'socket.io-client';
-import { API_URL } from '@/lib/apiConfig';
+import { Socket } from 'socket.io-client';
+import { API_URL, createSocket } from '@/lib/apiConfig';
 
 export interface AlertNotification {
   id: number;
@@ -48,9 +48,7 @@ export function useAlerts(userId: number | null, roleId?: number | null) {
   useEffect(() => {
     if (!userId) return;
 
-    const socket = io(`${API_URL}/alerts`, {
-      transports: ['websocket'],
-      reconnection: true,
+    const socket = createSocket('/alerts', {
       reconnectionDelay: 2000,
     });
     socketRef.current = socket;

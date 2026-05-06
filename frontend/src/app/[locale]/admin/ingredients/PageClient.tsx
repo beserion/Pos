@@ -7,6 +7,7 @@ import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
 import SearchableSelect from '@/components/SearchableSelect';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
+import { API_URL } from '@/lib/apiConfig';
 
 interface Product {
     id: number;
@@ -54,7 +55,7 @@ export function PageClient() {
     const fetchData = async () => {
         if (!user?.token) return;
         try {
-            const res = await axios.get(process.env.NEXT_PUBLIC_API_URL + '/products', {
+            const res = await axios.get(API_URL + '/products', {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
             // Filter only ingredients
@@ -76,10 +77,10 @@ export function PageClient() {
 
             if (formData.id === 0) {
                 const { id, ...postData } = payload;
-                await axios.post(process.env.NEXT_PUBLIC_API_URL + '/products', postData, config);
+                await axios.post(API_URL + '/products', postData, config);
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             } else {
-                await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/products/${formData.id}`, payload, config);
+                await axios.put(`${API_URL}/products/${formData.id}`, payload, config);
                 toastSwal({ title: tc('success'), text: tc('success'), icon: 'success' });
             }
             setIsModalOpen(false);
@@ -102,7 +103,7 @@ export function PageClient() {
 
         if (result.isConfirmed && user?.token) {
             try {
-                await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/products/${id}`, {
+                await axios.delete(`${API_URL}/products/${id}`, {
                     headers: { Authorization: `Bearer ${user.token}` }
                 });
                 toastSwal({ title: tc('success'), text: t('deleteSuccess'), icon: 'success' });

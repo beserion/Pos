@@ -7,6 +7,7 @@ import { showSwal, toastSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
 import PremiumModuleLocked from '@/components/PremiumModuleLocked';
 import SearchableSelect from '@/components/SearchableSelect';
+import { API_URL } from '@/lib/apiConfig';
 import dynamic from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
 
@@ -77,8 +78,8 @@ export function PageClient() {
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const [delRes, empRes] = await Promise.all([
-                axios.get(process.env.NEXT_PUBLIC_API_URL + '/deliveries', config),
-                axios.get(process.env.NEXT_PUBLIC_API_URL + '/employees', config)
+                axios.get(`${API_URL}/deliveries`, config),
+                axios.get(`${API_URL}/employees`, config)
             ]);
             setDeliveries(delRes.data);
             // Simple filter for couriers based on roleTitle
@@ -96,7 +97,7 @@ export function PageClient() {
     const fetchDeliveries = async () => {
         if (!user?.token) return;
         try {
-            const res = await axios.get(process.env.NEXT_PUBLIC_API_URL + '/deliveries', {
+            const res = await axios.get(`${API_URL}/deliveries`, {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
             setDeliveries(res.data);
@@ -119,7 +120,7 @@ export function PageClient() {
                 status: formData.courierId ? 'IN_TRANSIT' : 'PENDING'
             };
 
-            await axios.post(process.env.NEXT_PUBLIC_API_URL + '/deliveries', payload, {
+            await axios.post(`${API_URL}/deliveries`, payload, {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
 

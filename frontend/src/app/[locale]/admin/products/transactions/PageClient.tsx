@@ -6,6 +6,7 @@ import { showSwal } from '@/app/[locale]/utils/swal';
 import { useTranslations, useLocale } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import SearchableSelect from '@/components/SearchableSelect';
+import { API_URL } from '@/lib/apiConfig';
 
 interface ProductTransaction {
     id: number;
@@ -41,7 +42,6 @@ export function PageClient() {
 
     const fetchTransactions = async () => {
         try {
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
             const res = await axios.get(`${API_URL}/products/transactions`, {
                 headers: { Authorization: `Bearer ${user?.token}` }
             });

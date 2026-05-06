@@ -1,13 +1,14 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
-import { useAuth } from '../../AuthContext';
+import { useAuth } from '@/app/[locale]/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useThemeTransition } from '@/hooks/useThemeTransition';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { useTranslations, useLocale } from 'next-intl';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
-import { useParameters } from '../../utils/useParameters';
+import { useParameters } from '@/app/[locale]/utils/useParameters';
+import { API_URL } from '@/lib/apiConfig';
 
 import {
     DndContext,
@@ -42,7 +43,6 @@ export function PageClient() {
     const { theme, toggleTheme } = useThemeTransition();
     const [accounts, setAccounts] = useState<any[]>([]);
     const [accountsLoading, setAccountsLoading] = useState(true);
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
     const [isDesignMode, setIsDesignMode] = useState(false);
     const [cardOrder, setCardOrder] = useState<string[]>([]);
@@ -63,7 +63,7 @@ export function PageClient() {
             }
         };
         fetchStatus();
-    }, [API_URL]);
+    }, []);
 
     useEffect(() => {
         if (!loading && !user) {
@@ -623,5 +623,3 @@ function DashboardCardOverlay({ title, description, icon, color, bg }: Omit<Card
         </div>
     );
 }
-
-

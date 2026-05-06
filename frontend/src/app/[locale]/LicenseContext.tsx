@@ -26,19 +26,20 @@ export const LicenseProvider = ({ children }: { children: React.ReactNode }) => 
   // Activation form state
   const [licenseKey, setLicenseKey] = useState('');
   const [actLoading, setActLoading] = useState(false);
-  const [actError, setActError] = useState('');
+  const [actError, setActError] = useState('');
 
   const fetchStatus = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`${API_URL}/licenses/status`);
+      // Timeout ekleyerek internet yoksa uygulamanın kilitlenmesini engelliyoruz
+      const res = await axios.get(`${API_URL}/licenses/status`, { timeout: 5000 });
       setIsValid(res.data.isValid);
       setModules(res.data.modules || []);
       setDaysOffline(res.data.daysOffline || 0);
       setReason(res.data.reason || '');
     } catch (err) {
-      console.error('License check failed:', err);
-      // Backend not running?
+      console.error('License check failed (Offline or Server Down):', err);
+      // İnternet yoksa veya sunucu kapalıysa, mevcut durumu koru veya varsayılan olarak devam et
     } finally {
       setLoading(false);
     }
@@ -49,9 +50,6 @@ export const LicenseProvider = ({ children }: { children: React.ReactNode }) => 
     fetchStatus();
 
     // ─── 5 Dakikada Bir Otomatik Polling ───────────────────────────────────────
-    // Backend'de 1 saatlik önbellekleme olduğu için sistem yüklenmez;
-    // gerçek panel sorgusu sadece saatte bir yapılır. Polling yalnızca
-    // local veritabanı + önbelleği okuyarak hızlıca yanıt alır.
     const polling = setInterval(() => {
       // Sayfa görünür durumdaysa kontrol et (arka planda tab değilse)
       if (document.visibilityState === 'visible') {
@@ -70,10 +68,10 @@ export const LicenseProvider = ({ children }: { children: React.ReactNode }) => 
     setActLoading(true);
     setActError('');
     try {
-      await axios.post(`${API_URL}/licenses/activate`, { key: licenseKey.trim() });
+      await axios.post(`${API_URL}/licenses/activate`, { key: licenseKey.trim() }, { timeout: 10000 });
       await fetchStatus();
     } catch (err: any) {
-      setActError(err.response?.data?.message || 'Aktivasyon başarısız oldu.');
+      setActError(err.response?.data?.message || 'Aktivasyon başarısız oldu (Bağlantı sorunu olabilir).');
     } finally {
       setActLoading(false);
     }
@@ -167,8 +165,6 @@ export const LicenseProvider = ({ children }: { children: React.ReactNode }) => 
   };
 
   // ─── Offline Uyarı Banner'ı ──────────────────────────────────────────────────
-  // Lisans geçerliyken offline kalan kullanıcıyı 8. günden ONCE uyarır.
-  // 3-5 gün → sarı uyarı | 6+ gün → kırmızı kritik uyarı
   const remainingDays = Math.max(0, 8 - daysOffline);
   const offlineBanner = daysOffline >= 3 ? (
     <div
