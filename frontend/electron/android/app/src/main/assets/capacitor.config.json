@@ -1,8 +1,0 @@
-{
-	"appId": "com.posapp.app",
-	"appName": "POSAPP",
-	"webDir": "out",
-	"server": {
-		"androidScheme": "https"
-	}
-}
