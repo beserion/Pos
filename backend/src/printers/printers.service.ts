@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { Printer } from './printer.entity';
 import { CashRegister } from '../cash-registers/cash-register.entity';
 import { OrderRoutingService } from '../order-routing/order-routing.service';
@@ -31,6 +31,7 @@ export class PrintersService {
     private readonly parametersService: ParametersService,
     @InjectRepository(OutputProfile)
     private readonly profileRepository: Repository<OutputProfile>,
+    private readonly dataSource: DataSource,
   ) { }
 
   async findAll(): Promise<Printer[]> {
@@ -67,131 +68,250 @@ export class PrintersService {
     let printer: Printer | null = null;
 
     if (data.cashRegisterId) {
+      this.logger.log(`Kasa ID ${data.cashRegisterId} için profil/yazıcı aranıyor...`);
       const cashRegister = await this.cashRegisterRepository.findOne({
         where: { id: data.cashRegisterId },
-        relations: ['receiptPrinter'],
+        relations: ['receiptPrinter', 'receiptProfile', 'receiptProfile.mainPrinter', 'receiptProfile.infoPrinter'],
       });
-      if (cashRegister && cashRegister.receiptPrinter) {
-        printer = cashRegister.receiptPrinter;
+      
+      if (cashRegister) {
+        if (cashRegister.receiptProfile) {
+          const profile = cashRegister.receiptProfile;
+          this.logger.log(`Kasa Çıktı Profili bulundu: ${profile.name}`);
+          
+          // Profil varsa, içindeki yazıcıları listeye ekle
+          const targetPrinters = [];
+          if (profile.mainPrinter) targetPrinters.push({ printer: profile.mainPrinter, type: 'MAIN', copyCount: profile.copyCount || 1 });
+          if (profile.infoPrinter) targetPrinters.push({ printer: profile.infoPrinter, type: 'INFO', copyCount: 1 });
+          
+          if (targetPrinters.length > 0) {
+            return this.printToMultiplePrinters(targetPrinters, data, profile);
+          }
+        }
+        
+        if (cashRegister.receiptPrinter) {
+          printer = cashRegister.receiptPrinter;
+          this.logger.log(`Kasa yazıcısı bulundu (Eski Yöntem): ${printer.name} (${printer.ipAddress})`);
+        }
       }
     }
 
     if (!printer) {
-      // Fallback: If no cashRegisterId provided or no printer attached,
-      // fallback to standard 'kasa' lookup (for backwards compatibility).
-      printer = await this.printerRepository
+      this.logger.log(`Varsayılan 'kasa' yazıcısı aranıyor...`);
+      printer = (await this.printerRepository
         .createQueryBuilder('printer')
         .where('LOWER(printer.name) = :name', { name: 'kasa' })
         .andWhere('printer.isActive = :isActive', { isActive: true })
-        .getOne() as Printer | null;
+        .getOne()) as Printer | null;
+      
+      if (printer) {
+        this.logger.log(`Varsayılan 'kasa' yazıcısı bulundu: ${printer.ipAddress}`);
+      }
+    }
+
+    // FINAL FALLBACK: If still no printer, use the first active printer in the system
+    if (!printer) {
+      this.logger.warn('Kasa yazıcısı ve varsayılan "kasa" yazıcısı bulunamadı. İlk aktif yazıcı deneniyor...');
+      printer = await this.printerRepository.findOne({ where: { isActive: true } });
+      if (printer) {
+        this.logger.log(`Yedek yazıcı olarak "${printer.name}" kullanılacak.`);
+      }
     }
 
     if (!printer || !printer.ipAddress) {
-      console.warn(
-        'Bağlı bir fis yazıcısı bulunamadı veya IP adresi eksik. Sadece tarayıcıdan yazdırma yapılabilir.',
-      );
+      this.logger.error('Yazdırma başarısız: Hiçbir aktif yazıcı bulunamadı.');
       return {
         success: false,
-        message: 'Fiş yazdırılamadı: Geçerli kasa/yazıcı bulunamadı.',
+        message: 'Fiş yazdırılamadı: Geçerli bir yazıcı bulunamadı.',
       };
     }
 
-    try {
-      // Dynamic import because node-thermal-printer might need it
-      const { ThermalPrinter, PrinterTypes, CharacterSet, BreakLine } =
-        await import('node-thermal-printer');
+    // Tek yazıcı için tek kopya yazdır
+    return this.printToMultiplePrinters([{ printer, type: 'MAIN', copyCount: 1 }], data);
+  }
 
-      // Resolve printer interface
-      let printerInterface = printer.ipAddress;
-      if (printerInterface.includes('.') && !printerInterface.startsWith('tcp://') && !printerInterface.includes('//') && !printerInterface.includes('\\\\')) {
-        printerInterface = `tcp://${printerInterface}`;
-      }
+  private async printToMultiplePrinters(
+    targets: { printer: Printer; type: string; copyCount: number }[],
+    data: any,
+    profile?: OutputProfile
+  ): Promise<{ success: boolean; message: string }> {
+    const { ThermalPrinter, PrinterTypes, CharacterSet, BreakLine } =
+      await import('node-thermal-printer');
 
-      const thermalPrinter = new ThermalPrinter({
-        type: PrinterTypes.EPSON,
-        interface: printerInterface,
-        characterSet: CharacterSet.WPC1254_TURKISH,
-        removeSpecialCharacters: false,
-        lineCharacter: '=',
-        breakLine: BreakLine.WORD,
-        options: {
-          timeout: 5000,
-        },
-      });
+    let successCount = 0;
+    let lastError = '';
 
-      // Skip connectivity check for local printers as it's often unreliable 
-      // with standard drivers. For TCP, we still check.
-      if (printerInterface.startsWith('tcp://')) {
-        const isConnected = await thermalPrinter.isPrinterConnected();
-        if (!isConnected) {
-          return {
-            success: false,
-            message: `Ag yazıcısına bağlanılamadı: ${printer.ipAddress}`,
-          };
-        }
-      }
-
-      thermalPrinter.alignCenter();
-      thermalPrinter.bold(true);
-      thermalPrinter.setTextSize(1, 1);
-      thermalPrinter.println(trASCII(data.companyName || 'ANTIGRAVITY POS'));
-      thermalPrinter.setTextNormal();
-      thermalPrinter.bold(false);
-      thermalPrinter.println('Tesekkur Ederiz');
-      thermalPrinter.drawLine();
-
-      thermalPrinter.alignLeft();
-      const date = new Date(data.date || new Date()).toLocaleString('tr-TR');
-      thermalPrinter.println(`Tarih: ${date}`);
-      thermalPrinter.println(`Fis No: ${data.receiptNumber || '000000'}`);
-      if (data.tableName) thermalPrinter.println(`Masa: ${trASCII(data.tableName)}`);
-      thermalPrinter.println(`Kasiyer: ${trASCII(data.cashierName || 'Kasiyer')}`);
-      thermalPrinter.drawLine();
-
-      thermalPrinter.leftRight('Urun', 'Tutar');
-      thermalPrinter.drawLine();
-
-      for (const item of data.items) {
-        const nameStr = `${item.quantity}x ${trASCII(item.name).substring(0, 20)}`;
-        const totalStr = `${Number(item.total).toFixed(2)} TL`;
-        thermalPrinter.leftRight(nameStr, totalStr);
-
-        if (item.subItems && item.subItems.length > 0) {
-          for (const sub of item.subItems) {
-            const subName = trASCII(sub.product?.name || sub.name || `Urun #${sub.productId}`);
-            thermalPrinter.println(`  + ${subName}`);
+    for (const target of targets) {
+      const printer = target.printer;
+      for (let i = 0; i < target.copyCount; i++) {
+        try {
+          let printerInterface = printer.ipAddress;
+          
+          // Interface resolution logic
+          if (printerInterface.includes('.') && !printerInterface.startsWith('tcp://') && !printerInterface.includes('//') && !printerInterface.includes('\\\\')) {
+            printerInterface = `tcp://${printerInterface}`;
           }
+          if (process.platform === 'win32' && !printerInterface.startsWith('tcp://') && !printerInterface.includes('\\\\') && !printerInterface.includes('/') && !printerInterface.startsWith('printer:')) {
+            printerInterface = `printer:${printerInterface}`;
+          }
+
+          const thermalPrinter = new ThermalPrinter({
+            type: PrinterTypes.EPSON,
+            interface: printerInterface,
+            characterSet: CharacterSet.WPC1254_TURKISH,
+            removeSpecialCharacters: false,
+            lineCharacter: '=',
+            breakLine: BreakLine.WORD,
+            options: { timeout: 5000 },
+          });
+
+          if (printerInterface.startsWith('tcp://')) {
+            const isConnected = await thermalPrinter.isPrinterConnected();
+            if (!isConnected) throw new Error(`Yazıcıya bağlanılamadı: ${printerInterface}`);
+          }
+
+          // --- GÖVDE OLUŞTURMA ---
+          thermalPrinter.alignCenter();
+          thermalPrinter.bold(true);
+          
+          // Profil bazlı ayarlar
+          const tw = profile?.textSize === 'XLARGE' ? 2 : profile?.textSize === 'LARGE' ? 1 : 0;
+          const th = tw;
+          thermalPrinter.setTextSize(tw, th);
+          
+          if (profile?.showLogo) {
+            thermalPrinter.println('*** ' + (trASCII(data.companyName) || 'POSNETX') + ' ***');
+          }
+
+          if (profile?.showTitle !== false) {
+             thermalPrinter.println(trASCII(profile?.customTitle || 'FIS / ADISYON'));
+          }
+          
+          thermalPrinter.setTextNormal();
+          thermalPrinter.bold(false);
+          thermalPrinter.println('Tesekkur Ederiz');
+          thermalPrinter.drawLine();
+
+          thermalPrinter.alignLeft();
+          const date = new Date(data.date || new Date()).toLocaleString('tr-TR');
+          
+          if (profile?.showTable !== false && data.tableName) {
+            const headerTw = Math.max(0, tw === 0 ? 1 : tw);
+            const headerTh = Math.max(0, th === 0 ? 1 : th);
+            thermalPrinter.setTextSize(headerTw, headerTh);
+            thermalPrinter.println(trASCII(data.tableName));
+            thermalPrinter.setTextSize(tw, th);
+            thermalPrinter.bold(false);
+            thermalPrinter.drawLine();
+            thermalPrinter.alignLeft();
+          }
+
+          const timeOnly = date.includes(' ') ? date.split(' ')[1].substring(0, 5) : date;
+          thermalPrinter.leftRight(`Tarih: ${timeOnly}`, `No: ${data.receiptNumber || '000000'}`);
+          
+          if (profile?.showWaiter !== false && data.cashierName) {
+            thermalPrinter.println(`Kasiyer: ${trASCII(data.cashierName)}`);
+          }
+          thermalPrinter.drawLine();
+
+          thermalPrinter.leftRight('Urun', 'Tutar');
+          thermalPrinter.drawLine();
+
+          const activeItems = data.items.filter((i: any) => !i.status || i.status === 'ACTIVE');
+          const inactiveItems = data.items.filter((i: any) => i.status && i.status !== 'ACTIVE');
+
+          for (const item of activeItems) {
+            let portionStr = '';
+            if (item.saleType === 'HALF') portionStr = ' (YARIM)';
+            else if (item.saleType === 'DOUBLE') portionStr = ' (DUBLE)';
+            
+            const nameStr = `${item.quantity}x ${trASCII(item.name + portionStr).substring(0, 22)}`;
+            const totalStr = `${Number(item.total).toFixed(2)} TL`;
+            thermalPrinter.leftRight(nameStr, totalStr);
+
+            if (profile?.showPortion !== false) {
+              if (item.subItems && item.subItems.length > 0) {
+                for (const sub of item.subItems) {
+                  const subName = trASCII(sub.product?.name || sub.name || `Urun #${sub.productId}`);
+                  const subQty = sub.quantity && sub.quantity > 1 ? `${sub.quantity}x ` : '';
+                  thermalPrinter.println(`  + ${subQty}${subName}`);
+                }
+              }
+              if (item.note) thermalPrinter.println(`  Not: ${trASCII(item.note)}`);
+            }
+          }
+
+          if (inactiveItems.length > 0) {
+            thermalPrinter.drawLine();
+            thermalPrinter.alignCenter();
+            thermalPrinter.bold(true);
+            thermalPrinter.println('!!! IPTAL / IADE EDILENLER !!!');
+            thermalPrinter.bold(false);
+            thermalPrinter.alignLeft();
+            thermalPrinter.drawLine();
+
+            for (const item of inactiveItems) {
+              let portionStr = '';
+              if (item.saleType === 'HALF') portionStr = ' (YARIM)';
+              else if (item.saleType === 'DOUBLE') portionStr = ' (DUBLE)';
+              
+              const statusLabel = item.status === 'REFUNDED' ? 'IADE' : 'IPTAL';
+              const nameStr = `${item.quantity}x ${trASCII(item.name + portionStr).substring(0, 18)} [${statusLabel}]`;
+              thermalPrinter.println(nameStr);
+              const reason = item.refundReason || item.cancelReason || item.note;
+              if (reason) thermalPrinter.println(`  Sebep: ${trASCII(reason)}`);
+            }
+          }
+
+          thermalPrinter.drawLine();
+          thermalPrinter.bold(true);
+          thermalPrinter.leftRight('TOPLAM', `${Number(data.totalAmount).toFixed(2)} TL`);
+          thermalPrinter.setTextNormal();
+          thermalPrinter.bold(false);
+          
+          if (data.paymentMethod) {
+            thermalPrinter.println(`Odeme: ${data.paymentMethod === 'CASH' ? 'NAKIT' : 'KREDI KARTI'}`);
+          }
+
+          // Döviz Kurları (Profilde açıksa)
+          if (profile?.showExchangeRates) {
+            try {
+              const [eurStr, usdStr] = await Promise.all([
+                this.parametersService.getValue('pos', 'eur_rate'),
+                this.parametersService.getValue('pos', 'usd_rate')
+              ]);
+              const eurRate = Number(eurStr) || 37.50;
+              const usdRate = Number(usdStr) || 35.20;
+              
+              thermalPrinter.drawLine();
+              thermalPrinter.println(`EUR (${eurRate.toFixed(2)}) : E ${(Number(data.totalAmount) / eurRate).toFixed(2)}`);
+              thermalPrinter.println(`USD (${usdRate.toFixed(2)}) : $ ${(Number(data.totalAmount) / usdRate).toFixed(2)}`);
+            } catch (e) {}
+          }
+
+          thermalPrinter.drawLine();
+          thermalPrinter.alignCenter();
+          thermalPrinter.println('Mali Degeri Yoktur - Bilgi Fisidir');
+          thermalPrinter.cut();
+          
+          await thermalPrinter.execute();
+          successCount++;
+        } catch (err: any) {
+          this.logger.error(`Yazıcı Hatası (${printer.name}): ${err.message}`);
+          lastError = err.message;
         }
       }
+    }
 
-      thermalPrinter.drawLine();
-      thermalPrinter.bold(true);
-      thermalPrinter.setTextSize(1, 1);
-      thermalPrinter.leftRight(
-        'TOPLAM',
-        `${Number(data.totalAmount).toFixed(2)} TL`,
-      );
-      thermalPrinter.setTextNormal();
-      thermalPrinter.bold(false);
-      thermalPrinter.println(
-        `Odeme: ${data.paymentMethod === 'CASH' ? 'NAKIT' : 'KREDI KARTI'}`,
-      );
-      thermalPrinter.drawLine();
-
-      thermalPrinter.alignCenter();
-      thermalPrinter.println('Mali Degeri Yoktur - Bilgi Fisidir');
-      thermalPrinter.cut();
-      thermalPrinter.beep();
-
-      await thermalPrinter.execute();
-      thermalPrinter.clear();
-
-      return { success: true, message: 'Yazdırma başarılı' };
-    } catch (error: any) {
-      console.error('Yazıcı Hatası:', error);
-      return { success: false, message: `Yazıcı hatası: ${error.message}` };
+    if (successCount > 0) {
+      return { success: true, message: `${successCount} yazıcıdan çıktı alındı.` };
+    } else {
+      return { success: false, message: `Yazdırma başarısız: ${lastError}` };
     }
   }
+
+  private readonly logger = new Logger(PrintersService.name);
+
   async printKitchen(
     data: any,
   ): Promise<{ success: boolean; message: string }> {
@@ -221,15 +341,44 @@ export class PrintersService {
 
         for (const target of targetPrinters) {
           const printer = target.printer;
-          if (!printer || !printer.isActive || !printer.ipAddress) continue;
+          if (!printer) {
+            this.logger.warn(`[printKitchen] Target "${target.type}" için yazıcı nesnesi YÜKLENEMEDİ (Profil: ${target.profileName})`);
+            continue;
+          }
+          if (!printer.isActive) {
+            this.logger.warn(`[printKitchen] Yazıcı "${printer.name}" PASİF durumda, atlanıyor.`);
+            continue;
+          }
+          if (!printer.ipAddress) {
+            this.logger.warn(`[printKitchen] Yazıcı "${printer.name}" için IP/Adres eksik, atlanıyor.`);
+            continue;
+          }
           
           const copyCount = target.type === 'MAIN' ? (profile?.copyCount || 1) : 1;
           
           for (let c = 0; c < copyCount; c++) {
             try {
               let printerInterface = printer.ipAddress;
-              if (printerInterface.includes('.') && !printerInterface.startsWith('tcp://') && !printerInterface.includes('//') && !printerInterface.includes('\\\\')) {
+              // 1. IP Adresi kontrolü
+              if (
+                printerInterface.includes('.') &&
+                !printerInterface.startsWith('tcp://') &&
+                !printerInterface.includes('//') &&
+                !printerInterface.includes('\\\\')
+              ) {
                 printerInterface = `tcp://${printerInterface}`;
+              }
+
+              // 2. Windows USB/Local Yazıcı kontrolü
+              if (
+                process.platform === 'win32' &&
+                !printerInterface.startsWith('tcp://') &&
+                !printerInterface.includes('\\\\') &&
+                !printerInterface.includes('/') &&
+                !printerInterface.startsWith('printer:')
+              ) {
+                this.logger.log(`Windows USB Yazıcı formatı düzeltiliyor: ${printerInterface} -> printer:${printerInterface}`);
+                printerInterface = `printer:${printerInterface}`;
               }
 
               const thermalPrinter = new ThermalPrinter({
@@ -252,42 +401,57 @@ export class PrintersService {
                 thermalPrinter.alignCenter();
                 thermalPrinter.bold(true);
                 
-                // Font boyutu ayarı
-                let tw = 1, th = 1;
-                if (profile.textSize === 'LARGE') { tw = 2; th = 2; }
-                else if (profile.textSize === 'XLARGE') { tw = 3; th = 3; }
+                // Font boyutu ayarı (DÜZELTİLDİ: 0: Normal, 1: Large, 2: XL)
+                let tw = 0, th = 0;
+                if (profile.textSize === 'LARGE') { tw = 1; th = 1; }
+                else if (profile.textSize === 'XLARGE') { tw = 2; th = 2; }
                 
+                if (profile.showLogo) {
+                  thermalPrinter.println('*** ' + (trASCII(data.companyName) || 'POSNETX') + ' ***');
+                }
+
                 if (profile.showTitle !== false) {
                   thermalPrinter.setTextSize(tw, th);
-                  let title = trASCII(data.orderType || 'MUTFAK SIPARISI');
+                  let title = trASCII(profile.customTitle || data.orderType || 'MUTFAK SIPARISI');
                   if (target.type === 'INFO') title = 'BILGI FISI';
                   if (profile.infoOnly && profile.showPrice) title = 'ADISYON';
                   
+                  // İade/İptal durumu kontrolü
+                  const allRefunded = group.items.every((i: any) => i.status === 'REFUNDED');
+                  const allCancelled = group.items.every((i: any) => i.status === 'CANCELLED');
+                  if (allRefunded) title = '!!! IADE FISI !!!';
+                  else if (allCancelled) title = '!!! IPTAL FISI !!!';
+
                   thermalPrinter.println(title);
-                  thermalPrinter.setTextNormal();
                   thermalPrinter.bold(false);
                   thermalPrinter.drawLine();
                 }
 
                 // === BİLGİ SATIRI ===
                 thermalPrinter.alignLeft();
-                thermalPrinter.setTextSize(tw === 1 ? 1 : tw - 1, th === 1 ? 1 : th - 1); // Bilgi satırı ana fonttan biraz küçük olabilir
+                const infoTw = Math.max(0, tw - 1);
+                const infoTh = Math.max(0, th - 1);
+                thermalPrinter.setTextSize(infoTw, infoTh);
                 const date = new Date(data.date || new Date()).toLocaleString('tr-TR');
 
                 // Masa adı — büyük ve belirgin
                 if (data.tableName && profile.showTable !== false) {
                   thermalPrinter.alignCenter();
                   thermalPrinter.bold(true);
-                  thermalPrinter.setTextSize(tw === 1 ? 2 : tw, th === 1 ? 2 : th);
+                  const tableTw = Math.max(0, tw === 0 ? 1 : tw);
+                  const tableTh = Math.max(0, th === 0 ? 1 : th);
+                  thermalPrinter.setTextSize(tableTw, tableTh);
                   thermalPrinter.println(trASCII(data.tableName));
-                  thermalPrinter.setTextSize(tw === 1 ? 1 : tw - 1, th === 1 ? 1 : th - 1);
+                  const resetTw = Math.max(0, tw - 1);
+                  const resetTh = Math.max(0, th - 1);
+                  thermalPrinter.setTextSize(resetTw, resetTh);
                   thermalPrinter.bold(false);
                   thermalPrinter.drawLine();
                   thermalPrinter.alignLeft();
                 }
 
-                thermalPrinter.println(`Tarih: ${date}`);
-                thermalPrinter.println(`Siparis No: ${data.receiptNumber || '000000'}`);
+                const timeOnly = date.includes(' ') ? date.split(' ')[1].substring(0, 5) : date;
+                thermalPrinter.leftRight(`Tarih: ${timeOnly}`, `No: ${data.receiptNumber || '000000'}`);
                 if (data.waiterName && profile.showWaiter !== false) {
                   thermalPrinter.bold(true);
                   thermalPrinter.println(`Garson: ${trASCII(data.waiterName)}`);
@@ -318,8 +482,8 @@ export class PrintersService {
                     const totalStr = `${Number(item.total || item.price * item.quantity).toFixed(2)} TL`;
                     thermalPrinter.leftRight(`${item.quantity}x ${trASCII(item.name).substring(0,20)}`, totalStr);
                   } else {
-                    // Normal mutfak formatı
-                    thermalPrinter.leftRight(`${item.quantity}x`, trASCII(item.name).substring(0,28));
+                    // Normal mutfak formatı (Bitişik gösterim)
+                    thermalPrinter.println(`${item.quantity}x ${trASCII(item.name).substring(0,28)}`);
                   }
                   thermalPrinter.bold(false);
                   
@@ -327,10 +491,13 @@ export class PrintersService {
                     if (item.subItems && item.subItems.length > 0) {
                       for (const sub of item.subItems) {
                         const subName = trASCII(sub.product?.name || sub.name || `Urun #${sub.productId}`);
-                        thermalPrinter.println(`  + ${subName}`);
+                        const subQty = sub.quantity && sub.quantity > 1 ? `${sub.quantity}x ` : '';
+                        thermalPrinter.println(`  + ${subQty}${subName}`);
                       }
                     }
                     if (item.note) thermalPrinter.println(`  Not: ${trASCII(item.note)}`);
+                    if (item.status === 'REFUNDED' && item.refundReason) thermalPrinter.println(`  Iade Sebep: ${trASCII(item.refundReason)}`);
+                    if (item.status === 'CANCELLED' && item.cancelReason) thermalPrinter.println(`  Iptal Sebep: ${trASCII(item.cancelReason)}`);
                   }
                 }
 
@@ -349,7 +516,7 @@ export class PrintersService {
                       const totalStr = `${Number(item.total || item.price * item.quantity).toFixed(2)} TL`;
                       thermalPrinter.leftRight(`${item.quantity}x ${trASCII(item.name).substring(0,20)}`, totalStr);
                     } else {
-                      thermalPrinter.leftRight(`${item.quantity}x`, trASCII(item.name).substring(0,28));
+                      thermalPrinter.println(`${item.quantity}x ${trASCII(item.name).substring(0,28)}`);
                     }
                     thermalPrinter.bold(false);
 
@@ -357,7 +524,8 @@ export class PrintersService {
                       if (item.subItems && item.subItems.length > 0) {
                         for (const sub of item.subItems) {
                           const subName = trASCII(sub.product?.name || sub.name || `Urun #${sub.productId}`);
-                          thermalPrinter.println(`  + ${subName}`);
+                          const subQty = sub.quantity && sub.quantity > 1 ? `${sub.quantity}x ` : '';
+                          thermalPrinter.println(`  + ${subQty}${subName}`);
                         }
                       }
                       if (item.note) thermalPrinter.println(`  Not: ${trASCII(item.note)}`);
@@ -386,9 +554,10 @@ export class PrintersService {
                    thermalPrinter.drawLine();
                    for (const item of cancelledItems) {
                      thermalPrinter.bold(true);
-                     thermalPrinter.leftRight(`${item.quantity}x IPTAL`, trASCII(item.name).substring(0,20));
+                     thermalPrinter.println(`${item.quantity}x IPTAL ${trASCII(item.name).substring(0,20)}`);
                      thermalPrinter.bold(false);
-                     if (item.note) thermalPrinter.println(`  Sebep: ${trASCII(item.note)}`);
+                     const reason = item.refundReason || item.cancelReason || item.note;
+              if (reason) thermalPrinter.println(`  Sebep: ${trASCII(reason)}`);
                    }
                 }
 
@@ -453,6 +622,10 @@ export class PrintersService {
         }
       }
 
+      if (printCount === 0) {
+        this.logger.warn(`[printKitchen] Hiçbir ürün için çıktı profili/yazıcı bulunamadı. Ürünler: ${itemsToPrint.map((i: any) => i.name).join(', ')}, ZoneId: ${data.zoneId}`);
+      }
+
       return {
         success: true,
         message: `${printCount} adet fiş yazdırıldı.`,
@@ -482,8 +655,26 @@ export class PrintersService {
         await import('node-thermal-printer');
 
       let printerInterface = targetPrinter.ipAddress;
-      if (printerInterface.includes('.') && !printerInterface.startsWith('tcp://') && !printerInterface.includes('//') && !printerInterface.includes('\\\\')) {
+      // 1. IP Adresi kontrolü (Eğer IP formatındaysa tcp:// ekle)
+      if (
+        printerInterface.includes('.') &&
+        !printerInterface.startsWith('tcp://') &&
+        !printerInterface.includes('//') &&
+        !printerInterface.includes('\\\\')
+      ) {
         printerInterface = `tcp://${printerInterface}`;
+      }
+
+      // 2. Windows USB/Local Yazıcı kontrolü (Eğer IP/Path değilse ve Windows ise printer: ekle)
+      if (
+        process.platform === 'win32' &&
+        !printerInterface.startsWith('tcp://') &&
+        !printerInterface.includes('\\\\') &&
+        !printerInterface.includes('/') &&
+        !printerInterface.startsWith('printer:')
+      ) {
+        this.logger.log(`Windows USB Yazıcı formatı düzeltiliyor: ${printerInterface} -> printer:${printerInterface}`);
+        printerInterface = `printer:${printerInterface}`;
       }
 
       const thermalPrinter = new ThermalPrinter({
@@ -582,14 +773,12 @@ export class PrintersService {
         thermalPrinter.bold(true);
         
         if (profile.showLogo) {
-          // Logo printing would go here if we had a logo path
-          // For now, just a placeholder or text
           thermalPrinter.println('*** POSNETX ***');
         }
 
-        let tw = 1, th = 1;
-        if (profile.textSize === 'LARGE') { tw = 2; th = 2; }
-        else if (profile.textSize === 'XLARGE') { tw = 3; th = 3; }
+        let tw = 0, th = 0;
+        if (profile.textSize === 'LARGE') { tw = 1; th = 1; }
+        else if (profile.textSize === 'XLARGE') { tw = 2; th = 2; }
 
         thermalPrinter.setTextSize(tw, th);
         thermalPrinter.println(trASCII(profile.customTitle || 'GUN SONU RAPORU'));
@@ -606,33 +795,78 @@ export class PrintersService {
         thermalPrinter.drawLine();
 
         // Sales Totals
-        thermalPrinter.alignCenter();
-        thermalPrinter.bold(true);
-        thermalPrinter.println('--- SATIS TOPLAMLARI ---');
-        thermalPrinter.bold(false);
-        thermalPrinter.alignLeft();
-        
-        if (profile.groupByCategory && data.categoryTotals) {
-          for (const cat of data.categoryTotals) {
-            thermalPrinter.leftRight(trASCII(cat.name), `${Number(cat.total).toFixed(2)} TL`);
+        if (profile.showProductSummary) {
+          thermalPrinter.alignCenter();
+          thermalPrinter.bold(true);
+          thermalPrinter.println('--- SATIS TOPLAMLARI ---');
+          thermalPrinter.bold(false);
+          thermalPrinter.alignLeft();
+          
+          if (profile.groupByCategory && data.categoryTotals) {
+            for (const cat of data.categoryTotals) {
+              thermalPrinter.leftRight(trASCII(cat.name || 'Diger'), `${Number(cat.total).toFixed(2)} TL`);
+            }
+          } else {
+            thermalPrinter.leftRight('TOPLAM SATIS', `${Number(data.netSales || data.totalSales).toFixed(2)} TL`);
           }
-        } else {
-          thermalPrinter.leftRight('TOPLAM SATIS', `${Number(data.totalSales).toFixed(2)} TL`);
+          thermalPrinter.drawLine();
         }
-        thermalPrinter.drawLine();
 
-        // Payment Totals
+        // Transaction Analysis
+        if (profile.showTransactionAnalysis) {
+          thermalPrinter.alignCenter();
+          thermalPrinter.bold(true);
+          thermalPrinter.println('--- ISLEM ANALIZI ---');
+          thermalPrinter.bold(false);
+          thermalPrinter.alignLeft();
+          thermalPrinter.leftRight('TOPLAM FIS', `${data.totalReceipts || 0}`);
+          thermalPrinter.leftRight('IADE TOPLAM', `${Number(data.refundTotal || 0).toFixed(2)} TL`);
+          thermalPrinter.leftRight('IPTAL TOPLAM', `${Number(data.cancelTotal || 0).toFixed(2)} TL`);
+          if (data.discountTotal > 0) thermalPrinter.leftRight('INDIRIM TOPLAM', `${Number(data.discountTotal).toFixed(2)} TL`);
+          thermalPrinter.drawLine();
+        }
+
+        // Payment Totals (Currency Details logic if requested)
         thermalPrinter.alignCenter();
         thermalPrinter.bold(true);
         thermalPrinter.println('--- ODEME TOPLAMLARI ---');
         thermalPrinter.bold(false);
         thermalPrinter.alignLeft();
-        if (data.paymentTotals) {
+        
+        if (data.cashCollection !== undefined) {
+           thermalPrinter.leftRight('NAKIT', `${Number(data.cashCollection).toFixed(2)} TL`);
+           thermalPrinter.leftRight('KREDI KARTI', `${Number(data.creditCardCollection).toFixed(2)} TL`);
+           if (data.cariCollection > 0) thermalPrinter.leftRight('CARI', `${Number(data.cariCollection).toFixed(2)} TL`);
+        } else if (data.paymentTotals) {
           for (const pt of data.paymentTotals) {
             thermalPrinter.leftRight(trASCII(pt.method === 'CASH' ? 'NAKIT' : pt.method === 'CREDIT_CARD' ? 'KREDI KARTI' : pt.method), `${Number(pt.total).toFixed(2)} TL`);
           }
         }
         thermalPrinter.drawLine();
+
+        // VAT Summary
+        if (profile.showVatSummary && data.taxTotal !== undefined) {
+          thermalPrinter.alignCenter();
+          thermalPrinter.bold(true);
+          thermalPrinter.println('--- KDV OZETI ---');
+          thermalPrinter.bold(false);
+          thermalPrinter.alignLeft();
+          thermalPrinter.leftRight('MATRAH', `${Number(data.taxBase).toFixed(2)} TL`);
+          thermalPrinter.leftRight('KDV TOPLAM', `${Number(data.taxTotal).toFixed(2)} TL`);
+          thermalPrinter.drawLine();
+        }
+
+        // Guest Stats
+        if (profile.showGuestStats && data.totalProductCount !== undefined) {
+          thermalPrinter.alignCenter();
+          thermalPrinter.bold(true);
+          thermalPrinter.println('--- ISTATISTIKLER ---');
+          thermalPrinter.bold(false);
+          thermalPrinter.alignLeft();
+          thermalPrinter.leftRight('URUN ADEDI', `${data.totalProductCount}`);
+          if (data.serviceFeeTotal > 0) thermalPrinter.leftRight('SERVIS BEDELI', `${Number(data.serviceFeeTotal).toFixed(2)} TL`);
+          thermalPrinter.drawLine();
+        }
 
         // Waiter Sales
         if (profile.showWaiterSales && data.waiterSales) {
@@ -686,6 +920,156 @@ export class PrintersService {
     } catch (error: any) {
       console.error('Z-Report Print Error:', error);
       return { success: false, message: `Yazdirma hatasi: ${error.message}` };
+    }
+  }
+
+  async printZReportDetailed(zReportId: number, printerId: number, userId: number): Promise<{ success: boolean; message: string }> {
+    try {
+      // 1. Verileri Hazırla
+      const [zReport] = await this.dataSource.query(`SELECT * FROM z_reports WHERE id = @0`, [zReportId]);
+      if (!zReport) throw new NotFoundException('Z-Raporu bulunamadı.');
+
+      const printer = await this.printerRepository.findOne({ where: { id: printerId } });
+      if (!printer) throw new NotFoundException('Yazıcı bulunamadı.');
+
+      const [userInfo] = await this.dataSource.query(`SELECT firstName, lastName FROM users WHERE id = @0`, [userId]);
+      const userName = userInfo ? `${userInfo.firstName} ${userInfo.lastName}`.trim() : 'Bilinmeyen Kullanıcı';
+
+      const [crInfo] = await this.dataSource.query(`SELECT name FROM cash_registers WHERE id = @0`, [zReport.cashRegisterId]);
+      const cashRegisterName = crInfo?.name || `Kasa #${zReport.cashRegisterId}`;
+
+      // 2. Detaylı Ürün Satışlarını Çek
+      const shifts = await this.dataSource.query(`SELECT id FROM shifts WHERE businessDate = @0 AND cashRegisterId = @1`, [zReport.businessDate, zReport.cashRegisterId]);
+      const shiftIds = shifts.map((s: any) => s.id).join(',');
+      
+      let productSales = [];
+      if (shiftIds) {
+        productSales = await this.dataSource.query(`
+          SELECT si.name, SUM(CAST(si.quantity AS DECIMAL(12,2))) as quantity, SUM(CAST(si.total AS DECIMAL(12,2))) as total
+          FROM sale_items si JOIN sales s ON s.id = si.saleId
+          WHERE s.shiftId IN (${shiftIds}) AND s.status = 'COMPLETED' AND si.status = 'ACTIVE'
+          GROUP BY si.name
+          ORDER BY total DESC
+        `);
+      }
+
+      // JSON alanları parse et
+      const data = {
+        ...zReport,
+        userName,
+        cashRegisterName,
+        productSales,
+        categoryTotals: typeof zReport.categoryTotals === 'string' ? JSON.parse(zReport.categoryTotals) : zReport.categoryTotals,
+        paymentTotals: typeof zReport.paymentTotals === 'string' ? JSON.parse(zReport.paymentTotals) : zReport.paymentTotals,
+        waiterSales: typeof zReport.waiterSales === 'string' ? JSON.parse(zReport.waiterSales) : zReport.waiterSales,
+      };
+
+      // 3. Yazdır
+      const { ThermalPrinter, PrinterTypes, CharacterSet, BreakLine } = await import('node-thermal-printer');
+      let printerInterface = printer.ipAddress;
+      if (printerInterface.includes('.') && !printerInterface.startsWith('tcp://') && !printerInterface.includes('//') && !printerInterface.includes('\\\\')) {
+        printerInterface = `tcp://${printerInterface}`;
+      }
+      if (process.platform === 'win32' && !printerInterface.startsWith('tcp://') && !printerInterface.includes('\\\\') && !printerInterface.includes('/') && !printerInterface.startsWith('printer:')) {
+        printerInterface = `printer:${printerInterface}`;
+      }
+
+      const thermalPrinter = new ThermalPrinter({
+        type: PrinterTypes.EPSON,
+        interface: printerInterface,
+        characterSet: CharacterSet.WPC1254_TURKISH,
+        removeSpecialCharacters: false,
+        lineCharacter: '=',
+        breakLine: BreakLine.WORD,
+        options: { timeout: 5000 },
+      });
+
+      if (printerInterface.startsWith('tcp://')) {
+        const isConnected = await thermalPrinter.isPrinterConnected();
+        if (!isConnected) throw new Error('Yazıcıya bağlanılamadı.');
+      }
+
+      // Header
+      thermalPrinter.alignCenter();
+      thermalPrinter.bold(true);
+      thermalPrinter.println('*** POSNETX ***');
+      thermalPrinter.setTextSize(1, 1);
+      thermalPrinter.println('GUN SONU RAPORU');
+      thermalPrinter.setTextNormal();
+      thermalPrinter.bold(false);
+      thermalPrinter.drawLine();
+
+      // Info
+      thermalPrinter.alignLeft();
+      thermalPrinter.println(`Z No: ${data.zNumber || '---'}`);
+      thermalPrinter.println(`Tarih: ${new Date(data.businessDate).toLocaleDateString('tr-TR')}`);
+      thermalPrinter.println(`Kasa: ${trASCII(data.cashRegisterName)}`);
+      thermalPrinter.println(`Kullanici: ${trASCII(data.userName)}`);
+      thermalPrinter.drawLine();
+
+      // Category Totals
+      if (data.categoryTotals && data.categoryTotals.length > 0) {
+        thermalPrinter.alignCenter();
+        thermalPrinter.bold(true);
+        thermalPrinter.println('--- GRUP BAZLI SATISLAR ---');
+        thermalPrinter.bold(false);
+        thermalPrinter.alignLeft();
+        for (const cat of data.categoryTotals) {
+          thermalPrinter.leftRight(trASCII(cat.name || 'Diger'), `${Number(cat.total).toFixed(2)} TL`);
+        }
+        thermalPrinter.drawLine();
+      }
+
+      // Product Totals
+      if (data.productSales && data.productSales.length > 0) {
+        thermalPrinter.alignCenter();
+        thermalPrinter.bold(true);
+        thermalPrinter.println('--- URUN BAZLI SATISLAR ---');
+        thermalPrinter.bold(false);
+        thermalPrinter.alignLeft();
+        for (const p of data.productSales) {
+          thermalPrinter.leftRight(`${Number(p.quantity).toFixed(0)}x ${trASCII(p.name).substring(0, 18)}`, `${Number(p.total).toFixed(2)} TL`);
+        }
+        thermalPrinter.drawLine();
+      }
+
+      // Financial Summary
+      thermalPrinter.alignCenter();
+      thermalPrinter.bold(true);
+      thermalPrinter.println('--- ODEME TOPLAMLARI ---');
+      thermalPrinter.bold(false);
+      thermalPrinter.alignLeft();
+      if (data.paymentTotals) {
+        for (const pt of data.paymentTotals) {
+          thermalPrinter.leftRight(trASCII(pt.method === 'CASH' ? 'NAKIT' : pt.method === 'CREDIT_CARD' ? 'KREDI KARTI' : pt.method), `${Number(pt.total).toFixed(2)} TL`);
+        }
+      }
+      thermalPrinter.drawLine();
+
+      // Stats
+      thermalPrinter.leftRight('TOPLAM FIS', `${data.totalReceipts || 0}`);
+      thermalPrinter.leftRight('URUN ADEDI', `${data.totalProductCount || 0}`);
+      thermalPrinter.leftRight('IPTAL TOPLAM', `${Number(data.cancelTotal || 0).toFixed(2)} TL`);
+      thermalPrinter.leftRight('IADE TOPLAM', `${Number(data.refundTotal || 0).toFixed(2)} TL`);
+      thermalPrinter.drawLine();
+
+      // Grand Total
+      thermalPrinter.bold(true);
+      thermalPrinter.setTextSize(1, 1);
+      thermalPrinter.leftRight('GENEL TOPLAM', `${Number(data.netSales).toFixed(2)} TL`);
+      thermalPrinter.setTextNormal();
+      thermalPrinter.bold(false);
+      thermalPrinter.drawLine();
+
+      thermalPrinter.alignCenter();
+      thermalPrinter.println('Mali Degeri Yoktur');
+      thermalPrinter.cut();
+      await thermalPrinter.execute();
+
+      return { success: true, message: 'Detayli gun sonu raporu yazdirildi.' };
+    } catch (err: any) {
+      this.logger.error(`Detayli Z-Raporu yazdirma hatasi: ${err.message}`);
+      return { success: false, message: `Yazdirma hatasi: ${err.message}` };
     }
   }
 

@@ -27284,3 +27284,287 @@
 18:22:45.556 << ConnectionHelper::sendKeepAliveSignal
 14:51:44.960 >> inposext_version
 14:51:44.964 << inposext_version
+19:25:13.136 >> inposext_version
+19:25:13.136 << inposext_version
+23:35:38.605 >> inposext_version
+23:35:38.606 << inposext_version
+00:09:46.926 >> inposext_version
+00:09:46.926 << inposext_version
+00:15:03.118 >> inposext_version
+00:15:03.119 << inposext_version
+00:15:09.810 >> inposext_version
+00:15:09.811 << inposext_version
+00:36:50.621 >> inposext_version
+00:36:50.623 << inposext_version
+00:36:54.847 >> inposext_version
+00:36:54.849 << inposext_version
+00:36:57.614 >> inposext_version
+00:36:57.615 << inposext_version
+00:37:02.101 >> inposext_version
+00:37:02.102 << inposext_version
+00:39:00.105 >> inposext_version
+00:39:00.105 << inposext_version
+00:42:14.469 >> inposext_version
+00:42:14.470 << inposext_version
+00:42:53.697 >> inposext_version
+00:42:53.698 << inposext_version
+00:43:12.780 >> inposext_version
+00:43:12.782 << inposext_version
+00:56:18.573 >> inposext_version
+00:56:18.573 << inposext_version
+00:56:28.085 >> inposext_version
+00:56:28.085 << inposext_version
+01:03:00.524 >> inposext_version
+01:03:00.524 << inposext_version
+01:12:33.787 >> inposext_version
+01:12:33.787 << inposext_version
+01:26:33.957 >> inposext_version
+01:26:33.959 << inposext_version
+01:31:44.274 >> inposext_version
+01:31:44.274 << inposext_version
+01:31:44.570 >> inposext_version
+01:31:44.570 << inposext_version
+01:37:52.239 >> inposext_version
+01:37:52.239 << inposext_version
+01:37:55.349 >> inposext_version
+01:37:55.349 << inposext_version
+01:37:59.556 >> inposext_version
+01:37:59.556 << inposext_version
+01:45:12.069 >> inposext_version
+01:45:12.069 << inposext_version
+01:45:18.648 >> inposext_version
+01:45:18.649 << inposext_version
+01:45:26.322 >> inposext_version
+01:45:26.323 << inposext_version
+01:45:31.526 >> inposext_version
+01:45:31.526 << inposext_version
+14:31:42.907 >> inposext_version
+14:31:42.910 << inposext_version
+14:54:21.174 >> inposext_version
+14:54:21.176 << inposext_version
+14:56:46.195 >> inposext_version
+14:56:46.195 << inposext_version
+15:03:18.929 >> inposext_version
+15:03:18.930 << inposext_version
+15:03:30.452 >> inposext_version
+15:03:30.452 << inposext_version
+15:04:05.515 >> inposext_version
+15:04:05.517 << inposext_version
+15:05:06.272 >> inposext_version
+15:05:06.272 << inposext_version
+15:05:34.439 >> inposext_version
+15:05:34.441 << inposext_version
+15:05:52.870 >> inposext_version
+15:05:52.871 << inposext_version
+15:06:10.251 >> inposext_version
+15:06:10.252 << inposext_version
+15:19:38.330 >> inposext_version
+15:19:38.332 << inposext_version
+15:22:48.733 >> inposext_version
+15:22:48.733 << inposext_version
+15:34:09.367 >> inposext_version
+15:34:09.368 << inposext_version
+15:34:12.565 >> inposext_version
+15:34:12.566 << inposext_version
+15:34:16.837 >> inposext_version
+15:34:16.838 << inposext_version
+16:18:19.549 >> inposext_version
+16:18:19.549 << inposext_version
+16:28:10.701 >> inposext_version
+16:28:10.701 << inposext_version
+17:14:26.205 >> inposext_version
+17:14:26.205 << inposext_version
+17:14:29.354 >> inposext_version
+17:14:29.355 << inposext_version
+17:14:34.086 >> inposext_version
+17:14:34.087 << inposext_version
+17:44:17.122 >> inposext_version
+17:44:17.123 << inposext_version
+19:49:03.397 >> inposext_version
+19:49:03.397 << inposext_version
+19:50:20.093 >> inposext_version
+19:50:20.094 << inposext_version
+19:50:42.610 >> inposext_version
+19:50:42.612 << inposext_version
+20:07:05.080 >> inposext_version
+20:07:05.081 << inposext_version
+22:34:32.518 >> inposext_version
+22:34:32.519 << inposext_version
+23:50:22.061 >> inposext_version
+23:50:22.061 << inposext_version
+00:44:37.843 >> inposext_version
+00:44:37.843 << inposext_version
+00:47:43.065 >> inposext_version
+00:47:43.066 << inposext_version
+00:50:09.259 >> inposext_version
+00:50:09.259 << inposext_version
+00:50:11.002 >> inposext_version
+00:50:11.002 << inposext_version
+00:50:18.260 >> inposext_version
+00:50:18.260 << inposext_version
+00:50:23.677 >> inposext_version
+00:50:23.677 << inposext_version
+00:50:44.019 >> inposext_version
+00:50:44.019 << inposext_version
+00:50:52.268 >> inposext_version
+00:50:52.268 << inposext_version
+00:51:02.871 >> inposext_version
+00:51:02.871 << inposext_version
+00:51:14.752 >> inposext_version
+00:51:14.752 << inposext_version
+00:51:29.212 >> inposext_version
+00:51:29.214 << inposext_version
+01:04:28.944 >> inposext_version
+01:04:28.944 << inposext_version
+01:04:47.216 >> inposext_version
+01:04:47.216 << inposext_version
+01:05:07.898 >> inposext_version
+01:05:07.898 << inposext_version
+01:05:27.200 >> inposext_version
+01:05:27.202 << inposext_version
+04:13:42.769 >> inposext_version
+04:13:42.776 << inposext_version
+04:14:37.439 >> inposext_version
+04:14:37.439 << inposext_version
+04:15:43.727 >> inposext_version
+04:15:43.727 << inposext_version
+04:16:42.219 >> inposext_version
+04:16:42.219 << inposext_version
+16:43:39.489 >> inposext_version
+16:43:39.490 << inposext_version
+22:42:09.090 >> inposext_version
+22:42:09.094 << inposext_version
+22:46:08.343 >> inposext_version
+22:46:08.344 << inposext_version
+23:08:30.511 >> inposext_version
+23:08:30.511 << inposext_version
+23:50:16.407 >> inposext_version
+23:50:16.408 << inposext_version
+00:52:10.545 >> inposext_version
+00:52:10.545 << inposext_version
+00:55:52.486 >> inposext_version
+00:55:52.486 << inposext_version
+01:02:17.720 >> inposext_version
+01:02:17.720 << inposext_version
+01:21:56.339 >> inposext_version
+01:21:56.339 << inposext_version
+14:01:06.990 >> inposext_version
+14:01:06.993 << inposext_version
+14:18:11.476 >> inposext_version
+14:18:11.476 << inposext_version
+14:35:23.007 >> inposext_version
+14:35:23.008 << inposext_version
+16:26:45.880 >> inposext_version
+16:26:45.880 << inposext_version
+16:11:11.730 >> inposext_version
+16:11:11.731 << inposext_version
+16:15:52.034 >> inposext_version
+16:15:52.037 << inposext_version
+16:17:17.258 >> inposext_version
+16:17:17.259 << inposext_version
+16:17:41.025 >> inposext_initialize
+  16:17:41.042 >> ConnectionHelper::connectToDevice
+    16:17:41.042 >> ConnectionHelper::closeConnection
+    16:17:41.043 << ConnectionHelper::closeConnection
+    16:17:41.043 >> inpos_network_accept
+    16:17:41.047 << inpos_network_accept
+  16:17:41.048 << ConnectionHelper::connectToDevice
+16:17:41.048 << inposext_initialize
+16:17:41.555 >> inposext_initialize
+  16:17:41.557 >> ConnectionHelper::connectToDevice
+    16:17:41.557 >> ConnectionHelper::closeConnection
+    16:17:41.557 << ConnectionHelper::closeConnection
+    16:17:41.558 >> inpos_network_accept
+    16:17:41.558 << inpos_network_accept
+  16:17:41.559 << ConnectionHelper::connectToDevice
+16:17:41.559 << inposext_initialize
+16:17:42.064 >> inposext_initialize
+  16:17:42.067 >> ConnectionHelper::connectToDevice
+    16:17:42.067 >> ConnectionHelper::closeConnection
+    16:17:42.067 << ConnectionHelper::closeConnection
+    16:17:42.067 >> inpos_network_accept
+    16:17:42.068 << inpos_network_accept
+  16:17:42.069 << ConnectionHelper::connectToDevice
+16:17:42.070 << inposext_initialize
+16:17:42.575 >> inposext_initialize
+  16:17:42.577 >> ConnectionHelper::connectToDevice
+    16:17:42.577 >> ConnectionHelper::closeConnection
+    16:17:42.578 << ConnectionHelper::closeConnection
+    16:17:42.579 >> inpos_network_accept
+    16:17:42.581 << inpos_network_accept
+  16:17:42.582 << ConnectionHelper::connectToDevice
+16:17:42.582 << inposext_initialize
+16:17:43.090 >> inposext_initialize
+  16:17:43.091 >> ConnectionHelper::connectToDevice
+    16:17:43.091 >> ConnectionHelper::closeConnection
+    16:17:43.092 << ConnectionHelper::closeConnection
+    16:17:43.092 >> inpos_network_accept
+    16:17:43.092 << inpos_network_accept
+  16:17:43.094 << ConnectionHelper::connectToDevice
+16:17:43.094 << inposext_initialize
+16:17:43.601 >> inposext_initialize
+  16:17:43.602 >> ConnectionHelper::connectToDevice
+    16:17:43.602 >> ConnectionHelper::closeConnection
+    16:17:43.604 << ConnectionHelper::closeConnection
+    16:17:43.604 >> inpos_network_accept
+    16:17:43.605 << inpos_network_accept
+  16:17:43.605 << ConnectionHelper::connectToDevice
+16:17:43.606 << inposext_initialize
+16:17:44.110 >> inposext_initialize
+  16:17:44.112 >> ConnectionHelper::connectToDevice
+    16:17:44.112 >> ConnectionHelper::closeConnection
+    16:17:44.112 << ConnectionHelper::closeConnection
+    16:17:44.113 >> inpos_network_accept
+    16:17:44.113 << inpos_network_accept
+  16:17:44.113 << ConnectionHelper::connectToDevice
+16:17:44.113 << inposext_initialize
+16:17:44.621 >> inposext_initialize
+  16:17:44.622 >> ConnectionHelper::connectToDevice
+    16:17:44.624 >> ConnectionHelper::closeConnection
+    16:17:44.624 << ConnectionHelper::closeConnection
+    16:17:44.625 >> inpos_network_accept
+    16:17:44.625 << inpos_network_accept
+  16:17:44.625 << ConnectionHelper::connectToDevice
+16:17:44.627 << inposext_initialize
+16:17:45.134 >> inposext_initialize
+  16:17:45.136 >> ConnectionHelper::connectToDevice
+    16:17:45.136 >> ConnectionHelper::closeConnection
+    16:17:45.137 << ConnectionHelper::closeConnection
+    16:17:45.137 >> inpos_network_accept
+    16:17:45.138 << inpos_network_accept
+  16:17:45.138 << ConnectionHelper::connectToDevice
+16:17:45.140 << inposext_initialize
+16:17:45.644 >> inposext_initialize
+  16:17:45.646 >> ConnectionHelper::connectToDevice
+    16:17:45.647 >> ConnectionHelper::closeConnection
+    16:17:45.648 << ConnectionHelper::closeConnection
+    16:17:45.649 >> inpos_network_accept
+    16:17:45.649 << inpos_network_accept
+  16:17:45.650 << ConnectionHelper::connectToDevice
+16:17:45.651 << inposext_initialize
+16:18:41.054 >> ConnectionHelper::sendKeepAliveSignal
+16:18:41.055 << ConnectionHelper::sendKeepAliveSignal
+16:19:41.054 >> ConnectionHelper::sendKeepAliveSignal
+16:19:41.054 << ConnectionHelper::sendKeepAliveSignal
+16:20:23.963 >> inposext_version
+16:20:23.964 << inposext_version
+16:32:28.520 >> inposext_version
+16:32:28.525 << inposext_version
+16:34:46.246 >> inposext_version
+16:34:46.247 << inposext_version
+16:35:55.136 >> inposext_version
+16:35:55.137 << inposext_version
+16:38:38.563 >> inposext_version
+16:38:38.563 << inposext_version
+16:41:13.272 >> inposext_version
+16:41:13.272 << inposext_version
+17:12:31.678 >> inposext_version
+17:12:31.678 << inposext_version
+17:16:37.583 >> inposext_version
+17:16:37.583 << inposext_version
+17:16:44.793 >> inposext_version
+17:16:44.794 << inposext_version
+17:18:23.782 >> inposext_version
+17:18:23.782 << inposext_version
+17:53:27.314 >> inposext_version
+17:53:27.314 << inposext_version

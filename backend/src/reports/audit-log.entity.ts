@@ -36,6 +36,11 @@ export class AuditLog {
   @Column('int', { default: 1 })
   companyId: number;
 
+  // ─── Program Tarihi (İş Günü) ─────────────────────────────────────
+  // İşlemin gerçekleştiği program tarihi (YYYY-MM-DD).
+  @Column({ length: 10, nullable: true })
+  businessDate: string;
+
   @Column('int', { nullable: true , default: 0 })
   cashRegisterId: number;
 

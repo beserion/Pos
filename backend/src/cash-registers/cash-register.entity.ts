@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { Department } from '../departments/department.entity';
 import { Printer } from '../printers/printer.entity';
+import { OutputProfile } from '../output-profiles/output-profile.entity';
 
 @Entity('cash_registers')
 export class CashRegister {
@@ -19,6 +20,13 @@ export class CashRegister {
 
   @Column({ nullable: true })
   receiptPrinterId?: number | null;
+
+  @ManyToOne(() => OutputProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'receiptProfileId' })
+  receiptProfile: OutputProfile | null;
+
+  @Column({ nullable: true })
+  receiptProfileId?: number | null;
 
   @Column({ nullable: true , default: 0 })
   locationId: number;

@@ -61,6 +61,11 @@ export class AccountTransaction {
   @Column({ nullable: true })
   documentNumber: string;
 
+  // ─── Program Tarihi (İş Günü) ─────────────────────────────────────
+  // İşlemin ait olduğu program tarihi (YYYY-MM-DD).
+  @Column({ length: 10, nullable: true })
+  businessDate: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

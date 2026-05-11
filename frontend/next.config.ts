@@ -11,9 +11,9 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  trailingSlash: true,
+  trailingSlash: false,
   // Güvenli geliştirme için bu domainlere izin veriyoruz
-  allowedDevOrigins: ['test.posnetx.com', 'apitest.posnetx.com', 'localhost:3000']
+  allowedDevOrigins: ['tester.posnetx.com', 'test.posnetx.com', 'apitest.posnetx.com', 'localhost:3000'],
 } as any;
 
 export default withNextIntl(nextConfig);

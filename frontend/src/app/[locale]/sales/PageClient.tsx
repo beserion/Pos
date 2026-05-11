@@ -35,14 +35,16 @@ export function PageClient() {
     const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
-    const limit = 30;
+    const limit = 30;
+
 
     const fetchSales = async () => {
         setDataLoading(true);
         try {
             const token = localStorage.getItem('token') || (user as any)?.token;
-            // Fetch for today's sales or chosen date
-            const res = await fetch(`${API_URL}/sales?startDate=${filterDate}&endDate=${filterDate}T23:59:59&page=${page}&limit=${limit}`, {
+            // filterDate sadece YYYY-MM-DD olmalı, T23:59:59 eklemeden önce temizliyoruz
+            const cleanDate = filterDate && filterDate.includes('T') ? filterDate.split('T')[0] : filterDate;
+            const res = await fetch(`${API_URL}/sales?startDate=${cleanDate}&endDate=${cleanDate}T23:59:59&page=${page}&limit=${limit}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.ok) {
@@ -61,6 +63,30 @@ export function PageClient() {
         if (!loading && !user) router.push(`/${locale}/login`);
         if (user) fetchSales();
     }, [user, loading, filterDate, page]);
+
+    useEffect(() => {
+        const fetchStatus = async () => {
+            if (user) {
+                try {
+                    const token = localStorage.getItem('token') || (user as any)?.token;
+                    const res = await fetch(`${API_URL}/business-day/status`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.activeBusinessDate) {
+                            // Backend'den gelen '2026-05-08T00:00:00.000Z' formatını '2026-05-08' yapıyoruz
+                            const dateOnly = data.activeBusinessDate.split('T')[0];
+                            setFilterDate(dateOnly);
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error fetching business day status:', e);
+                }
+            }
+        };
+        fetchStatus();
+    }, [user]);
 
   const handleEditSale = async (sale: Sale) => {
         const result = await showSwal({
@@ -192,6 +218,59 @@ export function PageClient() {
             });
 
             fetchSales();
+
+            if (data.zReportId) {
+                try {
+                    const printRes = await fetch(`${API_URL}/printers`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (printRes.ok) {
+                        const printers = await printRes.json();
+                        const activePrinters = printers.filter((p: any) => p.isActive);
+                        if (activePrinters.length > 0) {
+                            const options: Record<string, string> = {};
+                            activePrinters.forEach((p: any) => {
+                                options[p.id.toString()] = `${p.name} (${p.ipAddress})`;
+                            });
+
+                            const { value: printerId } = await showSwal({
+                                title: 'Gün Sonu Raporunu Yazdır',
+                                text: 'Lütfen çıktının alınacağı yazıcıyı seçiniz:',
+                                input: 'select',
+                                inputOptions: options,
+                                inputPlaceholder: 'Yazıcı Seçiniz...',
+                                showCancelButton: true,
+                                confirmButtonText: 'Yazdır',
+                                cancelButtonText: 'İptal',
+                            });
+
+                            if (printerId) {
+                                const printActionRes = await fetch(`${API_URL}/printers/print-z-report-detailed`, {
+                                    method: 'POST',
+                                    headers: { 
+                                        'Content-Type': 'application/json', 
+                                        Authorization: `Bearer ${token}` 
+                                    },
+                                    body: JSON.stringify({
+                                        zReportId: data.zReportId,
+                                        printerId: Number(printerId)
+                                    })
+                                });
+                                const printActionData = await printActionRes.json();
+                                if (printActionData.success) {
+                                    toastSwal({ icon: 'success', title: 'Yazdırıldı' });
+                                } else {
+                                    showSwal({ icon: 'error', title: 'Hata', text: printActionData.message || 'Yazdırılamadı' });
+                                }
+                            }
+                        } else {
+                            showSwal({ icon: 'info', title: 'Yazıcı Bulunamadı', text: 'Sistemde aktif bir termal yazıcı tanımlı değil.' });
+                        }
+                    }
+                } catch (err) {
+                    console.error('Yazıcı işlemi başarısız:', err);
+                }
+            }
         } catch (error) {
             console.error('Error in End of Day:', error);
             showSwal({ icon: 'error', title: 'Hata', text: 'Gün sonu işlemi sırasında bir hata oluştu.' });

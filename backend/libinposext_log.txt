@@ -8621,3 +8621,63 @@ inposext_initialize(): BlockingQueuedConnection
 ConnectionHelper::closeConnection(): T60008681767.
 [18:17:50.170] ERROR: ConnectionHelper::connectToDevice - 2 / 520
 [18:17:50.170] ERROR: inposext_initialize - 2 / 520
+inposext_initialize(): 1 - T60008681767
+inposext_initialize(): 192.168.001.176 - 59000
+inposext_initialize(): BlockingQueuedConnection
+ConnectionHelper::closeConnection(): T60008681767.
+[16:17:41.047] ERROR: ConnectionHelper::connectToDevice - 2 / 520
+[16:17:41.048] ERROR: inposext_initialize - 2 / 520
+inposext_initialize(): 1 - T60008681767
+inposext_initialize(): 192.168.001.176 - 59000
+inposext_initialize(): BlockingQueuedConnection
+ConnectionHelper::closeConnection(): T60008681767.
+[16:17:41.558] ERROR: ConnectionHelper::connectToDevice - 2 / 520
+[16:17:41.559] ERROR: inposext_initialize - 2 / 520
+inposext_initialize(): 1 - T60008681767
+inposext_initialize(): 192.168.001.176 - 59000
+inposext_initialize(): BlockingQueuedConnection
+ConnectionHelper::closeConnection(): T60008681767.
+[16:17:42.069] ERROR: ConnectionHelper::connectToDevice - 2 / 520
+[16:17:42.069] ERROR: inposext_initialize - 2 / 520
+inposext_initialize(): 1 - T60008681767
+inposext_initialize(): 192.168.001.176 - 59000
+inposext_initialize(): BlockingQueuedConnection
+ConnectionHelper::closeConnection(): T60008681767.
+[16:17:42.581] ERROR: ConnectionHelper::connectToDevice - 2 / 520
+[16:17:42.582] ERROR: inposext_initialize - 2 / 520
+inposext_initialize(): 1 - T60008681767
+inposext_initialize(): 192.168.001.176 - 59000
+inposext_initialize(): BlockingQueuedConnection
+ConnectionHelper::closeConnection(): T60008681767.
+[16:17:43.092] ERROR: ConnectionHelper::connectToDevice - 2 / 520
+[16:17:43.094] ERROR: inposext_initialize - 2 / 520
+inposext_initialize(): 1 - T60008681767
+inposext_initialize(): 192.168.001.176 - 59000
+inposext_initialize(): BlockingQueuedConnection
+ConnectionHelper::closeConnection(): T60008681767.
+[16:17:43.605] ERROR: ConnectionHelper::connectToDevice - 2 / 520
+[16:17:43.605] ERROR: inposext_initialize - 2 / 520
+inposext_initialize(): 1 - T60008681767
+inposext_initialize(): 192.168.001.176 - 59000
+inposext_initialize(): BlockingQueuedConnection
+ConnectionHelper::closeConnection(): T60008681767.
+[16:17:44.113] ERROR: ConnectionHelper::connectToDevice - 2 / 520
+[16:17:44.113] ERROR: inposext_initialize - 2 / 520
+inposext_initialize(): 1 - T60008681767
+inposext_initialize(): 192.168.001.176 - 59000
+inposext_initialize(): BlockingQueuedConnection
+ConnectionHelper::closeConnection(): T60008681767.
+[16:17:44.625] ERROR: ConnectionHelper::connectToDevice - 2 / 520
+[16:17:44.627] ERROR: inposext_initialize - 2 / 520
+inposext_initialize(): 1 - T60008681767
+inposext_initialize(): 192.168.001.176 - 59000
+inposext_initialize(): BlockingQueuedConnection
+ConnectionHelper::closeConnection(): T60008681767.
+[16:17:45.138] ERROR: ConnectionHelper::connectToDevice - 2 / 520
+[16:17:45.139] ERROR: inposext_initialize - 2 / 520
+inposext_initialize(): 1 - T60008681767
+inposext_initialize(): 192.168.001.176 - 59000
+inposext_initialize(): BlockingQueuedConnection
+ConnectionHelper::closeConnection(): T60008681767.
+[16:17:45.650] ERROR: ConnectionHelper::connectToDevice - 2 / 520
+[16:17:45.651] ERROR: inposext_initialize - 2 / 520

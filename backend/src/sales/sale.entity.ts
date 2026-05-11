@@ -92,6 +92,12 @@ export class Sale {
   @Column({ nullable: true })
   companyId: number;
 
+  // ─── Program Tarihi (İş Günü) ───────────────────────────────────
+  // Satışın ait olduğu program tarihi (YYYY-MM-DD). Gece yarısı geçişlerinde
+  // gerçek saatten bağımsız, gün sonu mantığıyla tutarlı raporlama sağlar.
+  @Column({ length: 10, nullable: true })
+  businessDate: string;
+
   // --- Yazarkasa (inPOS) Alanları ---
   @Column({ nullable: true })
   ecrReceiptNo: number;

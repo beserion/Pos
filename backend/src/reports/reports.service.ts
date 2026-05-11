@@ -185,7 +185,8 @@ export class ReportsService {
 
     // İptal Özeti (Audit Logs üzerinden - İşlem anına göre)
     // Hem tüm adisyon iptallerini hem de tekil ürün iptallerini sayar
-    const auditDateFilter = dateFilter.replace(/s\.createdAt/g, 'timestamp').replace(/s\./g, '');
+    // Audit logs'da henüz businessDate kolonu yok, bu yüzden timestamp'i formatlayarak karşılaştırıyoruz.
+    const auditDateFilter = dateFilter.replace(/s\.businessDate/g, "FORMAT(timestamp, 'yyyy-MM-dd')").replace(/s\./g, '');
     const cancellationAuditRes = await this.dataSource.query(`
       SELECT COUNT(*) as iptalAdedi
       FROM audit_logs
@@ -342,6 +343,8 @@ export class ReportsService {
     `, params);
 
     // İade/iptal detayları (SaleItems üzerinden - Artık ödeme sonrası silinmiyorlar)
+    // Audit logs'da henüz businessDate kolonu yoksa (si join'i olduğu için si.businessDate aranabilir)
+    // Burada si join'i yok, auditDateFilter gibi bir yaklaşım gerekebilir ama iadeRes zaten si ve s joinli.
     const iadeRes = await this.dataSource.query(`
       SELECT si.status as durum,
         COUNT(*) as adet,
@@ -629,24 +632,21 @@ export class ReportsService {
     let dateFilter = '';
     let pIdx = 0;
 
+    // ── Tarih filtresi artık `businessDate` (program tarihi) üzerinden çalışır ──
+    // Bu sayede gece yarısı geçişlerinde satışlar gerçek saat yerine
+    // iş günü tarihine göre doğru şekilde raporlanır.
     const dateStr = filters.date;
     if (dateStr) {
-      const start = new Date(dateStr);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(dateStr);
-      end.setHours(23, 59, 59, 999);
-      params.push(start, end);
-      dateFilter += ` AND s.createdAt >= @${pIdx++} AND s.createdAt <= @${pIdx++}`;
+      params.push(dateStr, dateStr);
+      dateFilter += ` AND s.businessDate >= @${pIdx++} AND s.businessDate <= @${pIdx++}`;
     } else {
       if (filters.startDate) {
-        params.push(new Date(filters.startDate));
-        dateFilter += ` AND s.createdAt >= @${pIdx++}`;
+        params.push(filters.startDate);
+        dateFilter += ` AND s.businessDate >= @${pIdx++}`;
       }
       if (filters.endDate) {
-        const end = new Date(filters.endDate);
-        end.setHours(23, 59, 59, 999);
-        params.push(end);
-        dateFilter += ` AND s.createdAt <= @${pIdx++}`;
+        params.push(filters.endDate);
+        dateFilter += ` AND s.businessDate <= @${pIdx++}`;
       }
     }
 
@@ -657,6 +657,7 @@ export class ReportsService {
 
     return { dateFilter, params };
   }
+
 
   // ─── TRANSFER RAPORU ──────────────────────────────────────────────────────────
 

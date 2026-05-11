@@ -10,6 +10,7 @@ import ShiftManager from '@/components/shifts/ShiftManager';
 import TransferModal from './TransferModal';
 import { usePos } from './PosContext';
 import { API_URL } from '@/lib/apiConfig';
+import { useParameters } from '../utils/useParameters';
 
 interface Product {
     id: number;
@@ -51,10 +52,11 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const [mounted, setMounted] = useState(false);
 
     const { products, tables, zones: allZones, dataLoading: posDataLoading, refreshDynamicData } = usePos();
+    const { params } = useParameters();
     const [zones, setZones] = useState<Zone[]>([]);
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
     const [selectedZone, setSelectedZone] = useState<number | 'ALL'>('ALL');
-    const [cart, setCart] = useState<{ product: Product; quantity: number; itemId?: number; subCheckId?: number; subItems?: any[]; saleType?: string; saleTypeMultiplier?: number; note?: string; }[]>([]);
+    const [cart, setCart] = useState<{ product: Product; quantity: number; itemId?: number; subCheckId?: number; subItems?: any[]; saleType?: string; saleTypeMultiplier?: number; unitPrice?: number; note?: string; status?: string; refundReason?: string; cancelReason?: string; }[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string>('Tümü');
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [isSplitPaymentOpen, setIsSplitPaymentOpen] = useState(false);
@@ -89,7 +91,8 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     // Shift & Cash Register state
     const [activeShift, setActiveShift] = useState<any>(null);
     const [activeCashRegister, setActiveCashRegister] = useState<any>(null);
-    const [shiftReady, setShiftReady] = useState(false);
+    const [shiftReady, setShiftReady] = useState(false);
+
 
     useEffect(() => {
         if (!loading && !user) router.push(`/${locale}/login`);
@@ -205,7 +208,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                         flat.forEach(check => {
                             if (check.items) {
                                 check.items
-                                    .filter((item: any) => item.status === 'ACTIVE')
+
                                     .forEach((item: any) => {
                                         const product = item.product || { id: item.productId, name: `Ürün #${item.productId}`, price: item.unitPrice };
 
@@ -215,11 +218,18 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
                                         // For Sets, we might not want to merge if they are unique instances
                                         // But for now, let's keep the merging logic but add subItems to the cart item
-                                        const existing = newCart.find(c => c.product.id === product.id && !item.parentItemId);
+
 
                                         // Get children for this specific item
                                         const children = check.items.filter((sub: any) => sub.parentItemId === item.id);
 
+                                        const existing = newCart.find(c =>
+                                            c.product.id === product.id &&
+                                            c.variationId === item.variationId &&
+                                            c.saleType === item.saleType &&
+                                            (c.subItems?.length || 0) === children.length &&
+                                            children.length === 0
+                                        );
                                         if (existing && !product.isSet) {
                                             existing.quantity += item.quantity;
                                         } else {
@@ -233,7 +243,8 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                                 saleTypeMultiplier: item.saleTypeMultiplier,
                                                 unitPrice: item.unitPrice,
                                                 variationId: item.variationId,
-                                                variationName: item.variationName
+                                                variationName: item.variationName,
+                                                status: item.status
                                             });
                                         }
                                     });
@@ -246,7 +257,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                         const activeCheck = flat.find((s: any) => s.id === activeSubCheckId);
                         if (activeCheck && activeCheck.items) {
                             const newCart = activeCheck.items
-                                .filter((item: any) => item.status === 'ACTIVE' && !item.parentItemId)
+                                .filter((item: any) => !item.parentItemId)
                                 .map((item: any) => {
                                     const children = activeCheck.items.filter((sub: any) => sub.parentItemId === item.id);
                                     return {
@@ -259,7 +270,8 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                         saleTypeMultiplier: item.saleTypeMultiplier,
                                         unitPrice: item.unitPrice,
                                         variationId: item.variationId,
-                                        variationName: item.variationName
+                                        variationName: item.variationName,
+                                        status: item.status
                                     };
                                 });
                             setCart(newCart);
@@ -374,7 +386,11 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     quantity: i.quantity,
                     total: Number(i.quantity) * Number(i.unitPrice),
                     unitPrice: Number(i.unitPrice),
-                    subItems: i.subItems || []
+                    subItems: i.subItems || [],
+                    status: i.status,
+                    saleType: i.saleType,
+                    refundReason: i.refundReason,
+                    cancelReason: i.cancelReason
                 }));
 
                 const reqBody = {
@@ -433,9 +449,9 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
         }
 
         const selectedTotalAmount = itemsToPay.reduce((sum, item) => {
-            const effectivePrice = (item as any).unitPrice ?? item.product.price;
-            const base = (effectivePrice * (item.saleTypeMultiplier || 1)) * item.quantity;
-            const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
+            const base = (item.unitPrice ?? (item.product.price * (item.saleTypeMultiplier || 1))) * item.quantity;
+            // Ekstra bağımsız: kendi fiyatı × kendi adedi
+            const extras = (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0);
             return sum + base + extras;
         }, 0);
         const vatAmount = 0;
@@ -471,13 +487,14 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 shiftId: activeShift?.id || null,
                 items: itemsToPay.map(item => {
                     const effectivePrice = (item as any).unitPrice ?? item.product.price;
-                    const base = (effectivePrice * (item.saleTypeMultiplier || 1)) * item.quantity;
-                    const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
+                    const multiplier = item.saleTypeMultiplier || 1;
+                    const base = (effectivePrice * multiplier) * item.quantity;
+                    // Backend'e gönderirken sadece ana ürün tutarını gönderiyoruz, ekstralar ayrı satır olarak eklenecek.
                     return {
                         productId: item.product.id,
                         quantity: item.quantity,
-                        unitPrice: effectivePrice * (item.saleTypeMultiplier || 1),
-                        total: Number(((base + extras) * 1.1).toFixed(2)),
+                        unitPrice: effectivePrice * multiplier,
+                        total: Number(base.toFixed(2)),
                         subItems: (item.subItems || []).map((sub: any) => ({
                             productId: sub.productId,
                             quantity: sub.quantity,
@@ -507,14 +524,20 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     date: new Date(),
                     tableName: selectedTable?.name || null,
                     items: itemsToPay.map(item => {
-                        const effectivePrice = (item as any).unitPrice ?? item.product.price;
+                        const price = item.unitPrice ?? (item.product.price * (item.saleTypeMultiplier || 1));
+                        const base = price * item.quantity;
+                        const extras = (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0);
                         return {
                             name: item.product.name,
                             quantity: item.quantity,
-                            price: effectivePrice * (item.saleTypeMultiplier || 1),
-                            total: Number(((effectivePrice * (item.saleTypeMultiplier || 1) * item.quantity) * 1.1).toFixed(2)),
+                            price: price,
+                            total: Number((base + extras).toFixed(2)),
                             subItems: item.subItems,
-                            note: item.note
+                            note: item.note,
+                            status: item.status,
+                            saleType: item.saleType,
+                            refundReason: item.refundReason,
+                            cancelReason: item.cancelReason
                         };
                     }),
                     totalAmount: selectedGrandTotal,
@@ -524,17 +547,21 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 };
 
                 // Arka planda yazdırma isteğini gönder
-                fetch(`${API_URL}/printers/print-receipt`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                    body: JSON.stringify(printData)
-                }).then(r => r.json()).then(res => {
-                    if (!res.success) console.warn('Yazıcı uyarı:', res.message);
-                }).catch(e => console.error('Yazdırma hatası:', e));
+                if (params.print_receipt_on_payment) {
+                    fetch(`${API_URL}/printers/print-receipt`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                        body: JSON.stringify(printData)
+                    }).then(r => r.json()).then(res => {
+                        if (!res.success) console.warn('Yazıcı uyarı:', res.message);
+                    }).catch(e => console.error('Yazdırma hatası:', e));
+                }
 
                 showSwal({
                     title: tc('success'),
-                    text: `${t('paymentCollected')} (${paymentMethod}) ve fiş yazdırıldı!`,
+                    text: params.print_receipt_on_payment 
+                        ? `${t('paymentCollected')} (${paymentMethod}) ve fiş yazdırıldı!`
+                        : `${t('paymentCollected')} (${paymentMethod})`,
                     icon: 'success',
                 });
 
@@ -588,10 +615,11 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
 
 
-    const subTotal = cart.reduce((sum, item) => {
-        const effectivePrice = (item as any).unitPrice ?? item.product.price;
-        const base = (effectivePrice * (item.saleTypeMultiplier || 1)) * item.quantity;
-        const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
+    const subTotal = cart.reduce((sum, item: any) => {
+        if (item.status && item.status !== 'ACTIVE') return sum;
+        const base = (item.unitPrice ?? (item.product.price * (item.saleTypeMultiplier || 1))) * item.quantity;
+        // Ekstra bağımsız: kendi fiyatı × kendi adedi
+        const extras = (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0);
         return sum + base + extras;
     }, 0);
     const vatAmount = 0;
@@ -918,21 +946,26 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     ) : (
                         cart.map((item: any, index) => (
                             <div key={index} className="flex flex-col gap-1">
-                                <div className="flex flex-col gap-2 p-3 bg-white/50 dark:bg-slate-800/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
+                                <div className={`flex flex-col gap-2 p-3 bg-white/50 dark:bg-slate-800/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm ${item.status && item.status !== 'ACTIVE' ? 'opacity-50 grayscale line-through italic' : ''}`}>
                                     <div className="flex justify-between items-start">
                                         <span className="block font-medium text-slate-800 dark:text-slate-200">
                                             {item.product.name}
                                             {item.saleType && item.saleType !== 'STANDARD' && (
                                                 <span className={`text-[10px] ml-1 px-2 py-0.5 rounded-full inline-block font-bold border ${item.saleType === 'HALF' ? 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/20 dark:text-orange-400' : 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-400'}`}>
-                                                    {item.saleType === 'HALF' ? 'YARIM' : 'DUBLE'}
+                                                    {item.saleType === 'HALF' ? 'YARIM' : item.saleType === 'DOUBLE' ? 'DUBLE' : item.saleType}
+                                                </span>
+                                            )}
+                                            {item.status && item.status !== 'ACTIVE' && (
+                                                <span className="text-[10px] ml-1 px-2 py-0.5 rounded-full inline-block font-bold bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400">
+                                                    {item.status === 'REFUNDED' ? 'İADE' : 'İPTAL'}
                                                 </span>
                                             )}
                                             <span className="text-sm text-indigo-500 font-bold ml-1">x{item.quantity}</span>
                                         </span>
                                         <span className="font-bold text-slate-800 dark:text-slate-100 uppercase text-xs">
                                             ₺{((
-                                                ((item.unitPrice ?? item.product.price) * (item.saleTypeMultiplier || 1)) * item.quantity) +
-                                                (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0)
+                                                (item.unitPrice ?? (item.product.price * (item.saleTypeMultiplier || 1))) * item.quantity) +
+                                                (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0)
                                             ).toFixed(2)}
                                         </span>
                                     </div>
@@ -942,7 +975,10 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                         {item.subItems.map((sub: any, sIdx: number) => (
                                             <div key={sIdx} className="text-xs font-bold text-slate-400 dark:text-slate-500 flex items-center gap-2">
                                                 <i className="fat fa-caret-right"></i>
-                                                <span>{sub.product?.name || `Ürün #${sub.productId}`}</span>
+                                                <span>
+                                                    {sub.quantity > 1 ? `${sub.quantity}x ` : ''}
+                                                    {sub.product?.name || `Ürün #${sub.productId}`}
+                                                </span>
                                                 {sub.unitPrice > 0 && <span className="text-indigo-400">(+₺{sub.unitPrice})</span>}
                                             </div>
                                         ))}
@@ -1032,38 +1068,6 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                         >
                             <i className="fat fa-scissors mr-1"></i> Böl
                         </button>
-                        <button
-                            onClick={() => {
-                                if (!selectedTable) return;
-
-                                // --- Yetki Kontrolü ---
-                                const perms = user?.extraPermissions || [];
-                                const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
-                                if (!isSuperAdmin && !perms.includes('OP:CAN_TRANSFER')) {
-                                    showSwal({
-                                        icon: 'warning',
-                                        title: 'Yetki Yetersiz',
-                                        text: 'Masa veya ürün transferi yapma yetkiniz bulunmamaktadır.'
-                                    });
-                                    return;
-                                }
-
-                                // Seçili ürünler varsa ürün transferi, yoksa masa transferi
-                                const unpaidItems = cart.filter(i => !i.product.isQuickSale);
-                                if (activeSubCheckId && activeSubCheckId !== 'ALL') {
-                                    setTransferMode('SUBCHECK_TO_TABLE');
-                                    setTransferSelectedItemIds([]);
-                                } else {
-                                    setTransferMode('TABLE_TRANSFER');
-                                    setTransferSelectedItemIds([]);
-                                }
-                                setIsTransferModalOpen(true);
-                            }}
-                            className="py-3 rounded-2xl bg-yellow-50 dark:bg-yellow-500/10 border border-yellow-200 dark:border-yellow-500/30 text-yellow-700 dark:text-yellow-400 font-bold text-sm shadow-sm transition-all active:scale-[0.98]"
-                            disabled={!selectedTable || cart.length === 0}
-                        >
-                            <i className="fat fa-arrow-right-arrow-left mr-1"></i> Transfer
-                        </button>
                         {canCancelSale && (
                             <button
                                 onClick={handleCancelAdisyon}
@@ -1108,7 +1112,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                 }
 
                                 setIsCheckoutOpen(true);
-                                setSelectedPosItems(cart.map(i => i.itemId || i.product.id));
+                                setSelectedPosItems(cart.filter(i => !i.status || i.status === 'ACTIVE').map(i => i.itemId || i.product.id));
                             }}
                             className="w-3/4 py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold text-lg shadow-lg shadow-blue-500/30 transition-all active:scale-[0.98] disabled:opacity-50 disabled:grayscale"
                             disabled={cart.length === 0}
@@ -1121,10 +1125,11 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
             {/* Payment Modal */}
             {isCheckoutOpen && !isSplitPaymentOpen && (() => {
-                const selectedTotalAmount = cart.filter(i => selectedPosItems.includes(i.itemId || i.product.id)).reduce((sum, item) => {
+                const selectedTotalAmount = cart.filter(i => selectedPosItems.includes(i.itemId || i.product.id) && (!i.status || i.status === 'ACTIVE')).reduce((sum, item) => {
                     const effectivePrice = (item as any).unitPrice ?? item.product.price;
-                    const base = (effectivePrice * (item.saleTypeMultiplier || 1)) * item.quantity;
-                    const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
+                    const multiplier = item.saleTypeMultiplier || 1;
+                    const base = (effectivePrice * multiplier) * item.quantity;
+                    const extras = (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0);
                     return sum + base + extras;
                 }, 0);
                 const appliedDiscount = discount || 0;
@@ -1151,6 +1156,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                             <div key={uniqueKey} className="flex flex-col gap-1">
                                                 <div
                                                     onClick={() => {
+                                                        if (item.status && item.status !== 'ACTIVE') return;
                                                         const id = item.itemId || item.product.id;
                                                         if (selectedPosItems.includes(id)) {
                                                             setSelectedPosItems(prev => prev.filter(pId => pId !== id));
@@ -1158,18 +1164,26 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                                             setSelectedPosItems(prev => [...prev, id]);
                                                         }
                                                     }}
-                                                    className={`flex justify-between items-center p-3 rounded-2xl cursor-pointer transition-all border ${isSelected ? 'bg-indigo-50/80 border-indigo-200 dark:bg-indigo-500/20 dark:border-indigo-500/30' : 'bg-white border-transparent dark:bg-slate-800 opacity-60'}`}
+                                                    className={`flex justify-between items-center p-3 rounded-2xl cursor-pointer transition-all border ${isSelected ? 'bg-indigo-50/80 border-indigo-200 dark:bg-indigo-500/20 dark:border-indigo-500/30' : 'bg-white border-transparent dark:bg-slate-800 opacity-60'} ${item.status && item.status !== 'ACTIVE' ? 'opacity-50 grayscale line-through italic' : ''}`}
                                                 >
                                                     <div className="flex items-center gap-4">
                                                         <div className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-colors ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700'}`}>
                                                             {isSelected && <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
                                                         </div>
-                                                        <span className="font-bold text-slate-700 dark:text-slate-200">{item.product.name} <span className="text-sm font-extrabold text-indigo-500 bg-indigo-100 dark:bg-indigo-500/20 dark:text-indigo-300 px-2 py-0.5 rounded-full ml-1">x{item.quantity}</span></span>
+                                                        <span className={`font-bold ${item.status === 'REFUNDED' ? 'text-rose-500 dark:text-rose-400' : 'text-slate-700 dark:text-slate-200'}`}>
+                                                            {item.product.name} 
+                                                            {item.status && item.status !== 'ACTIVE' && (
+                                                                <span className={`text-[10px] ml-2 px-2 py-0.5 rounded-full inline-block font-bold border ${item.status === 'REFUNDED' ? 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/20 dark:text-rose-400' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400 border-slate-300 dark:border-slate-600'}`}>
+                                                                    {item.status === 'REFUNDED' ? 'İADE' : 'İPTAL'}
+                                                                </span>
+                                                            )}
+                                                            <span className="text-sm font-extrabold text-indigo-500 bg-indigo-100 dark:bg-indigo-500/20 dark:text-indigo-300 px-2 py-0.5 rounded-full ml-1">x{item.quantity}</span>
+                                                        </span>
                                                     </div>
                                                     <span className="font-bold text-slate-800 dark:text-slate-100 text-xs">
                                                         ₺{(
                                                             (((item as any).unitPrice ?? item.product.price) * (item.saleTypeMultiplier || 1)) * item.quantity +
-                                                            (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0)
+                                                            (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0)
                                                         ).toFixed(2)}
                                                     </span>
                                                 </div>
@@ -1324,10 +1338,11 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             {/* Split Payment Modal */}
             {
                 isSplitPaymentOpen && (() => {
-                    const selectedTotalAmount = cart.filter(i => selectedPosItems.includes(i.itemId || i.product.id)).reduce((sum, item) => {
+                    const selectedTotalAmount = cart.filter(i => selectedPosItems.includes(i.itemId || i.product.id) && (!i.status || i.status === 'ACTIVE')).reduce((sum, item) => {
                         const effectivePrice = (item as any).unitPrice ?? item.product.price;
                         const base = (effectivePrice * (item.saleTypeMultiplier || 1)) * item.quantity;
-                        const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
+                        // Ekstra bağımsız: kendi fiyatı × kendi adedi
+                        const extras = (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0);
                         return sum + base + extras;
                     }, 0);
                     const appliedDiscount = discount || 0;
@@ -1808,7 +1823,14 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                                         {item.quantity}
                                                     </div>
                                                     <div>
-                                                        <h4 className="font-bold text-slate-800 dark:text-white">{item.product?.name || `Ürün #${item.productId}`}</h4>
+                                                        <h4 className="font-bold text-slate-800 dark:text-white">
+                                                            {item.product?.name || `Ürün #${item.productId}`}
+                                                            {item.saleType && item.saleType !== 'STANDARD' && (
+                                                                <span className="text-[10px] ml-1 font-black text-indigo-500 uppercase">
+                                                                    ({item.saleType === 'HALF' ? 'Yarım' : item.saleType === 'DOUBLE' ? 'Duble' : item.saleType})
+                                                                </span>
+                                                            )}
+                                                        </h4>
                                                         <p className="text-xs font-bold text-slate-400">₺{Number(item.unitPrice).toFixed(2)}</p>
                                                     </div>
                                                 </div>

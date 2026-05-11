@@ -17,12 +17,14 @@ import { ParametersModule } from '../parameters/parameters.module';
 
 import { Sale } from '../sales/sale.entity';
 import { FinanceModule } from '../finance/finance.module';
+import { PrintersModule } from '../printers/printers.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([ZReport, AuditLog, BusinessDayLog, ClosedDayRecord, Shift, CashRegister, Table, Sale]),
     ParametersModule,
     FinanceModule,
+    PrintersModule,
   ],
   controllers: [ReportsController, BusinessDayController],
   providers: [ReportsService, ZReportsService, AuditLogService, BusinessDayService],

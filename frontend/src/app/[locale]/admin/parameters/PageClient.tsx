@@ -96,6 +96,9 @@ const defaultModules: Module[] = [
             { key: 'company_name', label: 'İşletme Adı', type: 'text', value: '' },
             { key: 'company_address', label: 'İşletme Adresi', type: 'text', value: '' },
             { key: 'company_phone', label: 'İşletme Telefonu', type: 'text', value: '' },
+            { key: 'print_on_refund', label: 'İade de fiş yazdır', description: 'Bir ürün iade edildiğinde mutfak yazıcısından iade fişi çıkartılsın mı?', type: 'boolean', value: true },
+            { key: 'print_on_cancel', label: 'İptal de fiş yazdır', description: 'Bir ürün iptal edildiğinde mutfak yazıcısından iptal fişi çıkartılsın mı?', type: 'boolean', value: true },
+            { key: 'print_receipt_on_payment', label: 'Ödeme Alındığında Fiş Yazdır', description: 'Kasa POS ekranında ödeme tamamlandığında otomatik müşteri fişi çıkartılsın mı?', type: 'boolean', value: true },
         ]
     },
     {

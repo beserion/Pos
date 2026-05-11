@@ -33,10 +33,11 @@ export default function TransferModal({
   const [targetTableId, setTargetTableId] = useState<number | null>(null);
   const [targetSubCheckId, setTargetSubCheckId] = useState<number | 'NEW' | null>(null);
   const [newSubCheckLabel, setNewSubCheckLabel] = useState('');
+  const [transferQuantities, setTransferQuantities] = useState<Record<number, number>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [confirmationRequired, setConfirmationRequired] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState('');
-  const [step, setStep] = useState<'SELECT_TARGET' | 'CONFIRM'>('SELECT_TARGET');
+  const [step, setStep] = useState<'SELECT_TARGET' | 'CONFIRM'>('SELECT_TARGET');
 
   useEffect(() => {
     if (isOpen) {
@@ -47,11 +48,20 @@ export default function TransferModal({
       setConfirmationMessage('');
       setStep('SELECT_TARGET');
       setIsLoading(false);
+
+      // Initialize transfer quantities
+      const initialQuantities: Record<number, number> = {};
+      const selectedItems = allFlatChecks.flatMap(c => c.items || []).filter(i => selectedItemIds.includes(i.id));
+      selectedItems.forEach(item => {
+        initialQuantities[item.id] = Number(item.quantity);
+      });
+      setTransferQuantities(initialQuantities);
+
       if (zones.length > 0 && !selectedZone) {
         setSelectedZone(zones[0].id);
       }
     }
-  }, [isOpen]);
+  }, [isOpen, selectedItemIds, allFlatChecks]);
 
   if (!isOpen) return null;
 
@@ -97,6 +107,7 @@ export default function TransferModal({
             sourceSubCheckId,
             targetTableId,
             itemIds: selectedItemIds,
+            quantities: transferQuantities,
             confirmed,
           };
           break;
@@ -107,6 +118,7 @@ export default function TransferModal({
             sourceSubCheckId,
             targetSubCheckId: targetSubCheckId === 'NEW' ? 'NEW' : targetSubCheckId,
             itemIds: selectedItemIds,
+            quantities: transferQuantities,
             newLabel: newSubCheckLabel || undefined,
           };
           break;
@@ -235,7 +247,109 @@ export default function TransferModal({
         {/* Hedef Seçici */}
         {step === 'SELECT_TARGET' && (
           <>
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+
+              {/* Ürün Adet Seçimi */}
+              {(mode === 'ITEM_TO_TABLE' || mode === 'ITEM_WITHIN_TABLE') && selectedItemIds.length > 0 && (
+                <div className="mb-6 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-3xl border border-slate-200 dark:border-slate-700/50">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <i className="fat fa-boxes-stacked"></i> Transfer Edilecek Ürünler
+                  </p>
+                  <div className="space-y-3">
+                    {allFlatChecks.flatMap(c => c.items || []).filter(i => selectedItemIds.includes(i.id)).map(item => {
+                      const children = allFlatChecks.flatMap(c => c.items || []).filter(i => i.parentItemId === item.id && i.status === 'ACTIVE');
+                      return (
+                      <div key={item.id} className="flex flex-col gap-2 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-slate-700 dark:text-slate-200 text-sm leading-tight">{item.product?.name || `Ürün #${item.productId}`}</span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Mevcut: {item.quantity} Adet</span>
+                          </div>
+                          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900 px-2 py-1 rounded-xl border border-slate-100 dark:border-slate-700 self-end sm:self-auto shrink-0">
+                            <button
+                              onClick={() => {
+                                const newParentQty = Math.max(1, (transferQuantities[item.id] || item.quantity) - 1);
+                                setTransferQuantities(prev => {
+                                  const updated = { ...prev, [item.id]: newParentQty };
+                                  // Optionally adjust children proportionally? We let the user adjust manually.
+                                  return updated;
+                                });
+                              }}
+                              className="w-7 h-7 flex items-center justify-center text-rose-500 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors font-black"
+                            >
+                              <i className="fat fa-minus"></i>
+                            </button>
+                            <span className="text-sm font-black text-slate-700 dark:text-slate-200 min-w-[1.5rem] text-center">
+                              {transferQuantities[item.id] || item.quantity}
+                            </span>
+                            <button
+                              onClick={() => {
+                                const newParentQty = Math.min(Number(item.quantity), (transferQuantities[item.id] || item.quantity) + 1);
+                                setTransferQuantities(prev => {
+                                  const updated = { ...prev, [item.id]: newParentQty };
+                                  return updated;
+                                });
+                              }}
+                              className="w-7 h-7 flex items-center justify-center text-emerald-500 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors font-black"
+                            >
+                              <i className="fat fa-plus"></i>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Ekstralar / Alt Ürünler */}
+                        {children.length > 0 && (
+                          <div className="flex flex-col gap-2 mt-1 pt-2 border-t border-slate-100 dark:border-slate-700/50 pl-4 border-l-2 border-l-indigo-500/20">
+                            {children.map(child => {
+                               // Varsayılan orantılı miktar hesaplaması (ilk gösterim için)
+                               const parentSplitQty = transferQuantities[item.id] || Number(item.quantity);
+                               const childQtyPerParent = Number(child.quantity) / Number(item.quantity);
+                               let defaultChildSplitQty = childQtyPerParent * parentSplitQty;
+                               
+                               // Eğer ekstra yarım porsiyon vs. küsuratlı ise küsuratı koru, yoksa tam sayı yap
+                               if (defaultChildSplitQty % 1 !== 0 && Number(child.quantity) % 1 === 0) {
+                                  // Ekstra aslında tam sayı ama oranlı bölünce küsurat çıkıyor (örn: 2 burgere 1 ekstra)
+                                  // Bu durumda varsayılanı yuvarlayalım mı? Yoksa serbest mi bırakalım?
+                                  // Kullanıcı zaten UI'dan görecek. Default olarak orantılıyı gösterelim.
+                               }
+                               
+                               const currentQty = transferQuantities[child.id] !== undefined ? transferQuantities[child.id] : defaultChildSplitQty;
+
+                               return (
+                                <div key={child.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <i className="fat fa-turn-down-right text-slate-300 dark:text-slate-600 text-xs"></i>
+                                    <span className="font-semibold text-slate-600 dark:text-slate-400 text-xs">{child.product?.name || `Ekstra #${child.productId}`}</span>
+                                    <span className="text-[10px] text-slate-400">({child.quantity} mevcut)</span>
+                                  </div>
+                                  <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-900 px-1 py-0.5 rounded-lg border border-slate-100 dark:border-slate-700">
+                                    <button
+                                      onClick={() => setTransferQuantities(prev => ({ ...prev, [child.id]: Math.max(0, currentQty - (Number(child.quantity) % 1 === 0 ? 1 : 0.5)) }))}
+                                      className="w-6 h-6 flex items-center justify-center text-rose-500 hover:bg-white dark:hover:bg-slate-800 rounded-md transition-colors text-xs font-black"
+                                    >
+                                      <i className="fat fa-minus"></i>
+                                    </button>
+                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200 min-w-[1.5rem] text-center">
+                                      {currentQty}
+                                    </span>
+                                    <button
+                                      onClick={() => setTransferQuantities(prev => ({ ...prev, [child.id]: Math.min(Number(child.quantity), currentQty + (Number(child.quantity) % 1 === 0 ? 1 : 0.5)) }))}
+                                      className="w-6 h-6 flex items-center justify-center text-emerald-500 hover:bg-white dark:hover:bg-slate-800 rounded-md transition-colors text-xs font-black"
+                                    >
+                                      <i className="fat fa-plus"></i>
+                                    </button>
+                                  </div>
+                                </div>
+                               );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Masa Seçimi */}
               {showTableSelector && (

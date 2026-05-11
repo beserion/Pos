@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { API_URL } from '@/lib/apiConfig';
 
 export interface AppParameters {
@@ -36,6 +36,7 @@ export interface AppParameters {
   company_name: string;
   company_address: string;
   company_phone: string;
+  print_receipt_on_payment: boolean;
 
   // Marş
   mars_enabled: boolean;
@@ -62,6 +63,9 @@ export interface AppParameters {
   double_price_multiplier: number;
   half_recipe_multiplier: number;
   double_recipe_multiplier: number;
+
+  // Ürün Seçenekleri
+  auto_open_product_options: boolean;
 
   // Kurlar
   exchange_rate_eur: number;
@@ -100,6 +104,7 @@ export const DEFAULT_PARAMS: AppParameters = {
   company_name: '',
   company_address: '',
   company_phone: '',
+  print_receipt_on_payment: true,
 
   mars_enabled: true,
   mars_default_items: false,
@@ -122,6 +127,8 @@ export const DEFAULT_PARAMS: AppParameters = {
   half_recipe_multiplier: 0.50,
   double_recipe_multiplier: 2.00,
 
+  auto_open_product_options: true,
+
   exchange_rate_eur: 37.50,
   exchange_rate_usd: 35.20,
   exchange_rate_gbp: 44.10,
@@ -130,7 +137,7 @@ export const DEFAULT_PARAMS: AppParameters = {
 // Tip dönüşüm yardımcısı
 function castValue(key: keyof AppParameters, raw: string): any {
   const defaults = DEFAULT_PARAMS;
-  const defaultVal = defaults[key];
+  const defaultVal = (defaults as any)[key];
   if (typeof defaultVal === 'boolean') return raw === 'true';
   if (typeof defaultVal === 'number') return Number(raw);
   return raw;

@@ -93,4 +93,13 @@ export class PrintersController {
   ): Promise<{ success: boolean; message: string }> {
     return this.printersService.printZReport(data);
   }
+
+  @Post('print-z-report-detailed')
+  async printZReportDetailed(
+    @Body() body: { zReportId: number; printerId: number },
+    @Request() req: any
+  ): Promise<{ success: boolean; message: string }> {
+    const userId = req.user?.userId || req.user?.id;
+    return this.printersService.printZReportDetailed(body.zReportId, body.printerId, userId);
+  }
 }

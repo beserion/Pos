@@ -66,6 +66,8 @@ interface CartItem {
     note?: string;
     variationId?: number;
     variationName?: string;
+    status?: string;
+    saleType?: string;
 }
 
 export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => void }) {
@@ -74,7 +76,8 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     const t = useTranslations('Admin');
     const tc = useTranslations('Common');
     const { user, loading: authLoading } = useAuth();
-    const { theme, toggleTheme, setTheme } = useThemeTransition();
+    const { theme, toggleTheme, setTheme } = useThemeTransition();
+
 
     const { products: allProducts, departments, parentGroups, productTypes, refreshDynamicData, dataLoading: posDataLoading } = usePos();
     const [selectedProductTypeId, setSelectedProductTypeId] = useState<number | 'all'>('all');
@@ -205,6 +208,36 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
         });
     }, [products, selectedProductTypeId, selectedDepartmentId, searchQuery, departments]);
 
+    const visibleParentGroups = useMemo(() => {
+        if (selectedParentGroupId) return [];
+        return parentGroups.filter(pg => {
+            if (selectedProductTypeId === 'all') return true;
+            const pgDepts = departments.filter(d => d.parentGroupId === pg.id);
+            return products.some(p => (p as any).productTypeId === selectedProductTypeId && pgDepts.some(d => d.name === p.category));
+        });
+    }, [parentGroups, departments, products, selectedProductTypeId, selectedParentGroupId]);
+
+    const visibleRootDepartments = useMemo(() => {
+        if (selectedParentGroupId) return [];
+        return departments.filter(d => !d.parentGroupId).filter(d => {
+            if (selectedProductTypeId === 'all') return true;
+            return products.some(p => (p as any).productTypeId === selectedProductTypeId && p.category === d.name);
+        });
+    }, [departments, products, selectedProductTypeId, selectedParentGroupId]);
+
+    const visibleSubDepartments = useMemo(() => {
+        if (!selectedParentGroupId || selectedParentGroupId === 'all' || selectedParentGroupId === 'unassigned') return [];
+        return departments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
+            if (selectedProductTypeId === 'all') return true;
+            return products.some(p => (p as any).productTypeId === selectedProductTypeId && p.category === d.name);
+        });
+    }, [departments, products, selectedProductTypeId, selectedParentGroupId]);
+
+    const hasCategories = useMemo(() => {
+        if (selectedParentGroupId && selectedParentGroupId !== 'all' && selectedParentGroupId !== 'unassigned') return visibleSubDepartments.length > 0;
+        return visibleParentGroups.length > 0 || visibleRootDepartments.length > 0;
+    }, [selectedParentGroupId, visibleSubDepartments, visibleParentGroups, visibleRootDepartments]);
+
     const addToCart = (product: Product, skipExtraCheck: boolean = false, forceVariationId?: number) => {
         if (!forceVariationId && product.variations && product.variations.filter(v => v.isActive !== false).length > 0) {
             setSelectedProductForVariation(product);
@@ -307,7 +340,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
     const totalAmount = useMemo(() => {
         return cart.reduce((sum, item) => {
             const base = (item.product.price + (item.extraPrice || 0)) * item.quantity;
-            const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
+            const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0);
             return sum + base + extras;
         }, 0);
     }, [cart]);
@@ -331,16 +364,20 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 tableName: 'QUICKSALE',
                 description: 'Perakende Müşteri',
                 waiterId: activeShift?.user?.id || activeShift?.userId || user?.id || user?.sub,
-                items: cart.map(item => ({
-                    productId: item.product.id,
-                    quantity: item.quantity,
-                    unitPrice: item.product.price + (item.extraPrice || 0),
-                    total: (item.product.price + (item.extraPrice || 0)) * item.quantity,
-                    subItems: item.subItems,
-                    note: item.note,
-                    variationId: item.variationId,
-                    variationName: item.variationName
-                }))
+                items: cart.map(item => {
+                    const base = (item.product.price + (item.extraPrice || 0)) * item.quantity;
+                    const extras = (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0);
+                    return {
+                        productId: item.product.id,
+                        quantity: item.quantity,
+                        unitPrice: item.product.price + (item.extraPrice || 0),
+                        total: base,
+                        subItems: item.subItems,
+                        note: item.note,
+                        variationId: item.variationId,
+                        variationName: item.variationName
+                    };
+                })
             };
 
             const res = await axios.post(`${API_URL}/sales`, saleData, { headers });
@@ -350,14 +387,19 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 companyName: 'ANTIGRAVITY POS',
                 cashierName: activeShift?.user?.firstName || user?.firstName || user?.name || 'Kasiyer',
                 date: new Date(),
-                items: cart.map(item => ({
-                    name: item.product.name + (item.variationName ? ` (${item.variationName})` : ''),
-                    quantity: item.quantity,
-                    price: item.product.price + (item.extraPrice || 0),
-                    total: (item.product.price + (item.extraPrice || 0)) * item.quantity,
-                    subItems: item.subItems,
-                    note: item.note
-                })),
+                items: cart.map(item => {
+                    const base = (item.product.price + (item.extraPrice || 0)) * item.quantity;
+                    const extras = (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0);
+                    return {
+                        name: item.product.name + (item.variationName ? ` (${item.variationName})` : ''),
+                        quantity: item.quantity,
+                        price: item.product.price + (item.extraPrice || 0),
+                        total: base,
+                        subItems: item.subItems,
+                        note: item.note,
+                        saleType: (item as any).saleType
+                    };
+                }),
                 totalAmount: totalAmount,
                 paymentMethod: paymentMethod,
                 receiptNumber: res.data?.id?.toString() || Math.floor(100000 + Math.random() * 900000).toString(),
@@ -581,82 +623,76 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                 <div className="flex-1 overflow-y-auto custom-scrollbar pt-2 pr-2 pb-6 max-h-[calc(100vh-250px)]">
                     {!selectedDepartmentId && !searchQuery ? (
                         <>
-                            <div className="grid grid-cols-5 md:grid-cols-6 lg:grid-cols-9 gap-4 mb-6">
-                                {/* SEVİYE 1: Üst Gruplar ve Bağımsız Kategoriler */}
-                                {!selectedParentGroupId && (
-                                    <>
-                                        {parentGroups.filter(pg => {
-                                            if (selectedProductTypeId === 'all') return true;
-                                            const pgDepts = departments.filter(d => d.parentGroupId === pg.id);
-                                            return products.some(p => (p as any).productTypeId === selectedProductTypeId && pgDepts.some(d => d.name === p.category));
-                                        }).map(pg => (
-                                            <button
-                                                key={`pg-${pg.id}`}
-                                                onClick={() => setSelectedParentGroupId(pg.id)}
-                                                className="group relative flex flex-col items-center justify-start p-2 pb-1.5 bg-white dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-orange-500/50 hover:-translate-y-1 transition-all duration-300"
-                                            >
-                                                <div className="w-full h-28 shrink-0 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center mb-1.5 group-hover:scale-105 transition-transform overflow-hidden shadow-sm">
-                                                    {(pg as any).imageUrl ? (
-                                                        <img src={(pg as any).imageUrl.startsWith('http') || (pg as any).imageUrl.startsWith('data:') || (pg as any).imageUrl.startsWith('/') ? (pg as any).imageUrl : `/uploads/${(pg as any).imageUrl}`} alt={pg.name} className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <i className="fat fa-folder-tree text-3xl text-orange-500"></i>
-                                                    )}
-                                                </div>
-                                                <span className="text-[11px] leading-tight mt-auto font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider truncate w-full px-1">{pg.name}</span>
-                                            </button>
-                                        ))}
-                                        {departments.filter(d => !d.parentGroupId).filter(d => {
-                                            if (selectedProductTypeId === 'all') return true;
-                                            return products.some(p => (p as any).productTypeId === selectedProductTypeId && p.category === d.name);
-                                        }).map(d => (
-                                            <button
-                                                key={`dept-${d.id}`}
-                                                onClick={() => setSelectedDepartmentId(d.id)}
-                                                className="group relative flex flex-col items-center justify-start p-2 pb-1.5 bg-white dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-500/50 hover:-translate-y-1 transition-all duration-300"
-                                            >
-                                                <div className="w-full h-28 shrink-0 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-1.5 group-hover:scale-105 transition-transform overflow-hidden shadow-sm">
-                                                    {(d as any).imageUrl ? (
-                                                        <img src={(d as any).imageUrl.startsWith('http') || (d as any).imageUrl.startsWith('data:') || (d as any).imageUrl.startsWith('/') ? (d as any).imageUrl : `/uploads/${(d as any).imageUrl}`} alt={d.name} className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <i className="fat fa-tags text-3xl text-emerald-500"></i>
-                                                    )}
-                                                </div>
-                                                <span className="text-[11px] leading-tight mt-auto font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider truncate w-full px-1">{d.name}</span>
-                                            </button>
-                                        ))}
-                                    </>
-                                )}
+                            {hasCategories && (
+                                <div className="grid grid-cols-5 md:grid-cols-6 lg:grid-cols-9 gap-4 mb-6">
+                                    {/* SEVİYE 1: Üst Gruplar ve Bağımsız Kategoriler */}
+                                    {!selectedParentGroupId && (
+                                        <>
+                                            {visibleParentGroups.map(pg => (
+                                                <button
+                                                    key={`pg-${pg.id}`}
+                                                    onClick={() => setSelectedParentGroupId(pg.id)}
+                                                    className="group relative flex flex-col items-center justify-start p-2 pb-1.5 bg-white dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-orange-500/50 hover:-translate-y-1 transition-all duration-300"
+                                                >
+                                                    <div className="w-full h-28 shrink-0 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center mb-1.5 group-hover:scale-105 transition-transform overflow-hidden shadow-sm">
+                                                        {(pg as any).imageUrl ? (
+                                                            <img src={(pg as any).imageUrl.startsWith('http') || (pg as any).imageUrl.startsWith('data:') || (pg as any).imageUrl.startsWith('/') ? (pg as any).imageUrl : `/uploads/${(pg as any).imageUrl}`} alt={pg.name} className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <i className="fat fa-folder-tree text-3xl text-orange-500"></i>
+                                                        )}
+                                                    </div>
+                                                    <span className="text-[11px] leading-tight mt-auto font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider truncate w-full px-1">{pg.name}</span>
+                                                </button>
+                                            ))}
+                                            {visibleRootDepartments.map(d => (
+                                                <button
+                                                    key={`dept-${d.id}`}
+                                                    onClick={() => setSelectedDepartmentId(d.id)}
+                                                    className="group relative flex flex-col items-center justify-start p-2 pb-1.5 bg-white dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-500/50 hover:-translate-y-1 transition-all duration-300"
+                                                >
+                                                    <div className="w-full h-28 shrink-0 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-1.5 group-hover:scale-105 transition-transform overflow-hidden shadow-sm">
+                                                        {(d as any).imageUrl ? (
+                                                            <img src={(d as any).imageUrl.startsWith('http') || (d as any).imageUrl.startsWith('data:') || (d as any).imageUrl.startsWith('/') ? (d as any).imageUrl : `/uploads/${(d as any).imageUrl}`} alt={d.name} className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <i className="fat fa-tags text-3xl text-emerald-500"></i>
+                                                        )}
+                                                    </div>
+                                                    <span className="text-[13px] leading-tight mt-auto font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider truncate w-full px-1">{d.name}</span>
+                                                </button>
+                                            ))}
+                                        </>
+                                    )}
 
-                                {/* SEVİYE 2: Seçili Üst Gruba Bağlı Kategoriler */}
-                                {selectedParentGroupId && departments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
-                                    if (selectedProductTypeId === 'all') return true;
-                                    return products.some(p => (p as any).productTypeId === selectedProductTypeId && p.category === d.name);
-                                }).map(d => (
-                                    <button
-                                        key={`dept-sub-${d.id}`}
-                                        onClick={() => setSelectedDepartmentId(d.id)}
-                                        className="group relative flex flex-col items-center justify-start p-2 pb-1.5 bg-white dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-500/50 hover:-translate-y-1 transition-all duration-300"
-                                    >
-                                        <div className="w-full h-28 shrink-0 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-1.5 group-hover:scale-105 transition-transform overflow-hidden shadow-sm">
-                                            {(d as any).imageUrl ? (
-                                                <img src={(d as any).imageUrl.startsWith('http') || (d as any).imageUrl.startsWith('data:') || (d as any).imageUrl.startsWith('/') ? (d as any).imageUrl : `/uploads/${(d as any).imageUrl}`} alt={d.name} className="w-full h-full object-cover" />
-                                            ) : (
-                                                <i className="fat fa-tags text-3xl text-emerald-500"></i>
-                                            )}
-                                        </div>
-                                        <span className="text-[11px] leading-tight mt-auto font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider truncate w-full px-1">{d.name}</span>
-                                    </button>
-                                ))}
-                            </div>
+                                    {/* SEVİYE 2: Seçili Üst Gruba Bağlı Kategoriler */}
+                                    {selectedParentGroupId && visibleSubDepartments.map(d => (
+                                        <button
+                                            key={`dept-sub-${d.id}`}
+                                            onClick={() => setSelectedDepartmentId(d.id)}
+                                            className="group relative flex flex-col items-center justify-start p-2 pb-1.5 bg-white dark:bg-slate-800/70 rounded-2xl border-2 border-transparent shadow-sm hover:shadow-xl hover:border-emerald-500/50 hover:-translate-y-1 transition-all duration-300"
+                                        >
+                                            <div className="w-full h-28 shrink-0 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-1.5 group-hover:scale-105 transition-transform overflow-hidden shadow-sm">
+                                                {(d as any).imageUrl ? (
+                                                    <img src={(d as any).imageUrl.startsWith('http') || (d as any).imageUrl.startsWith('data:') || (d as any).imageUrl.startsWith('/') ? (d as any).imageUrl : `/uploads/${(d as any).imageUrl}`} alt={d.name} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <i className="fat fa-tags text-3xl text-emerald-500"></i>
+                                                )}
+                                            </div>
+                                            <span className="text-[13px] leading-tight mt-auto font-black text-slate-700 dark:text-slate-200 text-center uppercase tracking-wider truncate w-full px-1">{d.name}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
 
                             {/* Kategorisi olmayan ürünleri doğrudan göster */}
                             {filteredProducts.length > 0 && (
                                 <div className="space-y-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Kategorisiz Ürünler</span>
-                                        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
-                                    </div>
+                                    {hasCategories && (
+                                        <div className="flex items-center gap-3">
+                                            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Kategorisiz Ürünler</span>
+                                            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
+                                        </div>
+                                    )}
                                     <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 auto-rows-max">
                                         {filteredProducts.map(product => (
                                             <button
@@ -688,11 +724,11 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
 
                                                 {/* Content Over the Background */}
                                                 <div className="relative z-20 w-full flex flex-col items-center justify-end text-center h-full">
-                                                    <div className="text-[11px] font-black uppercase tracking-tight text-white line-clamp-2 leading-tight mb-1 group-hover:text-orange-400 transition-colors drop-shadow-md">
+                                                    <div className="text-[13px] font-black uppercase tracking-tight text-white line-clamp-2 leading-tight mb-1 group-hover:text-orange-400 transition-colors drop-shadow-md">
                                                         {product.name}
                                                     </div>
-                                                    <div className="bg-slate-900/80 px-3 py-1 rounded-xl backdrop-blur-md border border-white/10 text-orange-400 font-extrabold text-[13px] shadow-lg">
-                                                        {product.price.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} <span className="text-[10px]">₺</span>
+                                                    <div className="bg-slate-900/80 px-3 py-1 rounded-xl backdrop-blur-md border border-white/10 text-orange-400 font-extrabold text-[15px] shadow-lg">
+                                                        {product.price.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} <span className="text-[12px]">₺</span>
                                                     </div>
                                                 </div>
                                             </button>
@@ -733,11 +769,11 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
 
                                     {/* Content Over the Background */}
                                     <div className="relative z-20 w-full flex flex-col items-center justify-end text-center h-full">
-                                        <div className="text-[11px] font-black uppercase tracking-tight text-white line-clamp-2 leading-tight mb-1 group-hover:text-orange-400 transition-colors drop-shadow-md">
+                                        <div className="text-[13px] font-black uppercase tracking-tight text-white line-clamp-2 leading-tight mb-1 group-hover:text-orange-400 transition-colors drop-shadow-md">
                                             {product.name}
                                         </div>
-                                        <div className="bg-slate-900/80 px-3 py-1 rounded-xl backdrop-blur-md border border-white/10 text-orange-400 font-extrabold text-[13px] shadow-lg">
-                                            {product.price.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} <span className="text-[10px]">₺</span>
+                                        <div className="bg-slate-900/80 px-3 py-1 rounded-xl backdrop-blur-md border border-white/10 text-orange-400 font-extrabold text-[15px] shadow-lg">
+                                            {product.price.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} <span className="text-[12px]">₺</span>
                                         </div>
                                     </div>
                                 </button>
@@ -792,7 +828,7 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                                             </button>
                                             {(() => {
                                                 const dept = departments.find(d => d.name === item.product.category);
-                                                if (!dept?.extraDepartmentId || dept?.autoOpenExtraPopup) return null;
+                                                if (!dept?.extraDepartmentId) return null;
                                                 const extraProds = products.filter(p => p.category === departments.find(d => d.id === dept.extraDepartmentId)?.name);
                                                 if (extraProds.length === 0) return null;
                                                 return (
@@ -829,7 +865,10 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
                                                 {item.subItems.map((sub: any, sIdx: number) => (
                                                     <div key={sIdx} className={`text-[10px] font-black flex items-center gap-2 px-2 py-1.5 rounded-lg border transition-all ${sub.isExtra ? 'bg-indigo-500/5 dark:bg-indigo-500/10 border-indigo-500/10 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400' : 'bg-slate-100/50 dark:bg-slate-800/50 border-slate-200/30 dark:border-slate-700/30 text-slate-500 dark:text-slate-400'}`}>
                                                         <i className={`fat ${sub.isExtra ? 'fa-square-plus' : 'fa-caret-right'} text-[8px] opacity-70`}></i>
-                                                        <span className="truncate flex-1 tracking-tight">{sub.product?.name || sub.name || `Ürün #${sub.productId}`}</span>
+                                                        <span className="truncate flex-1 tracking-tight">
+                                                            {sub.quantity > 1 ? `${sub.quantity}x ` : ''}
+                                                            {sub.product?.name || sub.name || `Ürün #${sub.productId}`}
+                                                        </span>
                                                         {sub.unitPrice > 0 && <span className="font-black text-slate-800 dark:text-indigo-300">₺{sub.unitPrice}</span>}
                                                     </div>
                                                 ))}

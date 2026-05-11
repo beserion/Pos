@@ -17,9 +17,11 @@ import { AlertsService } from '../alerts/alerts.service';
 import { StockMovementsService } from '../stock-movements/stock-movements.service';
 import { ProductsService } from '../products/products.service';
 import { TablesService } from '../tables/tables.service';
+import { ParametersService } from '../parameters/parameters.service';
 import { getCachedPerms } from '../auth/permissions.guard';
 import { InposService } from '../inpos/inpos.service';
 import { InposPaymentType, InposUnit } from '../inpos/inpos.types';
+import { BusinessDayService } from '../reports/business-day.service';
 import type { InposSaleItemData, InposPaymentInfo } from '../inpos/inpos.types';
 
 @Injectable()
@@ -44,6 +46,8 @@ export class SalesService implements OnModuleInit {
     private productsService: ProductsService,
     private tablesService: TablesService,
     private inposService: InposService,
+    private parametersService: ParametersService,
+    private businessDayService: BusinessDayService,
   ) { }
 
   async onModuleInit() {
@@ -354,7 +358,11 @@ export class SalesService implements OnModuleInit {
         const start = new Date(startDate);
         if (!isNaN(start.getTime())) {
           start.setHours(0, 0, 0, 0);
-          query.andWhere('sale.createdAt >= :startDate', { startDate: start });
+          const businessDateStr = startDate.split('T')[0];
+          query.andWhere('(sale.businessDate >= :businessStartDate OR (sale.businessDate IS NULL AND sale.createdAt >= :startDate))', { 
+            businessStartDate: businessDateStr,
+            startDate: start 
+          });
         }
       }
 
@@ -363,7 +371,11 @@ export class SalesService implements OnModuleInit {
         if (!isNaN(end.getTime())) {
           const endOfDay = new Date(end);
           endOfDay.setHours(23, 59, 59, 999);
-          query.andWhere('sale.createdAt <= :endDate', { endDate: endOfDay });
+          const businessDateStr = endDate.split('T')[0];
+          query.andWhere('(sale.businessDate <= :businessEndDate OR (sale.businessDate IS NULL AND sale.createdAt <= :endDate))', { 
+            businessEndDate: businessDateStr,
+            endDate: endOfDay 
+          });
         }
       }
 
@@ -544,6 +556,9 @@ export class SalesService implements OnModuleInit {
           data.partnerId = retailPartner.id;
         }
 
+        const activeDate = await this.businessDayService.getActiveBusinessDate();
+        (data as any).businessDate = activeDate;
+
         const newSale = manager.create(Sale, data);
         const savedSale = await manager.save(Sale, newSale);
 
@@ -682,8 +697,8 @@ export class SalesService implements OnModuleInit {
             if (item.subItems && item.subItems.length > 0) {
               const isMerging = Boolean(mergeSaleIds && mergeSaleIds.length > 0);
               for (const subItem of item.subItems) {
-                // Eğer birleştirme (merge) yapılıyorsa miktar zaten mutlaktır, değilse parent ile çarpılır
-                const finalSubQty = isMerging ? Number(subItem.quantity) : (Number(subItem.quantity) * Number(item.quantity));
+                // Ekstra (alt ürün) miktarı arayüzden gönderildiği şekliyle mutlak (absolute) olarak alınır, ana ürünle çarpılmaz.
+                const finalSubQty = Number(subItem.quantity);
                 const finalSubUnitPrice = Number(subItem.unitPrice || 0);
                 const finalSubTotal = isMerging ? (subItem.total || (finalSubUnitPrice * finalSubQty)) : (finalSubUnitPrice * finalSubQty);
 
@@ -1131,12 +1146,14 @@ export class SalesService implements OnModuleInit {
         relations: ['sale', 'sale.table']
       });
       
-      const unpaidItems = items.filter(i => !i.isPaid);
+      const unpaidItems = items.filter(i => !i.isPaid && i.status !== 'CANCELLED' && i.status !== 'REFUNDED');
       if (unpaidItems.length === 0) return;
 
       const totalCheckoutAmount = unpaidItems.reduce((sum, item) => sum + (item.total || Number(item.unitPrice) * Number(item.quantity)), 0);
       const firstItemSale = unpaidItems[0].sale;
       const table = firstItemSale?.table;
+
+      const activeDate = await this.businessDayService.getActiveBusinessDate();
 
       // 1. Create a unified COMPLETED Sale for these paid items
       const checkoutSale = manager.create(Sale, {
@@ -1145,6 +1162,7 @@ export class SalesService implements OnModuleInit {
         waiterId: firstItemSale?.waiterId,
         tableId: table?.id,
         tableName: table?.name,
+        businessDate: activeDate,
         totalAmount: totalCheckoutAmount,
         status: 'COMPLETED',
         paymentMethod: paymentMethod || 'KASA',
@@ -1473,6 +1491,23 @@ export class SalesService implements OnModuleInit {
       await this.saleItemRepository.save(child);
     }
 
+    // Mutfak çıktısı (Parametreye bağlı)
+    const printOnCancel = await this.parametersService.getValue('printer', 'print_on_cancel');
+    if (printOnCancel === 'true') {
+      const fullItem = await this.saleItemRepository.findOne({
+        where: { id: item.id },
+        relations: ['sale', 'sale.table', 'sale.table.zone', 'sale.waiter', 'product', 'product.outputProfile']
+      });
+      if (fullItem) {
+        await this.printersService.printKitchen({
+          tableName: fullItem.sale?.tableName || fullItem.sale?.table?.name,
+          waiterName: fullItem.sale?.waiter ? `${fullItem.sale.waiter.firstName} ${fullItem.sale.waiter.lastName}` : 'Garson',
+          zoneId: fullItem.sale?.table?.zone?.id,
+          items: [fullItem]
+        });
+      }
+    }
+
     // Yeni: Parametrik Stok geri alımı
     const isStockReverseEnabled = await this.checkStockReverseParam('cancel');
     if (isStockReverseEnabled) {
@@ -1603,6 +1638,23 @@ export class SalesService implements OnModuleInit {
       await this.saleItemRepository.save(child);
     }
 
+    // Mutfak çıktısı (Parametreye bağlı)
+    const printOnRefund = await this.parametersService.getValue('printer', 'print_on_refund');
+    if (printOnRefund === 'true') {
+      const fullItem = await this.saleItemRepository.findOne({
+        where: { id: item.id },
+        relations: ['sale', 'sale.table', 'sale.table.zone', 'sale.waiter', 'product', 'product.outputProfile']
+      });
+      if (fullItem) {
+        await this.printersService.printKitchen({
+          tableName: fullItem.sale?.tableName || fullItem.sale?.table?.name,
+          waiterName: fullItem.sale?.waiter ? `${fullItem.sale.waiter.firstName} ${fullItem.sale.waiter.lastName}` : 'Garson',
+          zoneId: fullItem.sale?.table?.zone?.id,
+          items: [fullItem]
+        });
+      }
+    }
+
     // Denetim logu
     try {
       await this.saleRepository.query(`
@@ -1707,6 +1759,24 @@ export class SalesService implements OnModuleInit {
         sale.items.map(i => i.id),
         { status: 'REFUNDED', refundReason: reason, refundedByUserId: userId } as any,
       );
+    }
+
+    // Mutfak çıktısı (Parametreye bağlı)
+    const printOnRefundBulk = await this.parametersService.getValue('printer', 'print_on_refund');
+    if (printOnRefundBulk === 'true' && sale.items?.length) {
+      const fullItems = await this.saleItemRepository.find({
+        where: { sale: { id: sale.id } },
+        relations: ['product', 'product.outputProfile', 'sale', 'sale.waiter', 'sale.table', 'sale.table.zone']
+      });
+      if (fullItems.length > 0) {
+        const first = fullItems[0];
+        await this.printersService.printKitchen({
+          tableName: first.sale?.tableName || first.sale?.table?.name,
+          waiterName: first.sale?.waiter ? `${first.sale.waiter.firstName} ${first.sale.waiter.lastName}` : 'Garson',
+          zoneId: first.sale?.table?.zone?.id,
+          items: fullItems
+        });
+      }
     }
 
     // Denetim logu
@@ -2263,14 +2333,18 @@ export class SalesService implements OnModuleInit {
       let newCheckTotal = 0;
       let sourceDeduction = 0;
 
+      sourceItems.sort((a, b) => (a.parentItemId ? 1 : 0) - (b.parentItemId ? 1 : 0));
+      const partiallyTransferredParentIds = new Set<number>();
+
       for (const item of sourceItems) {
+        if (item.parentItemId && partiallyTransferredParentIds.has(item.parentItemId)) {
+          continue; // Alt ürün zaten parent içindeyken bölünüp aktarıldı, eskisini atla
+        }
         const splitQty = quantities?.[item.id];
 
         if (splitQty && splitQty < Number(item.quantity)) {
-          // Set menü kontrolü: Parçalı taşıma yasaktır
-          const hasChildren = await manager.count(SaleItem, { where: { parentItemId: item.id, status: 'ACTIVE' } });
-          if (item.parentItemId || (hasChildren > 0)) {
-            throw new BadRequestException('Set menüler parçalı olarak taşınamaz.');
+          if (item.parentItemId) {
+             throw new BadRequestException('Set menü veya ekstra ürünler tek başına parçalanamaz, ana ürünü parçalayınız.');
           }
 
           // Miktar bölme: kaynak miktarını azalt, yeni item oluştur
@@ -2295,11 +2369,58 @@ export class SalesService implements OnModuleInit {
             saleType: item.saleType || 'STANDARD',
             saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
             sale: savedNewCheck,
+            variationId: item.variationId,
+            variationName: item.variationName,
+            productTypeName: item.productTypeName,
           });
-          await manager.save(SaleItem, newItem);
+          const savedNewItem = await manager.save(SaleItem, newItem);
 
           newCheckTotal += splitQty * Number(item.unitPrice);
           sourceDeduction += splitQty * Number(item.unitPrice);
+          partiallyTransferredParentIds.add(item.id);
+
+          const children = await manager.find(SaleItem, { where: { parentItemId: item.id, status: 'ACTIVE' } });
+          for (const child of children) {
+            let childSplitQty = 0;
+            if (quantities && quantities[child.id] !== undefined) {
+              childSplitQty = Number(quantities[child.id]);
+            } else {
+              const childQtyPerParent = Number(child.quantity) / Number(item.quantity);
+              childSplitQty = childQtyPerParent * splitQty;
+            }
+
+            if (childSplitQty <= 0) continue;
+            
+            childSplitQty = Math.min(childSplitQty, Number(child.quantity));
+            const childRemainingQty = Number(child.quantity) - childSplitQty;
+
+            if (childRemainingQty <= 0) {
+              await manager.update(SaleItem, child.id, {
+                parentItemId: savedNewItem.id,
+              });
+              await manager.query(`UPDATE sale_items SET saleId = ${savedNewCheck.id} WHERE id = ${child.id}`);
+              newCheckTotal += childSplitQty * Number(child.unitPrice);
+              sourceDeduction += childSplitQty * Number(child.unitPrice);
+            } else {
+              await manager.update(SaleItem, child.id, {
+                quantity: childRemainingQty,
+                total: childRemainingQty * Number(child.unitPrice),
+              });
+
+              const newChild = manager.create(SaleItem, {
+                ...child,
+                id: undefined,
+                quantity: childSplitQty,
+                total: childSplitQty * Number(child.unitPrice),
+                parentItemId: savedNewItem.id,
+                sale: savedNewCheck,
+              });
+              await manager.save(SaleItem, newChild);
+
+              newCheckTotal += childSplitQty * Number(child.unitPrice);
+              sourceDeduction += childSplitQty * Number(child.unitPrice);
+            }
+          }
         } else {
           // Tam taşıma: item'ı yeni adisyona aktar
           await manager.update(SaleItem, item.id, { sale: savedNewCheck } as any);
@@ -2348,7 +2469,8 @@ export class SalesService implements OnModuleInit {
       order: { subCheckIndex: 'ASC', createdAt: 'ASC' },
     });
 
-    // JS Filtreleme: İptal / İade edilenleri çıkar
+    // JS Filtreleme: İptal / İade edilenleri ARTIK ÇIKARMIYORUZ (Hesap çıktısı ve UI için gerekli)
+    /*
     sales.forEach(sale => {
       if (sale.items) {
         sale.items = sale.items.filter(i => i.status !== 'CANCELLED' && i.status !== 'REFUNDED');
@@ -2361,6 +2483,7 @@ export class SalesService implements OnModuleInit {
         });
       }
     });
+    */
 
     // Sadece kök adisyonları dön (alt adisyonlar zaten subChecks relation'ında)
     const rootSales = sales.filter(s => !s.parentSaleId);
@@ -2447,13 +2570,17 @@ export class SalesService implements OnModuleInit {
 
       let movedTotal = 0;
 
+      items.sort((a, b) => (a.parentItemId ? 1 : 0) - (b.parentItemId ? 1 : 0));
+      const partiallyTransferredParentIds = new Set<number>();
+
       for (const item of items) {
+        if (item.parentItemId && partiallyTransferredParentIds.has(item.parentItemId)) {
+          continue;
+        }
         const splitQty = quantities?.[item.id];
         if (splitQty && splitQty < Number(item.quantity)) {
-          // Set menü kontrolü: Parçalı taşıma yasaktır
-          const hasChildren = await manager.count(SaleItem, { where: { parentItemId: item.id, status: 'ACTIVE' } });
-          if (item.parentItemId || (hasChildren > 0)) {
-            throw new BadRequestException('Set menüler parçalı olarak taşınamaz.');
+          if (item.parentItemId) {
+             throw new BadRequestException('Set menü veya ekstra ürünler tek başına parçalanamaz, ana ürünü parçalayınız.');
           }
 
           const remainingQty = Number(item.quantity) - splitQty;
@@ -2477,9 +2604,53 @@ export class SalesService implements OnModuleInit {
             saleType: item.saleType || 'STANDARD',
             saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
             sale: targetSale,
+            variationId: item.variationId,
+            variationName: item.variationName,
+            productTypeName: item.productTypeName,
           });
-          await manager.save(SaleItem, newItem);
+          const savedNewItem = await manager.save(SaleItem, newItem);
           movedTotal += splitQty * Number(item.unitPrice);
+          partiallyTransferredParentIds.add(item.id);
+
+          const children = await manager.find(SaleItem, { where: { parentItemId: item.id, status: 'ACTIVE' } });
+          for (const child of children) {
+            let childSplitQty = 0;
+            if (quantities && quantities[child.id] !== undefined) {
+              childSplitQty = Number(quantities[child.id]);
+            } else {
+              const childQtyPerParent = Number(child.quantity) / Number(item.quantity);
+              childSplitQty = childQtyPerParent * splitQty;
+            }
+
+            if (childSplitQty <= 0) continue;
+            
+            childSplitQty = Math.min(childSplitQty, Number(child.quantity));
+            const childRemainingQty = Number(child.quantity) - childSplitQty;
+
+            if (childRemainingQty <= 0) {
+              await manager.update(SaleItem, child.id, {
+                parentItemId: savedNewItem.id,
+              });
+              await manager.query(`UPDATE sale_items SET saleId = ${targetSale.id} WHERE id = ${child.id}`);
+              movedTotal += childSplitQty * Number(child.unitPrice);
+            } else {
+              await manager.update(SaleItem, child.id, {
+                quantity: childRemainingQty,
+                total: childRemainingQty * Number(child.unitPrice),
+              });
+
+              const newChild = manager.create(SaleItem, {
+                ...child,
+                id: undefined,
+                quantity: childSplitQty,
+                total: childSplitQty * Number(child.unitPrice),
+                parentItemId: savedNewItem.id,
+                sale: targetSale,
+              });
+              await manager.save(SaleItem, newChild);
+              movedTotal += childSplitQty * Number(child.unitPrice);
+            }
+          }
         } else {
           await manager.query(`UPDATE sale_items SET saleId = ${targetId} WHERE id = ${item.id}`);
           movedTotal += Number(item.total || Number(item.unitPrice) * Number(item.quantity));
@@ -2691,7 +2862,13 @@ export class SalesService implements OnModuleInit {
       const transferredItemsList: any[] = [];
       const newItems: SaleItem[] = [];
 
+      items.sort((a, b) => (a.parentItemId ? 1 : 0) - (b.parentItemId ? 1 : 0));
+      const partiallyTransferredParentIds = new Set<number>();
+
       for (const item of items) {
+        if (item.parentItemId && partiallyTransferredParentIds.has(item.parentItemId)) {
+          continue;
+        }
         const splitQty = body.quantities?.[item.id];
 
         // Ürün bilgisini al
@@ -2702,10 +2879,8 @@ export class SalesService implements OnModuleInit {
         } catch { }
 
         if (splitQty && splitQty < Number(item.quantity)) {
-          // Set menü kontrolü: Parçalı taşıma yasaktır
-          const hasChildren = await manager.count(SaleItem, { where: { parentItemId: item.id, status: 'ACTIVE' } });
-          if (item.parentItemId || (hasChildren > 0)) {
-            throw new BadRequestException('Set menüler parçalı olarak taşınamaz.');
+          if (item.parentItemId) {
+             throw new BadRequestException('Set menü veya ekstra ürünler tek başına parçalanamaz, ana ürünü parçalayınız.');
           }
 
           // Miktar bölme
@@ -2731,12 +2906,56 @@ export class SalesService implements OnModuleInit {
             saleType: item.saleType || 'STANDARD',
             saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
             sale: targetSaleForItems,
+            variationId: item.variationId,
+            variationName: item.variationName,
           });
-          await manager.save(SaleItem, newItem);
-          newItems.push(newItem);
+          const savedNewItem = await manager.save(SaleItem, newItem);
+          newItems.push(savedNewItem);
           const itemTotal = splitQty * Number(item.unitPrice);
           movedTotal += itemTotal;
           transferredItemsList.push({ productId: item.productId, name: productName, quantity: splitQty, total: itemTotal });
+          partiallyTransferredParentIds.add(item.id);
+
+          const children = await manager.find(SaleItem, { where: { parentItemId: item.id, status: 'ACTIVE' } });
+          for (const child of children) {
+            let childSplitQty = 0;
+            if (body.quantities && body.quantities[child.id] !== undefined) {
+              childSplitQty = Number(body.quantities[child.id]);
+            } else {
+              const childQtyPerParent = Number(child.quantity) / Number(item.quantity);
+              childSplitQty = childQtyPerParent * splitQty;
+            }
+
+            if (childSplitQty <= 0) continue;
+            
+            childSplitQty = Math.min(childSplitQty, Number(child.quantity));
+            const childRemainingQty = Number(child.quantity) - childSplitQty;
+
+            if (childRemainingQty <= 0) {
+              await manager.update(SaleItem, child.id, {
+                parentItemId: savedNewItem.id,
+              });
+              await manager.query(`UPDATE sale_items SET saleId = ${targetSaleForItems.id} WHERE id = ${child.id}`);
+              movedTotal += childSplitQty * Number(child.unitPrice);
+            } else {
+              await manager.update(SaleItem, child.id, {
+                quantity: childRemainingQty,
+                total: childRemainingQty * Number(child.unitPrice),
+              });
+
+              const newChild = manager.create(SaleItem, {
+                ...child,
+                id: undefined,
+                quantity: childSplitQty,
+                total: childSplitQty * Number(child.unitPrice),
+                parentItemId: savedNewItem.id,
+                sale: targetSaleForItems,
+              });
+              const savedNewChild = await manager.save(SaleItem, newChild);
+              newItems.push(savedNewChild);
+              movedTotal += childSplitQty * Number(child.unitPrice);
+            }
+          }
         } else {
           // Tam taşıma
           const itemTotal = Number(item.total || Number(item.unitPrice) * Number(item.quantity));
@@ -2747,7 +2966,8 @@ export class SalesService implements OnModuleInit {
       }
 
       // 10. Tutarları güncelle
-      await manager.update(Sale, targetSaleForItems.id, { totalAmount: Math.max(0, movedTotal) });
+      const newTargetTotal = Number(targetSaleForItems.totalAmount || 0) + movedTotal;
+      await manager.update(Sale, targetSaleForItems.id, { totalAmount: Math.max(0, newTargetTotal) });
 
       const newSourceTotal = Math.max(0, Number(sourceSale.totalAmount) - movedTotal);
       await manager.update(Sale, sourceSale.id, { totalAmount: newSourceTotal });
@@ -2915,14 +3135,18 @@ export class SalesService implements OnModuleInit {
 
       let movedTotal = 0;
 
+      items.sort((a, b) => (a.parentItemId ? 1 : 0) - (b.parentItemId ? 1 : 0));
+      const partiallyTransferredParentIds = new Set<number>();
+
       for (const item of items) {
+        if (item.parentItemId && partiallyTransferredParentIds.has(item.parentItemId)) {
+          continue;
+        }
         const splitQty = body.quantities?.[item.id];
 
         if (splitQty && splitQty < Number(item.quantity)) {
-          // Set menü kontrolü: Parçalı taşıma yasaktır
-          const hasChildren = await manager.count(SaleItem, { where: { parentItemId: item.id, status: 'ACTIVE' } });
-          if (item.parentItemId || (hasChildren > 0)) {
-            throw new BadRequestException('Set menüler parçalı olarak taşınamaz.');
+          if (item.parentItemId) {
+             throw new BadRequestException('Set menü veya ekstra ürünler tek başına parçalanamaz, ana ürünü parçalayınız.');
           }
 
           const remainingQty = Number(item.quantity) - splitQty;
@@ -2947,9 +3171,52 @@ export class SalesService implements OnModuleInit {
             saleType: item.saleType || 'STANDARD',
             saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
             sale: targetSale,
+            variationId: item.variationId,
+            variationName: item.variationName,
           });
-          await manager.save(SaleItem, newItem);
+          const savedNewItem = await manager.save(SaleItem, newItem);
           movedTotal += splitQty * Number(item.unitPrice);
+          partiallyTransferredParentIds.add(item.id);
+
+          const children = await manager.find(SaleItem, { where: { parentItemId: item.id, status: 'ACTIVE' } });
+          for (const child of children) {
+            let childSplitQty = 0;
+            if (body.quantities && body.quantities[child.id] !== undefined) {
+              childSplitQty = Number(body.quantities[child.id]);
+            } else {
+              const childQtyPerParent = Number(child.quantity) / Number(item.quantity);
+              childSplitQty = childQtyPerParent * splitQty;
+            }
+
+            if (childSplitQty <= 0) continue;
+            
+            childSplitQty = Math.min(childSplitQty, Number(child.quantity));
+            const childRemainingQty = Number(child.quantity) - childSplitQty;
+
+            if (childRemainingQty <= 0) {
+              await manager.update(SaleItem, child.id, {
+                parentItemId: savedNewItem.id,
+              });
+              await manager.query(`UPDATE sale_items SET saleId = ${targetSale.id} WHERE id = ${child.id}`);
+              movedTotal += childSplitQty * Number(child.unitPrice);
+            } else {
+              await manager.update(SaleItem, child.id, {
+                quantity: childRemainingQty,
+                total: childRemainingQty * Number(child.unitPrice),
+              });
+
+              const newChild = manager.create(SaleItem, {
+                ...child,
+                id: undefined,
+                quantity: childSplitQty,
+                total: childSplitQty * Number(child.unitPrice),
+                parentItemId: savedNewItem.id,
+                sale: targetSale,
+              });
+              await manager.save(SaleItem, newChild);
+              movedTotal += childSplitQty * Number(child.unitPrice);
+            }
+          }
         } else {
           await manager.query(`UPDATE sale_items SET saleId = ${targetSale.id} WHERE id = ${item.id}`);
           movedTotal += Number(item.total || Number(item.unitPrice) * Number(item.quantity));

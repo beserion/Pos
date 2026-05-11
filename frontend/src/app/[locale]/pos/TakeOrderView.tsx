@@ -74,8 +74,8 @@ function SortableProductCard({ product, onClick, isDesignMode }: { product: Prod
             </div>
 
             <div className="absolute bottom-0 left-0 right-0 p-1.5 flex flex-col items-center text-center justify-end z-10 pointer-events-none">
-                <span className="font-bold text-white text-[10px] leading-tight mb-0 drop-shadow-md line-clamp-2">{product.name}</span>
-                <span className="font-extrabold text-white bg-emerald-600/90 backdrop-blur-sm px-2 py-0.5 rounded-full text-[9px] shadow-sm mt-0.5 border border-emerald-400/30">₺{product.price}</span>
+                <span className="font-bold text-white text-[14px] leading-tight mb-0 drop-shadow-md line-clamp-2">{product.name}</span>
+                <span className="font-extrabold text-white bg-emerald-600/90 backdrop-blur-sm px-2 py-0.5 rounded-full text-[11px] shadow-sm mt-0.5 border border-emerald-400/30">₺{product.price}</span>
             </div>
 
             {product.isSet && (
@@ -164,11 +164,11 @@ interface Product {
     variations?: any[];
 }
 interface ProductType { id: number; name: string; }
-interface OrderItem { product: Product; quantity: number; note?: string; isWaiting?: boolean; subItems?: any[]; extraPrice?: number; uniqueId?: string; saleType?: 'STANDARD' | 'HALF' | 'DOUBLE'; saleTypeMultiplier?: number; variationId?: number; variationName?: string; transactionType?: 'SALE' | 'FREE' | 'COMPLIMENTARY' | 'PROMOTION' | 'STAFF' | 'TICKET'; transactionReason?: string; }
+interface OrderItem { product: Product; quantity: number; note?: string; isWaiting?: boolean; subItems?: any[]; extraPrice?: number; uniqueId?: string; saleType?: 'STANDARD' | 'HALF' | 'DOUBLE'; saleTypeMultiplier?: number; variationId?: number; variationName?: string; transactionType?: 'SALE' | 'FREE' | 'COMPLIMENTARY' | 'PROMOTION' | 'STAFF' | 'TICKET'; transactionReason?: string; status?: string; refundReason?: string; cancelReason?: string; }
 interface ExistingOrder {
     id: number;
     totalAmount: number;
-    items: { id: number; product: { id: number; name: string; price: number; isSet?: boolean }; quantity: number; unitPrice: number; isPaid: boolean; isWaiting: boolean; isMarshed: boolean; parentItemId?: number; addedByName?: string; addedAt?: string; transactionType?: string; transactionReason?: string; }[];
+    items: { id: number; product: { id: number; name: string; price: number; isSet?: boolean }; quantity: number; unitPrice: number; isPaid: boolean; isWaiting: boolean; isMarshed: boolean; parentItemId?: number; addedByName?: string; addedAt?: string; transactionType?: string; transactionReason?: string; status?: string; refundReason?: string; cancelReason?: string; }[];
 }
 interface Zone { id: number; name: string; }
 interface Table { id: number; name: string; status: string; waiterName?: string; waiterId?: number; orderStartTime?: string; currentTotal?: number; isBillRequested?: boolean; zone: { id: number }; tempName?: string; }
@@ -247,6 +247,7 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
 
     const [noteModalItem, setNoteModalItem] = useState<OrderItem | null>(null);
     const [tempNote, setTempNote] = useState('');
+    const [tempSubItems, setTempSubItems] = useState<any[]>([]);
     const [isSending, setIsSending] = useState(false);
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [isSplitPaymentOpen, setIsSplitPaymentOpen] = useState(false);
@@ -275,7 +276,7 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
     const [selectedSetMenuProduct, setSelectedSetMenuProduct] = useState<Product | null>(null);
     const [isSetMenuModalOpen, setIsSetMenuModalOpen] = useState(false);
 
-    const [isBillRequestedAlertOpen, setIsBillRequestedAlertOpen] = useState(false);
+    const [isBillRequestedAlertOpen, setIsBillRequestedAlertOpen] = useState(false);
     const { params } = useParameters();
 
     // --- İşlem Tipi States ---
@@ -523,12 +524,14 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
             setSelectedProductForVariation(product);
             setPendingAddToCartArgs({ note, skipExtraCheck });
             setIsVariationModalOpen(true);
+            setActiveSaleType('STANDARD');
             return;
         }
 
         if (product.isSet && product.setMenu?.setType !== 'FIX') {
             setSelectedSetMenuProduct(product);
             setIsSetMenuModalOpen(true);
+            setActiveSaleType('STANDARD');
             return;
         }
 
@@ -556,7 +559,7 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
             if (dept?.extraDepartmentId) {
                 const extraProducts = products.filter(p => p.category === departments.find(d => d.id === dept.extraDepartmentId)?.name);
                 if (extraProducts.length > 0) {
-                    if (dept.autoOpenExtraPopup) {
+                    if (dept.autoOpenExtraPopup && params.auto_open_product_options !== false) {
                         // Önce ürünü sepete ekle, sonra popup aç
                         setCart(prev => {
                             const existing = prev.find(item => item.product.id === product.id && item.note === note && item.saleType === activeSaleType && !item.uniqueId);
@@ -567,6 +570,7 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                         setExtraPopupProducts(extraProducts);
                         setExtraPopupParentProduct(product);
                         setExtraPopupOpen(true);
+                        setActiveSaleType('STANDARD');
                         return;
                     } else {
                         // Manuel mod: kaydet pending için aşağıda işaret bırak
@@ -588,6 +592,7 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
             }
             return [...prev, newItem];
         });
+        setActiveSaleType('STANDARD');
     };
 
     const handleExtraSelect = (extraProduct: Product) => {
@@ -772,25 +777,20 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
     const handleSaveNote = () => {
         if (!noteModalItem) return;
 
-        let updatedCart;
-        if (noteModalItem.uniqueId) {
-            updatedCart = cart.filter((i: OrderItem) => i.uniqueId !== noteModalItem.uniqueId);
-        } else {
-            updatedCart = cart.filter((i: OrderItem) => !(i.product.id === noteModalItem.product.id && i.note === noteModalItem.note && i.saleType === noteModalItem.saleType && i.variationId === noteModalItem.variationId && !i.uniqueId));
-        }
+        // Ürün sırasını korumak için map kullanıyoruz
+        setCart(prev => prev.map(item => {
+            const isMatch = item.uniqueId
+                ? item.uniqueId === noteModalItem.uniqueId
+                : (item.product.id === noteModalItem.product.id && item.note === noteModalItem.note && item.saleType === noteModalItem.saleType && item.variationId === noteModalItem.variationId && !item.uniqueId);
 
-        if (noteModalItem.uniqueId) {
-            setCart([...updatedCart, { ...noteModalItem, note: tempNote.trim() || undefined }]);
-        } else {
-            const existingWithNewNote = updatedCart.find((i: OrderItem) => i.product.id === noteModalItem.product.id && i.note === tempNote.trim() && i.saleType === noteModalItem.saleType && i.variationId === noteModalItem.variationId && !i.uniqueId);
-            if (existingWithNewNote) {
-                existingWithNewNote.quantity += noteModalItem.quantity;
-                setCart([...updatedCart]);
-            } else {
-                setCart([...updatedCart, { ...noteModalItem, note: tempNote.trim() || undefined }]);
+            if (isMatch) {
+                return { ...item, note: tempNote.trim() || undefined, subItems: tempSubItems };
             }
-        }
+            return item;
+        }));
+
         setNoteModalItem(null);
+        setTempSubItems([]);
     };
 
     const handleTransactionTypeChange = (type: string) => {
@@ -957,7 +957,7 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                     userId: user?.id || user?.sub,
                     totalAmount: cart.reduce((sum: number, item: OrderItem) => {
                         const base = calculateItemPrice(item) * item.quantity;
-                        const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
+                        const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0);
                         return sum + base + extras;
                     }, 0),
                     status: 'NEW',
@@ -1054,12 +1054,12 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
 
     const cartTotal = cart.reduce((sum: number, item: OrderItem) => {
         const base = calculateItemPrice(item) * item.quantity;
-        const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * item.quantity), 0);
+        const extras = (item.subItems || []).filter((s: any) => s.isExtra).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0);
         return sum + base + extras;
     }, 0);
     const allExistingItems = existingOrders.flatMap(o => o.items);
     const paidItems = allExistingItems.filter(i => i.isPaid);
-    const unpaidItems = allExistingItems.filter(i => !i.isPaid);
+    const unpaidItems = allExistingItems.filter(i => !i.isPaid && i.status !== 'CANCELLED' && i.status !== 'REFUNDED');
     const paidTotal = paidItems.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0);
     const remainingTotal = unpaidItems.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0) + cartTotal;
 
@@ -1564,7 +1564,7 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                     {/* Satır 2: Aksiyon Butonları + Dinamik Alt Filtreler — aynı satırda */}
                                     <div className="flex items-center gap-2">
                                         {/* Dinamik Alt Filtreler (sol) -> Breadcrumb'a Dönüştü */}
-                                        <div className="flex-1 flex items-center gap-1.5 overflow-x-auto scrollbar-none min-h-[32px]">
+                                        <div className="flex-1 flex items-center gap-1 overflow-x-auto scrollbar-none min-h-[2px]">
                                             {(selectedParentGroupId || selectedDepartmentId) && !searchQuery ? (
                                                 <>
                                                     <button
@@ -1612,92 +1612,95 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                     </div>
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-280px)]">
+                                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 max-h-[calc(100vh-160px)]">
                                     {!selectedDepartmentId && !searchQuery ? (
                                         <>
-                                            <DndContext
-                                                sensors={sensors}
-                                                collisionDetection={closestCenter}
-                                                onDragStart={handleDragStart}
-                                                onDragEnd={handleDragEnd}
-                                                onDragCancel={() => { setActiveDragItem(null); setActiveDragGroup(null); }}
-                                            >
-                                                <SortableContext items={sortableGroupIds} strategy={rectSortingStrategy}>
-                                                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6 mt-2 p-2 relative">
-                                                        {/* SEVİYE 1: Üst Gruplar ve Bağımsız Kategoriler */}
-                                                        {!selectedParentGroupId && (
-                                                            <>
-                                                                {filteredParentGroups.map(pg => (
-                                                                    <SortableGroupCard
-                                                                        key={`pg-${pg.id}`}
-                                                                        id={`pg-${pg.id}`}
-                                                                        name={pg.name}
-                                                                        iconClass="fa-folder-tree"
-                                                                        imageUrl={(pg as any).imageUrl}
-                                                                        colorClass={{ bg: "bg-indigo-100 dark:bg-indigo-900/30", text: "text-indigo-500", hover: "hover:border-indigo-400" }}
-                                                                        onClick={() => setSelectedParentGroupId(pg.id)}
-                                                                        isDesignMode={isDesignMode}
-                                                                    />
-                                                                ))}
-                                                                {filteredRootDepartments.map(d => (
-                                                                    <SortableGroupCard
-                                                                        key={`dept-${d.id}`}
-                                                                        id={`dept-${d.id}`}
-                                                                        name={d.name}
-                                                                        iconClass="fa-tags"
-                                                                        imageUrl={(d as any).imageUrl}
-                                                                        colorClass={{ bg: "bg-emerald-100 dark:bg-emerald-900/30", text: "text-emerald-500", hover: "hover:border-emerald-400" }}
-                                                                        onClick={() => setSelectedDepartmentId(d.id)}
-                                                                        isDesignMode={isDesignMode}
-                                                                    />
-                                                                ))}
-                                                            </>
-                                                        )}
+                                            {sortableGroupIds.length > 0 && (
+                                                <DndContext
+                                                    sensors={sensors}
+                                                    collisionDetection={closestCenter}
+                                                    onDragStart={handleDragStart}
+                                                    onDragEnd={handleDragEnd}
+                                                    onDragCancel={() => { setActiveDragItem(null); setActiveDragGroup(null); }}
+                                                >
+                                                    <SortableContext items={sortableGroupIds} strategy={rectSortingStrategy}>
+                                                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6 mt-2 p-2 relative">
+                                                            {/* SEVİYE 1: Üst Gruplar ve Bağımsız Kategoriler */}
+                                                            {!selectedParentGroupId && (
+                                                                <>
+                                                                    {filteredParentGroups.map(pg => (
+                                                                        <SortableGroupCard
+                                                                            key={`pg-${pg.id}`}
+                                                                            id={`pg-${pg.id}`}
+                                                                            name={pg.name}
+                                                                            iconClass="fa-folder-tree"
+                                                                            imageUrl={(pg as any).imageUrl}
+                                                                            colorClass={{ bg: "bg-indigo-100 dark:bg-indigo-900/30", text: "text-indigo-500", hover: "hover:border-indigo-400" }}
+                                                                            onClick={() => setSelectedParentGroupId(pg.id)}
+                                                                            isDesignMode={isDesignMode}
+                                                                        />
+                                                                    ))}
+                                                                    {filteredRootDepartments.map(d => (
+                                                                        <SortableGroupCard
+                                                                            key={`dept-${d.id}`}
+                                                                            id={`dept-${d.id}`}
+                                                                            name={d.name}
+                                                                            iconClass="fa-tags"
+                                                                            imageUrl={(d as any).imageUrl}
+                                                                            colorClass={{ bg: "bg-emerald-100 dark:bg-emerald-900/30", text: "text-emerald-500", hover: "hover:border-emerald-400" }}
+                                                                            onClick={() => setSelectedDepartmentId(d.id)}
+                                                                            isDesignMode={isDesignMode}
+                                                                        />
+                                                                    ))}
+                                                                </>
+                                                            )}
 
-                                                        {/* SEVİYE 2: Seçili Üst Gruba Bağlı Kategoriler */}
-                                                        {selectedParentGroupId && filteredSubDepartments.map(d => (
+                                                            {/* SEVİYE 2: Seçili Üst Gruba Bağlı Kategoriler */}
+                                                            {selectedParentGroupId && filteredSubDepartments.map(d => (
+                                                                <SortableGroupCard
+                                                                    key={`dept-${d.id}`}
+                                                                    id={`dept-${d.id}`}
+                                                                    name={d.name}
+                                                                    iconClass="fa-tags"
+                                                                    imageUrl={(d as any).imageUrl}
+                                                                    colorClass={{ bg: "bg-emerald-100 dark:bg-emerald-900/30", text: "text-emerald-500", hover: "hover:border-emerald-400" }}
+                                                                    onClick={() => setSelectedDepartmentId(d.id)}
+                                                                    isDesignMode={isDesignMode}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                    </SortableContext>
+                                                    <DragOverlay dropAnimation={{
+                                                        duration: 300,
+                                                        easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+                                                        sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.4' } } })
+                                                    }}>
+                                                        {activeDragGroup ? (
                                                             <SortableGroupCard
-                                                                key={`dept-${d.id}`}
-                                                                id={`dept-${d.id}`}
-                                                                name={d.name}
-                                                                iconClass="fa-tags"
-                                                                imageUrl={(d as any).imageUrl}
-                                                                colorClass={{ bg: "bg-emerald-100 dark:bg-emerald-900/30", text: "text-emerald-500", hover: "hover:border-emerald-400" }}
-                                                                onClick={() => setSelectedDepartmentId(d.id)}
-                                                                isDesignMode={isDesignMode}
+                                                                id={activeDragGroup.dragType === 'pg' ? `pg-${activeDragGroup.id}` : `dept-${activeDragGroup.id}`}
+                                                                name={activeDragGroup.name}
+                                                                imageUrl={activeDragGroup.imageUrl}
+                                                                iconClass={activeDragGroup.dragType === 'pg' ? "fa-folder-tree" : "fa-tags"}
+                                                                colorClass={activeDragGroup.dragType === 'pg'
+                                                                    ? { bg: "bg-indigo-100 dark:bg-indigo-900/30", text: "text-indigo-500", hover: "hover:border-indigo-400" }
+                                                                    : { bg: "bg-emerald-100 dark:bg-emerald-900/30", text: "text-emerald-500", hover: "hover:border-emerald-400" }}
+                                                                onClick={() => { }}
+                                                                isDesignMode={true}
                                                             />
-                                                        ))}
-                                                    </div>
-                                                </SortableContext>
-                                                <DragOverlay dropAnimation={{
-                                                    duration: 300,
-                                                    easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
-                                                    sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.4' } } })
-                                                }}>
-                                                    {activeDragGroup ? (
-                                                        <SortableGroupCard
-                                                            id={activeDragGroup.dragType === 'pg' ? `pg-${activeDragGroup.id}` : `dept-${activeDragGroup.id}`}
-                                                            name={activeDragGroup.name}
-                                                            imageUrl={activeDragGroup.imageUrl}
-                                                            iconClass={activeDragGroup.dragType === 'pg' ? "fa-folder-tree" : "fa-tags"}
-                                                            colorClass={activeDragGroup.dragType === 'pg'
-                                                                ? { bg: "bg-indigo-100 dark:bg-indigo-900/30", text: "text-indigo-500", hover: "hover:border-indigo-400" }
-                                                                : { bg: "bg-emerald-100 dark:bg-emerald-900/30", text: "text-emerald-500", hover: "hover:border-emerald-400" }}
-                                                            onClick={() => { }}
-                                                            isDesignMode={true}
-                                                        />
-                                                    ) : null}
-                                                </DragOverlay>
-                                            </DndContext>
+                                                        ) : null}
+                                                    </DragOverlay>
+                                                </DndContext>
+                                            )}
 
                                             {/* Kategorisi olmayan ürünleri doğrudan göster */}
                                             {filteredProducts.length > 0 && (
                                                 <div className="space-y-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
-                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Kategorisiz Ürünler</span>
-                                                        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
-                                                    </div>
+                                                    {sortableGroupIds.length > 0 && (
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
+                                                            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700/50"></div>
+                                                        </div>
+                                                    )}
                                                     <DndContext
                                                         sensors={sensors}
                                                         collisionDetection={closestCenter}
@@ -1706,7 +1709,7 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                                         onDragCancel={() => setActiveDragItem(null)}
                                                     >
                                                         <SortableContext items={filteredProducts.map(p => p.id)} strategy={rectSortingStrategy}>
-                                                            <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-4 mb-6 relative p-2">
+                                                            <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-6 gap-4 mb-6 relative p-2">
                                                                 {filteredProducts.map(p => (
                                                                     <SortableProductCard
                                                                         key={p.id}
@@ -1743,7 +1746,7 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                             onDragCancel={() => setActiveDragItem(null)}
                                         >
                                             <SortableContext items={filteredProducts.map(p => p.id)} strategy={rectSortingStrategy}>
-                                                <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-4 mb-6 relative p-2">
+                                                <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-6 gap-4 mb-6 relative p-2">
                                                     {filteredProducts.map(p => (
                                                         <SortableProductCard
                                                             key={p.id}
@@ -1868,7 +1871,7 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                     // If it's a child item, don't include it in the top-level merged list
                                     if (item.parentItemId) return merged;
 
-                                    const existing = merged.find(m => m.product.id === item.product.id && m.isPaid === item.isPaid && !item.product.isSet && !item.parentItemId);
+                                    const existing = merged.find(m => m.product.id === item.product.id && m.isPaid === item.isPaid && m.status === item.status && !item.product.isSet && !item.parentItemId);
                                     if (existing) {
                                         existing.quantity += item.quantity;
                                     } else {
@@ -1884,10 +1887,20 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
 
                             return displayItems.map((item: any, idx: number) => (
                                 <div key={`ex-${item.id}-${idx}`} className="flex flex-col gap-1">
-                                    <div className={`flex flex-col gap-2 p-3 rounded-2xl border shadow-sm transition-all ${item.isPaid ? 'bg-emerald-50/60 dark:bg-emerald-900/10 border-emerald-200/50 dark:border-emerald-500/20 opacity-70' : 'bg-slate-100/50 dark:bg-slate-700/30 border-slate-200/50 dark:border-slate-700/50'}`}>
+                                    <div className={`flex flex-col gap-2 p-3 rounded-2xl border shadow-sm transition-all ${item.status && item.status !== 'ACTIVE' ? `opacity-60 grayscale line-through italic bg-slate-200/50 dark:bg-slate-800/50 border-slate-300 dark:border-slate-700 ${item.status === 'REFUNDED' ? 'text-rose-500 dark:text-rose-400' : ''}` : item.isPaid ? 'bg-emerald-50/60 dark:bg-emerald-900/10 border-emerald-200/50 dark:border-emerald-500/20 opacity-70' : 'bg-slate-100/50 dark:bg-slate-700/30 border-slate-200/50 dark:border-slate-700/50'}`}>
                                         <div className="flex justify-between items-start">
                                             <span className="block font-medium text-slate-600 dark:text-slate-400">
                                                 {item.product.name}
+                                                {item.saleType && item.saleType !== 'STANDARD' && (
+                                                    <span className={`text-[10px] ml-1 px-2 py-0.5 rounded-full inline-block font-bold border ${item.saleType === 'HALF' ? 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/20 dark:text-orange-400' : 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-400'}`}>
+                                                        {item.saleType === 'HALF' ? 'YARIM' : item.saleType === 'DOUBLE' ? 'DUBLE' : item.saleType}
+                                                    </span>
+                                                )}
+                                                {item.status && item.status !== 'ACTIVE' && (
+                                                    <span className={`text-[10px] ml-1 px-2 py-0.5 rounded-full inline-block font-bold border ${item.status === 'REFUNDED' ? 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/20 dark:text-rose-400' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400 border-slate-300 dark:border-slate-600'}`}>
+                                                        {item.status === 'REFUNDED' ? 'İADE' : 'İPTAL'}
+                                                    </span>
+                                                )}
                                                 {item.isPaid ? (
                                                     <span className="text-[10px] ml-1 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-500/30 inline-flex items-center gap-1">
                                                         <i className="fat fa-check text-[8px]"></i> Ödendi
@@ -2041,8 +2054,9 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                                 onClick={() => {
                                                     setNoteModalItem(item);
                                                     setTempNote(item.note || '');
+                                                    setTempSubItems(item.subItems || []);
                                                 }}
-                                                className="w-8 h-8 flex items-center justify-center text-amber-500 hover:text-amber-600 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded-md transition-colors" title="Not / Özellik Ekle"
+                                                className="w-8 h-8 flex items-center justify-center text-amber-500 hover:text-amber-600 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded-md transition-colors border border-amber-200 dark:border-amber-500/30" title="Not / Özellik / Ekstra Ekle"
                                             >
                                                 <i className="fat fa-pen-to-square"></i>
                                             </button>
@@ -2067,10 +2081,10 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                                 <span className="font-bold text-sm min-w-[1rem] text-center dark:text-white">{item.quantity}</span>
                                                 <button onClick={() => addToCart(item.product, item.note, true, item.variationId)} className="w-7 h-7 flex items-center justify-center text-emerald-500 font-bold hover:bg-white dark:hover:bg-slate-600 rounded-md transition-colors">+</button>
                                             </div>
-                                            {/* Manuel Ekstra Butonu: autoOpenExtraPopup false olduğunda görünür */}
+                                            {/* Manuel Ekstra Butonu */}
                                             {(() => {
                                                 const dept = departments.find((d: any) => d.name === item.product.category);
-                                                if (!dept?.extraDepartmentId || dept?.autoOpenExtraPopup) return null;
+                                                if (!dept?.extraDepartmentId) return null;
                                                 const extraProds = products.filter((p: any) => p.category === departments.find((d: any) => d.id === dept.extraDepartmentId)?.name);
                                                 if (extraProds.length === 0) return null;
                                                 return (
@@ -2199,6 +2213,76 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                             </div>
 
                             <div>
+                                {/* Ekstra Ürünler Bölümü */}
+                                {(() => {
+                                    if (!noteModalItem) return null;
+                                    // Hem departments hem de productTypes içinde arama yap (Garson uygulamasıyla uyumlu)
+                                    const dept = departments.find(d => d.name === noteModalItem.product.category || d.id === noteModalItem.product.productTypeId)
+                                        || productTypes.find(d => d.name === noteModalItem.product.category || d.id === noteModalItem.product.productTypeId);
+
+                                    if (!dept?.extraDepartmentId) return null;
+
+                                    // Ekstra departmanını/kategorisini bul
+                                    const extraDept = departments.find(d => d.id === dept.extraDepartmentId)
+                                        || productTypes.find(d => d.id === dept.extraDepartmentId);
+
+                                    if (!extraDept) return null;
+
+                                    // Bu kategoriye/departmana ait ürünleri filtrele
+                                    const extraProds = products.filter(p => p.category === extraDept.name || p.productTypeId === extraDept.id);
+                                    if (extraProds.length === 0) return null;
+
+                                    return (
+                                        <div className="bg-slate-50/50 dark:bg-slate-900/50 p-3 rounded-2xl border border-slate-100 dark:border-slate-800">
+                                            <label className="text-[10px] font-black text-indigo-500 dark:text-indigo-400 uppercase tracking-widest mb-3 block flex items-center gap-2">
+                                                <i className="fat fa-plus-circle"></i> Ekstralar
+                                            </label>
+                                            <div className="flex flex-wrap gap-2">
+                                                {extraProds.map(ep => {
+                                                    const existing = tempSubItems.find(s => s.productId === ep.id);
+                                                    const quantity = existing?.quantity || 0;
+                                                    const alreadyAdded = quantity > 0;
+                                                    return (
+                                                        <button
+                                                            key={ep.id}
+                                                            onClick={() => {
+                                                                setTempSubItems(prev => {
+                                                                    const exists = prev.find(s => s.productId === ep.id);
+                                                                    if (exists) {
+                                                                        return prev.map(s => s.productId === ep.id ? { ...s, quantity: s.quantity + 1 } : s);
+                                                                    } else {
+                                                                        return [...prev, { productId: ep.id, product: ep, quantity: 1, unitPrice: ep.price, isExtra: true }];
+                                                                    }
+                                                                });
+                                                            }}
+                                                            onContextMenu={(e) => {
+                                                                e.preventDefault();
+                                                                setTempSubItems(prev => {
+                                                                    const exists = prev.find(s => s.productId === ep.id);
+                                                                    if (exists && exists.quantity > 1) {
+                                                                        return prev.map(s => s.productId === ep.id ? { ...s, quantity: s.quantity - 1 } : s);
+                                                                    }
+                                                                    return prev.filter(s => s.productId !== ep.id);
+                                                                });
+                                                            }}
+                                                            className={`relative px-4 py-2 rounded-xl text-sm font-bold transition-all border flex items-center gap-2 ${alreadyAdded ? 'bg-indigo-500 text-white border-indigo-500 shadow-lg shadow-indigo-500/30' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-indigo-400 dark:hover:border-indigo-500/50'}`}
+                                                        >
+                                                            {ep.name}
+                                                            <span className={`text-[10px] ${alreadyAdded ? 'text-indigo-100' : 'opacity-60'}`}>₺{ep.price}</span>
+                                                            {quantity > 1 && (
+                                                                <div className="absolute -top-2 -right-2 w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-md border-2 border-white dark:border-slate-800 animate-in zoom-in duration-200">
+                                                                    {quantity}
+                                                                </div>
+                                                            )}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                            <p className="text-[9px] text-slate-400 mt-2 italic">* Artırmak için tıklayın, azaltmak için sağ tıklayın.</p>
+                                        </div>
+                                    );
+                                })()}
+
                                 <label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 block">Özel Not</label>
                                 <textarea
                                     value={tempNote}
@@ -2939,7 +3023,14 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                                         {item.quantity}
                                                     </div>
                                                     <div>
-                                                        <h4 className="font-bold text-slate-800 dark:text-white">{item.product?.name || `Ürün #${item.productId}`}</h4>
+                                                        <h4 className="font-bold text-slate-800 dark:text-white">
+                                                            {item.product?.name || `Ürün #${item.productId}`}
+                                                            {item.saleType && item.saleType !== 'STANDARD' && (
+                                                                <span className="text-[10px] ml-1 font-black text-indigo-500 uppercase">
+                                                                    ({item.saleType === 'HALF' ? 'Yarım' : item.saleType === 'DOUBLE' ? 'Duble' : item.saleType})
+                                                                </span>
+                                                            )}
+                                                        </h4>
                                                         <div className="flex items-center gap-2">
                                                             <p className="text-xs font-bold text-slate-400">₺{Number(item.unitPrice).toFixed(2)}</p>
                                                             {item.isPaid && <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-green-500/10 text-green-500 font-bold uppercase tracking-tighter">Ödendi</span>}

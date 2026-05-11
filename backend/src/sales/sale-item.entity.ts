@@ -7,11 +7,16 @@ import {
   CreateDateColumn,
 } from 'typeorm';
 import { Sale } from './sale.entity';
+import { Product } from '../products/product.entity';
 
 @Entity('sale_items')
 export class SaleItem {
   @PrimaryGeneratedColumn()
   id: number;
+  
+  @ManyToOne(() => Product, { nullable: true })
+  @JoinColumn({ name: 'productId' })
+  product: Product;
 
   @ManyToOne(() => Sale, (sale) => sale.items, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'saleId' })

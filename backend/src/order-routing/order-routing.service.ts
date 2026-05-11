@@ -176,6 +176,7 @@ export class OrderRoutingService {
     }
 
     // 6. Varsayılan
+    this.logger.warn(`Ürün "${product.name}" (#${productId}) için hiçbir çıktı profili bulunamadı!`);
     return { profile: null, source: 'DEFAULT', productId, productName: product.name };
   }
 
@@ -189,10 +190,12 @@ export class OrderRoutingService {
     // Eğer zoneId varsa, mappingleri baştan çekelim
     let zoneMappings: ZoneMapping[] = [];
     if (zoneId) {
+      this.logger.log(`[routeOrderItems] ZoneId: ${zoneId} için mappingler aranıyor...`);
       zoneMappings = await this.zoneMappingRepo.find({
-        where: { zoneId },
+        where: { zoneId: Number(zoneId) },
         relations: ['outputProfile', 'outputProfile.mainPrinter', 'outputProfile.infoPrinter', 'productType'],
       });
+      this.logger.log(`[routeOrderItems] Bulunan mapping sayısı: ${zoneMappings.length}`);
     }
 
     for (const item of items) {
@@ -206,7 +209,12 @@ export class OrderRoutingService {
 
       // 2. ZoneMapping kontrolü yap (sadece zoneId varsa ve bu ürünün cinsi varsa)
       if (zoneId && pTypeId && zoneMappings.length > 0) {
-        mapping = zoneMappings.find(m => m.productTypeId === pTypeId) || null;
+        mapping = zoneMappings.find(m => Number(m.productTypeId) === Number(pTypeId)) || null;
+        if (mapping) {
+          this.logger.log(`[routeOrderItems] Ürün "${resolved.productName}" için ZoneMapping BULUNDU (Profil: ${mapping.outputProfile?.name || 'BELİRSİZ'})`);
+        } else {
+          this.logger.log(`[routeOrderItems] Ürün "${resolved.productName}" (Cins: ${pTypeId}) için bu bölgede mapping bulunamadı.`);
+        }
       }
 
       let activeProfile = resolved.profile;
@@ -219,6 +227,7 @@ export class OrderRoutingService {
 
       if (!activeProfile) {
         // Tanımsız profil — uyarı loglandı, skip
+        this.logger.warn(`Ürün "${resolved.productName}" (ID: ${item.productId}) yönlendirilemedi: Profil bulunamadı. (Kaynak: ${resolved.source})`);
         continue;
       }
 

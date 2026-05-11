@@ -15,9 +15,11 @@ import {
 import { SalesService } from './sales.service';
 import { Sale } from './sale.entity';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Permissions } from '../auth/permissions.decorator';
+import { PermissionsGuard } from '../auth/permissions.guard';
 
 @Controller('sales')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SalesController {
   constructor(private readonly salesService: SalesService) { }
 
@@ -138,36 +140,42 @@ export class SalesController {
   }
 
   @Post('table/:tableId/cancel')
+  @Permissions('OP:CAN_CANCEL_SALE')
   cancelTableOrders(@Param('tableId') tableId: string, @Request() req: any) {
     const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
     return this.salesService.cancelTableOrders(+tableId, userId);
   }
 
   @Post('items/:id/cancel')
+  @Permissions('OP:CAN_CANCEL_SALE')
   cancelItem(@Param('id') id: string, @Body('reason') reason: string, @Request() req: any) {
     const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
     return this.salesService.cancelItem(+id, reason || '', userId);
   }
 
   @Post(':id/cancel')
+  @Permissions('OP:CAN_CANCEL_SALE')
   cancelSale(@Param('id') id: string, @Body('reason') reason: string, @Request() req: any) {
     const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
     return this.salesService.cancelSale(+id, reason || '', userId);
   }
 
   @Post('items/:id/refund')
+  @Permissions('OP:CAN_CANCEL_SALE')
   refundItem(@Param('id') id: string, @Body('reason') reason: string, @Request() req: any) {
     const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
     return this.salesService.refundItem(+id, reason || '', userId);
   }
 
   @Post(':id/refund')
+  @Permissions('OP:CAN_CANCEL_SALE')
   refundSale(@Param('id') id: string, @Body('reason') reason: string, @Request() req: any) {
     const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
     return this.salesService.refundSale(+id, reason || '', userId);
   }
 
   @Delete(':id')
+  @Permissions('OP:CAN_CANCEL_SALE')
   async remove(@Param('id') id: string, @Body('reason') reason: string, @Request() req: any) {
     const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
     return this.salesService.cancelSale(+id, reason || '', userId);

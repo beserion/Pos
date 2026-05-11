@@ -19,6 +19,8 @@ import { StockMovementsModule } from '../stock-movements/stock-movements.module'
 import { ProductsModule } from '../products/products.module';
 import { TablesModule } from '../tables/tables.module';
 import { InposModule } from '../inpos/inpos.module';
+import { ReportsModule } from '../reports/reports.module';
+import { ParametersModule } from '../parameters/parameters.module';
 
 @Module({
   imports: [
@@ -35,6 +37,8 @@ import { InposModule } from '../inpos/inpos.module';
     OrdersModule,
     TablesModule,
     InposModule,
+    ReportsModule,
+    ParametersModule,
   ],
   providers: [SalesService],
   controllers: [SalesController],

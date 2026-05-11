@@ -13,13 +13,16 @@ export class CashRegistersService {
   async findAll(companyId: number): Promise<CashRegister[]> {
     return this.cashRegisterRepository.find({
       where: { companyId },
-      relations: ['receiptPrinter'],
+      relations: ['receiptPrinter', 'receiptProfile'],
       order: { id: 'DESC' },
     });
   }
 
   async findOne(id: number, companyId: number): Promise<CashRegister> {
-    const register = await this.cashRegisterRepository.findOne({ where: { id, companyId } });
+    const register = await this.cashRegisterRepository.findOne({
+      where: { id, companyId },
+      relations: ['receiptPrinter', 'receiptProfile'],
+    });
     if (!register) throw new NotFoundException('Kasa bulunamadı.');
     return register;
   }
@@ -41,8 +44,9 @@ export class CashRegistersService {
       locationId: data.locationId,
       zoneIds: data.zoneIds,
       allowedPaymentMethods: data.allowedPaymentMethods,
-      // receiptPrinterId is the FK column — update it directly
+      // receiptPrinterId and receiptProfileId are the FK columns
       receiptPrinterId: data.receiptPrinterId,
+      receiptProfileId: data.receiptProfileId,
     };
 
     // Remove undefined keys so we don't accidentally wipe untouched columns
@@ -53,7 +57,7 @@ export class CashRegistersService {
     await this.cashRegisterRepository.update(id, updatePayload);
     return this.cashRegisterRepository.findOne({
       where: { id },
-      relations: ['receiptPrinter'],
+      relations: ['receiptPrinter', 'receiptProfile'],
     }) as Promise<CashRegister>;
   }
 

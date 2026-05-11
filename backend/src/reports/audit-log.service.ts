@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditLog } from './audit-log.entity';
+import { BusinessDayService } from './business-day.service';
 
 export interface LogActionDto {
   companyId?: number;
@@ -20,6 +21,7 @@ export interface LogActionDto {
   description?: string;
   approvedByUserId?: number;
   deviceInfo?: string;
+  businessDate?: string;
 }
 
 @Injectable()
@@ -27,14 +29,17 @@ export class AuditLogService {
   constructor(
     @InjectRepository(AuditLog)
     private readonly auditRepo: Repository<AuditLog>,
+    private readonly businessDayService: BusinessDayService,
   ) {}
 
   async logAction(dto: LogActionDto): Promise<void> {
     try {
+      const bDate = dto.businessDate || await this.businessDayService.getActiveBusinessDate();
       const log = this.auditRepo.create({
         ...dto,
         companyId: dto.companyId || 1,
         timestamp: new Date(),
+        businessDate: bDate,
       });
       await this.auditRepo.save(log);
     } catch (err) {

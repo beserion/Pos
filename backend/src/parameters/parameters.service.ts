@@ -70,6 +70,10 @@ export class ParametersService implements OnModuleInit {
         { module: 'pos', key: 'vat_rates', value: '0,1,10,20', label: 'KDV Oranları', type: 'text', description: 'Virgülle ayrılmış KDV oranları' },
         { module: 'pos', key: 'block_eod_if_tables_open', value: 'false', label: 'Açık Masa Varken Gün Sonunu Engelle', type: 'boolean', description: 'Eğer açık (ödenmemiş) masa varsa gün sonu alınmasını engeller.' },
         { module: 'pos', key: 'auto_close_shifts_on_eod', value: 'true', label: 'Gün Sonunda Vardiyaları Otomatik Kapat', type: 'boolean', description: 'Gün sonu alındığında hala açık olan vardiyalar otomatik olarak beklenen tutar ile kapatılsın mı?' },
+        { module: 'printer', key: 'print_on_refund', value: 'true', label: 'İade de fiş yazdır', type: 'boolean', description: 'Bir ürün iade edildiğinde ilgili yazıcıdan iade fişi çıkartılsın mı?' },
+        { module: 'printer', key: 'print_on_cancel', value: 'true', label: 'İptal de fiş yazdır', type: 'boolean', description: 'Bir ürün iptal edildiğinde ilgili yazıcıdan iptal fişi çıkartılsın mı?' },
+        { module: 'printer', key: 'print_receipt_on_payment', value: 'true', label: 'Ödeme Alındığında Fiş Yazdır', type: 'boolean', description: 'Kasa POS ekranında ödeme tamamlandığında otomatik müşteri fişi çıkartılsın mı?' },
+        { module: 'kitchen', key: 'auto_open_product_options', value: 'true', label: 'Ürün Seçince Detay Ekranını Otomatik Aç', type: 'boolean', description: 'Ürün seçildiğinde ekstra ve mutfak notu ekranının otomatik açılıp açılmayacağını belirler.' },
       ];
 
       for (const p of defaultParams) {

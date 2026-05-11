@@ -13,6 +13,7 @@ import { Shift } from '../shifts/shift.entity';
 import { Sale } from '../sales/sale.entity';
 import { ParametersService } from '../parameters/parameters.service';
 import { FinanceService } from '../finance/finance.service';
+import { PrintersService } from '../printers/printers.service';
 
 @Injectable()
 export class BusinessDayService {
@@ -31,6 +32,7 @@ export class BusinessDayService {
     private readonly saleRepo: Repository<Sale>,
     private readonly parametersService: ParametersService,
     private readonly financeService: FinanceService,
+    private readonly printersService: PrintersService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -460,6 +462,34 @@ export class BusinessDayService {
 
         const savedZ = await this.zReportRepo.save(zReport);
         zReportId = savedZ.id;
+
+        // ── Otomatik Yazdırma (Ön Yüzden Manuel Tetikleniyor) ──
+        /*
+        try {
+          const [crInfo, userInfo] = await Promise.all([
+            this.dataSource.query(`SELECT name FROM cash_registers WHERE id = @0`, [cr.id]),
+            this.dataSource.query(`SELECT firstName, lastName FROM users WHERE id = @0`, [userId])
+          ]);
+
+          const printData = {
+            ...savedZ,
+            cashRegisterName: crInfo[0]?.name || `Kasa #${cr.id}`,
+            userName: userInfo[0] ? `${userInfo[0].firstName} ${userInfo[0].lastName}`.trim() : 'Bilinmeyen Kullanıcı'
+          };
+
+          // JSON alanları objeye çevir (PrintersService dizi/obje bekliyor)
+          try {
+            if (printData.taxBreakdown && typeof printData.taxBreakdown === 'string') printData.taxBreakdown = JSON.parse(printData.taxBreakdown);
+            if (printData.categoryTotals && typeof printData.categoryTotals === 'string') printData.categoryTotals = JSON.parse(printData.categoryTotals);
+            if (printData.waiterSales && typeof printData.waiterSales === 'string') printData.waiterSales = JSON.parse(printData.waiterSales);
+            if (printData.paymentTotals && typeof printData.paymentTotals === 'string') printData.paymentTotals = JSON.parse(printData.paymentTotals);
+          } catch (e) {}
+
+          await this.printersService.printZReport(printData);
+        } catch (printErr) {
+          this.logger.error(`Z-Raporu otomatik yazdırma hatası (Kasa #${cr.id}):`, printErr);
+        }
+        */
       } catch (err) {
         this.logger.error(`Z-Raporu oluşturma hatası (kasa ${cr.id}):`, err);
       }
@@ -497,6 +527,7 @@ export class BusinessDayService {
           category: 'Gün Sonu',
           paymentMethod: 'KASA',
           userId,
+          businessDate: activeDate,
         });
       }
       if (totalCardAll > 0) {
@@ -506,6 +537,7 @@ export class BusinessDayService {
           category: 'Gün Sonu',
           paymentMethod: 'KREDI_KARTI',
           userId,
+          businessDate: activeDate,
         });
       }
       if (totalBankAll > 0) {
@@ -515,6 +547,7 @@ export class BusinessDayService {
           category: 'Gün Sonu',
           paymentMethod: 'BANKA',
           userId,
+          businessDate: activeDate,
         });
       }
     } catch (err) {

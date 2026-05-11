@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { AccountTransaction } from './account-transaction.entity';
 import { PartnersService } from '../partners/partners.service';
 import { CompanyAccountService } from './company-account.service';
+import { ParametersService } from '../parameters/parameters.service';
 
 @Injectable()
 export class FinanceService {
@@ -12,6 +13,7 @@ export class FinanceService {
     private transactionRepository: Repository<AccountTransaction>,
     private partnersService: PartnersService,
     private companyAccountService: CompanyAccountService,
+    private parametersService: ParametersService,
   ) {}
 
   async findAll(
@@ -147,26 +149,30 @@ export class FinanceService {
    * tekrar kayıt açmak yerine mevcut kaydın tutarını günceller.
    */
   async upsertEndOfDay(
-    data: { amount: number; paymentMethod: string; description: string; category: string; userId?: number },
+    data: { amount: number; paymentMethod: string; description: string; category: string; userId?: number; businessDate?: string },
     manager?: any,
   ): Promise<AccountTransaction> {
     const repo: Repository<AccountTransaction> = manager
       ? manager.getRepository(AccountTransaction)
       : this.transactionRepository;
 
-    // Bugünün başlangıcı ve sonu
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
+    // Aktif program tarihini al (gerçek tarih yerine iş günü tarihi)
+    let activeBusinessDate = data.businessDate;
+    if (!activeBusinessDate) {
+      try {
+        const stored = await this.parametersService.getValue('pos', 'active_business_date');
+        activeBusinessDate = (stored && stored.trim().length === 10) ? stored : new Date().toISOString().split('T')[0];
+      } catch {
+        activeBusinessDate = new Date().toISOString().split('T')[0];
+      }
+    }
 
-    // Aynı gün + END_OF_DAY + aynı ödeme yöntemi kaydı var mı?
+    // Aynı iş günü + END_OF_DAY + aynı ödeme yöntemi kaydı var mı?
     const existing = await repo
       .createQueryBuilder('tx')
       .where('tx.sourceType = :sourceType', { sourceType: 'END_OF_DAY' })
       .andWhere('tx.paymentMethod = :pm', { pm: data.paymentMethod })
-      .andWhere('tx.createdAt >= :start', { start: todayStart })
-      .andWhere('tx.createdAt <= :end', { end: todayEnd })
+      .andWhere('tx.businessDate = :bd', { bd: activeBusinessDate })
       .getOne();
 
     if (existing) {
@@ -192,8 +198,8 @@ export class FinanceService {
       return repo.findOne({ where: { id: existing.id } }) as Promise<AccountTransaction>;
     }
 
-    // Kayıt yoksa normal create
-    return this.create({ ...data, type: 'INCOME', sourceType: 'END_OF_DAY' }, manager);
+    // Kayıt yoksa normal create (businessDate ile)
+    return this.create({ ...data, type: 'INCOME', sourceType: 'END_OF_DAY', businessDate: activeBusinessDate }, manager);
   }
 
   async remove(id: number): Promise<void> {

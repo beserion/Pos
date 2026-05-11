@@ -12,6 +12,8 @@ interface CashRegister {
     isActive: boolean;
     receiptPrinterId: number | null;
     receiptPrinter?: any;
+    receiptProfileId: number | null;
+    receiptProfile?: any;
     zoneIds?: number[];
     allowedPaymentMethods?: string[];
 }
@@ -28,12 +30,13 @@ export function PageClient() {
     const [registers, setRegisters] = useState<CashRegister[]>([]);
     const [zones, setZones] = useState<Zone[]>([]);
     const [printers, setPrinters] = useState<any[]>([]);
+    const [profiles, setProfiles] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const tCommon = useTranslations('Common');
     const locale = useLocale();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [formData, setFormData] = useState<Partial<CashRegister>>({ id: 0, name: '', isActive: true, receiptPrinterId: null, zoneIds: [], allowedPaymentMethods: [] });
+    const [formData, setFormData] = useState<Partial<CashRegister>>({ id: 0, name: '', isActive: true, receiptPrinterId: null, receiptProfileId: null, zoneIds: [], allowedPaymentMethods: [] });
 
     const PAYMENT_METHODS = ['Nakit', 'Kart', 'Parçalı', 'Cari', 'Yemek Kartı', 'Online', 'KASA'];
 
@@ -42,6 +45,7 @@ export function PageClient() {
             fetchRegisters();
             fetchZones();
             fetchPrinters();
+            fetchProfiles();
         } else if (user === null) {
             setLoading(false);
         }
@@ -70,6 +74,19 @@ export function PageClient() {
             setPrinters(res.data);
         } catch (error) {
             console.error('Error fetching printers', error);
+        }
+    };
+
+    const fetchProfiles = async () => {
+        if (!user?.token) return;
+        try {
+            const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+            const res = await axios.get(`${API_URL}/output-profiles`, {
+                headers: { Authorization: `Bearer ${user.token}` }
+            });
+            setProfiles(res.data);
+        } catch (error) {
+            console.error('Error fetching profiles', error);
         }
     };
 
@@ -163,8 +180,9 @@ export function PageClient() {
                 regData.allowedPaymentMethods = [];
             }
             setFormData(regData);
+        } else {
+            setFormData({ id: 0, name: '', isActive: true, receiptPrinterId: null, receiptProfileId: null, zoneIds: [], allowedPaymentMethods: [] });
         }
-        else setFormData({ id: 0, name: '', isActive: true, receiptPrinterId: null, zoneIds: [], allowedPaymentMethods: [] });
         setIsModalOpen(true);
     };
 
@@ -224,7 +242,7 @@ export function PageClient() {
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Durum</th>
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Yetkili Bölümler</th>
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ödeme Yöntemleri</th>
-                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Fiş Yazıcısı</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Çıktı Profili / Yazıcı</th>
                                         <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">İşlemler</th>
                                     </tr>
                                 </thead>
@@ -299,9 +317,18 @@ export function PageClient() {
                                                 </div>
                                             </td>
                                             <td className="px-8 py-3">
-                                                <div className="text-sm font-bold text-slate-600 dark:text-slate-400 flex items-center gap-2">
-                                                    <i className="fat fa-print text-slate-300"></i>
-                                                    {reg.receiptPrinter ? reg.receiptPrinter.name : 'Seçilmedi'}
+                                                <div className="flex flex-col gap-1">
+                                                    {reg.receiptProfile ? (
+                                                        <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                                                            <i className="fat fa-file-invoice text-emerald-300"></i>
+                                                            {reg.receiptProfile.name}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-sm font-bold text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                                                            <i className="fat fa-print text-slate-300"></i>
+                                                            {reg.receiptPrinter ? reg.receiptPrinter.name : 'Seçilmedi'}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </td>
                                             <td className="px-8 py-3 text-right">
@@ -352,7 +379,7 @@ export function PageClient() {
                                 <div className="flex-1 overflow-y-auto w-full p-8 space-y-5">
                                     {/* modal-rule: input-group with wd-130 label */}
                                     <div className="space-y-4">
-                                        <div className="input-group flex items-center h-[54px]">
+                                        <div className="input-group flex items-center h-[54px] w-full">
                                             <div className="input-group-text wd-130 font-bold bg-slate-100 dark:bg-slate-900/50 border border-r-0 border-slate-200 dark:border-slate-700 h-full flex items-center px-4 rounded-l-2xl text-[10px] uppercase tracking-widest text-slate-400">
                                                 Kasa Adı <span className="text-danger ml-1">*</span>
                                             </div>
@@ -369,22 +396,50 @@ export function PageClient() {
                                             </div>
                                         </div>
 
-                                        <div className="input-group flex items-center h-[54px]">
-                                            <div className="input-group-text wd-130 font-bold bg-slate-100 dark:bg-slate-900/50 border border-r-0 border-slate-200 dark:border-slate-700 h-full flex items-center px-4 rounded-l-2xl text-[10px] uppercase tracking-widest text-slate-400">
-                                                Fiş Yazıcısı
+                                        <div className="space-y-2 w-full pt-2">
+                                            <div className="flex items-center justify-between px-2">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2 border-l-2 border-emerald-500">Çıktı Profili</span>
+                                                <i className="fat fa-file-invoice text-emerald-500/50"></i>
                                             </div>
-                                            <SearchableSelect
-                                                value={formData.receiptPrinterId?.toString() || ''}
-                                                onChange={(val) => setFormData({ ...formData, receiptPrinterId: val ? Number(val) : null })}
-                                                options={[
-                                                    { value: '', label: '-- Yazıcı Seçilmedi --' },
-                                                    ...printers.map(p => ({ value: p.id.toString(), label: p.name }))
-                                                ]}
-                                                icon="fat fa-print"
-                                            />
-                                            <div className="input-group-text wd-50 bg-slate-100 dark:bg-slate-900/50 border border-l-0 border-slate-200 dark:border-slate-700 h-full flex items-center justify-center px-4 rounded-r-2xl text-emerald-500/50">
-                                                <i className="fat fa-print"></i>
+                                            <div className="input-group flex items-center h-[54px] w-full">
+                                                <SearchableSelect
+                                                    value={formData.receiptProfileId?.toString() || ''}
+                                                    onChange={(val) => setFormData({ ...formData, receiptProfileId: val ? Number(val) : null, receiptPrinterId: val ? null : formData.receiptPrinterId })}
+                                                    options={[
+                                                        { value: '', label: '-- Profil Seçilmedi --' },
+                                                        ...profiles.map(p => ({ value: p.id.toString(), label: p.name }))
+                                                    ]}
+                                                    icon="fat fa-file-invoice"
+                                                />
+                                                <div className="input-group-text wd-50 bg-slate-100 dark:bg-slate-900/50 border border-l-0 border-slate-200 dark:border-slate-700 h-full flex items-center justify-center px-4 rounded-r-2xl text-emerald-500/50">
+                                                    <i className="fat fa-file-invoice"></i>
+                                                </div>
                                             </div>
+                                        </div>
+
+                                        {!formData.receiptProfileId && (
+                                            <div className="space-y-2 w-full">
+                                                <div className="flex items-center justify-between px-2">
+                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2 border-l-2 border-slate-400">Fiş Yazıcısı (Profilsiz)</span>
+                                                    <i className="fat fa-print text-slate-400/50"></i>
+                                                </div>
+                                                <div className="input-group flex items-center h-[54px] w-full">
+                                                    <SearchableSelect
+                                                        value={formData.receiptPrinterId?.toString() || ''}
+                                                        onChange={(val) => setFormData({ ...formData, receiptPrinterId: val ? Number(val) : null })}
+                                                        options={[
+                                                            { value: '', label: '-- Yazıcı Seçilmedi --' },
+                                                            ...printers.map(p => ({ value: p.id.toString(), label: p.name }))
+                                                        ]}
+                                                        icon="fat fa-print"
+                                                    />
+                                                    <div className="input-group-text wd-50 bg-slate-100 dark:bg-slate-900/50 border border-l-0 border-slate-200 dark:border-slate-700 h-full flex items-center justify-center px-4 rounded-r-2xl text-emerald-500/50">
+                                                        <i className="fat fa-print"></i>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
                                         </div>
 
                                         <div className="space-y-4">
@@ -512,7 +567,6 @@ export function PageClient() {
                                             </div>
                                         </div>
                                     </div>
-                                </div>
 
                                 <hr className="my-0 border-slate-100 dark:border-slate-700" />
 

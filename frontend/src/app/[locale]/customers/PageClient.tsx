@@ -28,7 +28,8 @@ interface Partner {
 export function PageClient() {
     const { user, loading } = useAuth();
     const router = useRouter();
-    const locale = useLocale();
+    const locale = useLocale();
+
 
     const tc = useTranslations('Common');
     const tAdmin = useTranslations('Admin');
@@ -86,7 +87,7 @@ export function PageClient() {
         const calculateLimit = () => {
             if (containerRef.current) {
                 // Optimized for 1080p (window.innerHeight - header(60) - cards(140) - filters(80) - footer(60) - extra(80))
-                const availableHeight = window.innerHeight - 420; 
+                const availableHeight = window.innerHeight - 420;
                 const rowHeight = 42; // Compact row height with py-1.5
                 const calculatedLimit = Math.max(Math.floor(availableHeight / rowHeight), 5);
                 setLimit(calculatedLimit);
@@ -134,7 +135,7 @@ export function PageClient() {
             return;
         }
         // Duplicate checks (frontend - current page only)
-        const isDuplicate = partners.some(p => 
+        const isDuplicate = partners.some(p =>
             p.id !== editingPartner?.id && (
                 (formData.name && p.name === formData.name) ||
                 (formData.taxNumber && p.taxNumber === formData.taxNumber && p.taxNumber !== '')
@@ -142,7 +143,7 @@ export function PageClient() {
         );
 
         if (isDuplicate) {
-            const dup = partners.find(p => 
+            const dup = partners.find(p =>
                 p.id !== editingPartner?.id && (
                     (formData.name && p.name === formData.name) ||
                     (formData.taxNumber && p.taxNumber === formData.taxNumber && p.taxNumber !== '')
@@ -151,7 +152,7 @@ export function PageClient() {
             let msg = '';
             if (dup?.name === formData.name) msg = `"${formData.name}" isimli cari zaten mevcut.`;
             else if (dup?.taxNumber === formData.taxNumber) msg = `"${formData.taxNumber}" vergi numaralı cari zaten mevcut.`;
-            
+
             showSwal({ title: 'Hata', text: msg, icon: 'warning' });
             return;
         }
@@ -374,9 +375,7 @@ export function PageClient() {
                                                 <button onClick={() => openEditModal(c)} className="text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors p-2 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-900/30" title="Düzenle">
                                                     <i className="fat fa-pen-to-square text-lg"></i>
                                                 </button>
-                                                <button onClick={() => handleDelete(c.id)} className="text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition-colors p-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/30" title="Sil">
-                                                    <i className="fat fa-trash text-lg"></i>
-                                                </button>
+
                                             </div>
                                         </td>
                                     </tr>
