@@ -347,7 +347,7 @@ export default function BusinessDayGuard({ apiUrl, onReady }: BusinessDayGuardPr
                                     {/* Eksik kapanışı tamamla (gün sonu al) */}
                                     {status.dateDiff === 0 && (
                                         <button
-                                            onClick={handleEndOfDay}
+                                            onClick={() => handleEndOfDay(false)}
                                             disabled={submitting}
                                             className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-black text-lg shadow-lg shadow-indigo-500/30 transition-all active:scale-[0.98] disabled:opacity-50 uppercase tracking-wider"
                                         >

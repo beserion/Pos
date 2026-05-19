@@ -55,8 +55,13 @@ const defaultModules: Module[] = [
             { key: 'end_of_day_min_hours', label: 'Gün Sonu Min. Saat Aralığı', description: 'İki gün sonu arasında minimum geçmesi gereken saat', type: 'number', value: 6, unit: 'saat' },
             { key: 'block_eod_if_tables_open', label: 'Açık Masa Varken Gün Sonunu Engelle', description: 'Eğer açık (ödenmemiş) masa varsa gün sonu alınmasını engeller.', type: 'boolean', value: false },
             { key: 'auto_close_shifts_on_eod', label: 'Gün Sonunda Vardiyaları Otomatik Kapat', description: 'Gün sonu alındığında hala açık olan vardiyalar otomatik olarak beklenen tutar ile kapatılsın mı?', type: 'boolean', value: true },
+            { key: 'waiters_can_order_to_any_table', label: 'Garsonlar Tüm Masalara Sipariş Ekleyebilsin', description: 'Pasif edilirse garsonlar sadece kendi açtıkları veya kendilerine atanan masalara sipariş ekleyebilir.', type: 'boolean', value: true },
             { key: 'cancel_stock_reverse', label: 'İptal Stoğa Geri Eklensin', description: 'İptal edilen ürünler stoğa geri döner', type: 'boolean', value: true },
             { key: 'refund_stock_reverse', label: 'İade Stoğa Geri Eklensin', description: 'İade edilen ürünler stoğa geri döner', type: 'boolean', value: true },
+            // ── Döviz Kurları ──
+            { key: 'eur_rate', label: 'EUR Kuru (Fişte Gösterim)', description: 'Müşteri fişinde TL tutarının Euro karşılığı için kullanılır', type: 'number', value: 37.50, unit: '₺' },
+            { key: 'usd_rate', label: 'USD Kuru (Fişte Gösterim)', description: 'Müşteri fişinde TL tutarının Dolar karşılığı için kullanılır', type: 'number', value: 35.20, unit: '₺' },
+            { key: 'gbp_rate', label: 'GBP Kuru (Fişte Gösterim)', description: 'Müşteri fişinde TL tutarının Sterlin karşılığı için kullanılır', type: 'number', value: 44.10, unit: '₺' },
         ]
     },
     {
@@ -128,9 +133,6 @@ const defaultModules: Module[] = [
             { key: 'currency_symbol', label: 'Para Birimi Sembolü', type: 'text', value: '₺', compact: true },
             { key: 'fiscal_year_start', label: 'Mali Yıl Başlangıcı', type: 'select', value: 'Ocak', options: ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'] },
             { key: 'auto_invoice', label: 'Satışta Otomatik Fatura Oluştur', type: 'boolean', value: false },
-            { key: 'exchange_rate_eur', label: 'EUR Kuru', type: 'number', value: 37.50, unit: '₺' },
-            { key: 'exchange_rate_usd', label: 'USD Kuru', type: 'number', value: 35.20, unit: '₺' },
-            { key: 'exchange_rate_gbp', label: 'GBP Kuru', type: 'number', value: 44.10, unit: '₺' },
         ]
     },
     {

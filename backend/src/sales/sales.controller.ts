@@ -95,7 +95,16 @@ export class SalesController {
   }
 
   @Put('items/pay-batch')
-  async payBatchItems(@Body() payload: { itemIds: number[], paymentMethod: string, partnerId?: number, paidAmountCash?: number, paidAmountCreditCard?: number }) {
+  async payBatchItems(@Body() payload: { 
+    itemIds: number[]; 
+    paymentMethod: string; 
+    partnerId?: number; 
+    paidAmountCash?: number; 
+    paidAmountCreditCard?: number;
+    paidCurrency?: string;
+    paidCurrencyRate?: number;
+    paidCurrencyAmount?: number;
+  }) {
     try {
       return await this.salesService.payBatchItems(payload);
     } catch (err: any) {
@@ -284,9 +293,23 @@ export class SalesController {
   }
   
   @Put(':id/discount')
-  updateDiscount(@Param('id') id: string, @Body('discountAmount') discountAmount: number, @Request() req: any) {
+  updateDiscount(
+    @Param('id') id: string,
+    @Body() body: { discountAmount: number; discountRate?: number },
+    @Request() req: any
+  ) {
     const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
-    return this.salesService.applyDiscount(+id, discountAmount, userId);
+    return this.salesService.applyDiscount(+id, body.discountAmount, body.discountRate || 0, userId);
+  }
+
+  @Put('items/:id/discount')
+  updateItemDiscount(
+    @Param('id') id: string,
+    @Body() body: { discountRate?: number; discountAmount?: number },
+    @Request() req: any
+  ) {
+    const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
+    return this.salesService.updateItemDiscount(+id, body.discountRate || 0, body.discountAmount || 0, userId);
   }
 
 

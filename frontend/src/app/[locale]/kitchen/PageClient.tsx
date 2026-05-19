@@ -284,6 +284,13 @@ export function PageClient() {
                         </div>
                     )}
 
+                    <button
+                        onClick={() => router.push(`/${locale}/dashboard`)}
+                        className="w-full py-3.5 mb-6 bg-slate-800 hover:bg-slate-750 active:bg-slate-700 text-white font-bold rounded-2xl border border-slate-700 transition flex items-center justify-center gap-2 shadow-lg hover:shadow-slate-900/50"
+                    >
+                        <i className="fat fa-reply"></i> Menüye Dön
+                    </button>
+
                     <p className="text-xs text-slate-600">
                         Bu ayarı değiştirmek için: <span className="text-slate-400 font-mono">Admin → Parametreler → Mutfak Ekranı (KDS Modülü)</span>
                     </p>

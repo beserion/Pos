@@ -5,7 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, In } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { BusinessDayLog } from './business-day-log.entity';
 import { ClosedDayRecord } from './closed-day-record.entity';
 import { ZReport } from './z-report.entity';
@@ -305,52 +305,17 @@ export class BusinessDayService {
 
     const autoCloseShifts = (await this.parametersService.getValue('pos', 'auto_close_shifts_on_eod')) !== 'false';
 
-    // ── Gün sonu işlemi: Z raporu oluştur (tüm kasalar için toplu) ──
-    // Tüm kasaları bul
-    const cashRegisters = await this.dataSource.query(
-      `SELECT id FROM cash_registers WHERE companyId = @0 AND isActive = 1`,
-      [companyId],
-    );
-
-    let totalCashAll = 0;
-    let totalCardAll = 0;
-    let totalBankAll = 0;
-    let allShiftIdsForFinance: number[] = [];
-
-    let zReportId: number | undefined;
-    for (const cr of cashRegisters) {
+    // ── Açık vardiyaları otomatik kapat (Z-Raporu oluşturmayı bloklamaz) ──
+    if (autoCloseShifts) {
       try {
-        // Bu kasa + bu tarih için zaten Z raporu var mı?
-        const existingZ = await this.zReportRepo.findOne({
-          where: { cashRegisterId: cr.id, businessDate: activeDate, companyId },
-        });
-        if (existingZ) {
-          zReportId = existingZ.id;
-          continue; // Bu kasa için zaten alınmış
-        }
-
-        // Bu kasada bu tarihte vardiya var mı?
-        const shifts = await this.shiftRepo.find({
-          where: { cashRegisterId: cr.id, businessDate: activeDate, companyId },
-        });
-        if (shifts.length === 0) continue; // Bu kasada işlem yok
-
-        // Açık vardiyalar varsa otomatik kapat (eğer mandatory değilse buraya geldiyse izin var)
-        const openShifts = shifts.filter((s) => s.status === 'OPEN');
-        if (openShifts.length > 0 && !autoCloseShifts) {
-           throw new BadRequestException(`${cr.id} nolu kasada açık vardiya bulunmaktadır. Lütfen önce vardiyayı kapatın.`);
-        }
-
+        const openShifts = await this.shiftRepo.find({ where: { status: 'OPEN', companyId } });
         for (const openShift of openShifts) {
-          // Beklenen nakit hesapla
           const expResult = await this.dataSource.query(
-            `SELECT ISNULL(SUM(CAST(paidAmountCash AS DECIMAL(12,2))), 0) as totalCashIn
-             FROM sales WHERE shiftId = @0 AND status = 'COMPLETED'`,
+            `SELECT ISNULL(SUM(CAST(paidAmountCash AS DECIMAL(12,2))), 0) as totalCashIn FROM sales WHERE shiftId = @0 AND status = 'COMPLETED'`,
             [openShift.id],
           );
           const totalCashIn = Number(expResult[0]?.totalCashIn || 0);
           const expectedCash = Number((openShift.openingCash + totalCashIn).toFixed(2));
-
           openShift.closedAt = now;
           openShift.status = 'CLOSED';
           openShift.closingCash = expectedCash;
@@ -359,139 +324,162 @@ export class BusinessDayService {
           openShift.note = (openShift.note || '') + ' [Gün sonu ile otomatik kapatıldı]';
           await this.shiftRepo.save(openShift);
         }
+      } catch (shiftErr) {
+        this.logger.warn('Açık vardiyalar kapatılırken hata (gün sonu devam ediyor):', shiftErr);
+      }
+    }
 
-        // Z raporu oluştur
-        const allShifts = await this.shiftRepo.find({
-          where: { cashRegisterId: cr.id, businessDate: activeDate, companyId },
-        });
-        const shiftIds = allShifts.map((s) => s.id);
-        if (shiftIds.length === 0) continue;
+    // ── Gün sonu işlemi: Z raporu oluştur — businessDate bazlı, vardiyadan bağımsız ──
+    const cashRegisters = await this.dataSource.query(
+      `SELECT id FROM cash_registers WHERE companyId = @0 AND isActive = 1`,
+      [companyId],
+    );
 
-        const shiftIdList = shiftIds.join(',');
+    let totalCashAll = 0;
+    let totalCardAll = 0;
+    let totalBankAll = 0;
+    let zReportId: number | null = null;
+    let lastErrorMsg = '';
+
+    // Aktif kasa yoksa tek genel rapor oluştururuz, varsa hem kasaları hem de kasasız satışları kapsarız
+    const targetRegisters: Array<{ id: number | null }> = [...cashRegisters, { id: null }];
+    let maxSales = -1;
+
+    for (const cr of targetRegisters) {
+      try {
+        // Bu kasa + bu tarih için where koşulunu hazırla
+        const existingWhere: any = { businessDate: activeDate, companyId };
+        if (cr.id) {
+          existingWhere.cashRegisterId = cr.id;
+        } else {
+          existingWhere.cashRegisterId = 0; // NULL kasaları 0 olarak tutuyoruz
+        }
+
+        // Satışları doğrudan businessDate üzerinden çek (shiftId bağımsız)
+        const crFilter = cr.id ? `AND s.cashRegisterId = ${cr.id}` : 'AND (s.cashRegisterId IS NULL OR s.cashRegisterId = 0)';
 
         const tahsilatRes = await this.dataSource.query(`
           SELECT
             SUM(CASE WHEN paymentMethod IN ('KASA','CASH') THEN CAST(paidAmountCash AS DECIMAL(12,2)) ELSE 0 END) as nakit,
             SUM(CASE WHEN paymentMethod IN ('KREDI_KARTI','CREDIT_CARD','CC') THEN CAST(paidAmountCreditCard AS DECIMAL(12,2)) ELSE 0 END) as krediKarti,
-            SUM(CASE WHEN paymentMethod IN ('BANKA','EFT','HAVALE') THEN CAST(paidAmountBank AS DECIMAL(12,2)) ELSE 0 END) as banka,
+            SUM(CASE WHEN paymentMethod IN ('BANKA','EFT','HAVALE') THEN CAST(totalAmount AS DECIMAL(12,2)) ELSE 0 END) as banka,
             SUM(CASE WHEN paymentMethod = 'CARI' THEN CAST(totalAmount AS DECIMAL(12,2)) ELSE 0 END) as cari,
             SUM(CASE WHEN paymentMethod = 'SPLIT' THEN CAST(paidAmountCash AS DECIMAL(12,2)) ELSE 0 END) as splitNakit,
             SUM(CASE WHEN paymentMethod = 'SPLIT' THEN CAST(paidAmountCreditCard AS DECIMAL(12,2)) ELSE 0 END) as splitKart,
             SUM(CAST(totalAmount AS DECIMAL(12,2))) as toplamTahsilat,
             COUNT(*) as adisyonSayisi,
-            SUM(CAST(discountAmount AS DECIMAL(12,2))) as toplamIndirim,
+            ISNULL(SUM(CAST(discountAmount AS DECIMAL(12,2))), 0) as toplamIndirim,
             ISNULL(SUM(CAST(serviceFee AS DECIMAL(12,2))), 0) as toplamServis,
             ISNULL(SUM(CAST(refundAmount AS DECIMAL(12,2))), 0) as toplamIade
-          FROM sales
-          WHERE shiftId IN (${shiftIdList}) AND status = 'COMPLETED'
-        `);
+          FROM sales s
+          WHERE s.businessDate = @0 AND (s.companyId = @1 OR s.companyId IS NULL) AND s.status = 'COMPLETED' ${crFilter}
+        `, [activeDate, companyId]);
         const t = tahsilatRes[0] || {};
+        const currentNetSales = Number(t.toplamTahsilat || 0);
+
         totalCashAll += Number(t.nakit || 0) + Number(t.splitNakit || 0);
         totalCardAll += Number(t.krediKarti || 0) + Number(t.splitKart || 0);
         totalBankAll += Number(t.banka || 0);
-        allShiftIdsForFinance.push(...shiftIds);
 
         const iptalRes = await this.dataSource.query(`
           SELECT COUNT(*) as iptalAdedi, ISNULL(SUM(CAST(totalAmount AS DECIMAL(12,2))), 0) as iptalToplam
-          FROM sales WHERE shiftId IN (${shiftIdList}) AND status = 'CANCELLED'
-        `);
+          FROM sales s WHERE s.businessDate = @0 AND (s.companyId = @1 OR s.companyId IS NULL) AND s.status = 'CANCELLED' ${crFilter}
+        `, [activeDate, companyId]);
         const iptal = iptalRes[0] || {};
 
         const urunRes = await this.dataSource.query(`
           SELECT COUNT(*) as toplamUrun
           FROM sale_items si JOIN sales s ON s.id = si.saleId
-          WHERE s.shiftId IN (${shiftIdList}) AND s.status = 'COMPLETED' AND si.status = 'ACTIVE'
-        `);
+          WHERE s.businessDate = @0 AND (s.companyId = @1 OR s.companyId IS NULL) AND s.status = 'COMPLETED' AND si.status = 'ACTIVE' ${crFilter}
+        `, [activeDate, companyId]);
 
-        const netSales = Number(t.toplamTahsilat || 0);
-        let totalOpeningCash = 0, totalClosingCash = 0, totalExpectedCash = 0, totalCashDifference = 0;
-        for (const shift of allShifts) {
-          totalOpeningCash += Number(shift.openingCash || 0);
-          totalClosingCash += Number(shift.closingCash || 0);
-          totalExpectedCash += Number(shift.expectedCash || 0);
-          totalCashDifference += Number(shift.cashDifference || 0);
+        let zReport = await this.zReportRepo.findOne({ where: existingWhere });
+        
+        if (!zReport) {
+          const zCount = await this.zReportRepo.count({ where: { companyId } });
+          zReport = this.zReportRepo.create({
+            cashRegisterId: cr.id || 0,
+            businessDate: activeDate,
+            companyId,
+            generatedByUserId: userId,
+            zNumber: zCount + 1,
+            totalCustomers: 0,
+            complimentaryTotal: 0,
+            mealCardCollection: 0,
+            onlinePaymentCollection: 0,
+            giftCardCollection: 0,
+            otherCollection: 0,
+          });
         }
 
-        const zCount = await this.zReportRepo.count({ where: { cashRegisterId: cr.id, companyId } });
-
-        const zReport = this.zReportRepo.create({
-          cashRegisterId: cr.id,
-          businessDate: activeDate,
-          companyId,
-          generatedByUserId: userId,
-          zNumber: zCount + 1,
-          openedAt: allShifts.reduce((min, s) => (!min || s.openedAt < min ? s.openedAt : min), null as any),
-          closedAt: allShifts.reduce((max, s) => (!max || (s.closedAt && s.closedAt > max) ? s.closedAt : max), null as any),
-          netSales,
-          cashCollection: Number(t.nakit || 0) + Number(t.splitNakit || 0),
-          creditCardCollection: Number(t.krediKarti || 0) + Number(t.splitKart || 0),
-          cariCollection: Number(t.cari || 0),
-          mealCardCollection: 0,
-          onlinePaymentCollection: 0,
-          giftCardCollection: 0,
-          otherCollection: 0,
-          totalCollection: netSales,
-          totalReceipts: Number(t.adisyonSayisi || 0),
-          totalCustomers: 0,
-          totalProductCount: Number(urunRes[0]?.toplamUrun || 0),
-          discountTotal: Number(t.toplamIndirim || 0),
-          complimentaryTotal: 0,
-          refundTotal: Number(t.toplamIade || 0),
-          cancelTotal: Number(iptal.iptalToplam || 0),
-          serviceFeeTotal: Number(t.toplamServis || 0),
-          taxBase: Math.round(netSales / 1.1 * 100) / 100,
-          taxTotal: Math.round((netSales - netSales / 1.1) * 100) / 100,
-          taxBreakdown: JSON.stringify([{
-            oran: 10,
-            matrah: Math.round(netSales / 1.1 * 100) / 100,
-            kdv: Math.round((netSales - netSales / 1.1) * 100) / 100,
-          }]),
-          openAccountPrevious: 0,
-          openAccountNew: 0,
-          openAccountClosed: 0,
-          openAccountRemaining: 0,
-          expectedTotal: totalExpectedCash,
-          confirmedTotal: totalClosingCash,
-          totalOpeningCash,
-          totalClosingCash,
-          totalExpectedCash,
-          totalCashDifference,
-          totalIncome: netSales,
-          totalExpense: 0,
-        });
+        // Değerleri her zaman güncelle (özellikle boş rapor oluşmuşsa üzerine yazar)
+        zReport.netSales = currentNetSales;
+        zReport.cashCollection = Number(t.nakit || 0) + Number(t.splitNakit || 0);
+        zReport.creditCardCollection = Number(t.krediKarti || 0) + Number(t.splitKart || 0);
+        zReport.cariCollection = Number(t.cari || 0);
+        zReport.totalCollection = currentNetSales;
+        zReport.totalReceipts = Number(t.adisyonSayisi || 0);
+        zReport.totalProductCount = Number(urunRes[0]?.toplamUrun || 0);
+        zReport.discountTotal = Number(t.toplamIndirim || 0);
+        zReport.refundTotal = Number(t.toplamIade || 0);
+        zReport.cancelTotal = Number(iptal.iptalToplam || 0);
+        zReport.serviceFeeTotal = Number(t.toplamServis || 0);
+        zReport.taxBase = currentNetSales > 0 ? Math.round(currentNetSales / 1.1 * 100) / 100 : 0;
+        zReport.taxTotal = currentNetSales > 0 ? Math.round((currentNetSales - currentNetSales / 1.1) * 100) / 100 : 0;
+        zReport.taxBreakdown = JSON.stringify([{ oran: 10, matrah: zReport.taxBase, kdv: zReport.taxTotal }]);
+        
+        // Eksik NOT NULL alanlar
+        zReport.openAccountPrevious = 0;
+        zReport.openAccountNew = 0;
+        zReport.openAccountClosed = 0;
+        zReport.openAccountRemaining = 0;
+        zReport.expectedTotal = 0;
+        zReport.confirmedTotal = 0;
+        zReport.totalOpeningCash = 0;
+        zReport.totalClosingCash = 0;
+        zReport.totalExpectedCash = 0;
+        zReport.totalCashDifference = 0;
+        zReport.totalIncome = currentNetSales;
+        zReport.totalExpense = 0;
 
         const savedZ = await this.zReportRepo.save(zReport);
-        zReportId = savedZ.id;
-
-        // ── Otomatik Yazdırma (Ön Yüzden Manuel Tetikleniyor) ──
-        /*
-        try {
-          const [crInfo, userInfo] = await Promise.all([
-            this.dataSource.query(`SELECT name FROM cash_registers WHERE id = @0`, [cr.id]),
-            this.dataSource.query(`SELECT firstName, lastName FROM users WHERE id = @0`, [userId])
-          ]);
-
-          const printData = {
-            ...savedZ,
-            cashRegisterName: crInfo[0]?.name || `Kasa #${cr.id}`,
-            userName: userInfo[0] ? `${userInfo[0].firstName} ${userInfo[0].lastName}`.trim() : 'Bilinmeyen Kullanıcı'
-          };
-
-          // JSON alanları objeye çevir (PrintersService dizi/obje bekliyor)
-          try {
-            if (printData.taxBreakdown && typeof printData.taxBreakdown === 'string') printData.taxBreakdown = JSON.parse(printData.taxBreakdown);
-            if (printData.categoryTotals && typeof printData.categoryTotals === 'string') printData.categoryTotals = JSON.parse(printData.categoryTotals);
-            if (printData.waiterSales && typeof printData.waiterSales === 'string') printData.waiterSales = JSON.parse(printData.waiterSales);
-            if (printData.paymentTotals && typeof printData.paymentTotals === 'string') printData.paymentTotals = JSON.parse(printData.paymentTotals);
-          } catch (e) {}
-
-          await this.printersService.printZReport(printData);
-        } catch (printErr) {
-          this.logger.error(`Z-Raporu otomatik yazdırma hatası (Kasa #${cr.id}):`, printErr);
+        this.logger.warn(`[EOD-DEBUG] activeDate=${activeDate}, cr.id=${cr.id}, crFilter=${crFilter}, currentNetSales=${currentNetSales}, adisyon=${t.adisyonSayisi}, nakit=${t.nakit}, tahsilatRes=${JSON.stringify(tahsilatRes[0])}, savedZ.id=${savedZ.id}, savedZ.netSales=${savedZ.netSales}`);
+        if (!zReportId || currentNetSales > maxSales) {
+          zReportId = savedZ.id;
+          maxSales = currentNetSales;
         }
-        */
-      } catch (err) {
+      } catch (err: any) {
+        lastErrorMsg = `Loop error (${cr.id}): ${err.message}`;
         this.logger.error(`Z-Raporu oluşturma hatası (kasa ${cr.id}):`, err);
+      }
+    }
+
+    // ── Hiçbir kasada Z-Raporu oluşturulamadıysa boş bir tane garantile ──
+    if (!zReportId) {
+      try {
+        const existingZ = await this.zReportRepo.findOne({ where: { businessDate: activeDate, companyId } });
+        if (existingZ) {
+          zReportId = existingZ.id;
+        } else {
+          const zCount = await this.zReportRepo.count({ where: { companyId } });
+          const emptyZ = this.zReportRepo.create({
+            cashRegisterId: cashRegisters[0]?.id || 0,
+            businessDate: activeDate, companyId, generatedByUserId: userId, zNumber: zCount + 1,
+            netSales: 0, cashCollection: 0, creditCardCollection: 0, cariCollection: 0,
+            mealCardCollection: 0, onlinePaymentCollection: 0, giftCardCollection: 0, otherCollection: 0,
+            totalCollection: 0, totalReceipts: 0, totalCustomers: 0, totalProductCount: 0,
+            discountTotal: 0, complimentaryTotal: 0, refundTotal: 0, cancelTotal: 0, serviceFeeTotal: 0,
+            taxBase: 0, taxTotal: 0, taxBreakdown: JSON.stringify([{ oran: 10, matrah: 0, kdv: 0 }]),
+            openAccountPrevious: 0, openAccountNew: 0, openAccountClosed: 0, openAccountRemaining: 0,
+            expectedTotal: 0, confirmedTotal: 0, totalOpeningCash: 0, totalClosingCash: 0,
+            totalExpectedCash: 0, totalCashDifference: 0, totalIncome: 0, totalExpense: 0,
+          });
+          const savedZ = await this.zReportRepo.save(emptyZ);
+          zReportId = savedZ.id;
+        }
+      } catch (err: any) {
+        lastErrorMsg += ` | Fallback error: ${err.message}`;
+        this.logger.error('Garantili Z-Raporu oluşturma hatası:', err);
       }
     }
 
@@ -508,6 +496,7 @@ export class BusinessDayService {
       newBusinessDate: nextDateStr,
       note: note || `Gün sonu başarıyla tamamlandı.`,
       openTableCount,
+      metadata: lastErrorMsg ? JSON.stringify({ error: lastErrorMsg }) : undefined,
     });
 
     // ── Audit log ──
@@ -520,57 +509,115 @@ export class BusinessDayService {
 
     // ── Finansal Kayıtları Güncelle (Manuel Gün Sonu Entegrasyonu) ──
     try {
-      if (totalCashAll > 0) {
+      // Find all foreign currency sales for this date
+      const foreignSales = await this.dataSource.query(`
+        SELECT
+          paidCurrency,
+          paymentMethod,
+          SUM(CAST(paidCurrencyAmount AS DECIMAL(12,2))) as totalForeignAmount,
+          SUM(CAST(totalAmount AS DECIMAL(12,2))) as totalTryAmount
+        FROM sales
+        WHERE businessDate = @0 AND (companyId = @1 OR companyId IS NULL) AND status = 'COMPLETED'
+          AND paidCurrency IS NOT NULL AND paidCurrency NOT IN ('TRY', 'TL')
+        GROUP BY paidCurrency, paymentMethod
+      `, [activeDate, companyId]);
+
+      let foreignCashTrySum = 0;
+      let foreignCardTrySum = 0;
+      let foreignBankTrySum = 0;
+
+      for (const fs of foreignSales) {
+        const currency = fs.paidCurrency;
+        const method = fs.paymentMethod || 'KASA';
+        const foreignAmount = Number(fs.totalForeignAmount || 0);
+        const tryAmount = Number(fs.totalTryAmount || 0);
+        const exchangeRate = foreignAmount > 0 ? (tryAmount / foreignAmount) : 1.0;
+
+        if (method === 'KASA' || method === 'CASH') {
+          foreignCashTrySum += tryAmount;
+        } else if (method === 'KREDI_KARTI' || method === 'CREDIT_CARD' || method === 'CC') {
+          foreignCardTrySum += tryAmount;
+        } else if (method === 'BANKA' || method === 'EFT' || method === 'HAVALE') {
+          foreignBankTrySum += tryAmount;
+        }
+
+        // Upsert foreign currency end of day
         await this.financeService.upsertEndOfDay({
-          amount: totalCashAll,
-          description: `Gün Sonu Nakit Tahsilat - ${activeDate}`,
+          amount: tryAmount,
+          foreignAmount: foreignAmount,
+          exchangeRate: exchangeRate,
+          currency: currency,
+          description: `Gün Sonu ${currency} ${method === 'KREDI_KARTI' || method === 'CREDIT_CARD' ? 'Kredi Kartı' : (method === 'BANKA' || method === 'EFT' ? 'Banka' : 'Nakit')} Tahsilatı - ${activeDate}`,
+          category: 'Gün Sonu',
+          paymentMethod: (method === 'KREDI_KARTI' || method === 'CREDIT_CARD') ? 'KREDI_KARTI' : ((method === 'BANKA' || method === 'EFT') ? 'BANKA' : 'KASA'),
+          userId,
+          businessDate: activeDate,
+        });
+      }
+
+      // Calculate TRY-only remaining totals
+      const remainingCash = totalCashAll - foreignCashTrySum;
+      const remainingCard = totalCardAll - foreignCardTrySum;
+      const remainingBank = totalBankAll - foreignBankTrySum;
+
+      if (remainingCash > 0) {
+        await this.financeService.upsertEndOfDay({
+          amount: remainingCash,
+          description: `Gün Sonu Nakit Tahsilat (TL) - ${activeDate}`,
           category: 'Gün Sonu',
           paymentMethod: 'KASA',
           userId,
           businessDate: activeDate,
+          currency: 'TRY',
+          exchangeRate: 1.0,
+          foreignAmount: 0.0,
         });
       }
-      if (totalCardAll > 0) {
+      if (remainingCard > 0) {
         await this.financeService.upsertEndOfDay({
-          amount: totalCardAll,
-          description: `Gün Sonu Kredi Kartı Tahsilat - ${activeDate}`,
+          amount: remainingCard,
+          description: `Gün Sonu Kredi Kartı Tahsilat (TL) - ${activeDate}`,
           category: 'Gün Sonu',
           paymentMethod: 'KREDI_KARTI',
           userId,
           businessDate: activeDate,
+          currency: 'TRY',
+          exchangeRate: 1.0,
+          foreignAmount: 0.0,
         });
       }
-      if (totalBankAll > 0) {
+      if (remainingBank > 0) {
         await this.financeService.upsertEndOfDay({
-          amount: totalBankAll,
-          description: `Gün Sonu Banka Tahsilat - ${activeDate}`,
+          amount: remainingBank,
+          description: `Gün Sonu Banka Tahsilat (TL) - ${activeDate}`,
           category: 'Gün Sonu',
           paymentMethod: 'BANKA',
           userId,
           businessDate: activeDate,
+          currency: 'TRY',
+          exchangeRate: 1.0,
+          foreignAmount: 0.0,
         });
       }
     } catch (err) {
       this.logger.error('Finance upsert error during End of Day:', err);
     }
 
-    // ── Satışları "Kapatıldı" Olarak İşaretle ──
-    if (allShiftIdsForFinance.length > 0) {
-      try {
-        await this.saleRepo.update(
-          { shiftId: In(allShiftIdsForFinance), status: 'COMPLETED' },
-          { isEndOfDayClosed: true }
-        );
-      } catch (err) {
-        this.logger.error('Failed to mark sales as closed:', err);
-      }
+    // ── Satışları "Kapatıldı" Olarak İşaretle (businessDate bazlı) ──
+    try {
+      await this.dataSource.query(
+        `UPDATE sales SET isEndOfDayClosed = 1 WHERE businessDate = @0 AND companyId = @1 AND status = 'COMPLETED'`,
+        [activeDate, companyId]
+      );
+    } catch (err) {
+      this.logger.error('Failed to mark sales as closed:', err);
     }
 
     return {
       success: true,
       message: `Gün sonu başarıyla tamamlandı. Yeni çalışma günü: ${nextDateStr}`,
       newBusinessDate: nextDateStr,
-      zReportId,
+      zReportId: zReportId || undefined,
     };
   }
 

@@ -74,6 +74,7 @@ export class ParametersService implements OnModuleInit {
         { module: 'printer', key: 'print_on_cancel', value: 'true', label: 'İptal de fiş yazdır', type: 'boolean', description: 'Bir ürün iptal edildiğinde ilgili yazıcıdan iptal fişi çıkartılsın mı?' },
         { module: 'printer', key: 'print_receipt_on_payment', value: 'true', label: 'Ödeme Alındığında Fiş Yazdır', type: 'boolean', description: 'Kasa POS ekranında ödeme tamamlandığında otomatik müşteri fişi çıkartılsın mı?' },
         { module: 'kitchen', key: 'auto_open_product_options', value: 'true', label: 'Ürün Seçince Detay Ekranını Otomatik Aç', type: 'boolean', description: 'Ürün seçildiğinde ekstra ve mutfak notu ekranının otomatik açılıp açılmayacağını belirler.' },
+        { module: 'pos', key: 'waiters_can_order_to_any_table', value: 'true', label: 'Garsonlar Tüm Masalara Sipariş Ekleyebilsin', type: 'boolean', description: 'Pasif edilirse garsonlar sadece kendi açtıkları veya kendilerine atanan masalara sipariş ekleyebilir.' },
       ];
 
       for (const p of defaultParams) {

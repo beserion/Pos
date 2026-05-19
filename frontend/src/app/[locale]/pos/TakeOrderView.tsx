@@ -162,6 +162,7 @@ interface Product {
         }[];
     };
     variations?: any[];
+    visibleZones?: any[];
 }
 interface ProductType { id: number; name: string; }
 interface OrderItem { product: Product; quantity: number; note?: string; isWaiting?: boolean; subItems?: any[]; extraPrice?: number; uniqueId?: string; saleType?: 'STANDARD' | 'HALF' | 'DOUBLE'; saleTypeMultiplier?: number; variationId?: number; variationName?: string; transactionType?: 'SALE' | 'FREE' | 'COMPLIMENTARY' | 'PROMOTION' | 'STAFF' | 'TICKET'; transactionReason?: string; status?: string; refundReason?: string; cancelReason?: string; }
@@ -364,21 +365,33 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
 
     const productTypeOptions = [{ id: 'all', name: 'Tümü' }, ...productTypes];
 
+    const activeMenuZoneId = selectedTable?.zone?.id || selectedZone;
+
+    const zoneFilteredDepartments = useMemo(() => {
+        if (!activeMenuZoneId) return departments;
+        return departments.filter(d => !d.visibleZones || d.visibleZones.length === 0 || d.visibleZones.some((z: any) => z.id === activeMenuZoneId));
+    }, [departments, activeMenuZoneId]);
+
+    const zoneFilteredProducts = useMemo(() => {
+        if (!activeMenuZoneId) return products;
+        return products.filter(p => !p.visibleZones || p.visibleZones.length === 0 || p.visibleZones.some((z: any) => z.id === activeMenuZoneId));
+    }, [products, activeMenuZoneId]);
+
     const filteredParentGroups = useMemo(() => parentGroups.filter(pg => {
         if (selectedProductTypeId === 'all') return true;
-        const pgDepts = departments.filter(d => d.parentGroupId === pg.id);
-        return products.some(p => p.productTypeId === selectedProductTypeId && pgDepts.some(d => d.name === p.category));
-    }), [parentGroups, selectedProductTypeId, departments, products]);
+        const pgDepts = zoneFilteredDepartments.filter(d => d.parentGroupId === pg.id);
+        return zoneFilteredProducts.some(p => p.productTypeId === selectedProductTypeId && pgDepts.some(d => d.name === p.category));
+    }), [parentGroups, selectedProductTypeId, zoneFilteredDepartments, zoneFilteredProducts]);
 
-    const filteredRootDepartments = useMemo(() => departments.filter(d => !d.parentGroupId).filter(d => {
+    const filteredRootDepartments = useMemo(() => zoneFilteredDepartments.filter(d => !d.parentGroupId).filter(d => {
         if (selectedProductTypeId === 'all') return true;
-        return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
-    }), [departments, selectedProductTypeId, products]);
+        return zoneFilteredProducts.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
+    }), [zoneFilteredDepartments, selectedProductTypeId, zoneFilteredProducts]);
 
-    const filteredSubDepartments = useMemo(() => selectedParentGroupId ? departments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
+    const filteredSubDepartments = useMemo(() => selectedParentGroupId ? zoneFilteredDepartments.filter(d => d.parentGroupId === selectedParentGroupId).filter(d => {
         if (selectedProductTypeId === 'all') return true;
-        return products.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
-    }) : [], [selectedParentGroupId, departments, selectedProductTypeId, products]);
+        return zoneFilteredProducts.some(p => p.productTypeId === selectedProductTypeId && p.category === d.name);
+    }) : [], [selectedParentGroupId, zoneFilteredDepartments, selectedProductTypeId, zoneFilteredProducts]);
 
     const sortableGroupIds = selectedParentGroupId
         ? filteredSubDepartments.map(d => `dept-${d.id}`)
@@ -387,7 +400,7 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
             ...filteredRootDepartments.map(d => `dept-${d.id}`)
         ];
 
-    const filteredProducts = useMemo(() => products.filter(p => {
+    const filteredProducts = useMemo(() => zoneFilteredProducts.filter(p => {
         if (p.posVisible === false) return false;
 
         const matchesType = selectedProductTypeId === 'all' || p.productTypeId === selectedProductTypeId;
@@ -405,12 +418,12 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
 
         if (selectedDepartmentId === 'all') return matchesType;
 
-        const dept = departments.find(d => d.id === selectedDepartmentId);
+        const dept = zoneFilteredDepartments.find(d => d.id === selectedDepartmentId);
         if (!dept) return false;
 
         const matchesCategory = p.category === dept.name || (!p.category && dept.name === 'Diğer');
         return matchesType && matchesCategory;
-    }), [products, selectedProductTypeId, searchQuery, selectedDepartmentId, departments]);
+    }), [zoneFilteredProducts, selectedProductTypeId, searchQuery, selectedDepartmentId, zoneFilteredDepartments]);
 
     const handleTableClick = async (table: Table) => {
         const ownTablesOnly = (user?.extraPermissions || []).includes('OWN_TABLES_ONLY');
@@ -1008,7 +1021,8 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                         productId: item.product.id,
                         subItems: item.subItems,
                         isWaiting: params.mars_enabled ? (item.isWaiting || false) : false,
-                        note: item.note
+                        note: item.note,
+                        saleType: item.saleType
                     }))
                 };
                 console.log('[sendOrder] kitchenPrintData:', { tableName: kitchenPrintData.tableName, waiterName: kitchenPrintData.waiterName });

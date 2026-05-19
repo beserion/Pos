@@ -71,11 +71,12 @@ export function PageClient() {
             const API = process.env.NEXT_PUBLIC_API_URL;
             const h = { headers: { Authorization: `Bearer ${user.token}` } };
             if (formData.id === 0) {
-                const { id, ...data } = formData;
+                const { id, outputProfile, ...data } = formData;
                 await axios.post(`${API}/product-types`, data, h);
                 toastSwal({ title: 'Başarılı', text: 'Kaydedildi', icon: 'success' });
             } else {
-                await axios.put(`${API}/product-types/${formData.id}`, formData, h);
+                const { outputProfile, ...data } = formData;
+                await axios.put(`${API}/product-types/${formData.id}`, data, h);
                 toastSwal({ title: 'Başarılı', text: 'Güncellendi', icon: 'success' });
             }
             setIsModalOpen(false);
@@ -218,7 +219,7 @@ export function PageClient() {
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">ÇIKTI PROFİLİ</label>
                                 <SearchableSelect
-                                    value={formData.outputProfileId || ''}
+                                    value={formData.outputProfileId ? formData.outputProfileId.toString() : ''}
                                     onChange={(val) => setFormData({ ...formData, outputProfileId: val ? parseInt(val) : 0 })}
                                     options={[
                                         { value: '', label: 'Profil seçin (Opsiyonel)' },

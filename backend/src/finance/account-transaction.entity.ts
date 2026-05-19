@@ -34,6 +34,15 @@ export class AccountTransaction {
   @Column({ default: 'KASA' })
   paymentMethod: string; // 'KASA', 'BANKA', 'KREDI_KARTI'
 
+  @Column({ default: 'TRY', length: 10 })
+  currency: string;
+
+  @Column('decimal', { precision: 12, scale: 4, default: 1.0000 })
+  exchangeRate: number;
+
+  @Column('decimal', { precision: 12, scale: 2, default: 0.00 })
+  foreignAmount: number;
+
   @Column({ nullable: true })
   category: string; // 'Satış', 'Alım', 'Gider', 'Maaş', 'Kira' etc.
 

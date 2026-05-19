@@ -13,6 +13,7 @@ export interface AppParameters {
   receipt_footer: string;
   screen_timeout: number;  // dakika cinsinden — 0 = devre dışı
   shift_system_enabled: boolean;
+  waiters_can_order_to_any_table: boolean;
 
   // Mutfak
   warning_time: number;
@@ -68,9 +69,9 @@ export interface AppParameters {
   auto_open_product_options: boolean;
 
   // Kurlar
-  exchange_rate_eur: number;
-  exchange_rate_usd: number;
-  exchange_rate_gbp: number;
+  eur_rate: number;
+  usd_rate: number;
+  gbp_rate: number;
 }
 
 // Varsayılan değerler (DB'den gelmezse fallback)
@@ -84,6 +85,7 @@ export const DEFAULT_PARAMS: AppParameters = {
   receipt_footer: 'Teşekkür ederiz! Tekrar bekleriz.',
   screen_timeout: 180,  // 180 saniye varsayılan (3 dakika)
   shift_system_enabled: true,
+  waiters_can_order_to_any_table: true,
 
   warning_time: 10,
   critical_time: 20,
@@ -129,9 +131,9 @@ export const DEFAULT_PARAMS: AppParameters = {
 
   auto_open_product_options: true,
 
-  exchange_rate_eur: 37.50,
-  exchange_rate_usd: 35.20,
-  exchange_rate_gbp: 44.10,
+  eur_rate: 37.50,
+  usd_rate: 35.20,
+  gbp_rate: 44.10,
 };
 
 // Tip dönüşüm yardımcısı

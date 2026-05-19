@@ -73,6 +73,7 @@
       "oneClick": false,
       "perMachine": true,
       "allowToChangeInstallationDirectory": true,
+      "include": "build/installer.nsh",
       "installerIcon": "build/icons/win/icon.ico",
       "uninstallerIcon": "build/icons/win/icon.ico",
       "installerHeaderIcon": "build/icons/win/icon.ico",
@@ -133,15 +134,8 @@
         ]
       },
       {
-        "from": "../backend/dist",
-        "to": "backend/dist",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "../backend/node_modules",
-        "to": "backend/node_modules",
+        "from": "../backend/dist/bundle",
+        "to": "backend/dist/bundle",
         "filter": [
           "**/*"
         ]
@@ -152,6 +146,10 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "../bossposnetx/dist-server/server-bundle.cjs",
+        "to": "boss-backend/server-bundle.cjs"
       },
       {
         "from": "electron/config.json",

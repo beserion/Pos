@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import Cookies from 'js-cookie';
@@ -12,7 +12,7 @@ import { useThemeTransition } from '@/hooks/useThemeTransition';
 import SetMenuSelectionModal from '../pos/SetMenuSelectionModal';
 import { API_URL } from '@/lib/apiConfig';
 
-interface Product { id: number; name: string; price: number; category: string; imageUrl?: string; printerId?: number; variations?: any[]; isSet?: boolean; setMenu?: any; sku: string; }
+interface Product { id: number; name: string; price: number; category: string; imageUrl?: string; printerId?: number; variations?: any[]; isSet?: boolean; setMenu?: any; sku: string; visibleZones?: any[]; }
 interface OrderItem { product: Product; quantity: number; variationId?: number; variationName?: string; extraPrice?: number; subItems?: any[]; uniqueId?: string; }
 interface SaleItem { id: number; productName: string; quantity: number; unitPrice: number; total: number; status: string; }
 interface TableSale { id: number; totalAmount: number; status: string; items: SaleItem[]; }
@@ -131,7 +131,15 @@ export function PageClient() {
         }
     };
 
-    const categories = ['Tümü', ...Array.from(new Set(products.map(p => p.category)))];
+    const zoneFilteredProducts = useMemo(() => {
+        if (!selectedTable?.zone?.id) return products;
+        const zoneId = selectedTable.zone.id;
+        return products.filter(p => !p.visibleZones || p.visibleZones.length === 0 || p.visibleZones.some((z: any) => z.id === zoneId));
+    }, [products, selectedTable]);
+
+    const categories = useMemo(() => {
+        return ['Tümü', ...Array.from(new Set(zoneFilteredProducts.map(p => p.category)))];
+    }, [zoneFilteredProducts]);
 
     const handleTableClick = (table: Table) => {
         const activeWaiterId = user?.id;
@@ -275,7 +283,7 @@ export function PageClient() {
         }
     };
 
-    const filteredProducts = selectedCategory === 'Tümü' ? products : products.filter(p => p.category === selectedCategory);
+    const filteredProducts = selectedCategory === 'Tümü' ? zoneFilteredProducts : zoneFilteredProducts.filter(p => p.category === selectedCategory);
     const cartTotal = cart.reduce((sum, item) => sum + ((item.product.price + (item.extraPrice || 0)) * item.quantity), 0);
 
     if (user && !hasFeature('waiter_system')) {

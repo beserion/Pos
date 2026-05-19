@@ -382,11 +382,19 @@ export default function QuickSaleView({ onSwitchToPos }: { onSwitchToPos: () => 
 
             const res = await axios.post(`${API_URL}/sales`, saleData, { headers });
 
+            // Program Tarihini backend'den çek
+            let qsBusinessDate = '';
+            try {
+                const bdRes = await axios.get(`${API_URL}/business-day/status`, { headers });
+                qsBusinessDate = bdRes.data?.activeBusinessDate || '';
+            } catch (e) { console.warn('businessDate alinamadi:', e); }
+
             // Prepare Print Data
             const printData = {
                 companyName: 'ANTIGRAVITY POS',
                 cashierName: activeShift?.user?.firstName || user?.firstName || user?.name || 'Kasiyer',
                 date: new Date(),
+                businessDate: qsBusinessDate,
                 items: cart.map(item => {
                     const base = (item.product.price + (item.extraPrice || 0)) * item.quantity;
                     const extras = (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0);

@@ -52,15 +52,17 @@ export class RecipesService {
   /**
    * Find the active recipe for a product. Returns null if none.
    */
-  async findActiveByProduct(productId: number): Promise<RecipeHeader | null> {
-    return this.headerRepository.findOne({
+  async findActiveByProduct(productId: number, manager?: any): Promise<RecipeHeader | null> {
+    const repo = manager ? manager.getRepository(RecipeHeader) : this.headerRepository;
+    return repo.findOne({
       where: { productId, isActive: true },
       relations: ['product', 'lines', 'lines.stockCard'],
     });
   }
 
-  async findOne(id: number): Promise<RecipeHeader> {
-    const header = await this.headerRepository.findOne({
+  async findOne(id: number, manager?: any): Promise<RecipeHeader> {
+    const repo = manager ? manager.getRepository(RecipeHeader) : this.headerRepository;
+    const header = await repo.findOne({
       where: { id },
       relations: ['product', 'lines', 'lines.stockCard'],
     });
@@ -175,7 +177,7 @@ export class RecipesService {
 
   // ─── Cost Calculation ────────────────────────────────
 
-  async calculateCost(productId: number): Promise<{
+  async calculateCost(productId: number, manager?: any): Promise<{
     productId: number;
     productName: string;
     recipeName: string;
@@ -190,8 +192,8 @@ export class RecipesService {
       isRequired: boolean;
     }[];
   }> {
-    const product = await this.productsService.findOne(productId);
-    const recipe = await this.findActiveByProduct(productId);
+    const product = await this.productsService.findOne(productId, manager);
+    const recipe = await this.findActiveByProduct(productId, manager);
 
     if (!recipe) {
       return {

@@ -23,7 +23,23 @@ export class ReportsService {
           END as paymentMethod,
           createdAt
         FROM sales 
-        WHERE status = 'COMPLETED' AND isEndOfDayClosed = 0 AND (ISNULL(companyId, 1) = @0 OR @0 = 0)
+        WHERE paymentMethod != 'SPLIT' AND status = 'COMPLETED' AND isEndOfDayClosed = 0 AND (ISNULL(companyId, 1) = @0 OR @0 = 0)
+        UNION ALL
+        SELECT 
+          paidAmountCash as amount, 
+          'INCOME' as type, 
+          'KASA' as paymentMethod,
+          createdAt
+        FROM sales 
+        WHERE paymentMethod = 'SPLIT' AND status = 'COMPLETED' AND isEndOfDayClosed = 0 AND (ISNULL(companyId, 1) = @0 OR @0 = 0)
+        UNION ALL
+        SELECT 
+          paidAmountCreditCard as amount, 
+          'INCOME' as type, 
+          'KREDI_KARTI' as paymentMethod,
+          createdAt
+        FROM sales 
+        WHERE paymentMethod = 'SPLIT' AND status = 'COMPLETED' AND isEndOfDayClosed = 0 AND (ISNULL(companyId, 1) = @0 OR @0 = 0)
       )
       SELECT 
         -- Weekly (Last 7 Days)
@@ -157,10 +173,16 @@ export class ReportsService {
     // Günün Cirosu
     const ciroRes = await this.dataSource.query(`
       SELECT
-        SUM(CASE WHEN (s.paymentMethod IN ('KASA','CASH')) THEN CAST(s.totalAmount AS DECIMAL(18,2)) ELSE 0 END) as nakitCiro,
-        SUM(CASE WHEN (s.paymentMethod IN ('KREDI_KARTI','CREDIT_CARD','CC')) THEN CAST(s.totalAmount AS DECIMAL(18,2)) ELSE 0 END) as kartCiro,
+        SUM(CASE 
+          WHEN (s.paymentMethod IN ('KASA','CASH')) THEN CAST(s.totalAmount AS DECIMAL(18,2)) 
+          WHEN (s.paymentMethod = 'SPLIT') THEN CAST(s.paidAmountCash AS DECIMAL(18,2))
+          ELSE 0 END) as nakitCiro,
+        SUM(CASE 
+          WHEN (s.paymentMethod IN ('KREDI_KARTI','CREDIT_CARD','CC')) THEN CAST(s.totalAmount AS DECIMAL(18,2)) 
+          WHEN (s.paymentMethod = 'SPLIT') THEN CAST(s.paidAmountCreditCard AS DECIMAL(18,2))
+          ELSE 0 END) as kartCiro,
         SUM(CASE WHEN (s.paymentMethod IN ('CARI')) THEN CAST(s.totalAmount AS DECIMAL(18,2)) ELSE 0 END) as cariCiro,
-        SUM(CASE WHEN (s.paymentMethod NOT IN ('KASA','CASH','KREDI_KARTI','CREDIT_CARD','CC','CARI') OR s.paymentMethod IS NULL) THEN CAST(s.totalAmount AS DECIMAL(18,2)) ELSE 0 END) as digerCiro,
+        SUM(CASE WHEN (s.paymentMethod NOT IN ('KASA','CASH','KREDI_KARTI','CREDIT_CARD','CC','CARI','SPLIT') OR s.paymentMethod IS NULL) THEN CAST(s.totalAmount AS DECIMAL(18,2)) ELSE 0 END) as digerCiro,
         SUM(CAST(s.totalAmount AS DECIMAL(18,2))) as toplamCiro
       FROM sales s
       WHERE s.status = 'COMPLETED' ${dateFilter}
@@ -267,13 +289,32 @@ export class ReportsService {
 
     // Tahsilat detayları
     const tahsilatRes = await this.dataSource.query(`
-      SELECT paymentMethod,
-        SUM(CAST(totalAmount AS DECIMAL(18,2))) as toplam,
-        COUNT(*) as adet
-      FROM sales s
-      WHERE s.status = 'COMPLETED' ${dateFilter}
-      ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
-      GROUP BY paymentMethod
+      SELECT method as paymentMethod, SUM(total) as toplam, SUM(adet) as adet
+      FROM (
+        SELECT 
+          CASE 
+            WHEN paymentMethod IN ('CASH', 'KASA') THEN 'CASH'
+            WHEN paymentMethod IN ('CREDIT_CARD', 'KREDI_KARTI', 'CC') THEN 'CREDIT_CARD'
+            ELSE paymentMethod 
+          END as method,
+          SUM(CAST(totalAmount AS DECIMAL(18,2))) as total,
+          COUNT(*) as adet
+        FROM sales s
+        WHERE s.status = 'COMPLETED' AND paymentMethod != 'SPLIT' ${dateFilter}
+        ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+        GROUP BY paymentMethod
+        UNION ALL
+        SELECT 'CASH' as method, SUM(CAST(paidAmountCash AS DECIMAL(18,2))) as total, COUNT(*) as adet
+        FROM sales s
+        WHERE s.status = 'COMPLETED' AND paymentMethod = 'SPLIT' AND paidAmountCash > 0 ${dateFilter}
+        ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+        UNION ALL
+        SELECT 'CREDIT_CARD' as method, SUM(CAST(paidAmountCreditCard AS DECIMAL(18,2))) as total, COUNT(*) as adet
+        FROM sales s
+        WHERE s.status = 'COMPLETED' AND paymentMethod = 'SPLIT' AND paidAmountCreditCard > 0 ${dateFilter}
+        ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      ) AS SplitPayments
+      GROUP BY method
     `, params);
 
     // Ürün satış özeti (en çok satılanlar)

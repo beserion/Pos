@@ -9,7 +9,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { UsersService } from '../users/users.service';
 import { AlertsService } from '../alerts/alerts.service';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 
 /** PIN başarısız giriş sayacı (in-memory, sunucu yeniden başlayınca sıfırlanır) */
 const PIN_FAIL_COUNTERS = new Map<string, number>();

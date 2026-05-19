@@ -39,6 +39,8 @@ interface Product {
     directStockQty?: number;
     directStockUnit?: string;
     posVisible?: boolean;
+    visibleZones?: any[];
+    visibleZoneIds?: number[];
 }
 
 interface Modifier {
@@ -102,7 +104,9 @@ export function PageClient() {
     const [recipeHeaders, setRecipeHeaders] = useState<any[]>([]);
     const [stockGroups, setStockGroups] = useState<any[]>([]);
     const [parameters, setParameters] = useState<any[]>([]);
+    const [zones, setZones] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isZonesDropdownOpen, setIsZonesDropdownOpen] = useState(false);
     const [currentRecipe, setCurrentRecipe] = useState<RecipeHeader | null>(null);
     const [recipeSummary, setRecipeSummary] = useState<any>(null);
     const [loadingRecipe, setLoadingRecipe] = useState(false);
@@ -137,7 +141,8 @@ export function PageClient() {
         linkedStockItemId: null,
         directStockQty: 0,
         directStockUnit: 'adet',
-        posVisible: true
+        posVisible: true,
+        visibleZoneIds: []
     });
 
     const [ingredientProduct, setIngredientProduct] = useState({ ingredientId: 0, quantity: 0, unit: 'adet' });
@@ -154,7 +159,7 @@ export function PageClient() {
         if (!user?.token) return;
         try {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
-            const [prodRes, printRes, modRes, typesRes, profilesRes, depRes, stocksRes, stockGroupsRes, recipesRes, paramsRes] = await Promise.all([
+            const [prodRes, printRes, modRes, typesRes, profilesRes, depRes, stocksRes, stockGroupsRes, recipesRes, paramsRes, zonesRes] = await Promise.all([
                 axios.get(`${API_URL}/products`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/printers`, { headers: { Authorization: `Bearer ${user.token}` } }),
                 axios.get(`${API_URL}/modifiers`, { headers: { Authorization: `Bearer ${user.token}` } }),
@@ -164,7 +169,8 @@ export function PageClient() {
                 axios.get(`${API_URL}/stock-cards?limit=1000`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: [] })),
                 axios.get(`${API_URL}/stock-groups`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: [] })),
                 axios.get(`${API_URL}/recipes`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: [] })),
-                axios.get(`${API_URL}/parameters`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: [] }))
+                axios.get(`${API_URL}/parameters`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: [] })),
+                axios.get(`${API_URL}/zones`, { headers: { Authorization: `Bearer ${user.token}` } }).catch(() => ({ data: [] }))
             ]);
             setProducts(prodRes.data);
             setFilteredProducts(prodRes.data);
@@ -180,6 +186,7 @@ export function PageClient() {
             setStockGroups(Array.isArray(stockGroupsRes.data) ? stockGroupsRes.data : (stockGroupsRes.data?.data || []));
             setRecipeHeaders(Array.isArray(recipesRes.data) ? recipesRes.data : (recipesRes.data?.data || []));
             setParameters(Array.isArray(paramsRes.data) ? paramsRes.data : []);
+            setZones(zonesRes.data);
         } catch (error) {
             console.error('Error fetching data', error);
             showSwal({ title: tc('error'), text: tc('loadingError'), icon: 'error' });
@@ -282,11 +289,12 @@ export function PageClient() {
             }
 
             if (formData.id === 0) {
-                const { id, ...postData } = finalPayload;
+                const { id, visibleZones, ...postData } = finalPayload;
                 await axios.post(`${API_URL}/products`, postData, config);
                 toastSwal({ title: tc('success'), text: tc('saved'), icon: 'success' });
             } else {
-                await axios.put(`${API_URL}/products/${formData.id}`, finalPayload, config);
+                const { visibleZones, ...putData } = finalPayload;
+                await axios.put(`${API_URL}/products/${formData.id}`, putData, config);
                 toastSwal({ title: tc('success'), text: tc('updated'), icon: 'success' });
             }
             setIsModalOpen(false);
@@ -520,7 +528,8 @@ export function PageClient() {
                 inventoryLinkType: prod.inventoryLinkType || 'none',
                 linkedStockItemId: prod.linkedStockItemId || null,
                 directStockQty: prod.directStockQty || 0,
-                directStockUnit: prod.directStockUnit || 'adet'
+                directStockUnit: prod.directStockUnit || 'adet',
+                visibleZoneIds: prod.visibleZones?.map(z => z.id) || []
             });
             if (hasRecipeLicense) {
                 fetchRecipeForProduct(prod.id);
@@ -551,7 +560,8 @@ export function PageClient() {
                 inventoryLinkType: 'none',
                 linkedStockItemId: null,
                 directStockQty: 0,
-                directStockUnit: 'adet'
+                directStockUnit: 'adet',
+                visibleZoneIds: []
             });
             setCurrentRecipe({
                 id: 0,
@@ -1032,6 +1042,75 @@ export function PageClient() {
                                                         </div>
                                                     </div>
                                                 </div>
+
+                                                {/* Görünürlük (Bölgeler) */}
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">GÖRÜNÜR OLDUĞU BÖLÜMLER</label>
+                                                    <div className="relative">
+                                                        <div 
+                                                            onClick={() => setIsZonesDropdownOpen(!isZonesDropdownOpen)}
+                                                            className="w-full flex items-center justify-between px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl cursor-pointer hover:border-teal-300 transition-all"
+                                                        >
+                                                            <div className="flex flex-wrap gap-1 text-left">
+                                                                {(!formData.visibleZoneIds || formData.visibleZoneIds.length === 0) ? (
+                                                                    <span className="text-slate-500 font-bold text-sm">Tüm Bölümlerde Görünür</span>
+                                                                ) : (
+                                                                    formData.visibleZoneIds.map(zid => {
+                                                                        const zName = zones.find(z => z.id === zid)?.name || 'Bilinmiyor';
+                                                                        return (
+                                                                            <span key={zid} className="px-2 py-0.5 bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300 rounded text-xs font-bold flex items-center gap-1">
+                                                                                {zName}
+                                                                                <i className="fat fa-times cursor-pointer hover:text-teal-900 ml-1" onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setFormData(prev => ({ ...prev, visibleZoneIds: prev.visibleZoneIds?.filter(id => id !== zid) }));
+                                                                                }}></i>
+                                                                            </span>
+                                                                        );
+                                                                    })
+                                                                )}
+                                                            </div>
+                                                            <i className={`fat fa-chevron-${isZonesDropdownOpen ? 'up' : 'down'} text-slate-400 text-xs ml-2 shrink-0`}></i>
+                                                        </div>
+                                                        
+                                                        {isZonesDropdownOpen && (
+                                                            <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl z-50 max-h-60 overflow-y-auto p-2">
+                                                                <div className="flex flex-col gap-1 text-left">
+                                                                    {zones.length === 0 && (
+                                                                        <div className="p-3 text-center text-slate-500 text-xs font-bold">Tanımlı Bölüm Bulunamadı</div>
+                                                                    )}
+                                                                    {zones.map(zone => {
+                                                                        const isSelected = formData.visibleZoneIds?.includes(zone.id);
+                                                                        return (
+                                                                            <label key={zone.id} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${isSelected ? 'bg-teal-50 dark:bg-teal-500/10' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}>
+                                                                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'border-teal-600 bg-teal-600' : 'border-slate-300 dark:border-slate-600'}`}>
+                                                                                    {isSelected && <i className="fat fa-check text-[10px] text-white"></i>}
+                                                                                </div>
+                                                                                <span className={`text-sm font-bold ${isSelected ? 'text-teal-700 dark:text-teal-300' : 'text-slate-700 dark:text-slate-300'}`}>{zone.name}</span>
+                                                                                <input 
+                                                                                    type="checkbox" 
+                                                                                    className="hidden" 
+                                                                                    checked={isSelected || false}
+                                                                                    onChange={(e) => {
+                                                                                        const checked = e.target.checked;
+                                                                                        setFormData(prev => {
+                                                                                            const current = prev.visibleZoneIds || [];
+                                                                                            return {
+                                                                                                ...prev,
+                                                                                                visibleZoneIds: checked ? [...current, zone.id] : current.filter(id => id !== zone.id)
+                                                                                            };
+                                                                                        });
+                                                                                    }}
+                                                                                />
+                                                                            </label>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-[10px] text-slate-500 mt-2 px-1">Seçim yapılmazsa ürün tüm bölümlerde görünür.</p>
+                                                </div>
+
                                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
                                                 </div>

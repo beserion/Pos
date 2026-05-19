@@ -29,6 +29,9 @@ export class Sale {
   @Column('decimal', { precision: 12, scale: 2, default: 0 })
   discountAmount: number;
 
+  @Column('decimal', { precision: 5, scale: 2, default: 0 })
+  discountRate: number;
+
   @Column('decimal', { precision: 12, scale: 2, default: 0 })
   serviceFee: number;
 
@@ -43,6 +46,15 @@ export class Sale {
 
   @Column('decimal', { precision: 12, scale: 2, default: 0, nullable: true })
   paidAmountCreditCard: number;
+
+  @Column({ default: 'TRY', length: 10 })
+  paidCurrency: string;
+
+  @Column('decimal', { precision: 12, scale: 4, default: 1.0000 })
+  paidCurrencyRate: number;
+
+  @Column('decimal', { precision: 12, scale: 2, default: 0.00 })
+  paidCurrencyAmount: number;
 
   @ManyToOne(() => Table, { nullable: true })
   @JoinColumn({ name: 'tableId' })

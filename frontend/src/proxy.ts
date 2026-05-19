@@ -12,10 +12,12 @@ const intlMiddleware = createMiddleware({
 export default function middleware(req: NextRequest) {
     const response = intlMiddleware(req);
 
-    // Cloudflare Tunnel üzerinde portun URL'ye eklenmesini engellemek için
-    // yönlendirme başlığındaki :3000 portunu temizliyoruz.
+    // Sadece istek yapılan host içinde :3000 portu yoksa (Cloudflare/Proxy durumu)
+    // yönlendirme başlığındaki portu temizliyoruz. Yerel kullanımda (localhost:3000) portu koruyoruz.
+    const host = req.headers.get('host') || '';
     const location = response.headers.get('location');
-    if (location && location.includes(':3000')) {
+    
+    if (location && location.includes(':3000') && !host.includes(':3000')) {
         response.headers.set('location', location.replace(':3000', ''));
     }
 

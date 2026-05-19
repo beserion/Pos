@@ -58,6 +58,48 @@ export class CompanyAccountService {
     return await repo.save(account);
   }
 
+  async getOrCreateDefaultAccount(type: string, currency: string, manager?: any): Promise<CompanyAccount> {
+    const repo = manager ? manager.getRepository(CompanyAccount) : this.accountRepository;
+    const upperCurrency = (currency || 'TRY').toUpperCase();
+    const cleanType = (type || 'CASH').toUpperCase();
+    
+    let account = await repo.findOne({
+      where: {
+        type: cleanType,
+        currency: upperCurrency,
+        isActive: true,
+      }
+    });
+    
+    if (!account) {
+      let name = '';
+      if (cleanType === 'CASH') {
+        if (upperCurrency === 'EUR') name = 'Euro Kasası';
+        else if (upperCurrency === 'USD') name = 'Dolar Kasası';
+        else if (upperCurrency === 'GBP') name = 'Sterlin Kasası';
+        else if (upperCurrency === 'TRY' || upperCurrency === 'TL') name = 'Merkez Kasa';
+        else name = `${upperCurrency} Kasası`;
+      } else if (cleanType === 'CREDIT_CARD') {
+        if (upperCurrency === 'TRY' || upperCurrency === 'TL') name = 'Garanti POS';
+        else name = `${upperCurrency} POS Hesabı`;
+      } else {
+        name = `${upperCurrency} Banka Hesabı`;
+      }
+      
+      account = repo.create({
+        name,
+        type: cleanType,
+        currency: upperCurrency,
+        balance: 0,
+        isActive: true,
+      });
+      
+      account = await repo.save(account);
+    }
+    
+    return account;
+  }
+
   async getTransactions(accountId: number, page: number = 1, limit: number = 20, search?: string) {
     const query = this.transactionRepository.createQueryBuilder('transaction')
       .leftJoinAndSelect('transaction.partner', 'partner')

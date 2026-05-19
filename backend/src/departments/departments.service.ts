@@ -12,26 +12,30 @@ export class DepartmentsService {
 
   findAll() {
     return this.repository.find({ 
-      relations: ['location', 'parentGroup', 'extraDepartment', 'outputProfile'],
+      relations: ['location', 'parentGroup', 'extraDepartment', 'outputProfile', 'visibleZones'],
       order: { orderIndex: 'ASC', name: 'ASC' }
     });
   }
 
   findOne(id: number) {
-    return this.repository.findOne({ where: { id }, relations: ['location', 'parentGroup', 'extraDepartment', 'outputProfile'] });
+    return this.repository.findOne({ where: { id }, relations: ['location', 'parentGroup', 'extraDepartment', 'outputProfile', 'visibleZones'] });
   }
 
-  async create(data: Partial<Department>) {
+  async create(data: any) {
     if (data.id) delete data.id;
     if (data.name) {
       const existing = await this.repository.findOne({ where: { name: data.name } });
       if (existing) throw new BadRequestException(`"${data.name}" isimli grup zaten mevcut.`);
     }
-    const dep = this.repository.create(data);
+    const { visibleZoneIds, ...rest } = data;
+    const dep = this.repository.create(rest) as any;
+    if (visibleZoneIds !== undefined) {
+      dep.visibleZones = visibleZoneIds.map((id: number) => ({ id })) as any[];
+    }
     return this.repository.save(dep);
   }
 
-  async update(id: number, data: Partial<Department>) {
+  async update(id: number, data: any) {
     if (data.id) delete data.id;
     const dep = await this.findOne(id);
     if (!dep) throw new NotFoundException(`Department #${id} not found`);
@@ -41,7 +45,13 @@ export class DepartmentsService {
       if (dup) throw new BadRequestException(`"${data.name}" isimli grup zaten mevcut.`);
     }
 
-    await this.repository.update(id, data);
+    const { visibleZoneIds, ...rest } = data;
+    this.repository.merge(dep, rest);
+    if (visibleZoneIds !== undefined) {
+      dep.visibleZones = visibleZoneIds.map((id: number) => ({ id })) as any[];
+    }
+
+    await this.repository.save(dep);
     return this.findOne(id);
   }
 

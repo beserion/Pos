@@ -1,7 +1,9 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { Location } from '../locations/location.entity';
 import type { OutputProfile } from '../output-profiles/output-profile.entity';
+import type { Zone } from '../zones/zone.entity';
 import { ParentGroup } from '../parent-groups/parent-group.entity';
+import { ManyToMany, JoinTable } from 'typeorm';
 
 @Entity('departments')
 export class Department {
@@ -52,6 +54,14 @@ export class Department {
 
   @Column({ default: 0 })
   orderIndex: number;
+
+  @ManyToMany('Zone', { cascade: true })
+  @JoinTable({
+    name: 'department_visible_zones',
+    joinColumn: { name: 'departmentId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'zoneId', referencedColumnName: 'id' }
+  })
+  visibleZones: Zone[];
 
   @CreateDateColumn()
   createdAt: Date;

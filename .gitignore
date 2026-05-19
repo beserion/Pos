@@ -1,6 +1,7 @@
 # Dependencies
 backend/node_modules/
 frontend/node_modules/
+.agents
 .pnp
 .pnp.js
 PROMPTS/*
@@ -14,7 +15,8 @@ docs/
 brain/
 scratch/
 *.exe
-
+Boss_Uretim_Paketi
+Boss_Minimal_Paket
 Yazarkasa
 # Production
 posnetx-waiter/

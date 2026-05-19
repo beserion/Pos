@@ -7,7 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './user.entity';
 import { PushSubscriptionEntity } from './push-subscription.entity';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { clearUserPermissionsCache } from '../auth/permissions.guard';
 
 @Injectable()

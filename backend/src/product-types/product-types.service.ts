@@ -30,7 +30,7 @@ export class ProductTypesService {
   async create(data: Partial<ProductType>): Promise<ProductType> {
     if (data.id) delete data.id;
     if (data.outputProfileId === 0) {
-      data.outputProfileId = undefined;
+      data.outputProfileId = null as any;
     }
     if (data.name) {
       const existing = await this.repo.findOne({ where: { name: data.name } });
@@ -43,7 +43,7 @@ export class ProductTypesService {
   async update(id: number, data: Partial<ProductType>): Promise<ProductType> {
     if (data.id) delete data.id;
     if (data.outputProfileId === 0) {
-      data.outputProfileId = undefined;
+      data.outputProfileId = null as any;
     }
     const type = await this.findOne(id);
     if (data.name && data.name !== type.name) {

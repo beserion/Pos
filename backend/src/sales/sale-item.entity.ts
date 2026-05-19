@@ -37,6 +37,12 @@ export class SaleItem {
   @Column('decimal', { precision: 12, scale: 2 , default: 0 })
   total: number;
 
+  @Column('decimal', { precision: 5, scale: 2, default: 0 })
+  discountRate: number; // Ürün satır indirim yüzdesi
+
+  @Column('decimal', { precision: 12, scale: 2, default: 0 })
+  discountAmount: number; // Ürün satır indirim tutarı
+
   @Column({ nullable: true })
   note: string;
 

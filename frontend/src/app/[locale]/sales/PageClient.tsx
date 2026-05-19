@@ -270,6 +270,12 @@ export function PageClient() {
                 } catch (err) {
                     console.error('Yazıcı işlemi başarısız:', err);
                 }
+            } else {
+                showSwal({ 
+                    icon: 'info', 
+                    title: 'Rapor Oluşturulamadı', 
+                    text: 'Gün sonu işlemi tamamlandı ancak yazdırılacak bir Z-Raporu ID\'si alınamadı.' 
+                });
             }
         } catch (error) {
             console.error('Error in End of Day:', error);

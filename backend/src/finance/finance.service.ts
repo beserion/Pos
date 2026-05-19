@@ -90,9 +90,13 @@ export class FinanceService {
 
     // Update Company Account Balance
     if (saved.companyAccountId) {
+      const balanceAmount = (saved.currency && saved.currency !== 'TRY' && saved.currency !== 'TL')
+        ? Number(saved.foreignAmount || 0)
+        : Number(saved.amount || 0);
+
       await this.companyAccountService.updateBalance(
         saved.companyAccountId,
-        saved.amount,
+        balanceAmount,
         saved.type as 'INCOME' | 'EXPENSE',
         manager,
       );
@@ -149,7 +153,18 @@ export class FinanceService {
    * tekrar kayıt açmak yerine mevcut kaydın tutarını günceller.
    */
   async upsertEndOfDay(
-    data: { amount: number; paymentMethod: string; description: string; category: string; userId?: number; businessDate?: string },
+    data: {
+      amount: number;
+      paymentMethod: string;
+      description: string;
+      category: string;
+      userId?: number;
+      businessDate?: string;
+      currency?: string;
+      exchangeRate?: number;
+      foreignAmount?: number;
+      companyAccountId?: number;
+    },
     manager?: any,
   ): Promise<AccountTransaction> {
     const repo: Repository<AccountTransaction> = manager
@@ -167,29 +182,42 @@ export class FinanceService {
       }
     }
 
-    // Aynı iş günü + END_OF_DAY + aynı ödeme yöntemi kaydı var mı?
+    const targetCurrency = (data.currency || 'TRY').toUpperCase();
+
+    // Aynı iş günü + END_OF_DAY + aynı ödeme yöntemi + aynı döviz kaydı var mı?
     const existing = await repo
       .createQueryBuilder('tx')
       .where('tx.sourceType = :sourceType', { sourceType: 'END_OF_DAY' })
       .andWhere('tx.paymentMethod = :pm', { pm: data.paymentMethod })
       .andWhere('tx.businessDate = :bd', { bd: activeBusinessDate })
+      .andWhere('tx.currency = :currency', { currency: targetCurrency })
       .getOne();
 
     if (existing) {
       // Mevcut tutara yeni miktarı ekle
-      const delta = data.amount;
-      const newAmount = Number(existing.amount) + delta;
+      const deltaAmount = Number(data.amount || 0);
+      const deltaForeign = Number(data.foreignAmount || 0);
+      
+      const newAmount = Number(existing.amount) + deltaAmount;
+      const newForeignAmount = Number(existing.foreignAmount || 0) + deltaForeign;
+      
       await repo.update(existing.id, {
         amount: newAmount,
+        foreignAmount: newForeignAmount,
+        exchangeRate: data.exchangeRate ?? existing.exchangeRate,
         description: data.description,
         userId: data.userId ?? existing.userId,
       });
 
       // Kasa bakiyesini yalnızca delta kadar artır
       if (existing.companyAccountId) {
+        const balanceDelta = (existing.currency && existing.currency !== 'TRY' && existing.currency !== 'TL')
+          ? deltaForeign
+          : deltaAmount;
+
         await this.companyAccountService.updateBalance(
           existing.companyAccountId,
-          delta,
+          balanceDelta,
           'INCOME',
           manager,
         );
@@ -198,8 +226,39 @@ export class FinanceService {
       return repo.findOne({ where: { id: existing.id } }) as Promise<AccountTransaction>;
     }
 
-    // Kayıt yoksa normal create (businessDate ile)
-    return this.create({ ...data, type: 'INCOME', sourceType: 'END_OF_DAY', businessDate: activeBusinessDate }, manager);
+    // Resolve companyAccountId automatically if not provided
+    let companyAccountId = data.companyAccountId;
+    if (!companyAccountId) {
+      let accountType = 'CASH';
+      if (data.paymentMethod === 'KREDI_KARTI' || data.paymentMethod === 'CREDIT_CARD') {
+        accountType = 'CREDIT_CARD';
+      } else if (data.paymentMethod === 'BANKA' || data.paymentMethod === 'BANK') {
+        accountType = 'BANK';
+      }
+      
+      try {
+        const account = await this.companyAccountService.getOrCreateDefaultAccount(
+          accountType,
+          targetCurrency,
+          manager,
+        );
+        companyAccountId = account.id;
+      } catch (err) {
+        this.logger.error('Failed to get or create company account for End of Day:', err);
+      }
+    }
+
+    // Kayıt yoksa normal create (businessDate ve otomatik companyAccountId ile)
+    return this.create({
+      ...data,
+      companyAccountId,
+      type: 'INCOME',
+      sourceType: 'END_OF_DAY',
+      businessDate: activeBusinessDate,
+      currency: targetCurrency,
+      exchangeRate: data.exchangeRate ?? 1.0,
+      foreignAmount: data.foreignAmount ?? 0.0,
+    }, manager);
   }
 
   async remove(id: number): Promise<void> {
@@ -208,9 +267,13 @@ export class FinanceService {
     // Reverse the balance before deleting
     if (tx.companyAccountId) {
       const reverseType = tx.type === 'INCOME' ? 'EXPENSE' : 'INCOME';
+      const balanceAmount = (tx.currency && tx.currency !== 'TRY' && tx.currency !== 'TL')
+        ? Number(tx.foreignAmount || 0)
+        : Number(tx.amount || 0);
+
       await this.companyAccountService.updateBalance(
         tx.companyAccountId,
-        tx.amount,
+        balanceAmount,
         reverseType
       );
     }

@@ -51,7 +51,7 @@ export class ProductsService {
         }
 
         const products = await this.productRepository.find({
-            relations: ['recipes', 'variations', 'printer', 'productType', 'outputProfile', 'setMenu', 'setMenu.groups', 'setMenu.groups.items', 'linkedStockCard', 'linkedStockCard.stockGroupRelation'],
+            relations: ['recipes', 'variations', 'printer', 'productType', 'outputProfile', 'setMenu', 'setMenu.groups', 'setMenu.groups.items', 'linkedStockCard', 'linkedStockCard.stockGroupRelation', 'visibleZones'],
             order: { orderIndex: 'ASC', id: 'ASC' }
         });
 
@@ -98,8 +98,9 @@ export class ProductsService {
         return data;
     }
 
-    async findOne(id: number): Promise<Product> {
-        const product = await this.productRepository.findOne({
+    async findOne(id: number, manager?: any): Promise<Product> {
+        const repo = manager ? manager.getRepository(Product) : this.productRepository;
+        const product = await repo.findOne({
             where: { id },
             relations: ['recipes', 'printer', 'productType', 'outputProfile', 'setMenu', 'setMenu.groups', 'setMenu.groups.items'],
         });
@@ -107,7 +108,7 @@ export class ProductsService {
             throw new NotFoundException(`Product with ID ${id} not found`);
         }
 
-        const rawModifiers = await this.productRepository.query(`
+        const rawModifiers = await repo.query(`
             SELECT m.*
             FROM product_modifiers pm
             JOIN modifiers m ON m.id = pm.modifiersId
@@ -125,9 +126,9 @@ export class ProductsService {
     }
 
     async create(
-        productData: Partial<Product> & { recipes?: Partial<Recipe>[], recipeHeader?: any, modifiers?: any[] },
+        productData: any,
     ): Promise<Product> {
-        const { recipes, recipeHeader, modifiers, ...data } = productData;
+        const { recipes, recipeHeader, modifiers, visibleZoneIds, ...data } = productData;
 
         // 12.md Validasyonları: Ürün Cinsi Zorunluluğu
         if (!data.productTypeId) {
@@ -156,15 +157,16 @@ export class ProductsService {
 
         let fetchedModifiers: Modifier[] = [];
         if (modifiers && modifiers.length > 0) {
-            const modifierIds = modifiers.map(m => typeof m === 'object' ? m.id : m);
+            const modifierIds = modifiers.map((m: any) => typeof m === 'object' ? m.id : m);
             fetchedModifiers = await this.modifierRepository.findByIds(modifierIds);
         }
 
         const newProduct = this.productRepository.create({
             ...data,
             modifiers: fetchedModifiers,
+            visibleZones: visibleZoneIds ? visibleZoneIds.map((id: number) => ({ id })) : undefined,
             isActive: data.isActive !== undefined ? data.isActive : true // Varsayılan aktif
-        });
+        }) as any;
         const savedProduct = await this.productRepository.save(newProduct);
 
         if (recipes && recipes.length > 0) {
@@ -202,10 +204,12 @@ export class ProductsService {
 
     async update(
         id: number,
-        updateData: Partial<Product> & { recipes?: Partial<Recipe>[], recipeHeader?: any, modifiers?: any[] },
+        updateData: any,
     ): Promise<Product> {
-        const product = await this.findOne(id);
-        const { id: _, recipes, recipeHeader, modifiers, ...data } = updateData as any;
+        const product = await this.productRepository.findOne({ where: { id }, relations: ['recipes', 'printer', 'productType', 'outputProfile', 'setMenu', 'setMenu.groups', 'setMenu.groups.items', 'modifiers', 'visibleZones'] });
+        if (!product) throw new NotFoundException(`Product with ID ${id} not found`);
+
+        const { id: _, recipes, recipeHeader, modifiers, visibleZoneIds, ...data } = updateData as any;
 
         // 12.md Validasyonları: Ürün Cinsi Zorunluluğu
         if (data.productTypeId !== undefined && !data.productTypeId) {
@@ -242,6 +246,10 @@ export class ProductsService {
                 fetchedModifiers = await this.modifierRepository.findByIds(modifierIds);
             }
             product.modifiers = fetchedModifiers;
+        }
+
+        if (visibleZoneIds !== undefined) {
+            product.visibleZones = visibleZoneIds.map((zid: number) => ({ id: zid })) as any[];
         }
 
         const oldPrice = parseFloat(String(product.price || 0));
@@ -319,12 +327,13 @@ export class ProductsService {
         });
     }
 
-    async recordTransaction(data: Partial<ProductTransaction>): Promise<ProductTransaction> {
-        const transaction = this.transactionRepository.create({
+    async recordTransaction(data: Partial<ProductTransaction>, manager?: any): Promise<ProductTransaction> {
+        const repo = manager ? manager.getRepository(ProductTransaction) : this.transactionRepository;
+        const transaction = repo.create({
             ...data,
             businessDate: data.businessDate || new Date(),
         });
-        return await this.transactionRepository.save(transaction);
+        return await repo.save(transaction);
     }
 
     async onModuleInit() {

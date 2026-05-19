@@ -209,7 +209,7 @@ export class StockMovementsService {
     warehouseId?: number,
     manager?: any,
   ): Promise<StockMovement[]> {
-    const recipe = await this.recipesService.findActiveByProduct(productId);
+    const recipe = await this.recipesService.findActiveByProduct(productId, manager);
     if (!recipe || !recipe.lines || recipe.lines.length === 0) {
       return []; // No recipe for this product
     }
@@ -251,7 +251,7 @@ export class StockMovementsService {
     warehouseId?: number,
     manager?: any,
   ): Promise<StockMovement[]> {
-    const header = await this.recipesService.findOne(recipeHeaderId);
+    const header = await this.recipesService.findOne(recipeHeaderId, manager);
     if (!header || !header.lines || header.lines.length === 0) {
       return [];
     }
@@ -280,9 +280,6 @@ export class StockMovementsService {
     return movements;
   }
 
-  /**
-   * Reverse consumption (for cancellations/refunds).
-   */
   async createReverseConsumption(
     productId: number,
     saleQuantity: number,
@@ -299,16 +296,22 @@ export class StockMovementsService {
     );
     if (restoreParam === 'false') return [];
 
-    const product = await manager.query(`SELECT inventoryLinkType, linkedStockItemId, directStockQty, directStockUnit FROM products WHERE id = ${productId}`);
+    const activeManager = manager || this.movementRepository.manager;
+
+    const product = await activeManager.query(`SELECT inventoryLinkType, linkedStockItemId, directStockQty, directStockUnit FROM products WHERE id = ${productId}`);
     if (!product || product.length === 0) return [];
 
     let variation = null;
     if (variationId) {
-      const variations = await manager.query(`SELECT inventoryLinkType, linkedStockItemId, directStockQty, directStockUnit, recipeHeaderId FROM product_variations WHERE id = ${variationId}`);
+      const variations = await activeManager.query(`SELECT inventoryLinkType, linkedStockItemId, directStockQty, directStockUnit, recipeHeaderId FROM product_variations WHERE id = ${variationId}`);
       variation = variations?.[0] || null;
     }
 
-    const linkType = variation?.inventoryLinkType || product[0].inventoryLinkType;
+    let linkType = product[0].inventoryLinkType === 'direct_stock' ? 'direct_stock' : 'recipe';
+    
+    if (variation && variation.inventoryLinkType) {
+      linkType = variation.inventoryLinkType.toLowerCase();
+    }
 
     if (linkType === 'direct_stock') {
       const stockItemId = variation?.linkedStockItemId || product[0].linkedStockItemId;
@@ -327,7 +330,7 @@ export class StockMovementsService {
           sourceId,
           description: `Satış iptal iadesi (Direkt Stok)`,
           userId,
-        }, manager);
+        }, activeManager);
         return [movement];
       }
     }
@@ -335,7 +338,7 @@ export class StockMovementsService {
     if (linkType === 'recipe') {
       let recipeHeader = null;
       if (variation?.recipeHeaderId) {
-        const headerCheck = await manager.query(`SELECT id FROM recipe_headers WHERE id = ${variation.recipeHeaderId} AND isActive = 1`);
+        const headerCheck = await activeManager.query(`SELECT id FROM recipe_headers WHERE id = ${variation.recipeHeaderId} AND isActive = 1`);
         if (headerCheck && headerCheck.length > 0) {
            recipeHeader = await this.recipesService.findOne(headerCheck[0].id);
         }
@@ -359,7 +362,7 @@ export class StockMovementsService {
           sourceId,
           description: `Satış iptal iadesi (Reçete): ${recipe.product?.name || `Ürün #${productId}`}`,
           userId,
-        }, manager);
+        }, activeManager);
         movements.push(movement);
       }
       return movements;

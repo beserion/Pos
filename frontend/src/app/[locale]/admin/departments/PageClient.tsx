@@ -31,10 +31,12 @@ interface Department {
     parentGroupId?: number | null;
     parentGroup?: ParentGroup;
     imageUrl?: string;
+    visibleZones?: any[];
+    visibleZoneIds?: number[];
 }
 
 const EMPTY_PARENT_GROUP: ParentGroup = { id: 0, name: '' };
-const EMPTY: Department = { id: 0, name: '', isActive: true, outputProfileId: null, extraDepartmentId: null, autoOpenExtraPopup: false, parentGroupId: null };
+const EMPTY: Department = { id: 0, name: '', isActive: true, outputProfileId: null, extraDepartmentId: null, autoOpenExtraPopup: false, parentGroupId: null, visibleZoneIds: [] };
 
 export function PageClient() {
     const locale = useLocale();
@@ -43,9 +45,11 @@ export function PageClient() {
     const [items, setItems] = useState<Department[]>([]);
     const [outputProfiles, setOutputProfiles] = useState<OutputProfile[]>([]);
     const [parentGroups, setParentGroups] = useState<ParentGroup[]>([]);
+    const [zones, setZones] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isParentGroupModalOpen, setIsParentGroupModalOpen] = useState(false);
+    const [isZonesDropdownOpen, setIsZonesDropdownOpen] = useState(false);
     const [formData, setFormData] = useState<Department>({ ...EMPTY });
     const [parentGroupFormData, setParentGroupFormData] = useState<ParentGroup>({ ...EMPTY_PARENT_GROUP });
 
@@ -56,14 +60,16 @@ export function PageClient() {
         try {
             const API = process.env.NEXT_PUBLIC_API_URL;
             const h = { headers: { Authorization: `Bearer ${user.token}` } };
-            const [depRes, opRes, pgRes] = await Promise.all([
+            const [depRes, opRes, pgRes, zonesRes] = await Promise.all([
                 axios.get(`${API}/departments`, h),
                 axios.get(`${API}/output-profiles`, h),
-                axios.get(`${API}/parent-groups`, h).catch(() => ({ data: [] }))
+                axios.get(`${API}/parent-groups`, h).catch(() => ({ data: [] })),
+                axios.get(`${API}/zones`, h).catch(() => ({ data: [] }))
             ]);
             setItems(depRes.data);
             setOutputProfiles(opRes.data);
             setParentGroups(pgRes.data);
+            setZones(zonesRes.data);
         } catch { showSwal({ title: 'Hata', text: 'Veri yüklenemedi', icon: 'error' }); }
         finally { setLoading(false); }
     };
@@ -88,11 +94,11 @@ export function PageClient() {
             const h = { headers: { Authorization: `Bearer ${user.token}` } };
             const payload = { ...formData };
             if (payload.id === 0) {
-                const { id, outputProfile, extraDepartment, parentGroup, ...data } = payload as any;
+                const { id, outputProfile, extraDepartment, parentGroup, visibleZones, ...data } = payload as any;
                 await axios.post(`${API}/departments`, data, h);
                 toastSwal({ title: 'Başarılı', text: 'Kaydedildi', icon: 'success' });
             } else {
-                const { outputProfile, extraDepartment, parentGroup, ...data } = payload as any;
+                const { outputProfile, extraDepartment, parentGroup, visibleZones, ...data } = payload as any;
                 await axios.put(`${API}/departments/${payload.id}`, data, h);
                 toastSwal({ title: 'Başarılı', text: 'Güncellendi', icon: 'success' });
             }
@@ -159,7 +165,7 @@ export function PageClient() {
     };
 
     const openModal = (item?: Department) => {
-        setFormData(item ? { ...item } : { ...EMPTY });
+        setFormData(item ? { ...item, visibleZoneIds: item.visibleZones?.map(z => z.id) || [] } : { ...EMPTY });
         setIsModalOpen(true);
     };
 
@@ -490,6 +496,74 @@ export function PageClient() {
                                     </div>
                                 </div>
                                 <p className="text-[10px] text-slate-500 mt-2 px-1">Profil seçilirse, bu kategoriye ait tüm ürünler o profile yönlendirilir.</p>
+                            </div>
+
+                            {/* Görünürlük (Bölgeler) */}
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">GÖRÜNÜR OLDUĞU BÖLÜMLER</label>
+                                <div className="relative">
+                                    <div 
+                                        onClick={() => setIsZonesDropdownOpen(!isZonesDropdownOpen)}
+                                        className="w-full flex items-center justify-between px-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl cursor-pointer hover:border-indigo-300 transition-all"
+                                    >
+                                        <div className="flex flex-wrap gap-1">
+                                            {(!formData.visibleZoneIds || formData.visibleZoneIds.length === 0) ? (
+                                                <span className="text-slate-500 font-bold text-sm">Tüm Bölümlerde Görünür</span>
+                                            ) : (
+                                                formData.visibleZoneIds.map(zid => {
+                                                    const zName = zones.find(z => z.id === zid)?.name || 'Bilinmiyor';
+                                                    return (
+                                                        <span key={zid} className="px-2 py-0.5 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 rounded text-xs font-bold flex items-center gap-1">
+                                                            {zName}
+                                                            <i className="fat fa-times cursor-pointer hover:text-indigo-900 ml-1" onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setFormData(prev => ({ ...prev, visibleZoneIds: prev.visibleZoneIds?.filter(id => id !== zid) }));
+                                                            }}></i>
+                                                        </span>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                        <i className={`fat fa-chevron-${isZonesDropdownOpen ? 'up' : 'down'} text-slate-400 text-xs ml-2 shrink-0`}></i>
+                                    </div>
+                                    
+                                    {isZonesDropdownOpen && (
+                                        <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl z-50 max-h-60 overflow-y-auto p-2">
+                                            <div className="flex flex-col gap-1">
+                                                {zones.length === 0 && (
+                                                    <div className="p-3 text-center text-slate-500 text-xs font-bold">Tanımlı Bölüm Bulunamadı</div>
+                                                )}
+                                                {zones.map(zone => {
+                                                    const isSelected = formData.visibleZoneIds?.includes(zone.id);
+                                                    return (
+                                                        <label key={zone.id} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${isSelected ? 'bg-indigo-50 dark:bg-indigo-500/10' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}>
+                                                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300 dark:border-slate-600'}`}>
+                                                                {isSelected && <i className="fat fa-check text-[10px] text-white"></i>}
+                                                            </div>
+                                                            <span className={`text-sm font-bold ${isSelected ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'}`}>{zone.name}</span>
+                                                            <input 
+                                                                type="checkbox" 
+                                                                className="hidden" 
+                                                                checked={isSelected || false}
+                                                                onChange={(e) => {
+                                                                    const checked = e.target.checked;
+                                                                    setFormData(prev => {
+                                                                        const current = prev.visibleZoneIds || [];
+                                                                        return {
+                                                                            ...prev,
+                                                                            visibleZoneIds: checked ? [...current, zone.id] : current.filter(id => id !== zone.id)
+                                                                        };
+                                                                    });
+                                                                }}
+                                                            />
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-2 px-1">Seçim yapılmazsa ürün grubu tüm bölümlerde görünür.</p>
                             </div>
 
                             {/* Kategori Görseli */}

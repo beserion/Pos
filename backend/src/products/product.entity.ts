@@ -16,6 +16,7 @@ import type { Recipe } from '../recipes/recipe.entity';
 import type { Modifier } from '../modifiers/modifier.entity';
 import type { ProductType } from '../product-types/product-type.entity';
 import type { OutputProfile } from '../output-profiles/output-profile.entity';
+import type { Zone } from '../zones/zone.entity';
 import { SetMenu } from './set-menu.entity';
 import { StockCard } from '../stock-cards/stock-card.entity';
 import { OneToOne } from 'typeorm';
@@ -175,6 +176,14 @@ export class Product {
     inverseJoinColumn: { name: 'modifiersId', referencedColumnName: 'id' }
   })
   modifiers: Modifier[];
+
+  @ManyToMany('Zone', { cascade: true })
+  @JoinTable({
+    name: 'product_visible_zones',
+    joinColumn: { name: 'productId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'zoneId', referencedColumnName: 'id' }
+  })
+  visibleZones: Zone[];
 
   @CreateDateColumn()
   createdAt: Date;

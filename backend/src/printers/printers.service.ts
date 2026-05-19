@@ -19,6 +19,18 @@ function trASCII(text: string): string {
     .replace(/ç/g, 'c').replace(/Ç/g, 'C');
 }
 
+/** İşlem tipi etiketini döndürür (SALE dışındaki tipler için) */
+function getTransactionLabel(type: string): string {
+  switch (type) {
+    case 'COMPLIMENTARY': return 'IKRAM';
+    case 'FREE': return 'BEDELSIZ';
+    case 'PROMOTION': return 'PROMOSYON';
+    case 'STAFF': return 'PERSONEL';
+    case 'TICKET': return 'FIYET';
+    default: return '';
+  }
+}
+
 @Injectable()
 export class PrintersService {
   constructor(
@@ -66,6 +78,7 @@ export class PrintersService {
     data: any,
   ): Promise<{ success: boolean; message: string }> {
     let printer: Printer | null = null;
+    let resolvedProfile: OutputProfile | undefined = undefined;
 
     if (data.cashRegisterId) {
       this.logger.log(`Kasa ID ${data.cashRegisterId} için profil/yazıcı aranıyor...`);
@@ -76,22 +89,29 @@ export class PrintersService {
       
       if (cashRegister) {
         if (cashRegister.receiptProfile) {
-          const profile = cashRegister.receiptProfile;
-          this.logger.log(`Kasa Çıktı Profili bulundu: ${profile.name}`);
+          // Profili veritabanından TÜM alanlarıyla (boolean dahil) yeniden çek
+          resolvedProfile = await this.profileRepository.findOne({ 
+            where: { id: cashRegister.receiptProfile.id },
+            relations: ['mainPrinter', 'infoPrinter'] 
+          }) || cashRegister.receiptProfile;
+
+          this.logger.log(`Kasa Çıktı Profili bulundu: ${resolvedProfile.name}, showExchangeRates: ${resolvedProfile.showExchangeRates}`);
           
-          // Profil varsa, içindeki yazıcıları listeye ekle
+          // Profil içinde yazıcı tanımlıysa doğrudan onları kullan
           const targetPrinters = [];
-          if (profile.mainPrinter) targetPrinters.push({ printer: profile.mainPrinter, type: 'MAIN', copyCount: profile.copyCount || 1 });
-          if (profile.infoPrinter) targetPrinters.push({ printer: profile.infoPrinter, type: 'INFO', copyCount: 1 });
+          if (resolvedProfile.mainPrinter) targetPrinters.push({ printer: resolvedProfile.mainPrinter, type: 'MAIN', copyCount: resolvedProfile.copyCount || 1 });
+          if (resolvedProfile.infoPrinter) targetPrinters.push({ printer: resolvedProfile.infoPrinter, type: 'INFO', copyCount: 1 });
           
           if (targetPrinters.length > 0) {
-            return this.printToMultiplePrinters(targetPrinters, data, profile);
+            return this.printToMultiplePrinters(targetPrinters, data, resolvedProfile);
           }
+          // Profil var ama içinde yazıcı atanmamış — kasanın receiptPrinter'ını kullan ama profil ayarlarını koru
+          this.logger.log(`Profil içinde yazıcı tanımlı değil, kasanın receiptPrinter'ı deneniyor (profil ayarları korunacak).`);
         }
         
         if (cashRegister.receiptPrinter) {
           printer = cashRegister.receiptPrinter;
-          this.logger.log(`Kasa yazıcısı bulundu (Eski Yöntem): ${printer.name} (${printer.ipAddress})`);
+          this.logger.log(`Kasa yazıcısı bulundu: ${printer.name} (${printer.ipAddress})`);
         }
       }
     }
@@ -126,8 +146,22 @@ export class PrintersService {
       };
     }
 
-    // Tek yazıcı için tek kopya yazdır
-    return this.printToMultiplePrinters([{ printer, type: 'MAIN', copyCount: 1 }], data);
+    // Profil hâlâ bulunamadıysa (cashRegisterId gelmedi veya kasaya profil atanmadı),
+    // veritabanındaki ilk STANDARD profili bul ve ayarlarını uygula
+    if (!resolvedProfile) {
+      resolvedProfile = await this.profileRepository.findOne({
+        where: { profileType: 'STANDARD' },
+        order: { id: 'ASC' },
+      }) ?? undefined;
+      if (resolvedProfile) {
+        this.logger.log(`Varsayılan STANDARD profil uygulandı: ${resolvedProfile.name}, showExchangeRates: ${resolvedProfile.showExchangeRates}`);
+      } else {
+        this.logger.warn('Hiçbir STANDARD profil bulunamadı. Profil ayarları uygulanamıyor.');
+      }
+    }
+
+    // resolvedProfile varsa profil ayarlarını (kur, logo vb.) yazıcıya taşı
+    return this.printToMultiplePrinters([{ printer, type: 'MAIN', copyCount: resolvedProfile?.copyCount || 1 }], data, resolvedProfile);
   }
 
   private async printToMultiplePrinters(
@@ -206,8 +240,15 @@ export class PrintersService {
             thermalPrinter.alignLeft();
           }
 
+          // Program Tarihi (businessDate) + Saat gösterimi
+          let displayDate = '';
+          if (data.businessDate) {
+            displayDate = new Date(data.businessDate).toLocaleDateString('tr-TR');
+          } else {
+            displayDate = date.includes(' ') ? date.split(' ')[0] : new Date().toLocaleDateString('tr-TR');
+          }
           const timeOnly = date.includes(' ') ? date.split(' ')[1].substring(0, 5) : date;
-          thermalPrinter.leftRight(`Tarih: ${timeOnly}`, `No: ${data.receiptNumber || '000000'}`);
+          thermalPrinter.leftRight(`Tarih: ${displayDate} ${timeOnly}`, `No: ${data.receiptNumber || '000000'}`);
           
           if (profile?.showWaiter !== false && data.cashierName) {
             thermalPrinter.println(`Kasiyer: ${trASCII(data.cashierName)}`);
@@ -222,11 +263,16 @@ export class PrintersService {
 
           for (const item of activeItems) {
             let portionStr = '';
-            if (item.saleType === 'HALF') portionStr = ' (YARIM)';
-            else if (item.saleType === 'DOUBLE') portionStr = ' (DUBLE)';
+            if (item.saleType === 'HALF') portionStr = '(YARIM) ';
+            else if (item.saleType === 'DOUBLE') portionStr = '(DUBLE) ';
             
-            const nameStr = `${item.quantity}x ${trASCII(item.name + portionStr).substring(0, 22)}`;
-            const totalStr = `${Number(item.total).toFixed(2)} TL`;
+            const nameStr = `${item.quantity}x ${portionStr}${trASCII(item.name)}`;
+            const txLabel = getTransactionLabel(item.transactionType);
+            const totalStr = txLabel && Number(item.total) === 0
+              ? `[${txLabel}]`
+              : txLabel
+                ? `${Number(item.total).toFixed(2)} TL [${txLabel}]`
+                : `${Number(item.total).toFixed(2)} TL`;
             thermalPrinter.leftRight(nameStr, totalStr);
 
             if (profile?.showPortion !== false) {
@@ -252,11 +298,11 @@ export class PrintersService {
 
             for (const item of inactiveItems) {
               let portionStr = '';
-              if (item.saleType === 'HALF') portionStr = ' (YARIM)';
-              else if (item.saleType === 'DOUBLE') portionStr = ' (DUBLE)';
+              if (item.saleType === 'HALF') portionStr = '(YARIM) ';
+              else if (item.saleType === 'DOUBLE') portionStr = '(DUBLE) ';
               
               const statusLabel = item.status === 'REFUNDED' ? 'IADE' : 'IPTAL';
-              const nameStr = `${item.quantity}x ${trASCII(item.name + portionStr).substring(0, 18)} [${statusLabel}]`;
+              const nameStr = `${item.quantity}x ${portionStr}${trASCII(item.name)} [${statusLabel}]`;
               thermalPrinter.println(nameStr);
               const reason = item.refundReason || item.cancelReason || item.note;
               if (reason) thermalPrinter.println(`  Sebep: ${trASCII(reason)}`);
@@ -264,29 +310,52 @@ export class PrintersService {
           }
 
           thermalPrinter.drawLine();
+
+          // İndirim varsa ARA TOPLAM ve İNDİRİM satırlarını göster
+          if (Number(data.discountAmount || 0) > 0) {
+            const subTotalBeforeDiscount = Number(data.totalAmount) + Number(data.discountAmount);
+            thermalPrinter.leftRight('ARA TOPLAM', `${subTotalBeforeDiscount.toFixed(2)} TL`);
+            thermalPrinter.leftRight('INDIRIM', `-${Number(data.discountAmount).toFixed(2)} TL`);
+            thermalPrinter.drawLine();
+          }
+
+          // TOPLAM — profil boyutundan 1 kademe büyük
+          const totalTw = Math.min((tw || 0) + 1, 2);
+          const totalTh = Math.min((th || 0) + 1, 2);
+          thermalPrinter.setTextSize(totalTw, totalTh);
           thermalPrinter.bold(true);
           thermalPrinter.leftRight('TOPLAM', `${Number(data.totalAmount).toFixed(2)} TL`);
           thermalPrinter.setTextNormal();
           thermalPrinter.bold(false);
           
-          if (data.paymentMethod) {
-            thermalPrinter.println(`Odeme: ${data.paymentMethod === 'CASH' ? 'NAKIT' : 'KREDI KARTI'}`);
-          }
+
 
           // Döviz Kurları (Profilde açıksa)
+          this.logger.log(`[printReceipt] showExchangeRates: ${profile?.showExchangeRates}, totalAmount: ${data.totalAmount}, profileId: ${profile?.id}`);
           if (profile?.showExchangeRates) {
             try {
-              const [eurStr, usdStr] = await Promise.all([
+              const [eurStr, usdStr, gbpStr] = await Promise.all([
                 this.parametersService.getValue('pos', 'eur_rate'),
-                this.parametersService.getValue('pos', 'usd_rate')
+                this.parametersService.getValue('pos', 'usd_rate'),
+                this.parametersService.getValue('pos', 'gbp_rate')
               ]);
+              this.logger.log(`[printReceipt] Kur değerleri: EUR=${eurStr}, USD=${usdStr}, GBP=${gbpStr}`);
               const eurRate = Number(eurStr) || 37.50;
               const usdRate = Number(usdStr) || 35.20;
+              const gbpRate = Number(gbpStr) || 44.10;
               
-              thermalPrinter.drawLine();
-              thermalPrinter.println(`EUR (${eurRate.toFixed(2)}) : E ${(Number(data.totalAmount) / eurRate).toFixed(2)}`);
-              thermalPrinter.println(`USD (${usdRate.toFixed(2)}) : $ ${(Number(data.totalAmount) / usdRate).toFixed(2)}`);
-            } catch (e) {}
+              const totalAmount = Number(data.totalAmount || 0);
+              if (totalAmount > 0) {
+                thermalPrinter.drawLine();
+                thermalPrinter.leftRight('EURO  (EUR)', `${(totalAmount / eurRate).toFixed(2)} EUR`);
+                thermalPrinter.leftRight('DOLAR (USD)', `${(totalAmount / usdRate).toFixed(2)} USD`);
+                thermalPrinter.leftRight('STERLIN (GBP)', `${(totalAmount / gbpRate).toFixed(2)} GBP`);
+              } else {
+                this.logger.warn('[printReceipt] totalAmount sıfır, kur bilgileri yazdırılmadı.');
+              }
+            } catch (e) {
+              this.logger.error('Döviz kurları yazdırılırken hata:', e.message);
+            }
           }
 
           thermalPrinter.drawLine();
@@ -450,8 +519,15 @@ export class PrintersService {
                   thermalPrinter.alignLeft();
                 }
 
+                // Program Tarihi (businessDate) + Saat gösterimi
+                let kitchenDisplayDate = '';
+                if (data.businessDate) {
+                  kitchenDisplayDate = new Date(data.businessDate).toLocaleDateString('tr-TR');
+                } else {
+                  kitchenDisplayDate = date.includes(' ') ? date.split(' ')[0] : new Date().toLocaleDateString('tr-TR');
+                }
                 const timeOnly = date.includes(' ') ? date.split(' ')[1].substring(0, 5) : date;
-                thermalPrinter.leftRight(`Tarih: ${timeOnly}`, `No: ${data.receiptNumber || '000000'}`);
+                thermalPrinter.leftRight(`Tarih: ${kitchenDisplayDate} ${timeOnly}`, `No: ${data.receiptNumber || '000000'}`);
                 if (data.waiterName && profile.showWaiter !== false) {
                   thermalPrinter.bold(true);
                   thermalPrinter.println(`Garson: ${trASCII(data.waiterName)}`);
@@ -476,14 +552,23 @@ export class PrintersService {
 
                 for (const item of immediateItems) {
                   thermalPrinter.bold(true);
-                  
+
+                  let portionStr = '';
+                  if (item.saleType === 'HALF') portionStr = '(YARIM) ';
+                  else if (item.saleType === 'DOUBLE') portionStr = '(DUBLE) ';
+
                   if (profile.showPrice) {
                     // Müşteri fişi formatı (fiyat gösterimli)
-                    const totalStr = `${Number(item.total || item.price * item.quantity).toFixed(2)} TL`;
-                    thermalPrinter.leftRight(`${item.quantity}x ${trASCII(item.name).substring(0,20)}`, totalStr);
+                    const txLabel = getTransactionLabel(item.transactionType);
+                    const totalStr = txLabel && Number(item.total || item.price * item.quantity) === 0
+                      ? `[${txLabel}]`
+                      : txLabel
+                        ? `${Number(item.total || item.price * item.quantity).toFixed(2)} TL [${txLabel}]`
+                        : `${Number(item.total || item.price * item.quantity).toFixed(2)} TL`;
+                    thermalPrinter.leftRight(`${item.quantity}x ${portionStr}${trASCII(item.name)}`, totalStr);
                   } else {
                     // Normal mutfak formatı (Bitişik gösterim)
-                    thermalPrinter.println(`${item.quantity}x ${trASCII(item.name).substring(0,28)}`);
+                    thermalPrinter.println(`${item.quantity}x ${portionStr}${trASCII(item.name)}`);
                   }
                   thermalPrinter.bold(false);
                   
@@ -512,11 +597,16 @@ export class PrintersService {
                   thermalPrinter.drawLine();
                   for (const item of waitingItems) {
                     thermalPrinter.bold(true);
+
+                    let portionStr = '';
+                    if (item.saleType === 'HALF') portionStr = '(YARIM) ';
+                    else if (item.saleType === 'DOUBLE') portionStr = '(DUBLE) ';
+
                     if (profile.showPrice) {
                       const totalStr = `${Number(item.total || item.price * item.quantity).toFixed(2)} TL`;
-                      thermalPrinter.leftRight(`${item.quantity}x ${trASCII(item.name).substring(0,20)}`, totalStr);
+                      thermalPrinter.leftRight(`${item.quantity}x ${portionStr}${trASCII(item.name)}`, totalStr);
                     } else {
-                      thermalPrinter.println(`${item.quantity}x ${trASCII(item.name).substring(0,28)}`);
+                      thermalPrinter.println(`${item.quantity}x ${portionStr}${trASCII(item.name)}`);
                     }
                     thermalPrinter.bold(false);
 
@@ -554,45 +644,52 @@ export class PrintersService {
                    thermalPrinter.drawLine();
                    for (const item of cancelledItems) {
                      thermalPrinter.bold(true);
-                     thermalPrinter.println(`${item.quantity}x IPTAL ${trASCII(item.name).substring(0,20)}`);
+                     thermalPrinter.println(`${item.quantity}x IPTAL ${trASCII(item.name)}`);
                      thermalPrinter.bold(false);
                      const reason = item.refundReason || item.cancelReason || item.note;
               if (reason) thermalPrinter.println(`  Sebep: ${trASCII(reason)}`);
                    }
                 }
 
-                // Döviz Kurları ve Genel Toplam (Sadece Müşteri Fişi İçin)
-                if (profile.infoOnly && profile.showPrice) {
+                // Döviz Kurları ve Genel Toplam (Sadece Müşteri Fişi / Adisyon İçin)
+                if (profile.showPrice || (profile.infoOnly && profile.showPrice)) {
                   // Siparişin genel toplamını hesapla (sadece iptal edilmeyenler)
                   const totalAmount = group.items
                     .filter((i: any) => !i.isCancelled)
                     .reduce((sum: number, i: any) => sum + (Number(i.total) || Number(i.price) * Number(i.quantity)), 0);
 
                   thermalPrinter.drawLine();
+                  // TOPLAM — profil boyutundan 1 kademe büyük
+                  const kitchenTotalTw = Math.min((tw || 0) + 1, 2);
+                  const kitchenTotalTh = Math.min((th || 0) + 1, 2);
+                  thermalPrinter.setTextSize(kitchenTotalTw, kitchenTotalTh);
                   thermalPrinter.bold(true);
-                  thermalPrinter.setTextSize(tw, th);
                   thermalPrinter.leftRight('TOPLAM', `${totalAmount.toFixed(2)} TL`);
                   thermalPrinter.bold(false);
                   thermalPrinter.setTextNormal();
 
-                  // Döviz Kurlarını Çek ve Yazdır
-                  try {
-                    const [eurStr, usdStr, gbpStr] = await Promise.all([
-                      this.parametersService.getValue('pos', 'eur_rate'),
-                      this.parametersService.getValue('pos', 'usd_rate'),
-                      this.parametersService.getValue('pos', 'gbp_rate')
-                    ]);
+                  // Döviz Kurlarını Çek ve Yazdır (Profilde açıksa)
+                  if (profile.showExchangeRates) {
+                    try {
+                      const [eurStr, usdStr, gbpStr] = await Promise.all([
+                        this.parametersService.getValue('pos', 'eur_rate'),
+                        this.parametersService.getValue('pos', 'usd_rate'),
+                        this.parametersService.getValue('pos', 'gbp_rate')
+                      ]);
 
-                    const eurRate = Number(eurStr) || 37.50;
-                    const usdRate = Number(usdStr) || 35.20;
-                    const gbpRate = Number(gbpStr) || 44.10;
+                      const eurRate = Number(eurStr) || 37.50;
+                      const usdRate = Number(usdStr) || 35.20;
+                      const gbpRate = Number(gbpStr) || 44.10;
 
-                    thermalPrinter.drawLine();
-                    thermalPrinter.println(`EUR (${eurRate.toFixed(2)}) : E ${(totalAmount / eurRate).toFixed(2)}`);
-                    thermalPrinter.println(`USD (${usdRate.toFixed(2)}) : $ ${(totalAmount / usdRate).toFixed(2)}`);
-                    thermalPrinter.println(`GBP (${gbpRate.toFixed(2)}) : P ${(totalAmount / gbpRate).toFixed(2)}`);
-                  } catch (err) {
-                    console.warn('Döviz kurlari alinamadi, atlaniliyor.', err);
+                      if (totalAmount > 0) {
+                        thermalPrinter.drawLine();
+                        thermalPrinter.leftRight('EURO  (EUR)', `${(totalAmount / eurRate).toFixed(2)} EUR`);
+                        thermalPrinter.leftRight('DOLAR (USD)', `${(totalAmount / usdRate).toFixed(2)} USD`);
+                        thermalPrinter.leftRight('STERLIN (GBP)', `${(totalAmount / gbpRate).toFixed(2)} GBP`);
+                      }
+                    } catch (err) {
+                      console.warn('Döviz kurlari alinamadi, atlaniliyor.', err);
+                    }
                   }
                 }
 
@@ -938,33 +1035,37 @@ export class PrintersService {
       const [crInfo] = await this.dataSource.query(`SELECT name FROM cash_registers WHERE id = @0`, [zReport.cashRegisterId]);
       const cashRegisterName = crInfo?.name || `Kasa #${zReport.cashRegisterId}`;
 
-      // 2. Detaylı Ürün Satışlarını Çek
-      const shifts = await this.dataSource.query(`SELECT id FROM shifts WHERE businessDate = @0 AND cashRegisterId = @1`, [zReport.businessDate, zReport.cashRegisterId]);
-      const shiftIds = shifts.map((s: any) => s.id).join(',');
-      
-      let productSales = [];
-      if (shiftIds) {
+      // 2. Z_REPORT Çıktı Profilini Yükle (profil yoksa varsayılan ayarlarla devam et)
+      const profile = await this.profileRepository.findOne({
+        where: { profileType: 'Z_REPORT', isActive: true },
+        relations: ['mainPrinter', 'infoPrinter'],
+      });
+
+      // 3. Detaylı Ürün Satışlarını Çek (businessDate bazlı, vardiyadan bağımsız)
+      let productSales: any[] = [];
+      try {
+        const crFilterProd = zReport.cashRegisterId ? `AND s.cashRegisterId = ${zReport.cashRegisterId}` : '';
         productSales = await this.dataSource.query(`
-          SELECT si.name, SUM(CAST(si.quantity AS DECIMAL(12,2))) as quantity, SUM(CAST(si.total AS DECIMAL(12,2))) as total
-          FROM sale_items si JOIN sales s ON s.id = si.saleId
-          WHERE s.shiftId IN (${shiftIds}) AND s.status = 'COMPLETED' AND si.status = 'ACTIVE'
-          GROUP BY si.name
-          ORDER BY total DESC
-        `);
-      }
+          SELECT p.name, SUM(CAST(si.quantity AS DECIMAL(12,2))) as quantity, SUM(CAST(si.total AS DECIMAL(12,2))) as total
+          FROM sale_items si 
+          JOIN sales s ON s.id = si.saleId
+          JOIN products p ON p.id = si.productId
+          WHERE s.businessDate = @0 AND (s.companyId = @1 OR s.companyId IS NULL) AND s.status = 'COMPLETED' AND si.status = 'ACTIVE' ${crFilterProd}
+          GROUP BY p.name ORDER BY total DESC
+        `, [zReport.businessDate, zReport.companyId]);
+      } catch (e) { this.logger.warn('Urun satislari cekilemedi:', e); }
 
       // JSON alanları parse et
-      const data = {
-        ...zReport,
-        userName,
-        cashRegisterName,
-        productSales,
-        categoryTotals: typeof zReport.categoryTotals === 'string' ? JSON.parse(zReport.categoryTotals) : zReport.categoryTotals,
-        paymentTotals: typeof zReport.paymentTotals === 'string' ? JSON.parse(zReport.paymentTotals) : zReport.paymentTotals,
-        waiterSales: typeof zReport.waiterSales === 'string' ? JSON.parse(zReport.waiterSales) : zReport.waiterSales,
-      };
+      let categoryTotals: any[] = [];
+      let paymentTotals: any[] = [];
+      let waiterSales: any[] = [];
+      try { categoryTotals = typeof zReport.categoryTotals === 'string' ? JSON.parse(zReport.categoryTotals) : (zReport.categoryTotals || []); } catch {}
+      try { paymentTotals = typeof zReport.paymentTotals === 'string' ? JSON.parse(zReport.paymentTotals) : (zReport.paymentTotals || []); } catch {}
+      try { waiterSales = typeof zReport.waiterSales === 'string' ? JSON.parse(zReport.waiterSales) : (zReport.waiterSales || []); } catch {}
 
-      // 3. Yazdır
+      const data = { ...zReport, userName, cashRegisterName, productSales, categoryTotals, paymentTotals, waiterSales };
+
+      // 4. Yazıcı Bağlantısını Kur (Frontend'den seçilen yazıcı)
       const { ThermalPrinter, PrinterTypes, CharacterSet, BreakLine } = await import('node-thermal-printer');
       let printerInterface = printer.ipAddress;
       if (printerInterface.includes('.') && !printerInterface.startsWith('tcp://') && !printerInterface.includes('//') && !printerInterface.includes('\\\\')) {
@@ -986,77 +1087,127 @@ export class PrintersService {
 
       if (printerInterface.startsWith('tcp://')) {
         const isConnected = await thermalPrinter.isPrinterConnected();
-        if (!isConnected) throw new Error('Yazıcıya bağlanılamadı.');
+        if (!isConnected) throw new Error('Yaziciya baglanamadi.');
       }
 
-      // Header
+      // 5. Fiş İçeriği — Profil Ayarlarına Göre
+      let tw = 0, th = 0;
+      if (profile?.textSize === 'LARGE') { tw = 1; th = 1; }
+      else if (profile?.textSize === 'XLARGE') { tw = 2; th = 2; }
+
+      // BAŞLIK
       thermalPrinter.alignCenter();
       thermalPrinter.bold(true);
-      thermalPrinter.println('*** POSNETX ***');
-      thermalPrinter.setTextSize(1, 1);
-      thermalPrinter.println('GUN SONU RAPORU');
+      if (profile?.showLogo !== false) {
+        const companyName = await this.parametersService.getValue('pos', 'company_name').catch(() => '');
+        thermalPrinter.println(`*** ${trASCII(companyName || 'POSNETX')} ***`);
+      }
+      thermalPrinter.setTextSize(tw, th);
+      thermalPrinter.println(trASCII(profile?.customTitle || 'GUN SONU RAPORU'));
       thermalPrinter.setTextNormal();
       thermalPrinter.bold(false);
       thermalPrinter.drawLine();
 
-      // Info
+      // BİLGİ
       thermalPrinter.alignLeft();
-      thermalPrinter.println(`Z No: ${data.zNumber || '---'}`);
-      thermalPrinter.println(`Tarih: ${new Date(data.businessDate).toLocaleDateString('tr-TR')}`);
-      thermalPrinter.println(`Kasa: ${trASCII(data.cashRegisterName)}`);
-      thermalPrinter.println(`Kullanici: ${trASCII(data.userName)}`);
+      thermalPrinter.println(`Z No   : ${data.zNumber || '---'}`);
+      thermalPrinter.println(`Tarih  : ${new Date(data.businessDate).toLocaleDateString('tr-TR')}`);
+      thermalPrinter.println(`Kasa   : ${trASCII(data.cashRegisterName)}`);
+      thermalPrinter.println(`Kasiyer: ${trASCII(data.userName)}`);
       thermalPrinter.drawLine();
 
-      // Category Totals
-      if (data.categoryTotals && data.categoryTotals.length > 0) {
-        thermalPrinter.alignCenter();
-        thermalPrinter.bold(true);
-        thermalPrinter.println('--- GRUP BAZLI SATISLAR ---');
-        thermalPrinter.bold(false);
-        thermalPrinter.alignLeft();
-        for (const cat of data.categoryTotals) {
-          thermalPrinter.leftRight(trASCII(cat.name || 'Diger'), `${Number(cat.total).toFixed(2)} TL`);
+      // SATIŞ TOPLAMLARI (showProductSummary)
+      if (profile?.showProductSummary !== false) {
+        thermalPrinter.alignCenter(); thermalPrinter.bold(true);
+        thermalPrinter.println('--- SATIS TOPLAMLARI ---');
+        thermalPrinter.bold(false); thermalPrinter.alignLeft();
+        if (profile?.groupByCategory && categoryTotals.length > 0) {
+          for (const cat of categoryTotals) thermalPrinter.leftRight(trASCII(cat.name || 'Diger'), `${Number(cat.total).toFixed(2)} TL`);
+        } else {
+          thermalPrinter.leftRight('TOPLAM SATIS', `${Number(data.netSales || 0).toFixed(2)} TL`);
         }
         thermalPrinter.drawLine();
       }
 
-      // Product Totals
-      if (data.productSales && data.productSales.length > 0) {
-        thermalPrinter.alignCenter();
-        thermalPrinter.bold(true);
+      // ÜRÜN BAZLI SATIŞLAR
+      if (productSales.length > 0) {
+        thermalPrinter.alignCenter(); thermalPrinter.bold(true);
         thermalPrinter.println('--- URUN BAZLI SATISLAR ---');
-        thermalPrinter.bold(false);
-        thermalPrinter.alignLeft();
-        for (const p of data.productSales) {
+        thermalPrinter.bold(false); thermalPrinter.alignLeft();
+        for (const p of productSales) {
           thermalPrinter.leftRight(`${Number(p.quantity).toFixed(0)}x ${trASCII(p.name).substring(0, 18)}`, `${Number(p.total).toFixed(2)} TL`);
         }
         thermalPrinter.drawLine();
       }
 
-      // Financial Summary
-      thermalPrinter.alignCenter();
-      thermalPrinter.bold(true);
+      // İŞLEM ANALİZİ (showTransactionAnalysis)
+      if (profile?.showTransactionAnalysis !== false) {
+        thermalPrinter.alignCenter(); thermalPrinter.bold(true);
+        thermalPrinter.println('--- ISLEM ANALIZI ---');
+        thermalPrinter.bold(false); thermalPrinter.alignLeft();
+        thermalPrinter.leftRight('TOPLAM FIS', `${data.totalReceipts || 0}`);
+        thermalPrinter.leftRight('URUN ADEDI', `${data.totalProductCount || 0}`);
+        thermalPrinter.leftRight('IADE TOPLAM', `${Number(data.refundTotal || 0).toFixed(2)} TL`);
+        thermalPrinter.leftRight('IPTAL TOPLAM', `${Number(data.cancelTotal || 0).toFixed(2)} TL`);
+        if (Number(data.discountTotal) > 0) thermalPrinter.leftRight('INDIRIM', `${Number(data.discountTotal).toFixed(2)} TL`);
+        if (Number(data.serviceFeeTotal) > 0) thermalPrinter.leftRight('SERVIS BEDELI', `${Number(data.serviceFeeTotal).toFixed(2)} TL`);
+        thermalPrinter.drawLine();
+      }
+
+      // ÖDEME TOPLAMLARI
+      thermalPrinter.alignCenter(); thermalPrinter.bold(true);
       thermalPrinter.println('--- ODEME TOPLAMLARI ---');
-      thermalPrinter.bold(false);
-      thermalPrinter.alignLeft();
-      if (data.paymentTotals) {
-        for (const pt of data.paymentTotals) {
+      thermalPrinter.bold(false); thermalPrinter.alignLeft();
+      if (paymentTotals.length > 0) {
+        for (const pt of paymentTotals) {
           thermalPrinter.leftRight(trASCII(pt.method === 'CASH' ? 'NAKIT' : pt.method === 'CREDIT_CARD' ? 'KREDI KARTI' : pt.method), `${Number(pt.total).toFixed(2)} TL`);
         }
+      } else {
+        thermalPrinter.leftRight('NAKIT', `${Number(data.cashCollection || 0).toFixed(2)} TL`);
+        thermalPrinter.leftRight('KREDI KARTI', `${Number(data.creditCardCollection || 0).toFixed(2)} TL`);
+        if (Number(data.cariCollection) > 0) thermalPrinter.leftRight('CARI', `${Number(data.cariCollection).toFixed(2)} TL`);
       }
       thermalPrinter.drawLine();
 
-      // Stats
-      thermalPrinter.leftRight('TOPLAM FIS', `${data.totalReceipts || 0}`);
-      thermalPrinter.leftRight('URUN ADEDI', `${data.totalProductCount || 0}`);
-      thermalPrinter.leftRight('IPTAL TOPLAM', `${Number(data.cancelTotal || 0).toFixed(2)} TL`);
-      thermalPrinter.leftRight('IADE TOPLAM', `${Number(data.refundTotal || 0).toFixed(2)} TL`);
-      thermalPrinter.drawLine();
+      // KDV ÖZETİ (showVatSummary)
+      if (profile?.showVatSummary && Number(data.taxTotal) > 0) {
+        thermalPrinter.alignCenter(); thermalPrinter.bold(true);
+        thermalPrinter.println('--- KDV OZETI ---');
+        thermalPrinter.bold(false); thermalPrinter.alignLeft();
+        thermalPrinter.leftRight('MATRAH', `${Number(data.taxBase || 0).toFixed(2)} TL`);
+        thermalPrinter.leftRight('KDV TOPLAM', `${Number(data.taxTotal || 0).toFixed(2)} TL`);
+        thermalPrinter.drawLine();
+      }
 
-      // Grand Total
+      // GARSON SATIŞLARI (showWaiterSales)
+      if (profile?.showWaiterSales && waiterSales.length > 0) {
+        thermalPrinter.alignCenter(); thermalPrinter.bold(true);
+        thermalPrinter.println('--- GARSON SATISLARI ---');
+        thermalPrinter.bold(false); thermalPrinter.alignLeft();
+        for (const ws of waiterSales) thermalPrinter.leftRight(trASCII(ws.waiterName || ws.name || '?'), `${Number(ws.total).toFixed(2)} TL`);
+        thermalPrinter.drawLine();
+      }
+
+      // DÖVİZ KURLARI (showExchangeRates)
+      if (profile?.showExchangeRates) {
+        try {
+          const [eurStr, usdStr] = await Promise.all([
+            this.parametersService.getValue('pos', 'eur_rate'),
+            this.parametersService.getValue('pos', 'usd_rate'),
+          ]);
+          thermalPrinter.alignCenter(); thermalPrinter.bold(true);
+          thermalPrinter.println('--- DOVIZ KURLARI ---');
+          thermalPrinter.bold(false); thermalPrinter.alignLeft();
+          thermalPrinter.leftRight('EUR', `${Number(eurStr || 0).toFixed(2)}`);
+          thermalPrinter.leftRight('USD', `${Number(usdStr || 0).toFixed(2)}`);
+          thermalPrinter.drawLine();
+        } catch {}
+      }
+
+      // GENEL TOPLAM
       thermalPrinter.bold(true);
-      thermalPrinter.setTextSize(1, 1);
-      thermalPrinter.leftRight('GENEL TOPLAM', `${Number(data.netSales).toFixed(2)} TL`);
+      thermalPrinter.setTextSize(tw > 0 ? tw : 1, th > 0 ? th : 1);
+      thermalPrinter.leftRight('GENEL TOPLAM', `${Number(data.netSales || 0).toFixed(2)} TL`);
       thermalPrinter.setTextNormal();
       thermalPrinter.bold(false);
       thermalPrinter.drawLine();
@@ -1064,9 +1215,12 @@ export class PrintersService {
       thermalPrinter.alignCenter();
       thermalPrinter.println('Mali Degeri Yoktur');
       thermalPrinter.cut();
-      await thermalPrinter.execute();
+      if (profile?.soundAlert) thermalPrinter.beep();
 
-      return { success: true, message: 'Detayli gun sonu raporu yazdirildi.' };
+      await thermalPrinter.execute();
+      thermalPrinter.clear();
+
+      return { success: true, message: 'Gun sonu raporu profil ayarlariyla yazdirildi.' };
     } catch (err: any) {
       this.logger.error(`Detayli Z-Raporu yazdirma hatasi: ${err.message}`);
       return { success: false, message: `Yazdirma hatasi: ${err.message}` };

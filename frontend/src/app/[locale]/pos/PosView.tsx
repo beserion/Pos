@@ -59,12 +59,74 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const [cart, setCart] = useState<{ product: Product; quantity: number; itemId?: number; subCheckId?: number; subItems?: any[]; saleType?: string; saleTypeMultiplier?: number; unitPrice?: number; note?: string; status?: string; refundReason?: string; cancelReason?: string; }[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string>('Tümü');
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+    const [selectedCurrency, setSelectedCurrency] = useState<'TRY' | 'EUR' | 'USD' | 'GBP'>('TRY');
     const [isSplitPaymentOpen, setIsSplitPaymentOpen] = useState(false);
     const [splitAmounts, setSplitAmounts] = useState({ cash: 0, creditCard: 0 });
     const [dataLoading, setDataLoading] = useState(false);
     const [activeOrderIds, setActiveOrderIds] = useState<number[]>([]);
     const [selectedPosItems, setSelectedPosItems] = useState<number[]>([]);
     const [discount, setDiscount] = useState<number>(0);
+    const [discountRate, setDiscountRate] = useState<number>(0);
+
+    // --- Satır İndirimi (Line Item Discount) State ---
+    const [isLineDiscountModalOpen, setIsLineDiscountModalOpen] = useState(false);
+    const [selectedDiscountItem, setSelectedDiscountItem] = useState<any>(null);
+    const [lineDiscountRate, setLineDiscountRate] = useState<number>(0);
+    const [lineDiscountAmount, setLineDiscountAmount] = useState<number>(0);
+
+    const openLineDiscountModal = (item: any) => {
+        setSelectedDiscountItem(item);
+        setLineDiscountRate(Number(item.discountRate || 0));
+        setLineDiscountAmount(Number(item.discountAmount || 0));
+        setIsLineDiscountModalOpen(true);
+    };
+
+    const saveLineDiscountToBackend = async () => {
+        if (!selectedDiscountItem) return;
+        const token = (user as any)?.token || localStorage.getItem('token');
+        
+        try {
+            const res = await fetch(`${API_URL}/sales/items/${selectedDiscountItem.id}/discount`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                    discountRate: lineDiscountRate,
+                    discountAmount: lineDiscountAmount
+                })
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                toastSwal({ icon: 'error', title: err.message || 'Satır indirimi kaydedilemedi' });
+            } else {
+                toastSwal({ icon: 'success', title: 'Satır indirimi başarıyla uygulandı!' });
+                setIsLineDiscountModalOpen(false);
+                if (selectedTable) {
+                    const resFetch = await fetch(`${API_URL}/sales/table/${selectedTable.id}/sub-checks`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (resFetch.ok) {
+                        const rootSales = await resFetch.json();
+                        setTableSubChecks(rootSales);
+                        const flat: any[] = [];
+                        const flatten = (arr: any[]) => {
+                            arr.forEach((s: any) => {
+                                flat.push(s);
+                                if (s.subChecks && s.subChecks.length > 0) {
+                                    flatten(s.subChecks);
+                                }
+                            });
+                        };
+                        flatten(rootSales);
+                        setAllFlatChecks(flat);
+                        loadDiscountFromChecks(flat, activeSubCheckId);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Satır indirim hatası:', e);
+            toastSwal({ icon: 'error', title: 'Satır indirimi kaydedilirken hata oluştu' });
+        }
+    };
     const [serviceFee, setServiceFee] = useState<number>(0);
 
     // --- Alt Adisyon (Sub-Check) State ---
@@ -162,6 +224,21 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     }, [user, activeCashRegister, mounted, API_URL]);
 
 
+    // Mevcut adisyondaki indirim değerini yükle
+    const loadDiscountFromChecks = (flat: any[], activeId: number | 'ALL' | null) => {
+        if (!flat || flat.length === 0) { setDiscount(0); setDiscountRate(0); return; }
+        if (activeId && activeId !== 'ALL') {
+            const activeCheck = flat.find((s: any) => s.id === activeId);
+            setDiscount(Number(activeCheck?.discountAmount || 0));
+            setDiscountRate(Number(activeCheck?.discountRate || 0));
+        } else {
+            // Tüm adisyonların indirim toplamını yükle
+            const totalDiscount = flat.reduce((sum: number, c: any) => sum + Number(c.discountAmount || 0), 0);
+            setDiscount(totalDiscount);
+            setDiscountRate(0);
+        }
+    };
+
     useEffect(() => {
         const fetchTableOrders = async () => {
             if (!selectedTable || (selectedTable.status === 'BOŞ' && !selectedTable.currentTotal)) {
@@ -170,6 +247,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 setTableSubChecks([]);
                 setAllFlatChecks([]);
                 setActiveSubCheckId(null);
+                setDiscount(0);
                 return;
             }
             try {
@@ -199,9 +277,14 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     setActiveOrderIds(orderIds);
 
                     // Aktif sekmeyi belirle
+                    let resolvedSubCheckId = activeSubCheckId;
                     if (flat.length > 0 && !activeSubCheckId) {
                         setActiveSubCheckId(flat[0].id);
+                        resolvedSubCheckId = flat[0].id;
                     }
+
+                    // Mevcut indirimi adisyondan yükle
+                    loadDiscountFromChecks(flat, resolvedSubCheckId);
 
                     if (activeSubCheckId === 'ALL' || !activeSubCheckId) {
                         let newCart: any[] = [];
@@ -307,16 +390,21 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                         setCart(newCart);
                         setActiveOrderIds(orderIds);
                         setAllFlatChecks(orders);
-                        if (orders.length > 0) setActiveSubCheckId(orders[0].id);
+                        if (orders.length > 0) {
+                            setActiveSubCheckId(orders[0].id);
+                            loadDiscountFromChecks(orders, orders[0].id);
+                        }
                     } else {
                         setCart([]);
                         setActiveOrderIds([]);
+                        setDiscount(0);
                     }
                 }
             } catch (error) {
                 console.error('Error fetching table orders:', error);
                 setCart([]);
                 setActiveOrderIds([]);
+                setDiscount(0);
             }
         };
         fetchTableOrders();
@@ -341,11 +429,13 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             // Tüm adisyonlar seçiliyse birleştirip tek fiş yazdır
             const mergedItems = allFlatChecks.flatMap((check: any) => check.items || []);
             const mergedTotal = allFlatChecks.reduce((sum: number, check: any) => sum + Number(check.totalAmount || 0), 0);
+            const mergedDiscount = allFlatChecks.reduce((sum: number, check: any) => sum + Number(check.discountAmount || 0), 0);
             checksToPrint.push({
                 receiptNumber: allFlatChecks[0]?.receiptNumber || 'TOPLU',
                 subCheckLabel: 'Tüm Adisyonlar',
                 items: mergedItems,
                 totalAmount: mergedTotal,
+                discountAmount: mergedDiscount,
                 date: new Date().toISOString()
             });
         } else {
@@ -355,6 +445,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 subCheckLabel: check.subCheckLabel || `Adisyon`,
                 items: check.items || [],
                 totalAmount: check.totalAmount,
+                discountAmount: check.discountAmount || 0,
                 date: new Date().toISOString()
             }));
         }
@@ -379,7 +470,17 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 return;
             }
 
+            // Program Tarihini backend'den çek
             const token = (user as any)?.token || localStorage.getItem('token');
+            let businessDate = '';
+            try {
+                const bdRes = await fetch(`${API_URL}/business-day/status`, { headers: { Authorization: `Bearer ${token}` } });
+                if (bdRes.ok) {
+                    const bdData = await bdRes.json();
+                    businessDate = bdData.activeBusinessDate || '';
+                }
+            } catch (e) { console.warn('businessDate alinamadi:', e); }
+
             for (const check of checksToPrint) {
                 const checkItems = check.items.map((i: any) => ({
                     name: i.product?.name || 'Ürün',
@@ -389,6 +490,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     subItems: i.subItems || [],
                     status: i.status,
                     saleType: i.saleType,
+                    transactionType: i.transactionType || 'SALE',
                     refundReason: i.refundReason,
                     cancelReason: i.cancelReason
                 }));
@@ -396,6 +498,8 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 const reqBody = {
                     items: checkItems,
                     totalAmount: check.totalAmount,
+                    discountAmount: check.discountAmount || 0,
+                    businessDate,
                     date: check.date,
                     receiptNumber: check.receiptNumber,
                     companyName: 'ANTIGRAVITY POS',
@@ -470,6 +574,17 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                         paymentMethod === 'Cari' ? 'PARTNER' :
                             'SPLIT';
 
+            const eurRate = Number(params?.eur_rate || 37.50);
+            const usdRate = Number(params?.usd_rate || 35.20);
+            const gbpRate = Number(params?.gbp_rate || 44.10);
+            
+            let currentRate = 1.0;
+            if (selectedCurrency === 'EUR') currentRate = eurRate;
+            else if (selectedCurrency === 'USD') currentRate = usdRate;
+            else if (selectedCurrency === 'GBP') currentRate = gbpRate;
+            
+            const foreignAmount = Number((selectedGrandTotal / currentRate).toFixed(2));
+
             const saleData = {
                 userId: user?.id || user?.sub,
                 tableId: selectedTable.id,
@@ -478,6 +593,9 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 paymentMethod: finalPMethod,
                 paidAmountCash: paymentMethod === 'Nakit' ? selectedGrandTotal : cashAmount,
                 paidAmountCreditCard: paymentMethod === 'Kart' ? selectedGrandTotal : creditAmount,
+                paidCurrency: selectedCurrency,
+                paidCurrencyRate: currentRate,
+                paidCurrencyAmount: selectedCurrency === 'TRY' ? selectedGrandTotal : foreignAmount,
                 discountAmount: appliedDiscount,
                 serviceFee: appliedServiceFee,
                 status: 'COMPLETED',
@@ -518,10 +636,22 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             if (saleRes.ok) {
                 // Fişi Yazdır (Kasa Yazıcısından)
                 const saleDataRes = await saleRes.clone().json();
+
+                // Program Tarihini backend'den çek
+                let paymentBusinessDate = '';
+                try {
+                    const bdRes2 = await fetch(`${API_URL}/business-day/status`, { headers: { Authorization: `Bearer ${token}` } });
+                    if (bdRes2.ok) {
+                        const bdData2 = await bdRes2.json();
+                        paymentBusinessDate = bdData2.activeBusinessDate || '';
+                    }
+                } catch (e) { console.warn('businessDate alinamadi:', e); }
+
                 const printData = {
                     companyName: 'ANTIGRAVITY POS',
                     cashierName: user?.firstName || (user as any)?.name || 'Kasiyer',
                     date: new Date(),
+                    businessDate: paymentBusinessDate,
                     tableName: selectedTable?.name || null,
                     items: itemsToPay.map(item => {
                         const price = item.unitPrice ?? (item.product.price * (item.saleTypeMultiplier || 1));
@@ -536,11 +666,13 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                             note: item.note,
                             status: item.status,
                             saleType: item.saleType,
+                            transactionType: (item as any).transactionType || 'SALE',
                             refundReason: item.refundReason,
                             cancelReason: item.cancelReason
                         };
                     }),
                     totalAmount: selectedGrandTotal,
+                    discountAmount: appliedDiscount,
                     paymentMethod: finalPMethod,
                     receiptNumber: saleDataRes?.id?.toString() || Math.floor(100000 + Math.random() * 900000).toString(),
                     cashRegisterId: activeCashRegister?.id || null
@@ -588,8 +720,61 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     };
 
 
+    const saveDiscountToBackend = async (discountValue: number, rateValue: number = 0) => {
+        if (!allFlatChecks || allFlatChecks.length === 0) return;
+        const token = (user as any)?.token || localStorage.getItem('token');
+
+        // Hangi adisyona uygulanacağını belirle
+        // activeSubCheckId belirli bir adisyon ise ona, yoksa kök adisyona uygula
+        const targetCheckId = (activeSubCheckId && activeSubCheckId !== 'ALL')
+            ? activeSubCheckId as number
+            : allFlatChecks[0]?.id;
+
+        if (!targetCheckId) return;
+
+        try {
+            const res = await fetch(`${API_URL}/sales/${targetCheckId}/discount`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ discountAmount: discountValue, discountRate: rateValue })
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                toastSwal({ icon: 'error', title: err.message || 'İndirim kaydedilemedi' });
+            } else {
+                toastSwal({ icon: 'success', title: rateValue > 0 ? `İndirim kaydedildi: %${rateValue}` : `İndirim kaydedildi: ₺${discountValue.toFixed(2)}` });
+                // Refresh table subchecks dynamically to reflect recalculation
+                if (selectedTable) {
+                    const resFetch = await fetch(`${API_URL}/sales/table/${selectedTable.id}/sub-checks`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (resFetch.ok) {
+                        const rootSales = await resFetch.json();
+                        setTableSubChecks(rootSales);
+                        const flat: any[] = [];
+                        const flatten = (arr: any[]) => {
+                            arr.forEach((s: any) => {
+                                flat.push(s);
+                                if (s.subChecks && s.subChecks.length > 0) {
+                                    flatten(s.subChecks);
+                                }
+                            });
+                        };
+                        flatten(rootSales);
+                        setAllFlatChecks(flat);
+                        loadDiscountFromChecks(flat, activeSubCheckId);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('İndirim kaydetme hatası:', e);
+            toastSwal({ icon: 'error', title: 'İndirim kaydedilirken hata oluştu' });
+        }
+    };
+
     const handleTableSelection = (table: Table) => {
         setActiveSubCheckId(null);
+        setDiscount(0);
         if (selectedTable?.id === table.id) {
             setSelectedTable(null);
             return;
@@ -961,13 +1146,34 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                                 </span>
                                             )}
                                             <span className="text-sm text-indigo-500 font-bold ml-1">x{item.quantity}</span>
+                                            
+                                            {/* Ürün İndirim Rozeti */}
+                                            {item.discountAmount > 0 && (
+                                                <span className="text-[9px] ml-1.5 px-2 py-0.5 rounded-full inline-block font-black bg-rose-500/10 text-rose-500 dark:bg-rose-500/20 dark:text-rose-400 animate-pulse border border-rose-500/10">
+                                                    {item.discountRate > 0 ? `%${Number(item.discountRate).toFixed(0)}` : `₺${Number(item.discountAmount).toFixed(2)}`} İndirim
+                                                </span>
+                                            )}
                                         </span>
-                                        <span className="font-bold text-slate-800 dark:text-slate-100 uppercase text-xs">
-                                            ₺{((
-                                                (item.unitPrice ?? (item.product.price * (item.saleTypeMultiplier || 1))) * item.quantity) +
-                                                (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0)
-                                            ).toFixed(2)}
-                                        </span>
+                                        
+                                        <div className="flex flex-col items-end gap-1.5">
+                                            <span className="font-bold text-slate-800 dark:text-slate-100 uppercase text-xs">
+                                                ₺{((
+                                                    (item.unitPrice ?? (item.product.price * (item.saleTypeMultiplier || 1))) * item.quantity) +
+                                                    (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0)
+                                                ).toFixed(2)}
+                                            </span>
+                                            
+                                            {/* Satır İndirimi Butonu */}
+                                            {item.id && item.status !== 'CANCELLED' && item.status !== 'REFUNDED' && (!selectedTable?.isBillRequested || canDiscountAfterBill) && (
+                                                <button
+                                                    onClick={() => openLineDiscountModal(item)}
+                                                    className="px-2 py-0.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-[9px] font-black tracking-wider uppercase transition-all active:scale-95"
+                                                    title="Satır İndirimi Uygula"
+                                                >
+                                                    % İndirim
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                                 {item.subItems && item.subItems.length > 0 && (
@@ -1004,7 +1210,12 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                 <input
                                     type="number"
                                     value={discount || ''}
-                                    onChange={(e) => setDiscount(Number(e.target.value) || 0)}
+                                    onChange={(e) => {
+                                        setDiscount(Number(e.target.value) || 0);
+                                        setDiscountRate(0);
+                                    }}
+                                    onBlur={() => saveDiscountToBackend(discount, 0)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
                                     className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-black dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all"
                                     placeholder="0.00"
                                 />
@@ -1013,11 +1224,14 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-2 tracking-widest">İndirim (%)</label>
                                 <input
                                     type="number"
-                                    value={(totalBeforeAdjustments > 0 && discount > 0) ? Number((discount / totalBeforeAdjustments) * 100).toFixed(1).replace(/\.0$/, '') : ''}
+                                    value={discountRate || ''}
                                     onChange={(e) => {
                                         const percent = Number(e.target.value) || 0;
+                                        setDiscountRate(percent);
                                         setDiscount(Number((totalBeforeAdjustments * percent / 100).toFixed(2)));
                                     }}
+                                    onBlur={() => saveDiscountToBackend(Number((totalBeforeAdjustments * discountRate / 100).toFixed(2)), discountRate)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
                                     className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-black dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-mono"
                                     placeholder="% 0"
                                 />
@@ -1883,6 +2097,82 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     }
                 }}
             />
+
+            {/* Satır İndirimi (Line Item Discount) Modal */}
+            {isLineDiscountModalOpen && selectedDiscountItem && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-md shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col scale-100 animate-in zoom-in-95 duration-200">
+                        <div className="p-6 text-center shrink-0 border-b border-slate-100 dark:border-slate-700 bg-gradient-to-r from-amber-500/10 to-orange-500/10">
+                            <div className="w-14 h-14 bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-full flex items-center justify-center mx-auto mb-3 shadow-inner">
+                                <span className="text-2xl font-bold">%</span>
+                            </div>
+                            <h2 className="text-xl font-black text-slate-800 dark:text-white">Satır İndirimi</h2>
+                            <p className="text-slate-500 dark:text-slate-400 text-xs font-medium mt-1">
+                                <span className="font-bold text-slate-700 dark:text-slate-300">{selectedDiscountItem.product.name}</span> ürününe indirim uygulayın.
+                            </p>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 px-4 py-3 rounded-2xl border border-slate-100 dark:border-slate-700/30">
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Satır Toplamı (Birim x Adet)</span>
+                                <span className="text-sm font-extrabold text-slate-700 dark:text-slate-200">
+                                    ₺{((selectedDiscountItem.unitPrice ?? selectedDiscountItem.product.price) * selectedDiscountItem.quantity).toFixed(2)}
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-2 tracking-widest">İndirim (%)</label>
+                                    <input
+                                        type="number"
+                                        value={lineDiscountRate || ''}
+                                        onChange={(e) => {
+                                            const percent = Number(e.target.value) || 0;
+                                            setLineDiscountRate(percent);
+                                            const base = (selectedDiscountItem.unitPrice ?? selectedDiscountItem.product.price) * selectedDiscountItem.quantity;
+                                            setLineDiscountAmount(Number((base * percent / 100).toFixed(2)));
+                                        }}
+                                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-3 py-2 text-sm font-black dark:text-white outline-none focus:ring-4 focus:ring-amber-500/10 transition-all font-mono"
+                                        placeholder="0"
+                                        min="0"
+                                        max="100"
+                                    />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-2 tracking-widest">İndirim (₺)</label>
+                                    <input
+                                        type="number"
+                                        value={lineDiscountAmount || ''}
+                                        onChange={(e) => {
+                                            const amount = Number(e.target.value) || 0;
+                                            setLineDiscountAmount(amount);
+                                            setLineDiscountRate(0);
+                                        }}
+                                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-3 py-2 text-sm font-black dark:text-white outline-none focus:ring-4 focus:ring-amber-500/10 transition-all"
+                                        placeholder="0.00"
+                                        min="0"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-6 shrink-0 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 flex gap-3">
+                            <button
+                                onClick={() => setIsLineDiscountModalOpen(false)}
+                                className="flex-1 py-3 rounded-2xl bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-bold text-sm shadow-sm transition-all hover:bg-slate-50 dark:hover:bg-slate-650 active:scale-[0.98]"
+                            >
+                                Vazgeç
+                            </button>
+                            <button
+                                onClick={saveLineDiscountToBackend}
+                                className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold text-sm shadow-md shadow-amber-500/20 hover:from-amber-600 hover:to-orange-600 transition-all active:scale-[0.98]"
+                            >
+                                Uygula
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

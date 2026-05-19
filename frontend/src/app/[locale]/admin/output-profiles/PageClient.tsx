@@ -198,9 +198,9 @@ export function PageClient() {
     };
 
     const renderPreview = () => {
-        const eurRate = parseFloat(params.exchange_rate_eur?.toString() || '37.50');
-        const usdRate = parseFloat(params.exchange_rate_usd?.toString() || '35.20');
-        const gbpRate = parseFloat(params.exchange_rate_gbp?.toString() || '44.10');
+        const eurRate = parseFloat(params.eur_rate?.toString() || '37.50');
+        const usdRate = parseFloat(params.usd_rate?.toString() || '35.20');
+        const gbpRate = parseFloat(params.gbp_rate?.toString() || '44.10');
 
         if (formData.noOutput) {
             return (

@@ -199,6 +199,13 @@ import { ScheduleModule } from '@nestjs/schedule';
             trustServerCertificate: true,
             ...(instanceName ? { instanceName } : {}),
           },
+          extra: {
+            pool: {
+              max: 200,
+              min: 10,
+              idleTimeoutMillis: 30000
+            }
+          }
         };
         console.log('[AppModule] Connecting to DB:', {
           host: config.host,
