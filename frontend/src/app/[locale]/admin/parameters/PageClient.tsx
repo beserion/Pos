@@ -62,6 +62,7 @@ const defaultModules: Module[] = [
             { key: 'eur_rate', label: 'EUR Kuru (Fişte Gösterim)', description: 'Müşteri fişinde TL tutarının Euro karşılığı için kullanılır', type: 'number', value: 37.50, unit: '₺' },
             { key: 'usd_rate', label: 'USD Kuru (Fişte Gösterim)', description: 'Müşteri fişinde TL tutarının Dolar karşılığı için kullanılır', type: 'number', value: 35.20, unit: '₺' },
             { key: 'gbp_rate', label: 'GBP Kuru (Fişte Gösterim)', description: 'Müşteri fişinde TL tutarının Sterlin karşılığı için kullanılır', type: 'number', value: 44.10, unit: '₺' },
+            { key: 'show_change_calculator', label: 'Nakit Ödemede Para Üstü Hesaplayıcı Göster', description: 'Nakit ödemelerde alınan tutar girişi ve para üstü hesaplama ekranını gösterir.', type: 'boolean', value: true },
         ]
     },
     {

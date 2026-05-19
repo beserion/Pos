@@ -14,6 +14,7 @@ export interface AppParameters {
   screen_timeout: number;  // dakika cinsinden — 0 = devre dışı
   shift_system_enabled: boolean;
   waiters_can_order_to_any_table: boolean;
+  show_change_calculator: boolean;
 
   // Mutfak
   warning_time: number;
@@ -86,6 +87,7 @@ export const DEFAULT_PARAMS: AppParameters = {
   screen_timeout: 180,  // 180 saniye varsayılan (3 dakika)
   shift_system_enabled: true,
   waiters_can_order_to_any_table: true,
+  show_change_calculator: true,
 
   warning_time: 10,
   critical_time: 20,

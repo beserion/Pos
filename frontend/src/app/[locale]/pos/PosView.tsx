@@ -56,7 +56,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const [zones, setZones] = useState<Zone[]>([]);
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
     const [selectedZone, setSelectedZone] = useState<number | 'ALL'>('ALL');
-    const [cart, setCart] = useState<{ product: Product; quantity: number; itemId?: number; subCheckId?: number; subItems?: any[]; saleType?: string; saleTypeMultiplier?: number; unitPrice?: number; note?: string; status?: string; refundReason?: string; cancelReason?: string; }[]>([]);
+    const [cart, setCart] = useState<{ product: Product; quantity: number; itemId?: number; subCheckId?: number; subItems?: any[]; saleType?: string; saleTypeMultiplier?: number; unitPrice?: number; note?: string; status?: string; refundReason?: string; cancelReason?: string; discountRate?: number; discountAmount?: number; }[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string>('Tümü');
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [selectedCurrency, setSelectedCurrency] = useState<'TRY' | 'EUR' | 'USD' | 'GBP'>('TRY');
@@ -67,6 +67,11 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const [selectedPosItems, setSelectedPosItems] = useState<number[]>([]);
     const [discount, setDiscount] = useState<number>(0);
     const [discountRate, setDiscountRate] = useState<number>(0);
+
+
+    // --- Para Üstü Hesaplayıcı State ---
+    const [isChangeModalOpen, setIsChangeModalOpen] = useState(false);
+    const [cashReceived, setCashReceived] = useState<string>('');
 
     // --- Satır İndirimi (Line Item Discount) State ---
     const [isLineDiscountModalOpen, setIsLineDiscountModalOpen] = useState(false);
@@ -86,7 +91,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
         const token = (user as any)?.token || localStorage.getItem('token');
         
         try {
-            const res = await fetch(`${API_URL}/sales/items/${selectedDiscountItem.id}/discount`, {
+            const res = await fetch(`${API_URL}/sales/items/${selectedDiscountItem.itemId || selectedDiscountItem.id}/discount`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body: JSON.stringify({
@@ -315,6 +320,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                         );
                                         if (existing && !product.isSet) {
                                             existing.quantity += item.quantity;
+                                            existing.discountAmount = Number(existing.discountAmount || 0) + Number(item.discountAmount || 0);
                                         } else {
                                             newCart.push({
                                                 product,
@@ -327,7 +333,9 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                                 unitPrice: item.unitPrice,
                                                 variationId: item.variationId,
                                                 variationName: item.variationName,
-                                                status: item.status
+                                                status: item.status,
+                                                discountRate: Number(item.discountRate || 0),
+                                                discountAmount: Number(item.discountAmount || 0)
                                             });
                                         }
                                     });
@@ -354,7 +362,9 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                         unitPrice: item.unitPrice,
                                         variationId: item.variationId,
                                         variationName: item.variationName,
-                                        status: item.status
+                                        status: item.status,
+                                        discountRate: Number(item.discountRate || 0),
+                                        discountAmount: Number(item.discountAmount || 0)
                                     };
                                 });
                             setCart(newCart);
@@ -543,6 +553,21 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
         }
     };
 
+    const getSelectedGrandTotal = () => {
+        const selectedTotalAmount = cart.filter(i => selectedPosItems.includes(i.itemId || i.product.id) && (!i.status || i.status === 'ACTIVE')).reduce((sum, item) => {
+            const effectivePrice = (item as any).unitPrice ?? item.product.price;
+            const multiplier = item.saleTypeMultiplier || 1;
+            const base = (effectivePrice * multiplier) * item.quantity;
+            const extras = (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0);
+            const extraDiscounts = (item.subItems || []).reduce((ed: number, s: any) => ed + Number(s.discountAmount || 0), 0);
+            const itemDiscount = Number(item.discountAmount || 0) + extraDiscounts;
+            return sum + base + extras - itemDiscount;
+        }, 0);
+        const appliedDiscount = discount || 0;
+        const appliedServiceFee = serviceFee || 0;
+        return Number((selectedTotalAmount + appliedServiceFee - appliedDiscount).toFixed(2));
+    };
+
     const handleCheckout = async (paymentMethod: 'Nakit' | 'Kart' | 'Parçalı' | 'Cari', cashAmount: number = 0, creditAmount: number = 0, partnerId?: number) => {
         if (!selectedTable) return;
 
@@ -556,7 +581,9 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             const base = (item.unitPrice ?? (item.product.price * (item.saleTypeMultiplier || 1))) * item.quantity;
             // Ekstra bağımsız: kendi fiyatı × kendi adedi
             const extras = (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0);
-            return sum + base + extras;
+            const extraDiscounts = (item.subItems || []).reduce((ed: number, s: any) => ed + Number(s.discountAmount || 0), 0);
+            const itemDiscount = Number(item.discountAmount || 0) + extraDiscounts;
+            return sum + base + extras - itemDiscount;
         }, 0);
         const vatAmount = 0;
 
@@ -704,6 +731,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 setActiveOrderIds([]);
                 setDiscount(0);
                 setServiceFee(0);
+                setSelectedCurrency('TRY');
                 refreshDynamicData();
             } else {
                 const errorData = await saleRes.json();
@@ -805,7 +833,9 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
         const base = (item.unitPrice ?? (item.product.price * (item.saleTypeMultiplier || 1))) * item.quantity;
         // Ekstra bağımsız: kendi fiyatı × kendi adedi
         const extras = (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0);
-        return sum + base + extras;
+        const extraDiscounts = (item.subItems || []).reduce((ed: number, s: any) => ed + Number(s.discountAmount || 0), 0);
+        const itemDiscount = Number(item.discountAmount || 0) + extraDiscounts;
+        return sum + base + extras - itemDiscount;
     }, 0);
     const vatAmount = 0;
     const totalBeforeAdjustments = subTotal + vatAmount;
@@ -1157,9 +1187,18 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                         
                                         <div className="flex flex-col items-end gap-1.5">
                                             <span className="font-bold text-slate-800 dark:text-slate-100 uppercase text-xs">
+                                                {Number(item.discountAmount || 0) > 0 && (
+                                                    <span className="text-red-500 line-through mr-1 text-[10px]">
+                                                        ₺{((
+                                                            (item.unitPrice ?? (item.product.price * (item.saleTypeMultiplier || 1))) * item.quantity) +
+                                                            (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0)
+                                                        ).toFixed(2)}
+                                                    </span>
+                                                )}
                                                 ₺{((
                                                     (item.unitPrice ?? (item.product.price * (item.saleTypeMultiplier || 1))) * item.quantity) +
-                                                    (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0)
+                                                    (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0) -
+                                                    Number(item.discountAmount || 0)
                                                 ).toFixed(2)}
                                             </span>
                                             
@@ -1337,32 +1376,43 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 </div>
             </div>
 
-            {/* Payment Modal */}
             {isCheckoutOpen && !isSplitPaymentOpen && (() => {
                 const selectedTotalAmount = cart.filter(i => selectedPosItems.includes(i.itemId || i.product.id) && (!i.status || i.status === 'ACTIVE')).reduce((sum, item) => {
                     const effectivePrice = (item as any).unitPrice ?? item.product.price;
                     const multiplier = item.saleTypeMultiplier || 1;
                     const base = (effectivePrice * multiplier) * item.quantity;
                     const extras = (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0);
-                    return sum + base + extras;
+                    const extraDiscounts = (item.subItems || []).reduce((ed: number, s: any) => ed + Number(s.discountAmount || 0), 0);
+                    const itemDiscount = Number(item.discountAmount || 0) + extraDiscounts;
+                    return sum + base + extras - itemDiscount;
                 }, 0);
                 const appliedDiscount = discount || 0;
                 const appliedServiceFee = serviceFee || 0;
                 const selectedGrandTotal = Number((selectedTotalAmount + appliedServiceFee - appliedDiscount).toFixed(2));
 
                 return (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-                        <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-md shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden border border-white/20 dark:border-slate-700/50 transform transition-all flex flex-col max-h-[90vh]">
-                            <div className="p-6 text-center shrink-0 border-b border-slate-100 dark:border-slate-700">
-                                <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <span className="text-3xl">💳</span>
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xl">
+                        <div className="bg-white dark:bg-slate-800 rounded-[32px] w-full max-w-4xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)] overflow-hidden border border-white/20 dark:border-slate-700/50 transform transition-all flex flex-col md:flex-row max-h-[90vh] md:h-[650px]">
+                            
+                            {/* SOL KOLON: Ürün Seçim Listesi ve Başlık */}
+                            <div className="flex-1 flex flex-col min-h-0 border-b md:border-b-0 md:border-r border-slate-100 dark:border-slate-700/50">
+                                {/* Header */}
+                                <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20 shrink-0">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-500/20 rounded-2xl flex items-center justify-center">
+                                            <span className="text-xl">💳</span>
+                                        </div>
+                                        <div>
+                                            <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                                {t('paymentMethod') || 'Ödeme ve Ürün Seçimi'}
+                                            </h2>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Ödemesini alacağınız ürünleri seçin.</p>
+                                        </div>
+                                    </div>
                                 </div>
-                                <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">{t('paymentMethod') || 'Ödeme ve Ürün Seçimi'}</h2>
-                                <p className="text-slate-500 dark:text-slate-400 text-sm">Ödemesini alacağınız ürünleri seçin.</p>
-                            </div>
 
-                            <div className="overflow-y-auto p-4 bg-slate-50/50 dark:bg-slate-900/30">
-                                <div className="space-y-2">
+                                {/* Ürün Listesi */}
+                                <div className="flex-1 overflow-y-auto p-6 bg-slate-50/30 dark:bg-slate-900/10 space-y-2">
                                     {cart.map((item, idx) => {
                                         const uniqueKey = item.itemId || `cart-${item.product.id}-${idx}`;
                                         const isSelected = selectedPosItems.includes(item.itemId || item.product.id);
@@ -1395,9 +1445,18 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                                         </span>
                                                     </div>
                                                     <span className="font-bold text-slate-800 dark:text-slate-100 text-xs">
+                                                        {Number(item.discountAmount || 0) > 0 && (
+                                                            <span className="text-red-500 line-through mr-1 text-[10px]">
+                                                                ₺{(
+                                                                    (((item as any).unitPrice ?? item.product.price) * (item.saleTypeMultiplier || 1)) * item.quantity +
+                                                                    (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0)
+                                                                ).toFixed(2)}
+                                                            </span>
+                                                        )}
                                                         ₺{(
                                                             (((item as any).unitPrice ?? item.product.price) * (item.saleTypeMultiplier || 1)) * item.quantity +
-                                                            (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0)
+                                                            (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0) -
+                                                            Number(item.discountAmount || 0)
                                                         ).toFixed(2)}
                                                     </span>
                                                 </div>
@@ -1419,130 +1478,210 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                 </div>
                             </div>
 
-                            <div className="p-6 shrink-0 bg-white dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700">
-                                <div className="flex justify-between items-end mb-6">
-                                    <span className="text-slate-500 font-medium">Ödenecek Tutar</span>
-                                    <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-600 dark:from-indigo-400 dark:to-blue-400">
-                                        ₺{selectedGrandTotal.toFixed(2)}
-                                    </span>
+                            {/* SAĞ KOLON: Ödeme Parametreleri, Döviz ve Butonlar */}
+                            <div className="w-full md:w-[420px] shrink-0 bg-white dark:bg-slate-800/90 flex flex-col p-6 min-h-0 justify-between overflow-y-auto">
+                                <div className="space-y-6">
+                                    {/* Döviz Seçici Segmented Control */}
+                                    <div className="shrink-0 pb-1 border-b border-slate-100 dark:border-slate-700/50">
+                                        <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
+                                            Ödeme Para Birimi
+                                        </label>
+                                        <div className="grid grid-cols-4 gap-1 p-1 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200/30 dark:border-slate-800/30">
+                                            {(['TRY', 'EUR', 'USD', 'GBP'] as const).map((curr) => {
+                                                const isActive = selectedCurrency === curr;
+                                                return (
+                                                    <button
+                                                        key={curr}
+                                                        type="button"
+                                                        onClick={() => setSelectedCurrency(curr)}
+                                                        className={`py-2 px-1 rounded-xl text-xs font-black transition-all duration-300 ${
+                                                            isActive
+                                                                ? 'bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-500/20 scale-105'
+                                                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                                                        }`}
+                                                    >
+                                                        {curr === 'TRY' ? '₺' : curr === 'EUR' ? '€' : curr === 'USD' ? '$' : '£'} {curr}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* Döviz Çevrim Kartı (Glassmorphic) */}
+                                    {selectedCurrency !== 'TRY' && (() => {
+                                        const eurRate = Number(params?.eur_rate || 37.50);
+                                        const usdRate = Number(params?.usd_rate || 35.20);
+                                        const gbpRate = Number(params?.gbp_rate || 44.10);
+                                        
+                                        let currentRate = 1.0;
+                                        let symbol = '₺';
+                                        if (selectedCurrency === 'EUR') { currentRate = eurRate; symbol = '€'; }
+                                        else if (selectedCurrency === 'USD') { currentRate = usdRate; symbol = '$'; }
+                                        else if (selectedCurrency === 'GBP') { currentRate = gbpRate; symbol = '£'; }
+                                        
+                                        const foreignVal = Number((selectedGrandTotal / currentRate).toFixed(2));
+                                        
+                                        return (
+                                            <div className="shrink-0 pb-1 animate-fadeIn">
+                                                <div className="relative overflow-hidden p-4 rounded-3xl border border-indigo-200/30 dark:border-indigo-500/20 bg-gradient-to-tr from-indigo-50/80 to-blue-50/30 dark:from-indigo-950/40 dark:to-blue-950/10 backdrop-blur-md shadow-inner">
+                                                    <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-indigo-500/10 dark:bg-indigo-400/10 rounded-full blur-xl pointer-events-none" />
+                                                    
+                                                    <div className="flex justify-between items-center relative z-10">
+                                                        <div>
+                                                            <span className="block text-[10px] font-bold text-indigo-400 dark:text-indigo-300 uppercase tracking-wider">
+                                                                Döviz Karşılığı ({selectedCurrency})
+                                                            </span>
+                                                            <span className="text-2xl font-black text-indigo-900 dark:text-indigo-200">
+                                                                {symbol}{foreignVal.toFixed(2)}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-right border-l border-indigo-200/50 dark:border-indigo-500/20 pl-4">
+                                                            <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                                                Güncel Kur
+                                                            </span>
+                                                            <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">
+                                                                1 {selectedCurrency} = ₺{currentRate.toFixed(2)}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    <div className="flex justify-between items-end border-b border-slate-100 dark:border-slate-700/50 pb-4">
+                                        <span className="text-slate-500 font-medium">Ödenecek Tutar</span>
+                                        <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-blue-600 dark:from-indigo-400 dark:to-blue-400">
+                                            ₺{selectedGrandTotal.toFixed(2)}
+                                        </span>
+                                    </div>
                                 </div>
 
-                                {/* Check permissions for payment methods */}
-                                {(() => {
-                                    const allowed = activeCashRegister?.allowedPaymentMethods || [];
-                                    const hasLimit = allowed.length > 0;
-                                    const canCash = !hasLimit || allowed.includes('Nakit');
-                                    const canCard = !hasLimit || allowed.includes('Kart');
-                                    const canSplit = !hasLimit || allowed.includes('Parçalı');
-                                    const canCari = !hasLimit || allowed.includes('Cari');
+                                <div className="space-y-4 mt-6">
+                                    {/* Check permissions for payment methods */}
+                                    {(() => {
+                                        const allowed = activeCashRegister?.allowedPaymentMethods || [];
+                                        const hasLimit = allowed.length > 0;
+                                        const canCash = !hasLimit || allowed.includes('Nakit');
+                                        const canCard = !hasLimit || allowed.includes('Kart');
+                                        const canSplit = !hasLimit || allowed.includes('Parçalı');
+                                        const canCari = !hasLimit || allowed.includes('Cari');
 
-                                    return (
-                                        <>
-                                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-                                                {canCash && (
+                                        return (
+                                            <>
+                                                <div className="grid grid-cols-3 gap-3">
+                                                    {canCash && (
+                                                        <button
+                                                            onClick={() => {
+                                                                const perms = user?.extraPermissions || [];
+                                                                const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+                                                                if (!isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_ACCOUNT')) {
+                                                                    showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Nakit ödeme alma yetkiniz bulunmamaktadır.' });
+                                                                    return;
+                                                                }
+                                                                const showCalculator = params?.show_change_calculator ?? true;
+                                                                const isForeign = selectedCurrency !== 'TRY';
+                                                                if (showCalculator || isForeign) {
+                                                                    setCashReceived('');
+                                                                    setIsChangeModalOpen(true);
+                                                                } else {
+                                                                    handleCheckout('Nakit');
+                                                                }
+                                                            }}
+                                                            className="flex flex-col items-center justify-center gap-2 p-4 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/30 rounded-2xl transition-all font-bold text-emerald-700 dark:text-emerald-400 active:scale-95 text-xs hover:shadow-lg hover:shadow-emerald-500/10"
+                                                        >
+                                                            <span className="text-2xl">💵</span> {t('paymentCash') || 'Nakit'}
+                                                        </button>
+                                                    )}
+                                                    {canCard && (
+                                                        <button
+                                                            onClick={() => {
+                                                                const perms = user?.extraPermissions || [];
+                                                                const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+                                                                if (!isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_ACCOUNT')) {
+                                                                    showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Kart ile ödeme alma yetkiniz bulunmamaktadır.' });
+                                                                    return;
+                                                                }
+                                                                handleCheckout('Kart');
+                                                            }}
+                                                            className="flex flex-col items-center justify-center gap-2 p-4 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 border border-blue-200 dark:border-blue-500/30 rounded-2xl transition-all font-bold text-blue-700 dark:text-blue-400 active:scale-95 text-xs hover:shadow-lg hover:shadow-blue-500/10"
+                                                        >
+                                                            <span className="text-2xl">💳</span> {t('paymentCreditCard') || 'Kart'}
+                                                        </button>
+                                                    )}
+                                                    {canCari && (
+                                                        <button
+                                                            onClick={async () => {
+                                                                const perms = user?.extraPermissions || [];
+                                                                const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+                                                                if (!isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_TO_CURRENT_ACCOUNT')) {
+                                                                    showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Cariye hesap kapatma yetkiniz bulunmamaktadır.' });
+                                                                    return;
+                                                                }
+
+                                                                const token = localStorage.getItem('token') || (user as any)?.token;
+                                                                let partners: any[] = [];
+                                                                try {
+                                                                    const pRes = await fetch(`${API_URL}/partners`, { headers: { Authorization: `Bearer ${token}` } });
+                                                                    if (pRes.ok) partners = await pRes.json();
+                                                                } catch (e) { console.error("Partners fetch failed", e); }
+
+                                                                const customerOptions = partners
+                                                                    .filter(p => p.type === 'CUSTOMER')
+                                                                    .reduce((acc, p) => ({ ...acc, [p.id]: p.name }), {});
+
+                                                                const Swal = (await import('sweetalert2')).default;
+                                                                const { value: partnerId } = await Swal.fire({
+                                                                    title: 'Cari Seçimi',
+                                                                    input: 'select',
+                                                                    inputOptions: customerOptions,
+                                                                    inputPlaceholder: 'Müşteri seçin...',
+                                                                    showCancelButton: true,
+                                                                    confirmButtonText: 'Cariye Kapat',
+                                                                    cancelButtonText: 'Vazgeç',
+                                                                    background: theme === 'dark' ? '#1e293b' : '#fff',
+                                                                    color: theme === 'dark' ? '#fff' : '#1e293b',
+                                                                });
+
+                                                                if (partnerId) {
+                                                                    handleCheckout('Cari' as any, 0, 0, parseInt(partnerId));
+                                                                }
+                                                            }}
+                                                            className="flex flex-col items-center justify-center gap-2 p-4 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 rounded-2xl transition-all font-bold text-indigo-700 dark:text-indigo-400 active:scale-95 text-xs hover:shadow-lg hover:shadow-indigo-500/10"
+                                                        >
+                                                            <span className="text-2xl">👤</span> {t('paymentCari') || 'Cari'}
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                {canSplit && (
                                                     <button
                                                         onClick={() => {
                                                             const perms = user?.extraPermissions || [];
                                                             const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
-                                                            if (!isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_ACCOUNT')) {
-                                                                showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Nakit ödeme alma yetkiniz bulunmamaktadır.' });
+                                                            if (!isSuperAdmin && !perms.includes('OP:FINANCE_PARTIAL_PAYMENT')) {
+                                                                showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Parçalı ödeme alma yetkiniz bulunmamaktadır.' });
                                                                 return;
                                                             }
-                                                            handleCheckout('Nakit');
+                                                            setIsSplitPaymentOpen(true);
+                                                            setSplitAmounts({ cash: 0, creditCard: selectedGrandTotal });
                                                         }}
-                                                        className="flex flex-col items-center justify-center gap-1 p-3 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-500/30 rounded-xl transition-all font-bold text-emerald-700 dark:text-emerald-400 active:scale-95 text-xs"
+                                                        className="w-full py-3.5 flex items-center justify-center gap-2 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 rounded-2xl transition-all font-bold text-indigo-700 dark:text-indigo-400 active:scale-[0.98] text-sm hover:shadow-lg hover:shadow-indigo-500/5"
                                                     >
-                                                        <span className="text-xl">💵</span> {t('paymentCash') || 'Nakit'}
+                                                        <span className="text-lg">🔀</span> Tutar Böl (Nakit + Kart)
                                                     </button>
                                                 )}
-                                                {canCard && (
-                                                    <button
-                                                        onClick={() => {
-                                                            const perms = user?.extraPermissions || [];
-                                                            const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
-                                                            if (!isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_ACCOUNT')) {
-                                                                showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Kart ile ödeme alma yetkiniz bulunmamaktadır.' });
-                                                                return;
-                                                            }
-                                                            handleCheckout('Kart');
-                                                        }}
-                                                        className="flex flex-col items-center justify-center gap-1 p-3 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 border border-blue-200 dark:border-blue-500/30 rounded-xl transition-all font-bold text-blue-700 dark:text-blue-400 active:scale-95 text-xs"
-                                                    >
-                                                        <span className="text-xl">💳</span> {t('paymentCreditCard') || 'Kart'}
-                                                    </button>
-                                                )}
-                                                {canCari && (
-                                                    <button
-                                                        onClick={async () => {
-                                                            const perms = user?.extraPermissions || [];
-                                                            const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
-                                                            if (!isSuperAdmin && !perms.includes('OP:FINANCE_CLOSE_TO_CURRENT_ACCOUNT')) {
-                                                                showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Cariye hesap kapatma yetkiniz bulunmamaktadır.' });
-                                                                return;
-                                                            }
+                                            </>
+                                        );
+                                    })()}
 
-                                                            const token = localStorage.getItem('token') || (user as any)?.token;
-                                                            let partners: any[] = [];
-                                                            try {
-                                                                const pRes = await fetch(`${API_URL}/partners`, { headers: { Authorization: `Bearer ${token}` } });
-                                                                if (pRes.ok) partners = await pRes.json();
-                                                            } catch (e) { console.error("Partners fetch failed", e); }
-
-                                                            const customerOptions = partners
-                                                                .filter(p => p.type === 'CUSTOMER')
-                                                                .reduce((acc, p) => ({ ...acc, [p.id]: p.name }), {});
-
-                                                            const Swal = (await import('sweetalert2')).default;
-                                                            const { value: partnerId } = await Swal.fire({
-                                                                title: 'Cari Seçimi',
-                                                                input: 'select',
-                                                                inputOptions: customerOptions,
-                                                                inputPlaceholder: 'Müşteri seçin...',
-                                                                showCancelButton: true,
-                                                                confirmButtonText: 'Cariye Kapat',
-                                                                cancelButtonText: 'Vazgeç',
-                                                                background: theme === 'dark' ? '#1e293b' : '#fff',
-                                                                color: theme === 'dark' ? '#fff' : '#1e293b',
-                                                            });
-
-                                                            if (partnerId) {
-                                                                handleCheckout('Cari' as any, 0, 0, parseInt(partnerId));
-                                                            }
-                                                        }}
-                                                        className="flex flex-col items-center justify-center gap-1 p-3 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 rounded-xl transition-all font-bold text-indigo-700 dark:text-indigo-400 active:scale-95 text-xs"
-                                                    >
-                                                        <span className="text-xl">👤</span> {t('paymentCari') || 'Cari'}
-                                                    </button>
-                                                )}
-                                            </div>
-
-                                            {canSplit && (
-                                                <button
-                                                    onClick={() => {
-                                                        const perms = user?.extraPermissions || [];
-                                                        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
-                                                        if (!isSuperAdmin && !perms.includes('OP:FINANCE_PARTIAL_PAYMENT')) {
-                                                            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Parçalı ödeme alma yetkiniz bulunmamaktadır.' });
-                                                            return;
-                                                        }
-                                                        setIsSplitPaymentOpen(true);
-                                                        setSplitAmounts({ cash: 0, creditCard: selectedGrandTotal });
-                                                    }}
-                                                    className="w-full py-3 flex items-center justify-center gap-2 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 rounded-xl transition-all font-bold text-indigo-700 dark:text-indigo-400 active:scale-[0.98] mb-3"
-                                                >
-                                                    <span className="text-xl">🔀</span> Tutar Böl (Nakit + Kart)
-                                                </button>
-                                            )}
-                                        </>
-                                    );
-                                })()}
-
-                                <button
-                                    onClick={() => setIsCheckoutOpen(false)}
-                                    className="mt-4 w-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-medium transition-colors p-2"
-                                >
-                                    {tc('cancel')}
-                                </button>
+                                    <button
+                                        onClick={() => { setIsCheckoutOpen(false); setSelectedCurrency('TRY'); }}
+                                        className="w-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-medium transition-colors p-2 active:scale-95"
+                                    >
+                                        {tc('cancel')}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1557,7 +1696,9 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                         const base = (effectivePrice * (item.saleTypeMultiplier || 1)) * item.quantity;
                         // Ekstra bağımsız: kendi fiyatı × kendi adedi
                         const extras = (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0);
-                        return sum + base + extras;
+                        const extraDiscounts = (item.subItems || []).reduce((ed: number, s: any) => ed + Number(s.discountAmount || 0), 0);
+                        const itemDiscount = Number(item.discountAmount || 0) + extraDiscounts;
+                        return sum + base + extras - itemDiscount;
                     }, 0);
                     const appliedDiscount = discount || 0;
                     const appliedServiceFee = serviceFee || 0;
@@ -2173,6 +2314,218 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     </div>
                 </div>
             )}
+
+            {/* Nakit Tahsilat & Para Üstü Modal */}
+            {isChangeModalOpen && (() => {
+                const grandTotal = getSelectedGrandTotal();
+                
+                const eurRate = Number(params?.eur_rate || 37.50);
+                const usdRate = Number(params?.usd_rate || 35.20);
+                const gbpRate = Number(params?.gbp_rate || 44.10);
+                
+                let currentRate = 1.0;
+                let symbol = '₺';
+                if (selectedCurrency === 'EUR') { currentRate = eurRate; symbol = '€'; }
+                else if (selectedCurrency === 'USD') { currentRate = usdRate; symbol = '$'; }
+                else if (selectedCurrency === 'GBP') { currentRate = gbpRate; symbol = '£'; }
+                
+                const payableInCurrency = Number((grandTotal / currentRate).toFixed(2));
+                const receivedVal = Number(cashReceived) || 0;
+                const receivedInTL = Number((receivedVal * currentRate).toFixed(2));
+                const changeInTL = Number((receivedInTL - grandTotal).toFixed(2));
+                
+                // Dinamik banknot listesi
+                let bills: number[] = [];
+                if (selectedCurrency === 'TRY') {
+                    bills = [50, 100, 200, 500, 1000];
+                } else if (selectedCurrency === 'USD') {
+                    bills = [10, 20, 50, 100, 200];
+                } else if (selectedCurrency === 'EUR') {
+                    bills = [10, 20, 50, 100, 200];
+                } else if (selectedCurrency === 'GBP') {
+                    bills = [10, 20, 50, 100, 200];
+                }
+                
+                const handleKeypadPress = (val: string) => {
+                    if (val === 'C') {
+                        setCashReceived('');
+                    } else if (val === '⌫') {
+                        setCashReceived(prev => prev.slice(0, -1));
+                    } else if (val === '.') {
+                        setCashReceived(prev => {
+                            if (prev.includes('.')) return prev;
+                            if (prev === '') return '0.';
+                            return prev + '.';
+                        });
+                    } else {
+                        setCashReceived(prev => {
+                            const parts = prev.split('.');
+                            if (parts[1] && parts[1].length >= 2) return prev;
+                            if (prev === '0' && val !== '0') return val;
+                            return prev + val;
+                        });
+                    }
+                };
+
+                const completePayment = () => {
+                    if (changeInTL < 0) return;
+                    handleCheckout('Nakit');
+                    setIsChangeModalOpen(false);
+                };
+
+                return (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xl animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-slate-900 rounded-[32px] w-full max-w-4xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)] overflow-hidden border border-white/20 dark:border-slate-700/50 transform transition-all flex flex-col md:flex-row max-h-[90vh] md:h-[600px] animate-in zoom-in-95 duration-200">
+                            
+                            {/* SOL TARAF: Özet, Banknotlar ve Sonuç */}
+                            <div className="flex-1 p-8 flex flex-col justify-between min-h-0 border-b md:border-b-0 md:border-r border-slate-100 dark:border-slate-700/50">
+                                <div className="space-y-6">
+                                    {/* Başlık */}
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-500/20 rounded-2xl flex items-center justify-center text-2xl">
+                                            💵
+                                        </div>
+                                        <div>
+                                            <h2 className="text-xl font-black text-slate-800 dark:text-white">
+                                                Nakit Tahsilat & Para Üstü
+                                            </h2>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                Alınan tutarı girin ve para üstünü verin.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Özet Kartı */}
+                                    <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-3xl border border-slate-200/30 dark:border-slate-800 space-y-3">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs font-bold text-slate-400 uppercase">Ödenecek Tutar (TL)</span>
+                                            <span className="text-lg font-black text-slate-800 dark:text-slate-200">₺{grandTotal.toFixed(2)}</span>
+                                        </div>
+                                        {selectedCurrency !== 'TRY' && (
+                                            <div className="flex justify-between items-center pt-2 border-t border-slate-100 dark:border-slate-800">
+                                                <span className="text-xs font-bold text-slate-400 uppercase">Döviz Karşılığı ({selectedCurrency})</span>
+                                                <span className="text-lg font-black text-indigo-600 dark:text-indigo-400">{symbol}{payableInCurrency.toFixed(2)}</span>
+                                            </div>
+                                        )}
+                                        {selectedCurrency !== 'TRY' && (
+                                            <div className="text-[10px] font-bold text-slate-400 text-right mt-1">
+                                                1 {selectedCurrency} = ₺{currentRate.toFixed(2)}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Hızlı Banknot Butonları */}
+                                    <div>
+                                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2 ml-1">
+                                            Hızlı Banknotlar ({symbol})
+                                        </label>
+                                        <div className="flex flex-wrap gap-2">
+                                            <button
+                                                onClick={() => setCashReceived(payableInCurrency.toFixed(2))}
+                                                className="py-2.5 px-4 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-200/50 dark:border-indigo-500/30 font-extrabold text-xs transition active:scale-95 shadow-sm"
+                                            >
+                                                Tam Tutar
+                                            </button>
+                                            {bills.map(bill => (
+                                                <button
+                                                    key={bill}
+                                                    onClick={() => setCashReceived(bill.toString())}
+                                                    className="py-2.5 px-4 rounded-2xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-extrabold text-xs transition active:scale-95 shadow-sm"
+                                                >
+                                                    {symbol}{bill}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Para Üstü Sonucu (Büyük Bölüm) */}
+                                <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
+                                    {changeInTL >= 0 ? (
+                                        <div className="bg-emerald-50/50 dark:bg-emerald-500/5 p-4 rounded-3xl border border-emerald-200/50 dark:border-emerald-500/20 flex flex-col justify-center items-center text-center animate-fadeIn">
+                                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-1">Verilecek Para Üstü</span>
+                                            <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
+                                                ₺{changeInTL.toFixed(2)}
+                                            </span>
+                                            {selectedCurrency !== 'TRY' && changeInTL > 0 && (
+                                                <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 mt-1">
+                                                    ({symbol}{(changeInTL / currentRate).toFixed(2)})
+                                                </span>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="bg-rose-50/50 dark:bg-rose-500/5 p-4 rounded-3xl border border-rose-200/50 dark:border-rose-500/20 flex flex-col justify-center items-center text-center">
+                                            <span className="text-[10px] font-bold text-rose-500 dark:text-rose-400 uppercase tracking-widest mb-1">Eksik Tutar</span>
+                                            <span className="text-2xl font-black text-rose-500 dark:text-rose-400 tabular-nums">
+                                                {symbol}{(payableInCurrency - receivedVal).toFixed(2)} {selectedCurrency !== 'TRY' && `(₺${(grandTotal - receivedInTL).toFixed(2)})`}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* SAĞ TARAF: Dokunmatik Keypad */}
+                            <div className="w-full md:w-[380px] shrink-0 bg-slate-50 dark:bg-slate-950 p-8 flex flex-col justify-between">
+                                {/* Alınan Tutar Ekranı */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Alınan Nakit Tutar ({symbol})</label>
+                                    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 text-right shadow-inner min-h-[64px] flex items-center justify-end">
+                                        <span className="text-2xl font-black text-slate-800 dark:text-white tabular-nums">
+                                            {symbol}{cashReceived || '0.00'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Keypad Grid */}
+                                <div className="grid grid-cols-3 gap-3 my-6">
+                                    {['7', '8', '9', '4', '5', '6', '1', '2', '3', '0', '.', '⌫'].map(char => {
+                                        const isAction = char === '⌫';
+                                        return (
+                                            <button
+                                                key={char}
+                                                type="button"
+                                                onClick={() => handleKeypadPress(char)}
+                                                className={`h-14 rounded-2xl font-black text-base transition-all active:scale-95 shadow-sm border flex items-center justify-center
+                                                    ${isAction 
+                                                        ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20'
+                                                        : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                                                    }`}
+                                            >
+                                                {char}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Alt Eylem Butonları */}
+                                <div className="space-y-3">
+                                    <button
+                                        onClick={completePayment}
+                                        disabled={changeInTL < 0 || receivedVal <= 0}
+                                        className={`w-full py-4 rounded-2xl font-black text-sm text-center shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2
+                                            ${changeInTL >= 0 && receivedVal > 0
+                                                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-emerald-600/10 hover:opacity-95'
+                                                : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed shadow-none'
+                                            }`}
+                                    >
+                                        <i className="fat fa-check-circle text-lg"></i> Ödemeyi Tamamla
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setIsChangeModalOpen(false);
+                                            setCashReceived('');
+                                        }}
+                                        className="w-full py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs text-center border border-slate-200 dark:border-slate-700 transition active:scale-95"
+                                    >
+                                        Vazgeç
+                                    </button>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 }

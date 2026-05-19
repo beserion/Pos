@@ -75,6 +75,7 @@ export class ParametersService implements OnModuleInit {
         { module: 'printer', key: 'print_receipt_on_payment', value: 'true', label: 'Ödeme Alındığında Fiş Yazdır', type: 'boolean', description: 'Kasa POS ekranında ödeme tamamlandığında otomatik müşteri fişi çıkartılsın mı?' },
         { module: 'kitchen', key: 'auto_open_product_options', value: 'true', label: 'Ürün Seçince Detay Ekranını Otomatik Aç', type: 'boolean', description: 'Ürün seçildiğinde ekstra ve mutfak notu ekranının otomatik açılıp açılmayacağını belirler.' },
         { module: 'pos', key: 'waiters_can_order_to_any_table', value: 'true', label: 'Garsonlar Tüm Masalara Sipariş Ekleyebilsin', type: 'boolean', description: 'Pasif edilirse garsonlar sadece kendi açtıkları veya kendilerine atanan masalara sipariş ekleyebilir.' },
+        { module: 'pos', key: 'show_change_calculator', value: 'true', label: 'Nakit Ödemede Para Üstü Hesaplayıcı Göster', type: 'boolean', description: 'Nakit ödemelerde alınan tutar girişi ve para üstü hesaplama ekranını gösterir.' },
       ];
 
       for (const p of defaultParams) {

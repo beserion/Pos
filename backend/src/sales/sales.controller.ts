@@ -305,11 +305,11 @@ export class SalesController {
   @Put('items/:id/discount')
   updateItemDiscount(
     @Param('id') id: string,
-    @Body() body: { discountRate?: number; discountAmount?: number },
+    @Body() body: { discountRate?: number; discountAmount?: number; quantity?: number },
     @Request() req: any
   ) {
     const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
-    return this.salesService.updateItemDiscount(+id, body.discountRate || 0, body.discountAmount || 0, userId);
+    return this.salesService.updateItemDiscount(+id, body.discountRate || 0, body.discountAmount || 0, userId, body.quantity);
   }
 
 

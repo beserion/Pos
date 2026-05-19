@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AccountTransaction } from './account-transaction.entity';
@@ -8,6 +8,8 @@ import { ParametersService } from '../parameters/parameters.service';
 
 @Injectable()
 export class FinanceService {
+  private readonly logger = new Logger(FinanceService.name);
+
   constructor(
     @InjectRepository(AccountTransaction)
     private transactionRepository: Repository<AccountTransaction>,

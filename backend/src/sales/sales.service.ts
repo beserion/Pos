@@ -472,7 +472,7 @@ export class SalesService implements OnModuleInit {
     });
   }
 
-  async updateItemDiscount(itemId: number, discountRate: number, discountAmount: number, userId: number): Promise<Sale> {
+  async updateItemDiscount(itemId: number, discountRate: number, discountAmount: number, userId: number, discountQty?: number): Promise<Sale> {
     const cached = getCachedPerms(userId);
     const up = cached?.allUserPerms || [];
     const isSuper = cached?.roleName === 'ADMIN' || cached?.roleName === 'ADMINISTRATOR';
@@ -497,7 +497,8 @@ export class SalesService implements OnModuleInit {
         if (discountRate === 0 && discountAmount > 0) {
           const checkItem = await this.saleRepository.manager.findOne(SaleItem, { where: { id: itemId } });
           if (checkItem) {
-            const itemSubtotal = Number(checkItem.unitPrice) * Number(checkItem.quantity);
+            const splitQty = discountQty && discountQty > 0 && discountQty < checkItem.quantity ? discountQty : checkItem.quantity;
+            const itemSubtotal = Number(checkItem.unitPrice) * Number(splitQty);
             requestedRate = itemSubtotal > 0 ? (discountAmount / itemSubtotal) * 100 : 0;
           }
         }
@@ -512,9 +513,58 @@ export class SalesService implements OnModuleInit {
       const item = await manager.findOne(SaleItem, { where: { id: itemId }, relations: ['sale', 'sale.table'] });
       if (!item) throw new NotFoundException('Ürün bulunamadı');
 
-      item.discountRate = discountRate;
-      item.discountAmount = discountAmount;
-      await manager.save(SaleItem, item);
+      const qtyToDiscount = Number(discountQty || 0);
+
+      if (qtyToDiscount > 0 && qtyToDiscount < Number(item.quantity)) {
+        // Split the item!
+        // 1. Create a copy of the item with the discountQty and the applied discount
+        const newItem = manager.create(SaleItem, {
+          product: { id: item.productId } as any,
+          productId: item.productId,
+          quantity: qtyToDiscount,
+          unitPrice: item.unitPrice,
+          costPrice: item.costPrice,
+          note: item.note,
+          isPaid: item.isPaid,
+          isWaiting: item.isWaiting,
+          isMarshed: item.isMarshed,
+          isReady: item.isReady,
+          status: item.status,
+          parentItemId: item.parentItemId,
+          menuGroupId: item.menuGroupId,
+          saleType: item.saleType,
+          saleTypeMultiplier: item.saleTypeMultiplier,
+          variationId: item.variationId,
+          variationName: item.variationName,
+          transactionType: item.transactionType,
+          transactionReason: item.transactionReason,
+          addedByUserId: item.addedByUserId,
+          addedAt: item.addedAt,
+          discountRate: discountRate,
+          discountAmount: discountAmount,
+          sale: item.sale,
+          isSentToPrinter: item.isSentToPrinter,
+          sentOutputProfileId: item.sentOutputProfileId,
+          productTypeName: item.productTypeName
+        });
+        newItem.total = Number((qtyToDiscount * Number(item.unitPrice) * Number(item.saleTypeMultiplier) - discountAmount).toFixed(2));
+        
+        // 2. Reduce the original item's quantity
+        const remainingQty = Number(item.quantity) - qtyToDiscount;
+        item.quantity = remainingQty;
+        item.discountRate = 0;
+        item.discountAmount = 0;
+        item.total = Number((remainingQty * Number(item.unitPrice) * Number(item.saleTypeMultiplier)).toFixed(2));
+
+        await manager.save(SaleItem, item);
+        await manager.save(SaleItem, newItem);
+      } else {
+        // Apply discount to the entire item
+        item.discountRate = discountRate;
+        item.discountAmount = discountAmount;
+        item.total = Number((Number(item.quantity) * Number(item.unitPrice) * Number(item.saleTypeMultiplier) - discountAmount).toFixed(2));
+        await manager.save(SaleItem, item);
+      }
 
       const savedSale = await this.recalculateSaleTotals(item.sale.id, manager);
 
@@ -523,7 +573,7 @@ export class SalesService implements OnModuleInit {
         await manager.query(`
           INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId)
           VALUES (GETDATE(), @0, 'ITEM_DISCOUNT', @1, @2, @3, @4, @5)
-        `, [userId, savedSale.id, savedSale.tableName, discountAmount, `Satır indirimi uygulandı: %${discountRate} / ₺${discountAmount}`, savedSale.companyId || 1]);
+        `, [userId, savedSale.id, savedSale.tableName, discountAmount, `Satır indirimi uygulandı: %${discountRate} / ₺${discountAmount} (Adet: ${qtyToDiscount || item.quantity})`, savedSale.companyId || 1]);
       } catch {}
 
       this.kitchenGateway.notifySaleUpdate(savedSale);
@@ -897,6 +947,10 @@ export class SalesService implements OnModuleInit {
               }
             }
 
+            const discountRate = Number(item.discountRate || 0);
+            const lineBase = Number(item.quantity) * finalUnitPrice * (item.saleTypeMultiplier || 1.00);
+            const discountAmount = Number(item.discountAmount || 0) || (discountRate > 0 ? Number((lineBase * (discountRate / 100)).toFixed(2)) : 0);
+
             const parentItem = manager.create(SaleItem, {
               productId: item.productId,
               quantity: item.quantity,
@@ -906,7 +960,9 @@ export class SalesService implements OnModuleInit {
               saleType: item.saleType || 'STANDARD',
               saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
               costPrice: item.costPrice || 0,
-              total: item.total || (Number(item.quantity) * finalUnitPrice),
+              discountRate: discountRate,
+              discountAmount: discountAmount,
+              total: Number((lineBase - discountAmount).toFixed(2)),
               note: item.note,
               isWaiting: item.isWaiting || false,
               isMarshed: false,
@@ -2381,6 +2437,10 @@ export class SalesService implements OnModuleInit {
           }
         }
 
+        const discountRate = Number(item.discountRate || 0);
+        const lineBase = Number(item.quantity) * finalUnitPrice * (item.saleTypeMultiplier || 1.00);
+        const discountAmount = Number(item.discountAmount || 0) || (discountRate > 0 ? Number((lineBase * (discountRate / 100)).toFixed(2)) : 0);
+
         const parentItem = manager.create(SaleItem, {
           productId: item.productId,
           quantity: item.quantity,
@@ -2390,7 +2450,9 @@ export class SalesService implements OnModuleInit {
           saleType: item.saleType || 'STANDARD',
           saleTypeMultiplier: item.saleTypeMultiplier || 1.00,
           costPrice: item.costPrice || 0,
-          total: item.total || (Number(item.quantity) * finalUnitPrice),
+          discountRate: discountRate,
+          discountAmount: discountAmount,
+          total: Number((lineBase - discountAmount).toFixed(2)),
           note: item.note,
           isWaiting: item.isWaiting || false,
           isMarshed: false,
