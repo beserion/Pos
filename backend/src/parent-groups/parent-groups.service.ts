@@ -2,12 +2,15 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ParentGroup } from './parent-group.entity';
+import { Department } from '../departments/department.entity';
 
 @Injectable()
 export class ParentGroupsService {
   constructor(
     @InjectRepository(ParentGroup)
     private readonly repository: Repository<ParentGroup>,
+    @InjectRepository(Department)
+    private readonly departmentRepository: Repository<Department>,
   ) {}
 
   private categoriesCache: ParentGroup[] | null = null;
@@ -57,6 +60,16 @@ export class ParentGroupsService {
 
   async remove(id: number): Promise<void> {
     const group = await this.findOne(id);
+    
+    const departmentInGroup = await this.departmentRepository.findOne({
+      where: { parentGroupId: id }
+    });
+    if (departmentInGroup) {
+      throw new BadRequestException(
+        `"${group.name}" üst grubu kullanımda (bu gruba bağlı kategoriler var) olduğu için silinemez. Önce bağlı kategorileri güncelleyin veya silin.`
+      );
+    }
+
     await this.repository.delete(id);
     this.clearCache();
   }

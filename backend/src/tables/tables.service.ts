@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Table } from './table.entity';
 import { UsersService } from '../users/users.service';
 import { getCachedPerms } from '../auth/permissions.guard';
@@ -133,6 +133,17 @@ export class TablesService {
     }
 
     await this.tableRepository.update(id, updateData);
+    if (updateData.isBillRequested === false) {
+      await this.saleRepository.update(
+        { tableId: id, status: In(['NEW', 'PREPARATION', 'READY', 'SERVED']) },
+        { isBillRequested: false }
+      );
+    } else if (updateData.isBillRequested === true) {
+      await this.saleRepository.update(
+        { tableId: id, status: In(['NEW', 'PREPARATION', 'READY', 'SERVED']) },
+        { isBillRequested: true }
+      );
+    }
     this.clearCache();
     this.kitchenGateway.notifySaleUpdate({ tableId: id } as any);
     return this.findOne(id);

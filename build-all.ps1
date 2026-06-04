@@ -22,7 +22,7 @@ Set-Location "C:\Github\Pos\bossposnetx"
 ..\node-x64\node.exe node_modules\vite\bin\vite.js build
 Write-Host "Boss express backend derleniyor (esbuild)..." -ForegroundColor Cyan
 Remove-Item -Recurse -Force "dist-server" -ErrorAction SilentlyContinue
-npx -y esbuild server.ts --bundle --platform=node --target=node20 --outfile=dist-server/server-bundle.cjs
+npx -y esbuild server.ts --bundle --platform=node --target=node20 --external:vite --outfile=dist-server/server-bundle.cjs
 Write-Host "Boss dosyalari public icine kopyalaniyor..." -ForegroundColor Cyan
 Remove-Item -Recurse -Force "C:\Github\Pos\frontend\public\boss" -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path "C:\Github\Pos\frontend\public\boss" | Out-Null

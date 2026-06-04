@@ -68,6 +68,12 @@ export class AccountTransaction {
   companyAccountId: number;
 
   @Column({ nullable: true })
+  shiftId?: number;
+
+  @Column({ nullable: true })
+  cashRegisterId?: number;
+
+  @Column({ nullable: true })
   documentNumber: string;
 
   // ─── Program Tarihi (İş Günü) ─────────────────────────────────────

@@ -82,4 +82,33 @@ export class ReportsController {
     const companyId = req?.user?.companyId || 1;
     return await this.auditLogService.getAuditLogs({ ...query, companyId });
   }
+
+  // ── 7. İkram ve Ödenmez Detay Raporu ──
+  @Get('complimentary-non-payable')
+  async getComplimentaryNonPayableReport(@Query() query: any, @Request() req: any) {
+    const companyId = req?.user?.companyId || 1;
+    return await this.reportsService.getComplimentaryNonPayableReport({ ...query, companyId });
+  }
+
+  // ── 8. İade Detay Raporu ──
+  @Get('refunds')
+  async getRefundsReport(@Query() query: any, @Request() req: any) {
+    const companyId = req?.user?.companyId || 1;
+    return await this.reportsService.getRefundsReport({ ...query, companyId });
+  }
+
+  // ── 9. İptal Detay Raporu ──
+  @Get('cancelled')
+  async getCancelledReport(@Query() query: any, @Request() req: any) {
+    const companyId = req?.user?.companyId || 1;
+    return await this.reportsService.getCancelledReport({ ...query, companyId });
+  }
+
+  // ── 10. Detaylı İndirim Raporu ──
+  @Get('discounts')
+  async getDiscountsReport(@Query() query: any, @Request() req: any) {
+    const companyId = req?.user?.companyId || 1;
+    return await this.reportsService.getDiscountsReport({ ...query, companyId });
+  }
 }
+

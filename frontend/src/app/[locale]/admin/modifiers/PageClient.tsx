@@ -12,6 +12,9 @@ interface Modifier {
     groupName?: string;
     modifierGroupId?: number;
     group?: ModifierGroup;
+    isGeneral?: boolean;
+    productTypeId?: number | null;
+    productCategory?: string | null;
 }
 
 interface ModifierGroup {
@@ -28,11 +31,22 @@ export function PageClient() {
     // Note: Reusing Admin translations where possible; otherwise using hardcoded Turkish for this feature per specific context
     const [modifiers, setModifiers] = useState<Modifier[]>([]);
     const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
+    const [productTypes, setProductTypes] = useState<any[]>([]);
+    const [departments, setDepartments] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
-    const [formData, setFormData] = useState({ id: 0, name: '', groupName: '', modifierGroupId: 0 });
+    const [formData, setFormData] = useState({ 
+        id: 0, 
+        name: '', 
+        groupName: '', 
+        modifierGroupId: 0,
+        scope: 'product',
+        isGeneral: false,
+        productTypeId: 0,
+        productCategory: ''
+    });
     const [groupFormData, setGroupFormData] = useState({ id: 0, name: '' });
 
     useEffect(() => {
@@ -47,13 +61,17 @@ export function PageClient() {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const baseUrl = process.env.NEXT_PUBLIC_API_URL;
             
-            const [modifiersRes, groupsRes] = await Promise.all([
+            const [modifiersRes, groupsRes, typesRes, deptsRes] = await Promise.all([
                 axios.get(`${baseUrl}/modifiers`, config),
-                axios.get(`${baseUrl}/modifier-groups`, config)
+                axios.get(`${baseUrl}/modifier-groups`, config),
+                axios.get(`${baseUrl}/product-types`, config).catch(() => ({ data: [] })),
+                axios.get(`${baseUrl}/departments`, config).catch(() => ({ data: [] }))
             ]);
             
             setModifiers(modifiersRes.data);
             setModifierGroups(groupsRes.data);
+            setProductTypes(typesRes.data);
+            setDepartments(deptsRes.data);
         } catch (error) {
             console.error('Error fetching data', error);
             showSwal({ title: tc('error'), text: tc('loadingError'), icon: 'error' });
@@ -74,6 +92,9 @@ export function PageClient() {
                 name: formData.name,
                 modifierGroupId: formData.modifierGroupId ? Number(formData.modifierGroupId) : null,
                 groupName: selectedGroup ? selectedGroup.name : (formData.groupName || null),
+                isGeneral: formData.scope === 'general',
+                productTypeId: formData.scope === 'cins' && formData.productTypeId ? Number(formData.productTypeId) : null,
+                productCategory: formData.scope === 'group' && formData.productCategory ? formData.productCategory : null,
             };
 
             if (formData.id === 0) {
@@ -162,8 +183,35 @@ export function PageClient() {
     };
 
     const openModal = (modifier?: Modifier) => {
-        if (modifier) setFormData({ id: modifier.id, name: modifier.name, groupName: modifier.groupName || '', modifierGroupId: modifier.modifierGroupId || 0 });
-        else setFormData({ id: 0, name: '', groupName: '', modifierGroupId: 0 });
+        if (modifier) {
+            let scope = 'product';
+            if (modifier.isGeneral) scope = 'general';
+            else if (modifier.productTypeId) scope = 'cins';
+            else if (modifier.productCategory) scope = 'group';
+
+            setFormData({ 
+                id: modifier.id, 
+                name: modifier.name, 
+                groupName: modifier.groupName || '', 
+                modifierGroupId: modifier.modifierGroupId || 0,
+                scope,
+                isGeneral: !!modifier.isGeneral,
+                productTypeId: modifier.productTypeId || 0,
+                productCategory: modifier.productCategory || ''
+            });
+        }
+        else {
+            setFormData({ 
+                id: 0, 
+                name: '', 
+                groupName: '', 
+                modifierGroupId: 0,
+                scope: 'product',
+                isGeneral: false,
+                productTypeId: 0,
+                productCategory: ''
+            });
+        }
         setIsModalOpen(true);
     };
 
@@ -236,6 +284,7 @@ export function PageClient() {
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest" style={{ width: '40px' }}>ID</th>
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Grup Adı</th>
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Özellik Adı</th>
+                                        <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Kapsam</th>
                                         <th className="px-8 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">İşlemler</th>
                                     </tr>
                                 </thead>
@@ -260,6 +309,25 @@ export function PageClient() {
                                                     </div>
                                                 </div>
                                             </td>
+                                            <td className="px-8 py-3">
+                                                {m.isGeneral ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 dark:bg-amber-500/10 rounded-xl border border-amber-200 dark:border-amber-500/20 text-amber-600 dark:text-amber-400 font-bold text-xs uppercase tracking-wider">
+                                                        <i className="fat fa-globe text-[10px]"></i> Genel
+                                                    </span>
+                                                ) : m.productTypeId ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 dark:bg-blue-500/10 rounded-xl border border-blue-200 dark:border-blue-500/20 text-blue-600 dark:text-blue-400 font-bold text-xs uppercase tracking-wider">
+                                                        <i className="fat fa-shapes text-[10px]"></i> Cins: {productTypes.find(t => t.id === m.productTypeId)?.name || `Cins #${m.productTypeId}`}
+                                                    </span>
+                                                ) : m.productCategory ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl border border-emerald-200 dark:border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold text-xs uppercase tracking-wider">
+                                                        <i className="fat fa-folder-tree text-[10px]"></i> Ürün Grubu: {m.productCategory}
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">
+                                                        <i className="fat fa-tag text-[10px]"></i> Ürüne Özel
+                                                    </span>
+                                                )}
+                                            </td>
                                             <td className="px-8 py-3 text-right">
                                                 <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
                                                     <button onClick={() => openModal(m)} className="w-10 h-10 bg-white dark:bg-slate-800 text-blue-600 hover:text-white hover:bg-blue-600 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-all flex items-center justify-center">
@@ -274,7 +342,7 @@ export function PageClient() {
                                     ))}
                                     {modifiers.length === 0 && (
                                         <tr>
-                                            <td colSpan={3} className="p-20 text-center">
+                                            <td colSpan={5} className="p-20 text-center">
                                                 <div className="flex flex-col items-center opacity-40">
                                                     <i className="fat fa-tags text-6xl mb-4 text-slate-300"></i>
                                                     <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">Hiç özellik bulunamadı</p>
@@ -332,6 +400,70 @@ export function PageClient() {
                                                 <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-amber-500/10 outline-none transition-shadow" placeholder="Özellik adını giriniz..." />
                                             </div>
                                         </div>
+                                    </div>
+
+                                    {/* Kapsam Seçimi */}
+                                    <div className="border-t border-slate-100 dark:border-slate-700 pt-6">
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">ÖZELLİK KAPSAMI</label>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                                            {[
+                                                { id: 'product', label: 'Ürüne Özel' },
+                                                { id: 'general', label: 'Genel' },
+                                                { id: 'cins', label: 'Cins Bazlı' },
+                                                { id: 'group', label: 'Ürün Grubu Bazlı' }
+                                            ].map(s => (
+                                                <button
+                                                    key={s.id}
+                                                    type="button"
+                                                    onClick={() => setFormData(prev => ({ 
+                                                        ...prev, 
+                                                        scope: s.id,
+                                                        isGeneral: s.id === 'general',
+                                                        productTypeId: s.id === 'cins' ? (prev.productTypeId || productTypes[0]?.id || 0) : 0,
+                                                        productCategory: s.id === 'group' ? (prev.productCategory || departments.filter(d=>d.isActive)[0]?.name || '') : ''
+                                                    }))}
+                                                    className={`py-3 px-2 rounded-2xl border text-xs font-black uppercase tracking-wider transition-all hover:scale-105 active:scale-95 ${formData.scope === s.id ? 'bg-amber-500 border-amber-500 text-white shadow-md shadow-amber-500/20' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'}`}
+                                                >
+                                                    {s.label}
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        {formData.scope === 'cins' && (
+                                            <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">GEÇERLİ OLACAĞI ÜRÜN CİNSİ</label>
+                                                <div className="relative">
+                                                    <i className="fat fa-shapes absolute left-4 top-3.5 text-amber-500/50"></i>
+                                                    <select value={formData.productTypeId} onChange={(e) => setFormData({ ...formData, productTypeId: Number(e.target.value) })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-amber-500/10 outline-none transition-shadow appearance-none">
+                                                        <option value={0}>Cins Seçiniz...</option>
+                                                        {productTypes.map(t => (
+                                                            <option key={t.id} value={t.id}>{t.name}</option>
+                                                        ))}
+                                                    </select>
+                                                    <div className="absolute right-4 top-3.5 pointer-events-none text-slate-400">
+                                                        <i className="fat fa-chevron-down"></i>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {formData.scope === 'group' && (
+                                            <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">GEÇERLİ OLACAĞI ÜRÜN GRUBU (KATEGORİ)</label>
+                                                <div className="relative">
+                                                    <i className="fat fa-folder-tree absolute left-4 top-3.5 text-amber-500/50"></i>
+                                                    <select value={formData.productCategory} onChange={(e) => setFormData({ ...formData, productCategory: e.target.value })} className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-white font-bold focus:ring-4 focus:ring-amber-500/10 outline-none transition-shadow appearance-none">
+                                                        <option value="">Ürün Grubu Seçiniz...</option>
+                                                        {departments.filter(d => d.isActive).map(d => (
+                                                            <option key={d.id} value={d.name}>{d.name}</option>
+                                                        ))}
+                                                    </select>
+                                                    <div className="absolute right-4 top-3.5 pointer-events-none text-slate-400">
+                                                        <i className="fat fa-chevron-down"></i>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="p-8 pt-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20 shrink-0 flex justify-between h-[100px] items-center">

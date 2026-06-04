@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'POSAPP',
   webDir: 'out',
   server: {
-    url: 'http://192.168.1.163:3050',
+    url: 'http://192.168.1.163:4050',
     cleartext: true,
     androidScheme: 'https' // Next.js and its absolute paths work better with a virtual origin
   }

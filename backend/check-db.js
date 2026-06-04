@@ -28,7 +28,7 @@ async function run() {
   // Check system_parameters for multipliers
   const params = await AppDataSource.query(`
     SELECT [key], value FROM system_parameters 
-    WHERE [module] = 'pos' AND [key] IN ('half_recipe_multiplier', 'double_recipe_multiplier')
+    WHERE [module] IN ('pos', 'half_double') AND [key] IN ('half_recipe_multiplier', 'double_recipe_multiplier')
   `);
   console.log('Parameters:', params);
 

@@ -102,7 +102,7 @@ $tbMainFrontPort = New-TextBox 160 ($y + 20) $config.frontendPort 120
 $form.Controls.Add($tbMainFrontPort)
 
 $form.Controls.Add((New-Label "Patron Port" 300 $y 120))
-$tbPatronPort = New-TextBox 300 ($y + 20) "3100" 120
+$tbPatronPort = New-TextBox 300 ($y + 20) "4100" 120
 $form.Controls.Add($tbPatronPort)
 
 $form.Controls.Add((New-Label "Garson Port" 440 $y 120))

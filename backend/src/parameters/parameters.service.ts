@@ -49,10 +49,10 @@ export class ParametersService implements OnModuleInit {
   private async seedDefaults() {
     try {
       const defaultParams = [
-        { module: 'pos', key: 'half_price_multiplier', value: '0.50', label: 'Yarım Fiyat Katsayısı', type: 'number', description: 'Yarım satışlarda fiyat çarpanı' },
-        { module: 'pos', key: 'double_price_multiplier', value: '1.70', label: 'Duble Fiyat Katsayısı', type: 'number', description: 'Duble satışlarda fiyat çarpanı' },
-        { module: 'pos', key: 'half_recipe_multiplier', value: '0.50', label: 'Yarım Reçete Katsayısı', type: 'number', description: 'Yarım satışlarda stok düşüm çarpanı' },
-        { module: 'pos', key: 'double_recipe_multiplier', value: '2.00', label: 'Duble Reçete Katsayısı', type: 'number', description: 'Duble satışlarda stok düşüm çarpanı' },
+        { module: 'half_double', key: 'half_price_multiplier', value: '0.50', label: 'Yarım Fiyat Katsayısı', type: 'number', description: 'Yarım satışlarda fiyat çarpanı' },
+        { module: 'half_double', key: 'double_price_multiplier', value: '1.70', label: 'Duble Fiyat Katsayısı', type: 'number', description: 'Duble satışlarda fiyat çarpanı' },
+        { module: 'half_double', key: 'half_recipe_multiplier', value: '0.50', label: 'Yarım Reçete Katsayısı', type: 'number', description: 'Yarım satışlarda stok düşüm çarpanı' },
+        { module: 'half_double', key: 'double_recipe_multiplier', value: '2.00', label: 'Duble Reçete Katsayısı', type: 'number', description: 'Duble satışlarda stok düşüm çarpanı' },
         { module: 'inventory', key: 'stock_restore_on_cancel', value: 'true', label: 'İptal/İade Stok Geri Yükleme', type: 'boolean', description: 'İptal veya iade durumunda stok otomatik geri yüklensin mi?' },
         { module: 'inventory', key: 'default_warehouse_id', value: '0', label: 'Varsayılan Depo', type: 'number', description: 'Varsayılan depo ID (0 = belirtilmemiş)' },
         { module: 'inventory', key: 'blind_count_default', value: 'false', label: 'Kör Sayım Varsayılanı', type: 'boolean', description: 'Sayım başlatılırken kör sayım seçili mi?' },
@@ -66,6 +66,7 @@ export class ParametersService implements OnModuleInit {
         { module: 'pos', key: 'shift_closure_mode', value: 'warn_only', label: 'Vardiya Kapanış Modu', type: 'select', description: 'Gün sonu öncesi açık vardiya kontrolü: warn_only / authorized_approval / mandatory_close' },
         { module: 'pos', key: 'z_report_print_mode', value: 'auto_print', label: 'Z Raporu Yazdırma Modu', type: 'select', description: 'Gün sonu sonrası Z raporu: auto_print / manual_print / disabled' },
         { module: 'pos', key: 'shift_system_enabled', value: 'true', label: 'Vardiyalı Kasiyer Sistemi', type: 'boolean', description: 'Vardiyalı kasiyer sistemi aktif mi?' },
+        { module: 'pos', key: 'boss_password', value: '1234', label: 'Patron Raporu Şifresi', type: 'text', description: 'Patron Raporu ekranı (bossposnetx) için giriş şifresi' },
         { module: 'pos', key: 'end_of_day_min_hours', value: '6', label: 'Gün Sonu Min. Saat Aralığı', type: 'number', description: 'İki gün sonu arasında minimum kaç saat geçmeli?' },
         { module: 'pos', key: 'vat_rates', value: '0,1,10,20', label: 'KDV Oranları', type: 'text', description: 'Virgülle ayrılmış KDV oranları' },
         { module: 'pos', key: 'block_eod_if_tables_open', value: 'false', label: 'Açık Masa Varken Gün Sonunu Engelle', type: 'boolean', description: 'Eğer açık (ödenmemiş) masa varsa gün sonu alınmasını engeller.' },

@@ -6,7 +6,7 @@
  * 
  * Kurallar:
  * 1. .env'de NEXT_PUBLIC_API_URL tanımlıysa → her zaman o kullanılır
- * 2. Tanımlı değilse ve geliştirme ortamıysa → localhost:3050 fallback
+ * 2. Tanımlı değilse ve geliştirme ortamıysa → localhost:4050 fallback
  */
 
 export function getApiUrl(): string {
@@ -18,12 +18,12 @@ export function getApiUrl(): string {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     if (hostname === 'localhost' || hostname === '127.0.0.1' || /^192\.168\./.test(hostname) || /^10\./.test(hostname)) {
-      return `http://${hostname}:3050`;
+      return `http://${hostname}:4050`;
     }
   }
 
   // 3. Hiçbiri yoksa varsayılan
-  return 'http://localhost:3050';
+  return 'http://localhost:4050';
 }
 
 export const API_URL = getApiUrl();

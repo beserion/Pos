@@ -94,7 +94,7 @@ export function PageClient() {
                 await axios.delete(`${API}/product-types/${id}`, { headers: { Authorization: `Bearer ${user.token}` } });
                 toastSwal({ title: 'Silindi', text: 'Ürün cinsi silindi', icon: 'success' });
                 fetchData();
-            } catch { showSwal({ title: 'Hata', text: 'Silme hatası', icon: 'error' }); }
+            } catch (err: any) { showSwal({ title: 'Hata', text: err?.response?.data?.message || 'Silme hatası', icon: 'error' }); }
         }
     };
 

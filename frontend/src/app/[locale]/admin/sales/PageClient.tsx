@@ -26,6 +26,7 @@ interface Sale {
     waiter?: { firstName: string, lastName: string, name?: string, email: string };
     items: SaleItem[];
     createdAt: string;
+    businessDate?: string;
     tableName?: string; // QuickSale etc.
     partner?: { name: string };
 }
@@ -434,7 +435,9 @@ export function PageClient() {
                                             {sale.waiter ? `${sale.waiter.firstName} ${sale.waiter.lastName}` : '-'}
                                         </td>
                                         <td className="px-8 py-2">{getStatusBadge(sale.status)}</td>
-                                        <td className="px-8 py-2 text-sm text-slate-500 font-medium">{new Date(sale.createdAt).toLocaleString()}</td>
+                                        <td className="px-8 py-2 text-sm text-slate-500 font-medium">
+                                            {sale.businessDate ? `${sale.businessDate} ${new Date(sale.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : new Date(sale.createdAt).toLocaleString()}
+                                        </td>
                                         <td className="px-8 py-2 font-black text-orange-600 dark:text-orange-400 text-right">₺{sale.totalAmount}</td>
                                         <td className="px-8 py-2 text-right">
                                             <div className="flex justify-end gap-2 transition-all">

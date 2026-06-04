@@ -12,13 +12,13 @@ const intlMiddleware = createMiddleware({
 export default function middleware(req: NextRequest) {
     const response = intlMiddleware(req);
 
-    // Sadece istek yapılan host içinde :3000 portu yoksa (Cloudflare/Proxy durumu)
-    // yönlendirme başlığındaki portu temizliyoruz. Yerel kullanımda (localhost:3000) portu koruyoruz.
+    // Sadece istek yapılan host içinde :4000 portu yoksa (Cloudflare/Proxy durumu)
+    // yönlendirme başlığındaki portu temizliyoruz. Yerel kullanımda (localhost:4000) portu koruyoruz.
     const host = req.headers.get('host') || '';
     const location = response.headers.get('location');
     
-    if (location && location.includes(':3000') && !host.includes(':3000')) {
-        response.headers.set('location', location.replace(':3000', ''));
+    if (location && location.includes(':4000') && !host.includes(':4000')) {
+        response.headers.set('location', location.replace(':4000', ''));
     }
 
     return response;

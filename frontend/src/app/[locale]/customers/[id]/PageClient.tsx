@@ -5,6 +5,9 @@ import axios from 'axios';
 import Cookies from 'js-cookie';
 import { useAuth } from '../../AuthContext';
 import { API_URL } from '@/lib/apiConfig';
+import SearchableSelect from '@/components/SearchableSelect';
+import { showSwal, toastSwal } from '../../utils/swal';
+
 
 // API Modelleri
 interface Partner {
@@ -53,6 +56,9 @@ export function PageClient() {
     const [invoices, setInvoices] = useState<Invoice[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'invoices'>('overview');
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [form, setForm] = useState({ amount: 0, type: 'INCOME', description: '', paymentMethod: 'KASA', category: 'Tahsilat' });
+
 
     // Bağımsız Veri Çekme Fonksiyonu
     const fetchData = async () => {
@@ -100,6 +106,43 @@ export function PageClient() {
         if (!authLoading && !user) router.push(`/${locale}/login`);
         if (user && id) fetchData();
     }, [user, authLoading, id]);
+
+    const handleSaveTransaction = async () => {
+        const perms = user?.extraPermissions || [];
+        const isSuperAdmin = user?.role?.name?.toUpperCase() === 'ADMIN' || user?.role?.name?.toUpperCase() === 'ADMINISTRATOR';
+        
+        if (form.type === 'INCOME' && !isSuperAdmin && !perms.includes('OP:FINANCE_COLLECT_CURRENT_ACCOUNT')) {
+            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Cari hesap tahsilatı yapma yetkiniz bulunmamaktadır.' });
+            return;
+        }
+        if (form.type === 'EXPENSE' && !isSuperAdmin && !perms.includes('OP:FINANCE_PAY_CURRENT_ACCOUNT')) {
+            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Cari hesap ödemesi yapma yetkiniz bulunmamaktadır.' });
+            return;
+        }
+        if (form.type === 'INCOME' && form.category === 'Peşinat' && !isSuperAdmin && !perms.includes('OP:FINANCE_DOWN_PAYMENT')) {
+            showSwal({ icon: 'warning', title: 'Yetki Yetersiz', text: 'Peşinat tahsilatı yapma yetkiniz bulunmamaktadır.' });
+            return;
+        }
+
+        if (!form.description.trim() || form.amount <= 0) {
+            showSwal({ icon: 'warning', title: 'Uyarı', text: 'Tutar ve açıklama zorunludur.' });
+            return;
+        }
+        try {
+            const token = Cookies.get('token');
+            await axios.post(`${API_URL}/finance/transactions`, {
+                ...form,
+                partnerId: Number(id),
+                sourceType: 'MANUAL',
+            }, { headers: { Authorization: `Bearer ${token}` } });
+            toastSwal({ icon: 'success', title: 'Hareket eklendi!' });
+            setIsModalOpen(false);
+            fetchData();
+        } catch (e: any) {
+            showSwal({ icon: 'error', title: 'Hata', text: e.response?.data?.message || 'İşlem başarısız.' });
+        }
+    };
+
 
     // Yükleme Durumu
     if (loading || authLoading) {
@@ -250,15 +293,28 @@ export function PageClient() {
 
                         {/* Quick Actions */}
                         <div className="grid grid-cols-2 gap-4">
-                            <button className="p-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-wider flex flex-col items-center gap-2 transition-all shadow-lg shadow-indigo-500/30 group">
+                            <button 
+                                onClick={() => {
+                                    setForm({ amount: 0, type: 'INCOME', description: '', paymentMethod: 'KASA', category: 'Tahsilat' });
+                                    setIsModalOpen(true);
+                                }}
+                                className="p-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-wider flex flex-col items-center gap-2 transition-all shadow-lg shadow-indigo-500/30 group active:scale-95"
+                            >
                                 <i className="fat fa-plus-circle text-xl group-hover:scale-110 transition-transform"></i>
                                 Tahsilat Gir
                             </button>
-                            <button className="p-4 bg-violet-600 hover:bg-violet-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-wider flex flex-col items-center gap-2 transition-all shadow-lg shadow-violet-500/30 group">
+                            <button 
+                                onClick={() => {
+                                    setForm({ amount: 0, type: 'EXPENSE', description: '', paymentMethod: 'KASA', category: 'Ödeme' });
+                                    setIsModalOpen(true);
+                                }}
+                                className="p-4 bg-violet-600 hover:bg-violet-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-wider flex flex-col items-center gap-2 transition-all shadow-lg shadow-violet-500/30 group active:scale-95"
+                            >
                                 <i className="fat fa-minus-circle text-xl group-hover:scale-110 transition-transform"></i>
                                 Ödeme Yap
                             </button>
                         </div>
+
 
                     </div>
 
@@ -430,6 +486,110 @@ export function PageClient() {
                 </div>
 
             </div>
+
+            {/* Tahsilat / Ödeme Giriş Modalı */}
+            {isModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-xl">
+                    <div className="bg-white dark:bg-slate-800 rounded-[32px] w-full max-w-md shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50">
+                        <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20">
+                            <div>
+                                <h2 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2">
+                                    <i className={`fat ${form.type === 'INCOME' ? 'fa-hand-holding-dollar text-emerald-500' : 'fa-money-bill-wave text-rose-500'}`}></i>
+                                    {form.type === 'INCOME' ? 'Tahsilat Gir' : 'Ödeme Yap'}
+                                </h2>
+                                <p className="text-xs text-slate-400 mt-1">{partner.name} - Cari İşlem Kaydı</p>
+                            </div>
+                            <button onClick={() => setIsModalOpen(false)} className="w-10 h-10 flex items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors text-xl">&times;</button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tür *</label>
+                                    <div className="-m-2 w-full">
+                                        <SearchableSelect
+                                            value={form.type}
+                                            onChange={(val) => setForm({ ...form, type: val.toString(), category: val === 'INCOME' ? 'Tahsilat' : 'Ödeme' })}
+                                            options={[
+                                                { value: 'INCOME', label: 'Gelir / Tahsilat' },
+                                                { value: 'EXPENSE', label: 'Gider / Ödeme' }
+                                            ]}
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Tutar (₺) *</label>
+                                    <input 
+                                        type="number" 
+                                        step="0.01" 
+                                        value={form.amount || ''} 
+                                        onChange={e => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })} 
+                                        className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500/20 outline-none" 
+                                        placeholder="0.00" 
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Açıklama *</label>
+                                <input 
+                                    type="text" 
+                                    value={form.description} 
+                                    onChange={e => setForm({ ...form, description: e.target.value })} 
+                                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500/20 outline-none" 
+                                    placeholder="Açıklama girin" 
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Ödeme Yöntemi</label>
+                                    <div className="-m-2 w-full">
+                                        <SearchableSelect
+                                            value={form.paymentMethod}
+                                            onChange={(val) => setForm({ ...form, paymentMethod: val.toString() })}
+                                            options={[
+                                                { value: 'KASA', label: 'Kasa' },
+                                                { value: 'BANKA', label: 'Banka' },
+                                                { value: 'KREDI_KARTI', label: 'Kredi Kartı' }
+                                            ]}
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Kategori</label>
+                                    <div className="-m-2 w-full">
+                                        <SearchableSelect
+                                            value={form.category}
+                                            onChange={(val) => setForm({ ...form, category: val.toString() })}
+                                            options={
+                                                form.type === 'INCOME' 
+                                                ? [
+                                                    { value: 'Tahsilat', label: 'Tahsilat' },
+                                                    { value: 'Satış', label: 'Satış' },
+                                                    { value: 'Peşinat', label: 'Peşinat' },
+                                                    { value: 'Diğer', label: 'Diğer' }
+                                                  ]
+                                                : [
+                                                    { value: 'Ödeme', label: 'Ödeme' },
+                                                    { value: 'Alım', label: 'Alım' },
+                                                    { value: 'Gider', label: 'Gider' },
+                                                    { value: 'Diğer', label: 'Diğer' }
+                                                  ]
+                                            }
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-6 border-t border-slate-100 dark:border-slate-700 flex justify-between">
+                            <button onClick={() => setIsModalOpen(false)} className="px-6 py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold hover:bg-slate-200 transition-colors flex items-center gap-2 active:scale-95">
+                                <i className="fat fa-times-circle"></i> İptal
+                            </button>
+                            <button onClick={handleSaveTransaction} className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
+                                <i className="fat fa-check-circle"></i> Kaydet
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Global Style (Animations) */}
             <style jsx global>{`

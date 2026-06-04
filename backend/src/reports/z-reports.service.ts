@@ -43,7 +43,7 @@ export class ZReportsService {
       SELECT
         SUM(CASE WHEN paymentMethod IN ('KASA','CASH') THEN CAST(paidAmountCash AS DECIMAL(12,2)) ELSE 0 END) as nakit,
         SUM(CASE WHEN paymentMethod IN ('KREDI_KARTI','CREDIT_CARD','CC') THEN CAST(paidAmountCreditCard AS DECIMAL(12,2)) ELSE 0 END) as krediKarti,
-        SUM(CASE WHEN paymentMethod = 'CARI' THEN CAST(totalAmount AS DECIMAL(12,2)) ELSE 0 END) as cari,
+        SUM(CASE WHEN paymentMethod IN ('CARI', 'PARTNER', 'OPEN') THEN CAST(totalAmount AS DECIMAL(12,2)) ELSE 0 END) as cari,
         SUM(CASE WHEN paymentMethod = 'SPLIT' THEN CAST(paidAmountCash AS DECIMAL(12,2)) ELSE 0 END) as splitNakit,
         SUM(CASE WHEN paymentMethod = 'SPLIT' THEN CAST(paidAmountCreditCard AS DECIMAL(12,2)) ELSE 0 END) as splitKart,
         SUM(CAST(totalAmount AS DECIMAL(12,2))) as toplamTahsilat,
@@ -54,6 +54,19 @@ export class ZReportsService {
       FROM sales
       WHERE shiftId IN (${shiftIdList}) AND status = 'COMPLETED'
     `);
+
+    // Fetch manual cari tahsilat/odemeler for these shifts
+    const manualTahsilatRes = await this.dataSource.query(`
+      SELECT 
+        paymentMethod,
+        SUM(CASE WHEN type = 'INCOME' THEN CAST(amount AS DECIMAL(12,2)) ELSE -CAST(amount AS DECIMAL(12,2)) END) as toplam
+      FROM account_transactions
+      WHERE shiftId IN (${shiftIdList})
+      GROUP BY paymentMethod
+    `).catch(() => []);
+
+    const manualNakit = Number(manualTahsilatRes.find((c: any) => c.paymentMethod === 'KASA' || c.paymentMethod === 'CASH')?.toplam || 0);
+    const manualKredi = Number(manualTahsilatRes.find((c: any) => c.paymentMethod === 'KREDI_KARTI' || c.paymentMethod === 'CREDIT_CARD' || c.paymentMethod === 'CC')?.toplam || 0);
 
     const t = tahsilatRes[0] || {};
 
@@ -71,13 +84,42 @@ export class ZReportsService {
       WHERE s.shiftId IN (${shiftIdList}) AND s.status = 'COMPLETED' AND si.status = 'ACTIVE'
     `);
 
-    // Kategori bazlı toplamlar
+    // Kategori bazlı toplamlar (düzeltilmiş JOIN ile)
     const catRes = await this.dataSource.query(`
-      SELECT si.category as name, SUM(CAST(si.total AS DECIMAL(12,2))) as total
-      FROM sale_items si JOIN sales s ON s.id = si.saleId
+      SELECT COALESCE(p.category, 'Diğer') as name, SUM(CAST(si.total AS DECIMAL(12,2))) as total
+      FROM sale_items si 
+      JOIN sales s ON s.id = si.saleId
+      LEFT JOIN products p ON p.id = si.productId
       WHERE s.shiftId IN (${shiftIdList}) AND s.status = 'COMPLETED' AND si.status = 'ACTIVE'
-      GROUP BY si.category
-    `);
+      GROUP BY p.category
+    `).catch(() => []);
+
+    // İade toplam ve adet sorgusu
+    const iadeSorguRes = await this.dataSource.query(`
+      SELECT 
+        ISNULL(SUM(CAST(si.total AS DECIMAL(12,2))), 0) as refundTotal,
+        ISNULL(SUM(CAST(si.quantity AS DECIMAL(12,2))), 0) as refundCount
+      FROM sale_items si
+      JOIN sales s ON s.id = si.saleId
+      WHERE s.shiftId IN (${shiftIdList}) AND si.status = 'REFUNDED'
+    `).catch(() => [{ refundTotal: 0, refundCount: 0 }]);
+    const iadeData = iadeSorguRes[0] || { refundTotal: 0, refundCount: 0 };
+
+    // Kategori x İşlem Tipi bazlı dağılım sorgusu
+    const catTxRes = await this.dataSource.query(`
+      SELECT 
+        COALESCE(p.category, 'Diğer') as categoryName,
+        si.transactionType,
+        si.status,
+        SUM(CAST(si.quantity AS DECIMAL(12,2))) as quantity,
+        SUM(CAST(si.total AS DECIMAL(12,2))) as total,
+        SUM(CAST(COALESCE(p.price, 0) * si.quantity AS DECIMAL(12,2))) as retailTotal
+      FROM sale_items si
+      JOIN sales s ON s.id = si.saleId
+      LEFT JOIN products p ON p.id = si.productId
+      WHERE s.shiftId IN (${shiftIdList})
+      GROUP BY p.category, si.transactionType, si.status
+    `).catch(() => []);
 
     // Garson bazlı toplamlar
     const waiterRes = await this.dataSource.query(`
@@ -116,14 +158,14 @@ export class ZReportsService {
       netSales,
 
       // -- Tahsilat Toplamları --
-      cashCollection: Number(t.nakit || 0) + Number(t.splitNakit || 0),
-      creditCardCollection: Number(t.krediKarti || 0) + Number(t.splitKart || 0),
+      cashCollection: Number(t.nakit || 0) + Number(t.splitNakit || 0) + manualNakit,
+      creditCardCollection: Number(t.krediKarti || 0) + Number(t.splitKart || 0) + manualKredi,
       cariCollection: Number(t.cari || 0),
       mealCardCollection: 0,
       onlinePaymentCollection: 0,
       giftCardCollection: 0,
       otherCollection: 0,
-      totalCollection,
+      totalCollection: totalCollection + manualNakit + manualKredi,
 
       // -- Operasyon --
       totalReceipts: Number(t.adisyonSayisi || 0),
@@ -133,7 +175,8 @@ export class ZReportsService {
       // -- Düzeltme --
       discountTotal: Number(t.toplamIndirim || 0),
       complimentaryTotal: 0,
-      refundTotal: Number(t.toplamIade || 0),
+      refundTotal: Number(iadeData.refundTotal || 0),
+      refundCount: Number(iadeData.refundCount || 0),
       cancelTotal: Number(iptal.iptalToplam || 0),
       serviceFeeTotal: Number(t.toplamServis || 0),
 
@@ -153,6 +196,7 @@ export class ZReportsService {
       confirmedTotal: totalClosingCash,
 
       categoryTotals: JSON.stringify(catRes),
+      categoryTransactionTotals: JSON.stringify(catTxRes),
       waiterSales: JSON.stringify(waiterRes),
       paymentTotals: JSON.stringify([
         { method: 'CASH', total: Number(t.nakit || 0) + Number(t.splitNakit || 0) },
@@ -165,7 +209,7 @@ export class ZReportsService {
       totalClosingCash,
       totalExpectedCash,
       totalCashDifference,
-      totalIncome: netSales,
+      totalIncome: netSales + manualNakit + manualKredi,
       totalExpense: 0,
     });
 
@@ -173,6 +217,7 @@ export class ZReportsService {
     try {
       if (saved.taxBreakdown) (saved as any).taxBreakdown = JSON.parse(saved.taxBreakdown);
       if (saved.categoryTotals) (saved as any).categoryTotals = JSON.parse(saved.categoryTotals);
+      if (saved.categoryTransactionTotals) (saved as any).categoryTransactionTotals = JSON.parse(saved.categoryTransactionTotals);
       if (saved.waiterSales) (saved as any).waiterSales = JSON.parse(saved.waiterSales);
       if (saved.paymentTotals) (saved as any).paymentTotals = JSON.parse(saved.paymentTotals);
     } catch (e) {}
@@ -184,6 +229,7 @@ export class ZReportsService {
     try {
       if (report.taxBreakdown) (report as any).taxBreakdown = JSON.parse(report.taxBreakdown);
       if (report.categoryTotals) (report as any).categoryTotals = JSON.parse(report.categoryTotals);
+      if (report.categoryTransactionTotals) (report as any).categoryTransactionTotals = JSON.parse(report.categoryTransactionTotals);
       if (report.waiterSales) (report as any).waiterSales = JSON.parse(report.waiterSales);
       if (report.paymentTotals) (report as any).paymentTotals = JSON.parse(report.paymentTotals);
     } catch (e) {}
@@ -206,6 +252,7 @@ export class ZReportsService {
       try {
         if (report.taxBreakdown) (report as any).taxBreakdown = JSON.parse(report.taxBreakdown);
         if (report.categoryTotals) (report as any).categoryTotals = JSON.parse(report.categoryTotals);
+        if (report.categoryTransactionTotals) (report as any).categoryTransactionTotals = JSON.parse(report.categoryTransactionTotals);
         if (report.waiterSales) (report as any).waiterSales = JSON.parse(report.waiterSales);
         if (report.paymentTotals) (report as any).paymentTotals = JSON.parse(report.paymentTotals);
       } catch (e) {}

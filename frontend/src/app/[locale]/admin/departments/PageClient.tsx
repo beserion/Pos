@@ -117,7 +117,7 @@ export function PageClient() {
                 await axios.delete(`${API}/departments/${id}`, { headers: { Authorization: `Bearer ${user.token}` } });
                 toastSwal({ title: 'Silindi', text: 'Kategori silindi', icon: 'success' });
                 fetchData();
-            } catch { showSwal({ title: 'Hata', text: 'Silme hatası', icon: 'error' }); }
+            } catch (err: any) { showSwal({ title: 'Hata', text: err?.response?.data?.message || 'Silme hatası', icon: 'error' }); }
         }
     };
 
@@ -160,7 +160,7 @@ export function PageClient() {
                 await axios.delete(`${API}/parent-groups/${id}`, { headers: { Authorization: `Bearer ${user.token}` } });
                 toastSwal({ title: 'Silindi', text: 'Üst grup silindi', icon: 'success' });
                 fetchData();
-            } catch { showSwal({ title: 'Hata', text: 'Silme hatası', icon: 'error' }); }
+            } catch (err: any) { showSwal({ title: 'Hata', text: err?.response?.data?.message || 'Silme hatası', icon: 'error' }); }
         }
     };
 

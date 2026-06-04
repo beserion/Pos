@@ -363,7 +363,7 @@ export class BusinessDayService {
             SUM(CASE WHEN paymentMethod IN ('KASA','CASH') THEN CAST(paidAmountCash AS DECIMAL(12,2)) ELSE 0 END) as nakit,
             SUM(CASE WHEN paymentMethod IN ('KREDI_KARTI','CREDIT_CARD','CC') THEN CAST(paidAmountCreditCard AS DECIMAL(12,2)) ELSE 0 END) as krediKarti,
             SUM(CASE WHEN paymentMethod IN ('BANKA','EFT','HAVALE') THEN CAST(totalAmount AS DECIMAL(12,2)) ELSE 0 END) as banka,
-            SUM(CASE WHEN paymentMethod = 'CARI' THEN CAST(totalAmount AS DECIMAL(12,2)) ELSE 0 END) as cari,
+            SUM(CASE WHEN paymentMethod IN ('CARI', 'PARTNER', 'OPEN') THEN CAST(totalAmount AS DECIMAL(12,2)) ELSE 0 END) as cari,
             SUM(CASE WHEN paymentMethod = 'SPLIT' THEN CAST(paidAmountCash AS DECIMAL(12,2)) ELSE 0 END) as splitNakit,
             SUM(CASE WHEN paymentMethod = 'SPLIT' THEN CAST(paidAmountCreditCard AS DECIMAL(12,2)) ELSE 0 END) as splitKart,
             SUM(CAST(totalAmount AS DECIMAL(12,2))) as toplamTahsilat,
@@ -393,6 +393,18 @@ export class BusinessDayService {
           WHERE s.businessDate = @0 AND (s.companyId = @1 OR s.companyId IS NULL) AND s.status = 'COMPLETED' AND si.status = 'ACTIVE' ${crFilter}
         `, [activeDate, companyId]);
 
+        const crFilterAcc = cr.id ? `AND cashRegisterId = ${cr.id}` : 'AND (cashRegisterId IS NULL OR cashRegisterId = 0)';
+        const manualTahsilatRes = await this.dataSource.query(`
+          SELECT
+            SUM(CASE WHEN paymentMethod IN ('KASA','CASH') THEN (CASE WHEN type = 'INCOME' THEN CAST(amount AS DECIMAL(12,2)) ELSE -CAST(amount AS DECIMAL(12,2)) END) ELSE 0 END) as nakit,
+            SUM(CASE WHEN paymentMethod IN ('KREDI_KARTI','CREDIT_CARD','CC') THEN (CASE WHEN type = 'INCOME' THEN CAST(amount AS DECIMAL(12,2)) ELSE -CAST(amount AS DECIMAL(12,2)) END) ELSE 0 END) as krediKarti
+          FROM account_transactions
+          WHERE businessDate = @0 AND (companyId = @1 OR companyId IS NULL) ${crFilterAcc}
+        `, [activeDate, companyId]).catch(() => []);
+        const mt = manualTahsilatRes[0] || {};
+        const manualNakit = Number(mt.nakit || 0);
+        const manualKredi = Number(mt.krediKarti || 0);
+
         let zReport = await this.zReportRepo.findOne({ where: existingWhere });
         
         if (!zReport) {
@@ -414,10 +426,10 @@ export class BusinessDayService {
 
         // Değerleri her zaman güncelle (özellikle boş rapor oluşmuşsa üzerine yazar)
         zReport.netSales = currentNetSales;
-        zReport.cashCollection = Number(t.nakit || 0) + Number(t.splitNakit || 0);
-        zReport.creditCardCollection = Number(t.krediKarti || 0) + Number(t.splitKart || 0);
+        zReport.cashCollection = Number(t.nakit || 0) + Number(t.splitNakit || 0) + manualNakit;
+        zReport.creditCardCollection = Number(t.krediKarti || 0) + Number(t.splitKart || 0) + manualKredi;
         zReport.cariCollection = Number(t.cari || 0);
-        zReport.totalCollection = currentNetSales;
+        zReport.totalCollection = currentNetSales + manualNakit + manualKredi;
         zReport.totalReceipts = Number(t.adisyonSayisi || 0);
         zReport.totalProductCount = Number(urunRes[0]?.toplamUrun || 0);
         zReport.discountTotal = Number(t.toplamIndirim || 0);
@@ -439,7 +451,7 @@ export class BusinessDayService {
         zReport.totalClosingCash = 0;
         zReport.totalExpectedCash = 0;
         zReport.totalCashDifference = 0;
-        zReport.totalIncome = currentNetSales;
+        zReport.totalIncome = currentNetSales + manualNakit + manualKredi;
         zReport.totalExpense = 0;
 
         const savedZ = await this.zReportRepo.save(zReport);
@@ -502,8 +514,8 @@ export class BusinessDayService {
     // ── Audit log ──
     try {
       await this.dataSource.query(`
-        INSERT INTO audit_logs (timestamp, userId, actionType, description, companyId)
-        VALUES (GETDATE(), @0, 'END_OF_DAY', @1, @2)
+        INSERT INTO audit_logs (timestamp, userId, actionType, description, companyId, businessDate)
+        VALUES (GETDATE(), @0, 'END_OF_DAY', @1, @2, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
       `, [userId, `Gün sonu alındı. ${activeDate} → ${nextDateStr}`, companyId]);
     } catch {}
 
@@ -515,7 +527,7 @@ export class BusinessDayService {
           paidCurrency,
           paymentMethod,
           SUM(CAST(paidCurrencyAmount AS DECIMAL(12,2))) as totalForeignAmount,
-          SUM(CAST(totalAmount AS DECIMAL(12,2))) as totalTryAmount
+          SUM(CAST(paidCurrencyAmount * paidCurrencyRate AS DECIMAL(12,2))) as totalTryAmount
         FROM sales
         WHERE businessDate = @0 AND (companyId = @1 OR companyId IS NULL) AND status = 'COMPLETED'
           AND paidCurrency IS NOT NULL AND paidCurrency NOT IN ('TRY', 'TL')
@@ -560,7 +572,7 @@ export class BusinessDayService {
       const remainingCard = totalCardAll - foreignCardTrySum;
       const remainingBank = totalBankAll - foreignBankTrySum;
 
-      if (remainingCash > 0) {
+      if (remainingCash !== 0) {
         await this.financeService.upsertEndOfDay({
           amount: remainingCash,
           description: `Gün Sonu Nakit Tahsilat (TL) - ${activeDate}`,
@@ -573,7 +585,7 @@ export class BusinessDayService {
           foreignAmount: 0.0,
         });
       }
-      if (remainingCard > 0) {
+      if (remainingCard !== 0) {
         await this.financeService.upsertEndOfDay({
           amount: remainingCard,
           description: `Gün Sonu Kredi Kartı Tahsilat (TL) - ${activeDate}`,
@@ -586,7 +598,7 @@ export class BusinessDayService {
           foreignAmount: 0.0,
         });
       }
-      if (remainingBank > 0) {
+      if (remainingBank !== 0) {
         await this.financeService.upsertEndOfDay({
           amount: remainingBank,
           description: `Gün Sonu Banka Tahsilat (TL) - ${activeDate}`,
@@ -731,8 +743,8 @@ export class BusinessDayService {
     // Audit log
     try {
       await this.dataSource.query(`
-        INSERT INTO audit_logs (timestamp, userId, actionType, description, companyId)
-        VALUES (GETDATE(), @0, 'OVERRIDE', @1, @2)
+        INSERT INTO audit_logs (timestamp, userId, actionType, description, companyId, businessDate)
+        VALUES (GETDATE(), @0, 'OVERRIDE', @1, @2, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
       `, [userId, `Aynı program tarihinde (${activeDate}) devam edildi. Sebep: ${note}`, companyId]);
     } catch {}
 
@@ -790,8 +802,8 @@ export class BusinessDayService {
     // Audit log
     try {
       await this.dataSource.query(`
-        INSERT INTO audit_logs (timestamp, userId, actionType, description, companyId)
-        VALUES (GETDATE(), @0, 'OVERRIDE', @1, @2)
+        INSERT INTO audit_logs (timestamp, userId, actionType, description, companyId, businessDate)
+        VALUES (GETDATE(), @0, 'OVERRIDE', @1, @2, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
       `, [userId, `TEKNİK TARİH DÜZELTMESİ: ${activeDate} → ${newDate}. Sebep: ${note}`, companyId]);
     } catch {}
 

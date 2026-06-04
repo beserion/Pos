@@ -13,7 +13,7 @@ export function PageClient() {
             try {
                 const token = document.cookie.split(';').find(c => c.trim().startsWith('token='))?.split('=')[1];
                 if (!token) return;
-                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/inpos/status`, {
+                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4050'}/inpos/status`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
                 if (res.ok) setInposStatus(await res.json());

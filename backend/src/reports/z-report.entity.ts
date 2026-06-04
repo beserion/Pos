@@ -108,6 +108,12 @@ export class ZReport {
   @Column({ type: 'nvarchar', length: 'max', nullable: true })
   categoryTotals: string; // JSON - Kategori bazlı satışlar
 
+  @Column('decimal', { precision: 10, scale: 2, default: 0, nullable: true })
+  refundCount: number; // İade edilen ürün adedi
+
+  @Column({ type: 'nvarchar', length: 'max', nullable: true })
+  categoryTransactionTotals: string; // JSON - Kategori x İşlem Tipi bazlı dağılım
+
   @Column({ type: 'nvarchar', length: 'max', nullable: true })
   waiterSales: string; // JSON - Garson bazlı satışlar
 

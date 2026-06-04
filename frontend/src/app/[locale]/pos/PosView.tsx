@@ -11,6 +11,7 @@ import TransferModal from './TransferModal';
 import { usePos } from './PosContext';
 import { API_URL } from '@/lib/apiConfig';
 import { useParameters } from '../utils/useParameters';
+import SearchableSelect from '@/components/SearchableSelect';
 
 interface Product {
     id: number;
@@ -56,7 +57,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const [zones, setZones] = useState<Zone[]>([]);
     const [selectedTable, setSelectedTable] = useState<Table | null>(null);
     const [selectedZone, setSelectedZone] = useState<number | 'ALL'>('ALL');
-    const [cart, setCart] = useState<{ product: Product; quantity: number; itemId?: number; subCheckId?: number; subItems?: any[]; saleType?: string; saleTypeMultiplier?: number; unitPrice?: number; note?: string; status?: string; refundReason?: string; cancelReason?: string; discountRate?: number; discountAmount?: number; }[]>([]);
+    const [cart, setCart] = useState<{ product: Product; quantity: number; itemId?: number; subCheckId?: number; subItems?: any[]; saleType?: string; saleTypeMultiplier?: number; unitPrice?: number; note?: string; status?: string; refundReason?: string; cancelReason?: string; discountRate?: number; discountAmount?: number; transactionType?: string; transactionReason?: string; }[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string>('Tümü');
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [selectedCurrency, setSelectedCurrency] = useState<'TRY' | 'EUR' | 'USD' | 'GBP'>('TRY');
@@ -68,6 +69,10 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const [discount, setDiscount] = useState<number>(0);
     const [discountRate, setDiscountRate] = useState<number>(0);
 
+    // --- Cari Seçim Modali State ---
+    const [isCariModalOpen, setIsCariModalOpen] = useState(false);
+    const [cariPartners, setCariPartners] = useState<{ value: number; label: string }[]>([]);
+    const [selectedCariPartnerId, setSelectedCariPartnerId] = useState<number | null>(null);
 
     // --- Para Üstü Hesaplayıcı State ---
     const [isChangeModalOpen, setIsChangeModalOpen] = useState(false);
@@ -145,6 +150,11 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
     const [newSubCheckLabel, setNewSubCheckLabel] = useState('');
     const [isPrintBillModalOpen, setIsPrintBillModalOpen] = useState(false);
     const [selectedPrintCheckIds, setSelectedPrintCheckIds] = useState<number[]>([]);
+    
+    // --- Cari Hızlı Ekleme State'leri ---
+    const [isCreatingNewCari, setIsCreatingNewCari] = useState(false);
+    const [newCariName, setNewCariName] = useState('');
+    const [newCariPhone, setNewCariPhone] = useState('');
 
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     const [transferMode, setTransferMode] = useState<'ITEM_TO_TABLE' | 'ITEM_WITHIN_TABLE' | 'SUBCHECK_TO_TABLE' | 'TABLE_TRANSFER'>('ITEM_TO_TABLE');
@@ -246,7 +256,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
 
     useEffect(() => {
         const fetchTableOrders = async () => {
-            if (!selectedTable || (selectedTable.status === 'BOŞ' && !selectedTable.currentTotal)) {
+            if (!selectedTable || (selectedTable.status === 'BOŞ' && Number(selectedTable.currentTotal || 0) === 0)) {
                 setCart([]);
                 setActiveOrderIds([]);
                 setTableSubChecks([]);
@@ -335,7 +345,10 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                                 variationName: item.variationName,
                                                 status: item.status,
                                                 discountRate: Number(item.discountRate || 0),
-                                                discountAmount: Number(item.discountAmount || 0)
+                                                discountAmount: Number(item.discountAmount || 0),
+                                                transactionType: item.transactionType,
+                                                transactionReason: item.transactionReason,
+                                                addedAt: item.addedAt
                                             });
                                         }
                                     });
@@ -364,7 +377,10 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                         variationName: item.variationName,
                                         status: item.status,
                                         discountRate: Number(item.discountRate || 0),
-                                        discountAmount: Number(item.discountAmount || 0)
+                                        discountAmount: Number(item.discountAmount || 0),
+                                        transactionType: item.transactionType,
+                                        transactionReason: item.transactionReason,
+                                        addedAt: item.addedAt
                                     };
                                 });
                             setCart(newCart);
@@ -441,7 +457,8 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             const mergedTotal = allFlatChecks.reduce((sum: number, check: any) => sum + Number(check.totalAmount || 0), 0);
             const mergedDiscount = allFlatChecks.reduce((sum: number, check: any) => sum + Number(check.discountAmount || 0), 0);
             checksToPrint.push({
-                receiptNumber: allFlatChecks[0]?.receiptNumber || 'TOPLU',
+                id: allFlatChecks[0]?.id,
+                receiptNumber: allFlatChecks[0]?.receiptNumber || allFlatChecks[0]?.id?.toString() || 'TOPLU',
                 subCheckLabel: 'Tüm Adisyonlar',
                 items: mergedItems,
                 totalAmount: mergedTotal,
@@ -451,7 +468,8 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
         } else {
             // Ayrı ayrı fiş yazdır
             checksToPrint = allFlatChecks.filter((check: any) => idsToPrint.includes(check.id)).map((check: any) => ({
-                receiptNumber: check.receiptNumber,
+                id: check.id,
+                receiptNumber: check.receiptNumber || check.id?.toString(),
                 subCheckLabel: check.subCheckLabel || `Adisyon`,
                 items: check.items || [],
                 totalAmount: check.totalAmount,
@@ -492,31 +510,45 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             } catch (e) { console.warn('businessDate alinamadi:', e); }
 
             for (const check of checksToPrint) {
-                const checkItems = check.items.map((i: any) => ({
-                    name: i.product?.name || 'Ürün',
-                    quantity: i.quantity,
-                    total: Number(i.quantity) * Number(i.unitPrice),
-                    unitPrice: Number(i.unitPrice),
-                    subItems: i.subItems || [],
-                    status: i.status,
-                    saleType: i.saleType,
-                    transactionType: i.transactionType || 'SALE',
-                    refundReason: i.refundReason,
-                    cancelReason: i.cancelReason
-                }));
+                const checkItems = check.items.map((i: any) => {
+                    const qty = Number(i.quantity || 0);
+                    const uPrice = Number(i.unitPrice || 0);
+                    const discAmount = Number(i.discountAmount || 0);
+                    const total = i.total !== undefined && i.total !== null
+                        ? Number(i.total)
+                        : (qty * uPrice) - discAmount;
+
+                    return {
+                        name: i.product?.name || 'Ürün',
+                        quantity: qty,
+                        total: total,
+                        unitPrice: uPrice,
+                        discountAmount: discAmount,
+                        discountRate: Number(i.discountRate || 0),
+                        subItems: i.subItems || [],
+                        status: i.status,
+                        saleType: i.saleType,
+                        transactionType: i.transactionType || 'SALE',
+                        refundReason: i.refundReason,
+                        cancelReason: i.cancelReason
+                    };
+                });
 
                 const reqBody = {
+                    id: check.id,
                     items: checkItems,
                     totalAmount: check.totalAmount,
                     discountAmount: check.discountAmount || 0,
+                    discountRate: check.discountRate || 0,
                     businessDate,
                     date: check.date,
-                    receiptNumber: check.receiptNumber,
+                    receiptNumber: check.receiptNumber || check.id?.toString(),
                     companyName: 'ANTIGRAVITY POS',
                     paymentMethod: 'HESAP',
                     subType: 'BILL',
                     cashRegisterId: activeCashRegister?.id || null,
                     tableName: selectedTable?.name || null,
+                    subCheckLabel: check.subCheckLabel || null,
                     isAlreadyPrinted: selectedTable?.isBillRequested || false // Backend'e bildir
                 };
 
@@ -612,17 +644,21 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
             
             const foreignAmount = Number((selectedGrandTotal / currentRate).toFixed(2));
 
+            const isForeignCash = finalPMethod === 'CASH' && selectedCurrency !== 'TRY';
+            const receivedVal = isForeignCash ? (Number(cashReceived) || foreignAmount) : 0;
+            const changeInTL = isForeignCash ? (receivedVal * currentRate - selectedGrandTotal) : 0;
+
             const saleData = {
                 userId: user?.id || user?.sub,
                 tableId: selectedTable.id,
                 tableName: selectedTable.name,
                 partnerId: partnerId || (paymentMethod === 'Cari' ? partnerId : undefined),
                 paymentMethod: finalPMethod,
-                paidAmountCash: paymentMethod === 'Nakit' ? selectedGrandTotal : cashAmount,
+                paidAmountCash: isForeignCash ? -Number(changeInTL.toFixed(2)) : (paymentMethod === 'Nakit' ? selectedGrandTotal : cashAmount),
                 paidAmountCreditCard: paymentMethod === 'Kart' ? selectedGrandTotal : creditAmount,
                 paidCurrency: selectedCurrency,
                 paidCurrencyRate: currentRate,
-                paidCurrencyAmount: selectedCurrency === 'TRY' ? selectedGrandTotal : foreignAmount,
+                paidCurrencyAmount: selectedCurrency === 'TRY' ? selectedGrandTotal : receivedVal,
                 discountAmount: appliedDiscount,
                 serviceFee: appliedServiceFee,
                 status: 'COMPLETED',
@@ -634,18 +670,27 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     const effectivePrice = (item as any).unitPrice ?? item.product.price;
                     const multiplier = item.saleTypeMultiplier || 1;
                     const base = (effectivePrice * multiplier) * item.quantity;
+                    const itemDiscount = Number(item.discountAmount || 0);
                     // Backend'e gönderirken sadece ana ürün tutarını gönderiyoruz, ekstralar ayrı satır olarak eklenecek.
                     return {
+                        id: item.itemId,
                         productId: item.product.id,
                         quantity: item.quantity,
                         unitPrice: effectivePrice * multiplier,
-                        total: Number(base.toFixed(2)),
+                        discountRate: Number(item.discountRate || 0),
+                        discountAmount: itemDiscount,
+                        total: Number((base - itemDiscount).toFixed(2)),
+                        transactionType: (item as any).transactionType || 'SALE',
+                        transactionReason: (item as any).transactionReason,
+                        addedAt: (item as any).addedAt,
                         subItems: (item.subItems || []).map((sub: any) => ({
+                            id: sub.id,
                             productId: sub.productId,
                             quantity: sub.quantity,
                             unitPrice: sub.unitPrice,
                             total: sub.total,
-                            menuGroupId: sub.menuGroupId
+                            menuGroupId: sub.menuGroupId,
+                            addedAt: sub.addedAt
                         }))
                     };
                 })
@@ -674,21 +719,31 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     }
                 } catch (e) { console.warn('businessDate alinamadi:', e); }
 
+                const activeCheck = allFlatChecks.find((f: any) => f.id === activeSubCheckId);
+                const subCheckLabel = activeCheck?.subCheckLabel;
+
                 const printData = {
                     companyName: 'ANTIGRAVITY POS',
                     cashierName: user?.firstName || (user as any)?.name || 'Kasiyer',
                     date: new Date(),
                     businessDate: paymentBusinessDate,
                     tableName: selectedTable?.name || null,
+                    subCheckLabel: subCheckLabel || null,
                     items: itemsToPay.map(item => {
                         const price = item.unitPrice ?? (item.product.price * (item.saleTypeMultiplier || 1));
                         const base = price * item.quantity;
                         const extras = (item.subItems || []).reduce((es: number, s: any) => es + ((s.unitPrice || 0) * (s.quantity || 1)), 0);
+                        const discAmount = Number(item.discountAmount || 0);
+                        const total = item.total !== undefined && item.total !== null
+                            ? Number(item.total)
+                            : (base + extras) - discAmount;
                         return {
                             name: item.product.name,
                             quantity: item.quantity,
                             price: price,
-                            total: Number((base + extras).toFixed(2)),
+                            total: Number(total.toFixed(2)),
+                            discountAmount: discAmount,
+                            discountRate: Number(item.discountRate || 0),
                             subItems: item.subItems,
                             note: item.note,
                             status: item.status,
@@ -700,6 +755,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     }),
                     totalAmount: selectedGrandTotal,
                     discountAmount: appliedDiscount,
+                    discountRate: discountRate || 0,
                     paymentMethod: finalPMethod,
                     receiptNumber: saleDataRes?.id?.toString() || Math.floor(100000 + Math.random() * 900000).toString(),
                     cashRegisterId: activeCashRegister?.id || null
@@ -732,6 +788,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                 setDiscount(0);
                 setServiceFee(0);
                 setSelectedCurrency('TRY');
+                setCashReceived('');
                 refreshDynamicData();
             } else {
                 const errorData = await saleRes.json();
@@ -744,6 +801,48 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
         } catch (e) {
             console.error(e);
             showSwal({ title: 'Hata!', text: 'Sistem hatası oluştu.', icon: 'error' });
+        }
+    };
+ 
+    const handleCreateCari = async () => {
+        if (!newCariName.trim()) {
+            toastSwal({ icon: 'warning', title: 'Lütfen cari adı girin!' });
+            return;
+        }
+        const token = localStorage.getItem('token') || (user as any)?.token;
+        try {
+            const res = await fetch(`${API_URL}/partners`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    name: newCariName.trim(),
+                    type: 'CUSTOMER',
+                    phone: newCariPhone.trim() || undefined,
+                    isActive: true
+                })
+            });
+
+            if (res.ok) {
+                const created = await res.json();
+                toastSwal({ icon: 'success', title: 'Cari başarıyla oluşturuldu!' });
+                
+                const newOption = { value: created.id, label: created.name };
+                setCariPartners(prev => [newOption, ...prev]);
+                setSelectedCariPartnerId(created.id);
+                
+                setNewCariName('');
+                setNewCariPhone('');
+                setIsCreatingNewCari(false);
+            } else {
+                const err = await res.json();
+                showSwal({ icon: 'error', title: 'Hata', text: err.message || 'Cari oluşturulamadı.' });
+            }
+        } catch (e) {
+            console.error(e);
+            showSwal({ icon: 'error', title: 'Hata', text: 'Cari oluşturulurken sistemsel bir hata oluştu.' });
         }
     };
 
@@ -1037,7 +1136,7 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                             const zoneMatch = selectedZone === 'ALL'
                                 ? zones.some(z => z.id === t.zone?.id || z.id === (t as any).zoneId)
                                 : t.zone?.id === selectedZone || (t as any).zoneId === selectedZone;
-                            const isOccupied = t.status === 'DOLU' || t.status === 'REZERVE' || (t.currentTotal && t.currentTotal > 0);
+                            const isOccupied = t.status === 'DOLU' || t.status === 'REZERVE' || (t.currentTotal && Number(t.currentTotal) > 0);
                             return zoneMatch && isOccupied;
                         })
                         .map(table => (
@@ -1170,12 +1269,33 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                                     {item.saleType === 'HALF' ? 'YARIM' : item.saleType === 'DOUBLE' ? 'DUBLE' : item.saleType}
                                                 </span>
                                             )}
+                                            {item.transactionType && item.transactionType !== 'SALE' && (
+                                                <span className={`text-[10px] ml-1 px-2 py-0.5 rounded-full inline-block font-bold border ${
+                                                    item.transactionType === 'COMPLIMENTARY' ? 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-400' :
+                                                    item.transactionType === 'FREE' ? 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/20 dark:text-rose-400' :
+                                                    item.transactionType === 'PROMOTION' ? 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-400' :
+                                                    item.transactionType === 'STAFF' ? 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/20 dark:text-amber-400' :
+                                                    item.transactionType === 'TICKET' ? 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/20 dark:text-blue-400' :
+                                                    'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-500/20 dark:text-slate-400'
+                                                }`}>
+                                                    {item.transactionType === 'COMPLIMENTARY' ? 'İkram' :
+                                                     item.transactionType === 'FREE' ? 'Ödenmez' :
+                                                     item.transactionType === 'PROMOTION' ? 'Promosyon' :
+                                                     item.transactionType === 'STAFF' ? 'Personel' :
+                                                     item.transactionType === 'TICKET' ? 'Bilet' : item.transactionType}
+                                                </span>
+                                            )}
                                             {item.status && item.status !== 'ACTIVE' && (
                                                 <span className="text-[10px] ml-1 px-2 py-0.5 rounded-full inline-block font-bold bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400">
                                                     {item.status === 'REFUNDED' ? 'İADE' : 'İPTAL'}
                                                 </span>
                                             )}
                                             <span className="text-sm text-indigo-500 font-bold ml-1">x{item.quantity}</span>
+                                            {item.transactionReason && (
+                                                <span className="block text-[10px] text-slate-400 dark:text-slate-500 italic mt-0.5 ml-1">
+                                                    Neden: {item.transactionReason}
+                                                </span>
+                                            )}
                                             
                                             {/* Ürün İndirim Rozeti */}
                                             {item.discountAmount > 0 && (
@@ -1435,14 +1555,35 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                                             {isSelected && <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
                                                         </div>
                                                         <span className={`font-bold ${item.status === 'REFUNDED' ? 'text-rose-500 dark:text-rose-400' : 'text-slate-700 dark:text-slate-200'}`}>
-                                                            {item.product.name} 
-                                                            {item.status && item.status !== 'ACTIVE' && (
-                                                                <span className={`text-[10px] ml-2 px-2 py-0.5 rounded-full inline-block font-bold border ${item.status === 'REFUNDED' ? 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/20 dark:text-rose-400' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400 border-slate-300 dark:border-slate-600'}`}>
-                                                                    {item.status === 'REFUNDED' ? 'İADE' : 'İPTAL'}
-                                                                </span>
-                                                            )}
-                                                            <span className="text-sm font-extrabold text-indigo-500 bg-indigo-100 dark:bg-indigo-500/20 dark:text-indigo-300 px-2 py-0.5 rounded-full ml-1">x{item.quantity}</span>
-                                                        </span>
+                                                             {item.product.name} 
+                                                             {item.transactionType && item.transactionType !== 'SALE' && (
+                                                                 <span className={`text-[10px] ml-2 px-2 py-0.5 rounded-full inline-block font-bold border ${
+                                                                     item.transactionType === 'COMPLIMENTARY' ? 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-400' :
+                                                                     item.transactionType === 'FREE' ? 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/20 dark:text-rose-400' :
+                                                                     item.transactionType === 'PROMOTION' ? 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-400' :
+                                                                     item.transactionType === 'STAFF' ? 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/20 dark:text-amber-400' :
+                                                                     item.transactionType === 'TICKET' ? 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/20 dark:text-blue-400' :
+                                                                     'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-500/20 dark:text-slate-400'
+                                                                 }`}>
+                                                                     {item.transactionType === 'COMPLIMENTARY' ? 'İkram' :
+                                                                      item.transactionType === 'FREE' ? 'Ödenmez' :
+                                                                      item.transactionType === 'PROMOTION' ? 'Promosyon' :
+                                                                      item.transactionType === 'STAFF' ? 'Personel' :
+                                                                      item.transactionType === 'TICKET' ? 'Bilet' : item.transactionType}
+                                                                 </span>
+                                                             )}
+                                                             {item.status && item.status !== 'ACTIVE' && (
+                                                                 <span className={`text-[10px] ml-2 px-2 py-0.5 rounded-full inline-block font-bold border ${item.status === 'REFUNDED' ? 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/20 dark:text-rose-400' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400 border-slate-300 dark:border-slate-600'}`}>
+                                                                     {item.status === 'REFUNDED' ? 'İADE' : 'İPTAL'}
+                                                                 </span>
+                                                             )}
+                                                             <span className="text-sm font-extrabold text-indigo-500 bg-indigo-100 dark:bg-indigo-500/20 dark:text-indigo-300 px-2 py-0.5 rounded-full ml-1">x{item.quantity}</span>
+                                                             {item.transactionReason && (
+                                                                 <span className="block text-[10px] text-slate-400 dark:text-slate-500 italic mt-0.5 ml-1 font-normal">
+                                                                     Neden: {item.transactionReason}
+                                                                 </span>
+                                                             )}
+                                                         </span>
                                                     </div>
                                                     <span className="font-bold text-slate-800 dark:text-slate-100 text-xs">
                                                         {Number(item.discountAmount || 0) > 0 && (
@@ -1623,29 +1764,23 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                                                                 let partners: any[] = [];
                                                                 try {
                                                                     const pRes = await fetch(`${API_URL}/partners`, { headers: { Authorization: `Bearer ${token}` } });
-                                                                    if (pRes.ok) partners = await pRes.json();
+                                                                    if (pRes.ok) {
+                                                                        const resData = await pRes.json();
+                                                                        partners = Array.isArray(resData) ? resData : (resData.data || []);
+                                                                    }
                                                                 } catch (e) { console.error("Partners fetch failed", e); }
 
-                                                                const customerOptions = partners
-                                                                    .filter(p => p.type === 'CUSTOMER')
-                                                                    .reduce((acc, p) => ({ ...acc, [p.id]: p.name }), {});
+                                                                const filteredPartners = (Array.isArray(partners) ? partners : [])
+                                                                    .filter(p => p.type === 'CUSTOMER' && p.name !== 'PERAKENDE MÜŞTERİ' && p.name !== 'PAREKENDE MÜŞTERİ')
+                                                                    .map(p => ({ value: p.id, label: p.name }));
 
-                                                                const Swal = (await import('sweetalert2')).default;
-                                                                const { value: partnerId } = await Swal.fire({
-                                                                    title: 'Cari Seçimi',
-                                                                    input: 'select',
-                                                                    inputOptions: customerOptions,
-                                                                    inputPlaceholder: 'Müşteri seçin...',
-                                                                    showCancelButton: true,
-                                                                    confirmButtonText: 'Cariye Kapat',
-                                                                    cancelButtonText: 'Vazgeç',
-                                                                    background: theme === 'dark' ? '#1e293b' : '#fff',
-                                                                    color: theme === 'dark' ? '#fff' : '#1e293b',
-                                                                });
-
-                                                                if (partnerId) {
-                                                                    handleCheckout('Cari' as any, 0, 0, parseInt(partnerId));
+                                                                setCariPartners(filteredPartners);
+                                                                if (filteredPartners.length > 0) {
+                                                                    setSelectedCariPartnerId(filteredPartners[0].value);
+                                                                } else {
+                                                                    setSelectedCariPartnerId(null);
                                                                 }
+                                                                setIsCariModalOpen(true);
                                                             }}
                                                             className="flex flex-col items-center justify-center gap-2 p-4 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/30 rounded-2xl transition-all font-bold text-indigo-700 dark:text-indigo-400 active:scale-95 text-xs hover:shadow-lg hover:shadow-indigo-500/10"
                                                         >
@@ -1687,6 +1822,114 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     </div>
                 );
             })()}
+
+            {/* Cari Seçim Modali */}
+            {isCariModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-xl animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-slate-800 rounded-[32px] w-full max-w-md shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 transform transition-all duration-200 scale-100">
+                        {/* Header */}
+                        <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/20">
+                            <div>
+                                <h2 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2">
+                                    <i className="fat fa-user text-indigo-600 dark:text-indigo-400"></i> {isCreatingNewCari ? 'Yeni Cari Hesap' : 'Cari Seçimi'}
+                                </h2>
+                                <p className="text-xs text-slate-400 mt-1">{isCreatingNewCari ? 'Yeni müşteri bilgilerini doldurun.' : 'Hesabın aktarılacağı müşteriyi seçin.'}</p>
+                            </div>
+                            <button 
+                                onClick={() => { setIsCariModalOpen(false); setIsCreatingNewCari(false); }} 
+                                className="w-10 h-10 flex items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors text-xl"
+                            >
+                                &times;
+                            </button>
+                        </div>
+                        {/* Body */}
+                        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                            {!isCreatingNewCari ? (
+                                <div className="space-y-2">
+                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Müşteri Seçin *</label>
+                                    <SearchableSelect
+                                        value={selectedCariPartnerId}
+                                        onChange={(val) => setSelectedCariPartnerId(val)}
+                                        options={cariPartners}
+                                        placeholder="Müşteri ara/seç..."
+                                    />
+                                    <button 
+                                        onClick={() => setIsCreatingNewCari(true)}
+                                        className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 mt-2.5 active:scale-95 transition-transform"
+                                    >
+                                        <i className="fat fa-plus-circle"></i> Veya Yeni Cari Oluştur
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Cari Adı *</label>
+                                        <input 
+                                            type="text" 
+                                            value={newCariName} 
+                                            onChange={(e) => setNewCariName(e.target.value)} 
+                                            className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500/20 outline-none" 
+                                            placeholder="Müşteri Ad Soyad veya Ünvan" 
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Telefon</label>
+                                        <input 
+                                            type="text" 
+                                            value={newCariPhone} 
+                                            onChange={(e) => setNewCariPhone(e.target.value)} 
+                                            className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500/20 outline-none" 
+                                            placeholder="05xx xxx xx xx" 
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        {/* Footer */}
+                        <div className="p-6 border-t border-slate-100 dark:border-slate-700 flex justify-between">
+                            {!isCreatingNewCari ? (
+                                <>
+                                    <button 
+                                        onClick={() => setIsCariModalOpen(false)} 
+                                        className="px-6 py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold hover:bg-slate-200 transition-colors flex items-center gap-2 active:scale-95"
+                                    >
+                                        <i className="fat fa-times-circle"></i> Vazgeç
+                                    </button>
+                                    <button 
+                                        onClick={() => {
+                                            if (selectedCariPartnerId) {
+                                                handleCheckout('Cari' as any, 0, 0, selectedCariPartnerId);
+                                                setIsCariModalOpen(false);
+                                            } else {
+                                                toastSwal({ icon: 'warning', title: 'Lütfen bir müşteri seçin!' });
+                                            }
+                                        }} 
+                                        className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/20 hover:scale-105 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+                                        disabled={!selectedCariPartnerId}
+                                    >
+                                        <i className="fat fa-check-circle"></i> Cariye Kapat
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <button 
+                                        onClick={() => { setIsCreatingNewCari(false); setNewCariName(''); setNewCariPhone(''); }} 
+                                        className="px-6 py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold hover:bg-slate-200 transition-colors flex items-center gap-2 active:scale-95"
+                                    >
+                                        <i className="fat fa-arrow-left"></i> Geri Dön
+                                    </button>
+                                    <button 
+                                        onClick={handleCreateCari} 
+                                        className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/20 hover:scale-105 transition-all flex items-center gap-2 active:scale-95"
+                                    >
+                                        <i className="fat fa-check-circle"></i> Cariyi Kaydet
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Split Payment Modal */}
             {
@@ -2367,9 +2610,9 @@ export default function PosView({ onSwitchToQuickSale, onSwitchToTakeOrder }: { 
                     }
                 };
 
-                const completePayment = () => {
+                const completePayment = async () => {
                     if (changeInTL < 0) return;
-                    handleCheckout('Nakit');
+                    await handleCheckout('Nakit');
                     setIsChangeModalOpen(false);
                 };
 

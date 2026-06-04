@@ -53,8 +53,8 @@ export class AuthService {
 
     try {
       await this.dataSource.query(`
-        INSERT INTO audit_logs (timestamp, actionType, description, companyId)
-        VALUES (GETDATE(), 'FAILED_LOGIN', @0, 1)
+        INSERT INTO audit_logs (timestamp, actionType, description, companyId, businessDate)
+        VALUES (GETDATE(), 'FAILED_LOGIN', @0, 1, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
       `, [`Başarısız giriş denemesi: ${identifier}`]);
     } catch { /* sessiz geç */ }
 
@@ -109,8 +109,8 @@ export class AuthService {
 
     try {
       await this.dataSource.query(`
-        INSERT INTO audit_logs (timestamp, actionType, description, companyId)
-        VALUES (GETDATE(), 'FAILED_LOGIN', @0, 1)
+        INSERT INTO audit_logs (timestamp, actionType, description, companyId, businessDate)
+        VALUES (GETDATE(), 'FAILED_LOGIN', @0, 1, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
       `, [`Geçersiz ortak PIN denemesi`]);
     } catch { /* sessiz geç */ }
 
@@ -128,8 +128,8 @@ export class AuthService {
 
     try {
       await this.dataSource.query(`
-        INSERT INTO audit_logs (timestamp, userId, actionType, description, companyId)
-        VALUES (GETDATE(), @0, 'USER_LOGIN', @1, @2)
+        INSERT INTO audit_logs (timestamp, userId, actionType, description, companyId, businessDate)
+        VALUES (GETDATE(), @0, 'USER_LOGIN', @1, @2, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
       `, [user.id || 0, `Kullanıcı girişi yapıldı: ${user.firstName} ${user.lastName}`, user.companyId || 1]);
     } catch { /* sessiz geç */ }
 

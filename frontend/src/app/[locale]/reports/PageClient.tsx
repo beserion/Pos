@@ -173,7 +173,7 @@ export function PageClient() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => router.push(`/${locale}/reports/detailed-sales-analysis`)}
+              onClick={() => router.push(`/${locale}/reports/detailed`)}
               className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md shadow-indigo-500/30 transition-all active:scale-95"
             >
               <BarChart size={18} /> Detaylı Raporlar

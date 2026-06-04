@@ -19,6 +19,7 @@ interface Transaction {
     paymentMethod: string;
     category?: string;
     createdAt: string;
+    businessDate?: string;
 }
 
 interface Summary {
@@ -400,7 +401,7 @@ export function PageClient() {
                                             {((page - 1) * limit) + index + 1}
                                         </td>
                                         <td className="px-8 py-1.5 text-slate-500 dark:text-slate-400 text-sm whitespace-nowrap">
-                                            {new Date(tx.createdAt).toLocaleDateString('tr-TR')}
+                                            {tx.businessDate ? tx.businessDate : new Date(tx.createdAt).toLocaleDateString('tr-TR')}
                                             <span className="ml-2 text-xs text-slate-400">{new Date(tx.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</span>
                                         </td>
                                         <td className="px-8 py-1.5 font-semibold text-slate-800 dark:text-slate-200">{tx.description}</td>

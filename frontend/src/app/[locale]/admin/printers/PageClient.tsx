@@ -62,12 +62,14 @@ export function PageClient() {
                 headers: { Authorization: `Bearer ${user?.token}` }
             });
             if (res.data?.success) {
-                setScannedPrinters(res.data.printers);
+                setScannedPrinters(Array.isArray(res.data.printers) ? res.data.printers : []);
             } else {
+                setScannedPrinters([]);
                 showSwal({ title: tc('error'), text: res.data?.message || tc('error'), icon: 'error' });
             }
         } catch (error) {
            console.error(error);
+           setScannedPrinters([]);
            showSwal({ title: tc('error'), text: tc('error'), icon: 'error' });
         } finally {
             setIsScanning(false);
@@ -75,19 +77,21 @@ export function PageClient() {
     };
 
     const selectScannedPrinter = (p: any) => {
+        if (!p) return;
         setIsScannerOpen(false);
         // Try to extract IP if port looks like an IP or starts with IP_ (Standard TCP/IP Port)
         const ipRegex = /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/;
-        const match = p.port && p.port.match(ipRegex);
+        const portStr = p.port ? String(p.port) : '';
+        const match = portStr.match(ipRegex);
         const ipAddr = match ? match[0] : '';
-        const isUsb = p.port && (p.port.toLowerCase().includes('usb') || !ipAddr);
+        const isUsb = portStr && (portStr.toLowerCase().includes('usb') || !ipAddr);
 
         setFormData({
             id: 0,
-            name: p.name,
+            name: p.name || 'Bilinmeyen Yazıcı',
             location: '',
-            printerName: p.name, 
-            ipAddress: isUsb ? p.name : ipAddr,
+            printerName: p.name || '', 
+            ipAddress: isUsb ? (p.name || '') : ipAddr,
             isActive: true
         });
         setIsModalOpen(true);
@@ -406,14 +410,14 @@ export function PageClient() {
                                     <i className="fat fa-spinner-third animate-spin text-5xl text-emerald-500 mb-4"></i>
                                     <p className="font-bold text-slate-500 uppercase tracking-widest">Yazıcılar Aranıyor...</p>
                                 </div>
-                            ) : scannedPrinters.length === 0 ? (
+                            ) : (!scannedPrinters || scannedPrinters.length === 0) ? (
                                 <div className="flex flex-col items-center justify-center py-20 opacity-50">
                                     <i className="fat fa-triangle-exclamation text-6xl text-amber-500 mb-4"></i>
                                     <p className="font-bold text-slate-500 uppercase tracking-widest text-center px-4">Sistemde kaydedilmiş bir yazıcı bulunamadı.<br/> Lütfen Windows/Linux Ayarlarında yazıcı ekleyin.</p>
                                 </div>
                             ) : (
                                 <div className="grid grid-cols-1 gap-3">
-                                    {scannedPrinters.map((p, idx) => (
+                                    {scannedPrinters.filter(Boolean).map((p, idx) => (
                                         <button key={idx} onClick={() => selectScannedPrinter(p)} className="flex items-center gap-4 text-left w-full bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-200 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 hover:shadow-lg transition-all group">
                                             <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-2xl text-slate-500 group-hover:text-emerald-500 transition-colors shrink-0">
                                                 <i className="fat fa-print"></i>

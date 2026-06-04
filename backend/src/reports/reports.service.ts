@@ -181,8 +181,8 @@ export class ReportsService {
           WHEN (s.paymentMethod IN ('KREDI_KARTI','CREDIT_CARD','CC')) THEN CAST(s.totalAmount AS DECIMAL(18,2)) 
           WHEN (s.paymentMethod = 'SPLIT') THEN CAST(s.paidAmountCreditCard AS DECIMAL(18,2))
           ELSE 0 END) as kartCiro,
-        SUM(CASE WHEN (s.paymentMethod IN ('CARI')) THEN CAST(s.totalAmount AS DECIMAL(18,2)) ELSE 0 END) as cariCiro,
-        SUM(CASE WHEN (s.paymentMethod NOT IN ('KASA','CASH','KREDI_KARTI','CREDIT_CARD','CC','CARI','SPLIT') OR s.paymentMethod IS NULL) THEN CAST(s.totalAmount AS DECIMAL(18,2)) ELSE 0 END) as digerCiro,
+        SUM(CASE WHEN (s.paymentMethod IN ('CARI', 'PARTNER', 'OPEN')) THEN CAST(s.totalAmount AS DECIMAL(18,2)) ELSE 0 END) as cariCiro,
+        SUM(CASE WHEN (s.paymentMethod NOT IN ('KASA','CASH','KREDI_KARTI','CREDIT_CARD','CC','CARI','PARTNER','OPEN','SPLIT') OR s.paymentMethod IS NULL) THEN CAST(s.totalAmount AS DECIMAL(18,2)) ELSE 0 END) as digerCiro,
         SUM(CAST(s.totalAmount AS DECIMAL(18,2))) as toplamCiro
       FROM sales s
       WHERE s.status = 'COMPLETED' ${dateFilter}
@@ -249,6 +249,17 @@ export class ReportsService {
       WHERE status = 'DOLU'
     `);
 
+    // Alınan Döviz Analizi
+    const dovizRes = await this.dataSource.query(`
+      SELECT 
+        COALESCE(s.paidCurrency, 'TRY') as currency,
+        SUM(CAST(s.paidCurrencyAmount AS DECIMAL(18,2))) as totalAmount
+      FROM sales s
+      WHERE s.status = 'COMPLETED' AND s.paidCurrencyAmount > 0 ${dateFilter}
+      ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      GROUP BY s.paidCurrency
+    `, params).catch(() => []);
+
     return {
       gunCirosu: {
         nakitCiro: Number(ciro.nakitCiro || 0),
@@ -276,6 +287,10 @@ export class ReportsService {
         toplam: Number(g.toplam || 0),
         adisyonSayisi: Number(g.adisyonSayisi || 0),
       })),
+      dovizAnalizi: dovizRes.map((d: any) => ({
+        currency: d.currency,
+        totalAmount: Number(d.totalAmount || 0),
+      })),
     };
   }
 
@@ -284,10 +299,16 @@ export class ReportsService {
   async getDetailedSalesAnalysis(filters: {
     startDate?: string; endDate?: string; cashRegisterId?: number;
     waiterId?: number; paymentMethod?: string; companyId?: number;
+    date?: string;
   }) {
     const { dateFilter, params } = this.buildDateFilter(filters);
+    const { dateFilter: dateFilterAcc, params: paramsAcc } = this.buildDateFilter({
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+      date: filters.date,
+    });
 
-    // Tahsilat detayları
+    // 1. Tahsilat Detayları & SPLIT Payments
     const tahsilatRes = await this.dataSource.query(`
       SELECT method as paymentMethod, SUM(total) as toplam, SUM(adet) as adet
       FROM (
@@ -295,6 +316,7 @@ export class ReportsService {
           CASE 
             WHEN paymentMethod IN ('CASH', 'KASA') THEN 'CASH'
             WHEN paymentMethod IN ('CREDIT_CARD', 'KREDI_KARTI', 'CC') THEN 'CREDIT_CARD'
+            WHEN paymentMethod IN ('CARI', 'PARTNER', 'OPEN') THEN 'CARI'
             ELSE paymentMethod 
           END as method,
           SUM(CAST(totalAmount AS DECIMAL(18,2))) as total,
@@ -315,100 +337,181 @@ export class ReportsService {
         ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
       ) AS SplitPayments
       GROUP BY method
-    `, params);
+    `, params).catch(() => []);
 
-    // Ürün satış özeti (en çok satılanlar)
-    const urunRes = await this.dataSource.query(`
-      SELECT p.name as urunAdi,
+    // 2. Giderler / Ödeme (-)
+    const expenseRes = await this.dataSource.query(`
+      SELECT SUM(CAST(amount AS DECIMAL(18,2))) as payout
+      FROM account_transactions s
+      WHERE s.type = 'EXPENSE' ${dateFilterAcc}
+    `, paramsAcc).catch(() => [{ payout: 0 }]);
+    const payoutTotal = Number(expenseRes[0]?.payout || 0);
+
+    // 3. Cari Tahsilat Kırılımları (Nakit/Kart)
+    const cariCollectionsRes = await this.dataSource.query(`
+      SELECT 
+        s.paymentMethod,
+        SUM(CAST(s.amount AS DECIMAL(18,2))) as toplam
+      FROM account_transactions s
+      WHERE s.type = 'INCOME' AND s.partnerId > 0 ${dateFilterAcc}
+      GROUP BY s.paymentMethod
+    `, paramsAcc).catch(() => []);
+
+    const cariNakit = Number(cariCollectionsRes.find((c: any) => c.paymentMethod === 'KASA' || c.paymentMethod === 'CASH')?.toplam || 0);
+    const cariKredi = Number(cariCollectionsRes.find((c: any) => c.paymentMethod === 'KREDI_KARTI' || c.paymentMethod === 'CREDIT_CARD')?.toplam || 0);
+
+    // 4. Alınan Döviz Analizi
+    const dovizRes = await this.dataSource.query(`
+      SELECT 
+        COALESCE(s.paidCurrency, 'TRY') as currency,
+        SUM(CAST(s.paidCurrencyAmount AS DECIMAL(18,2))) as totalAmount
+      FROM sales s
+      WHERE s.status = 'COMPLETED' AND s.paidCurrencyAmount > 0 ${dateFilter}
+      ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      GROUP BY s.paidCurrency
+    `, params).catch(() => []);
+
+    // 5. İşlem Toplamları (İade, İptal, İkram, Ödenmez vb.)
+    const islemDetayRes = await this.dataSource.query(`
+      SELECT 
+        si.status,
+        si.transactionType,
         SUM(CAST(si.quantity AS DECIMAL(18,2))) as adet,
-        SUM(CAST(si.total AS DECIMAL(18,2))) as toplam
+        SUM(CAST(si.total AS DECIMAL(18,2))) as toplam,
+        SUM(CAST(COALESCE(p.price, 0) * si.quantity AS DECIMAL(18,2))) as retailToplam
       FROM sale_items si
-      JOIN products p ON p.id = si.productId
       JOIN sales s ON s.id = si.saleId
-      WHERE s.status = 'COMPLETED' AND si.status = 'ACTIVE' ${dateFilter}
+      LEFT JOIN products p ON p.id = si.productId
+      WHERE s.status = 'COMPLETED' ${dateFilter}
+      ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      GROUP BY si.status, si.transactionType
+    `, params).catch(() => []);
+
+    // 6. İndirim Toplamları (Satış vs Cari)
+    const indirimDetayRes = await this.dataSource.query(`
+      SELECT 
+        CASE WHEN s.paymentMethod IN ('CARI', 'PARTNER', 'OPEN') THEN 'CARI' ELSE 'SATIS' END as tip,
+        SUM(CAST(s.discountAmount AS DECIMAL(18,2))) as toplam
+      FROM sales s
+      WHERE s.status = 'COMPLETED' AND s.discountAmount > 0 ${dateFilter}
+      ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      GROUP BY CASE WHEN s.paymentMethod IN ('CARI', 'PARTNER', 'OPEN') THEN 'CARI' ELSE 'SATIS' END
+    `, params).catch(() => []);
+
+    const satisIndirim = Number(indirimDetayRes.find((i: any) => i.tip === 'SATIS')?.toplam || 0);
+    const cariIndirim = Number(indirimDetayRes.find((i: any) => i.tip === 'CARI')?.toplam || 0);
+
+    // 7. Açık Hesap Detayı (Cari Hesaplar listesi)
+    const acikHesapRes = await this.dataSource.query(`
+      SELECT 
+        COALESCE(p.name, 'Bilinmeyen Cari') as cariAdi,
+        SUM(CAST(s.totalAmount AS DECIMAL(18,2))) as toplam
+      FROM sales s
+      JOIN partners p ON p.id = s.partnerId
+      WHERE s.status = 'COMPLETED' AND s.paymentMethod IN ('CARI', 'PARTNER', 'OPEN') ${dateFilter}
       ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
       GROUP BY p.name
-      ORDER BY toplam DESC
-    `, params);
+    `, params).catch(() => []);
 
-    // Satış Tipi Kırılımı (Yarım/Duble)
-    const saleTypeRes = await this.dataSource.query(`
-      SELECT p.name as urunAdi,
-        si.saleType,
+    // 8. Kategori Bazlı Ürün Satış Özeti
+    const urunKategoriRes = await this.dataSource.query(`
+      SELECT 
+        COALESCE(pt.name, 'Diğer') as kategori,
+        p.name as urunAdi,
         SUM(CAST(si.quantity AS DECIMAL(18,2))) as adet,
         SUM(CAST(si.total AS DECIMAL(18,2))) as toplam
       FROM sale_items si
       JOIN products p ON p.id = si.productId
+      LEFT JOIN product_types pt ON pt.id = p.productTypeId
       JOIN sales s ON s.id = si.saleId
-      WHERE s.status = 'COMPLETED' AND si.status = 'ACTIVE' ${dateFilter}
+      WHERE s.status = 'COMPLETED' AND si.status = 'ACTIVE' AND si.transactionType = 'SALE' ${dateFilter}
       ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
-      GROUP BY p.name, si.saleType
-      ORDER BY p.name, si.saleType
-    `, params);
+      GROUP BY COALESCE(pt.name, 'Diğer'), p.name
+      ORDER BY COALESCE(pt.name, 'Diğer'), toplam DESC
+    `, params).catch(() => []);
 
-    // Grup bazlı satış (kategori)
-    const grupRes = await this.dataSource.query(`
-      SELECT ISNULL(p.category, 'Diğer') as kategori,
-        SUM(CAST(si.quantity AS DECIMAL(18,2))) as adet,
-        SUM(CAST(si.total AS DECIMAL(18,2))) as toplam
-      FROM sale_items si
-      JOIN products p ON p.id = si.productId
-      JOIN sales s ON s.id = si.saleId
-      WHERE s.status = 'COMPLETED' AND si.status = 'ACTIVE' ${dateFilter}
-      ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
-      GROUP BY p.category
-      ORDER BY toplam DESC
-    `, params);
-
-    // Garson toplamları
+    // 9. Garson Satış ve İndirim Toplamları
     const garsonRes = await this.dataSource.query(`
-      SELECT u.firstName + ' ' + ISNULL(u.lastName,'') as garsonAdi,
-        SUM(CAST(s.totalAmount AS DECIMAL(18,2))) as satisToplam,
+      SELECT 
+        COALESCE(u.firstName + ' ' + u.lastName, 'Sistem') as garsonAdi,
         SUM(CAST(s.discountAmount AS DECIMAL(18,2))) as indirimToplam,
-        COUNT(DISTINCT s.id) as adisyonSayisi
+        SUM(CAST(s.totalAmount AS DECIMAL(18,2))) as satisToplam
       FROM sales s
       LEFT JOIN users u ON u.id = s.waiterId
       WHERE s.status = 'COMPLETED' ${dateFilter}
       ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
       GROUP BY u.firstName, u.lastName
       ORDER BY satisToplam DESC
-    `, params);
+    `, params).catch(() => []);
 
-    // İndirim özeti
-    const indirimRes = await this.dataSource.query(`
-      SELECT SUM(CAST(discountAmount AS DECIMAL(18,2))) as toplamIndirim,
-        COUNT(CASE WHEN discountAmount > 0 THEN 1 END) as indirimliAdisyon
+    // 10. Kasiyer / Kasa Tahsilat Toplamları
+    const kasiyerRes = await this.dataSource.query(`
+      SELECT 
+        COALESCE(cr.name, 'Ana Kasa') as kasaAdi,
+        SUM(CAST(s.totalAmount AS DECIMAL(18,2))) as toplam
+      FROM sales s
+      LEFT JOIN cash_registers cr ON cr.id = s.cashRegisterId
+      WHERE s.status = 'COMPLETED' ${dateFilter}
+      ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      GROUP BY cr.name
+    `, params).catch(() => []);
+
+    // 11. Müşteri / Hizmet Tipi Toplamları
+    const musteriRes = await this.dataSource.query(`
+      SELECT 
+        CASE 
+          WHEN s.tableName LIKE 'Paket%' OR s.tableName LIKE 'Servis%' OR s.tableName LIKE 'Delivery%' THEN 'PAKET' 
+          ELSE 'MASA' 
+        END as tip,
+        COUNT(s.id) as adet,
+        SUM(CAST(s.totalAmount AS DECIMAL(18,2))) as toplam
       FROM sales s
       WHERE s.status = 'COMPLETED' ${dateFilter}
       ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
-    `, params);
+      GROUP BY CASE 
+        WHEN s.tableName LIKE 'Paket%' OR s.tableName LIKE 'Servis%' OR s.tableName LIKE 'Delivery%' THEN 'PAKET' 
+        ELSE 'MASA' 
+      END
+    `, params).catch(() => []);
 
-    // İade/iptal detayları (SaleItems üzerinden - Artık ödeme sonrası silinmiyorlar)
-    // Audit logs'da henüz businessDate kolonu yoksa (si join'i olduğu için si.businessDate aranabilir)
-    // Burada si join'i yok, auditDateFilter gibi bir yaklaşım gerekebilir ama iadeRes zaten si ve s joinli.
-    const iadeRes = await this.dataSource.query(`
-      SELECT si.status as durum,
-        COUNT(*) as adet,
-        SUM(CAST(si.total AS DECIMAL(18,2))) as toplam
-      FROM sale_items si
-      JOIN sales s ON s.id = si.saleId
-      WHERE si.status IN ('CANCELLED','REFUNDED') ${dateFilter}
-      ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
-      GROUP BY si.status
-    `, params);
-
-    // Genel toplamlar
+    // Genel Toplamlar
     const toplamRes = await this.dataSource.query(`
       SELECT
         SUM(CAST(totalAmount AS DECIMAL(18,2))) as netSatis,
         SUM(CAST(discountAmount AS DECIMAL(18,2))) as toplamIndirim,
         SUM(CAST(serviceFee AS DECIMAL(18,2))) as toplamServis,
-        ISNULL(SUM(CAST(refundAmount AS DECIMAL(18,2))), 0) as toplamIade,
         COUNT(*) as adisyonSayisi
       FROM sales s
       WHERE s.status = 'COMPLETED' ${dateFilter}
       ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
-    `, params);
+    `, params).catch(() => [{ netSatis: 0, toplamIndirim: 0, toplamServis: 0, adisyonSayisi: 0 }]);
+
+    const refundRes = await this.dataSource.query(`
+      SELECT
+        ISNULL(SUM(CAST(si.total AS DECIMAL(18,2))), 0) as toplamIade,
+        ISNULL(SUM(CAST(si.quantity AS DECIMAL(18,2))), 0) as iadeAdedi
+      FROM sale_items si
+      JOIN sales s ON s.id = si.saleId
+      WHERE si.status = 'REFUNDED' ${dateFilter}
+      ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+    `, params).catch(() => [{ toplamIade: 0, iadeAdedi: 0 }]);
+
+    // Kategori x İşlem Tipi Dağılımı
+    const catTxRes = await this.dataSource.query(`
+      SELECT 
+        COALESCE(p.category, 'Diğer') as categoryName,
+        si.transactionType,
+        si.status,
+        SUM(CAST(si.quantity AS DECIMAL(12,2))) as quantity,
+        SUM(CAST(si.total AS DECIMAL(12,2))) as total,
+        SUM(CAST(COALESCE(p.price, 0) * si.quantity AS DECIMAL(12,2))) as retailTotal
+      FROM sale_items si
+      JOIN sales s ON s.id = si.saleId
+      LEFT JOIN products p ON p.id = si.productId
+      WHERE 1=1 ${dateFilter}
+      ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      GROUP BY p.category, si.transactionType, si.status
+    `, params).catch(() => []);
 
     return {
       tahsilatDetay: tahsilatRes.map((t: any) => ({
@@ -416,44 +519,60 @@ export class ReportsService {
         toplam: Number(t.toplam || 0),
         adet: Number(t.adet || 0),
       })),
-      urunSatisOzeti: urunRes.map((u: any) => ({
+      payoutTotal,
+      cariNakit,
+      cariKredi,
+      dovizAnalizi: dovizRes.map((d: any) => ({
+        currency: d.currency,
+        totalAmount: Number(d.totalAmount || 0),
+      })),
+      islemDetaylari: islemDetayRes.map((i: any) => ({
+        status: i.status,
+        transactionType: i.transactionType,
+        adet: Number(i.adet || 0),
+        toplam: Number(i.toplam || 0),
+        retailToplam: Number(i.retailToplam || 0),
+      })),
+      satisIndirim,
+      cariIndirim,
+      acikHesapDetay: acikHesapRes.map((a: any) => ({
+        cariAdi: a.cariAdi,
+        toplam: Number(a.toplam || 0),
+      })),
+      urunKategoriSatis: urunKategoriRes.map((u: any) => ({
+        kategori: u.kategori,
         urunAdi: u.urunAdi,
         adet: Number(u.adet || 0),
         toplam: Number(u.toplam || 0),
-      })),
-      satisTipiKirilim: saleTypeRes.map((r: any) => ({
-        urunAdi: r.urunAdi,
-        satisTipi: r.saleType === 'HALF' ? 'Yarım' : r.saleType === 'DOUBLE' ? 'Duble' : 'Standart',
-        adet: Number(r.adet || 0),
-        toplam: Number(r.toplam || 0),
-      })),
-      grupSatisToplam: grupRes.map((g: any) => ({
-        kategori: g.kategori,
-        adet: Number(g.adet || 0),
-        toplam: Number(g.toplam || 0),
       })),
       garsonlarToplamlar: garsonRes.map((g: any) => ({
         garsonAdi: g.garsonAdi?.trim() || 'Bilinmeyen',
         satisToplam: Number(g.satisToplam || 0),
         indirimToplam: Number(g.indirimToplam || 0),
-        adisyonSayisi: Number(g.adisyonSayisi || 0),
       })),
-      indirimOzeti: {
-        toplamIndirim: Number(indirimRes[0]?.toplamIndirim || 0),
-        indirimliAdisyon: Number(indirimRes[0]?.indirimliAdisyon || 0),
-      },
-      iadeIptalDetay: iadeRes.map((i: any) => ({
-        durum: i.durum,
-        adet: Number(i.adet || 0),
-        toplam: Number(i.toplam || 0),
+      kasiyerTahsilat: kasiyerRes.map((k: any) => ({
+        kasaAdi: k.kasaAdi,
+        toplam: Number(k.toplam || 0),
+      })),
+      musteriToplamlari: musteriRes.map((m: any) => ({
+        tip: m.tip,
+        adet: Number(m.adet || 0),
+        toplam: Number(m.toplam || 0),
+      })),
+      categoryTransactionTotals: catTxRes.map((c: any) => ({
+        categoryName: c.categoryName,
+        transactionType: c.transactionType,
+        status: c.status,
+        quantity: Number(c.quantity || 0),
+        total: Number(c.total || 0),
+        retailTotal: Number(c.retailTotal || 0),
       })),
       genelToplamlar: {
         netSatis: Number(toplamRes[0]?.netSatis || 0),
         toplamIndirim: Number(toplamRes[0]?.toplamIndirim || 0),
         toplamServis: Number(toplamRes[0]?.toplamServis || 0),
-        toplamIade: Number(toplamRes[0]?.toplamIade || 0),
-        toplamIadeUrun: Number(iadeRes.find((i: any) => i.durum === 'REFUNDED')?.toplam || 0),
-        toplamIptal: Number(iadeRes.find((i: any) => i.durum === 'CANCELLED')?.toplam || 0),
+        toplamIade: Number(refundRes[0]?.toplamIade || 0),
+        iadeAdedi: Number(refundRes[0]?.iadeAdedi || 0),
         adisyonSayisi: Number(toplamRes[0]?.adisyonSayisi || 0),
       },
     };
@@ -479,7 +598,7 @@ export class ReportsService {
       SELECT
         SUM(CASE WHEN paymentMethod IN ('KASA','CASH') THEN CAST(paidAmountCash AS DECIMAL(12,2)) ELSE 0 END) as nakit,
         SUM(CASE WHEN paymentMethod IN ('KREDI_KARTI','CREDIT_CARD','CC') THEN CAST(paidAmountCreditCard AS DECIMAL(12,2)) ELSE 0 END) as krediKarti,
-        SUM(CASE WHEN paymentMethod = 'CARI' THEN CAST(totalAmount AS DECIMAL(12,2)) ELSE 0 END) as cari,
+        SUM(CASE WHEN paymentMethod IN ('CARI', 'PARTNER', 'OPEN') THEN CAST(totalAmount AS DECIMAL(12,2)) ELSE 0 END) as cari,
         SUM(CASE WHEN paymentMethod = 'SPLIT' THEN CAST(paidAmountCash AS DECIMAL(12,2)) ELSE 0 END) as bolunmusNakit,
         SUM(CASE WHEN paymentMethod = 'SPLIT' THEN CAST(paidAmountCreditCard AS DECIMAL(12,2)) ELSE 0 END) as bolunmusKart,
         SUM(CAST(totalAmount AS DECIMAL(12,2))) as toplamTahsilat,
@@ -502,6 +621,19 @@ export class ReportsService {
     const tahsilat = tahsilatRes[0] || {};
     const islem = islemRes[0] || {};
 
+    // Fetch manual cari tahsilat/odemeler for this shift
+    const manualTahsilatRes = await this.dataSource.query(`
+      SELECT 
+        paymentMethod,
+        SUM(CASE WHEN type = 'INCOME' THEN CAST(amount AS DECIMAL(12,2)) ELSE -CAST(amount AS DECIMAL(12,2)) END) as toplam
+      FROM account_transactions
+      WHERE shiftId = @0
+      GROUP BY paymentMethod
+    `, [shiftId]).catch(() => []);
+
+    const manualNakit = Number(manualTahsilatRes.find((c: any) => c.paymentMethod === 'KASA' || c.paymentMethod === 'CASH')?.toplam || 0);
+    const manualKredi = Number(manualTahsilatRes.find((c: any) => c.paymentMethod === 'KREDI_KARTI' || c.paymentMethod === 'CREDIT_CARD' || c.paymentMethod === 'CC')?.toplam || 0);
+
     const sure = shift.closedAt && shift.openedAt
       ? Math.round((new Date(shift.closedAt).getTime() - new Date(shift.openedAt).getTime()) / 60000)
       : null;
@@ -522,10 +654,10 @@ export class ReportsService {
         not: shift.note,
       },
       tahsilat: {
-        nakit: Number(tahsilat.nakit || 0) + Number(tahsilat.bolunmusNakit || 0),
-        krediKarti: Number(tahsilat.krediKarti || 0) + Number(tahsilat.bolunmusKart || 0),
+        nakit: Number(tahsilat.nakit || 0) + Number(tahsilat.bolunmusNakit || 0) + manualNakit,
+        krediKarti: Number(tahsilat.krediKarti || 0) + Number(tahsilat.bolunmusKart || 0) + manualKredi,
         cari: Number(tahsilat.cari || 0),
-        toplamTahsilat: Number(tahsilat.toplamTahsilat || 0),
+        toplamTahsilat: Number(tahsilat.toplamTahsilat || 0) + manualNakit + manualKredi,
         adisyonSayisi: Number(tahsilat.adisyonSayisi || 0),
       },
       islemler: {
@@ -583,7 +715,7 @@ export class ReportsService {
       SELECT
         SUM(CASE WHEN paymentMethod IN ('KASA','CASH') THEN CAST(paidAmountCash AS DECIMAL(12,2)) ELSE 0 END) as nakit,
         SUM(CASE WHEN paymentMethod IN ('KREDI_KARTI','CREDIT_CARD','CC') THEN CAST(paidAmountCreditCard AS DECIMAL(12,2)) ELSE 0 END) as krediKarti,
-        SUM(CASE WHEN paymentMethod = 'CARI' THEN CAST(totalAmount AS DECIMAL(12,2)) ELSE 0 END) as cari,
+        SUM(CASE WHEN paymentMethod IN ('CARI', 'PARTNER', 'OPEN') THEN CAST(totalAmount AS DECIMAL(12,2)) ELSE 0 END) as cari,
         SUM(CASE WHEN paymentMethod = 'SPLIT' THEN CAST(paidAmountCash AS DECIMAL(12,2)) ELSE 0 END) as bolunmusNakit,
         SUM(CASE WHEN paymentMethod = 'SPLIT' THEN CAST(paidAmountCreditCard AS DECIMAL(12,2)) ELSE 0 END) as bolunmusKart,
         SUM(CAST(totalAmount AS DECIMAL(12,2))) as toplamTahsilat,
@@ -605,6 +737,19 @@ export class ReportsService {
 
     const tahsilat = tahsilatRes[0] || {};
     const islem = islemRes[0] || {};
+
+    // Fetch manual cari tahsilat/odemeler for these shifts combined
+    const manualTahsilatRes = await this.dataSource.query(`
+      SELECT 
+        paymentMethod,
+        SUM(CASE WHEN type = 'INCOME' THEN CAST(amount AS DECIMAL(12,2)) ELSE -CAST(amount AS DECIMAL(12,2)) END) as toplam
+      FROM account_transactions
+      WHERE shiftId IN (${shiftIds})
+      GROUP BY paymentMethod
+    `).catch(() => []);
+
+    const manualNakit = Number(manualTahsilatRes.find((c: any) => c.paymentMethod === 'KASA' || c.paymentMethod === 'CASH')?.toplam || 0);
+    const manualKredi = Number(manualTahsilatRes.find((c: any) => c.paymentMethod === 'KREDI_KARTI' || c.paymentMethod === 'CREDIT_CARD' || c.paymentMethod === 'CC')?.toplam || 0);
 
     // Toplam süre & kapanış
     let totalMinutes = 0;
@@ -638,10 +783,10 @@ export class ReportsService {
         not: `Toplam ${shiftsRes.length} vardiya`,
       },
       tahsilat: {
-        nakit: Number(tahsilat.nakit || 0) + Number(tahsilat.bolunmusNakit || 0),
-        krediKarti: Number(tahsilat.krediKarti || 0) + Number(tahsilat.bolunmusKart || 0),
+        nakit: Number(tahsilat.nakit || 0) + Number(tahsilat.bolunmusNakit || 0) + manualNakit,
+        krediKarti: Number(tahsilat.krediKarti || 0) + Number(tahsilat.bolunmusKart || 0) + manualKredi,
         cari: Number(tahsilat.cari || 0),
-        toplamTahsilat: Number(tahsilat.toplamTahsilat || 0),
+        toplamTahsilat: Number(tahsilat.toplamTahsilat || 0) + manualNakit + manualKredi,
         adisyonSayisi: Number(tahsilat.adisyonSayisi || 0),
       },
       islemler: {
@@ -747,4 +892,421 @@ export class ReportsService {
       },
     };
   }
+
+  // ─── İKRAM VE ÖDENMEZ DETAY RAPORU ──────────────────────────────────────────
+
+  async getComplimentaryNonPayableReport(filters: { startDate?: string; endDate?: string; companyId?: number }) {
+    const { dateFilter, params } = this.buildDateFilter({ startDate: filters.startDate, endDate: filters.endDate });
+
+    const itemsRes = await this.dataSource.query(`
+      SELECT 
+        si.id as id,
+        COALESCE(NULLIF(s.tableName, ''), t.name, ps.tableName, 'Paket/Hızlı Satış') as tableName,
+        s.id as saleId,
+        COALESCE(si.addedAt, s.createdAt) as transactionDate,
+        COALESCE(u.firstName + ' ' + u.lastName, 'Sistem') as staffName,
+        p.name as productName,
+        CAST(si.quantity AS DECIMAL(18,2)) as quantity,
+        COALESCE(si.productTypeName, 'Diğer') as productTypeName,
+        si.transactionType as transactionType,
+        si.transactionReason as transactionReason,
+        CAST(si.unitPrice AS DECIMAL(18,2)) as unitPrice,
+        CAST(si.total AS DECIMAL(18,2)) as total,
+        CAST(COALESCE(p.price, 0) AS DECIMAL(18,2)) as retailPrice
+      FROM sale_items si
+      JOIN sales s ON s.id = si.saleId
+      LEFT JOIN tables t ON t.id = s.tableId
+      LEFT JOIN sales ps ON ps.id = s.parentSaleId
+      LEFT JOIN products p ON p.id = si.productId
+      LEFT JOIN users u ON u.id = COALESCE(si.addedByUserId, s.waiterId)
+      WHERE si.transactionType != 'SALE' 
+        AND si.status = 'ACTIVE'
+        AND s.status = 'COMPLETED'
+        ${dateFilter}
+        ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      ORDER BY transactionDate DESC
+    `, params).catch(() => []);
+
+    const categorySummary = await this.dataSource.query(`
+      SELECT 
+        COALESCE(si.productTypeName, 'Diğer') as categoryName,
+        SUM(CAST(si.quantity AS DECIMAL(18,2))) as totalQuantity,
+        SUM(CAST(COALESCE(p.price, 0) * si.quantity AS DECIMAL(18,2))) as totalValue
+      FROM sale_items si
+      JOIN sales s ON s.id = si.saleId
+      LEFT JOIN products p ON p.id = si.productId
+      WHERE si.transactionType != 'SALE' 
+        AND si.status = 'ACTIVE'
+        AND s.status = 'COMPLETED'
+        ${dateFilter}
+        ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      GROUP BY COALESCE(si.productTypeName, 'Diğer')
+      ORDER BY totalQuantity DESC
+    `, params).catch(() => []);
+
+    const typeSummary = await this.dataSource.query(`
+      SELECT 
+        si.transactionType as transactionType,
+        COUNT(DISTINCT s.id) as saleCount,
+        SUM(CAST(si.quantity AS DECIMAL(18,2))) as totalQuantity,
+        SUM(CAST(COALESCE(p.price, 0) * si.quantity AS DECIMAL(18,2))) as totalValue
+      FROM sale_items si
+      JOIN sales s ON s.id = si.saleId
+      LEFT JOIN products p ON p.id = si.productId
+      WHERE si.transactionType != 'SALE' 
+        AND si.status = 'ACTIVE'
+        AND s.status = 'COMPLETED'
+        ${dateFilter}
+        ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      GROUP BY si.transactionType
+      ORDER BY totalQuantity DESC
+    `, params).catch(() => []);
+
+    const staffSummary = await this.dataSource.query(`
+      SELECT 
+        COALESCE(u.firstName + ' ' + u.lastName, 'Sistem') as staffName,
+        COUNT(si.id) as itemTransactionCount,
+        SUM(CAST(si.quantity AS DECIMAL(18,2))) as totalQuantity,
+        SUM(CAST(COALESCE(p.price, 0) * si.quantity AS DECIMAL(18,2))) as totalValue
+      FROM sale_items si
+      JOIN sales s ON s.id = si.saleId
+      LEFT JOIN products p ON p.id = si.productId
+      LEFT JOIN users u ON u.id = COALESCE(si.addedByUserId, s.waiterId)
+      WHERE si.transactionType != 'SALE' 
+        AND si.status = 'ACTIVE'
+        AND s.status = 'COMPLETED'
+        ${dateFilter}
+        ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      GROUP BY u.firstName, u.lastName
+      ORDER BY totalQuantity DESC
+    `, params).catch(() => []);
+
+    return {
+      items: itemsRes.map((item: any) => ({
+        id: item.id,
+        tableName: item.tableName,
+        saleId: item.saleId,
+        transactionDate: item.transactionDate,
+        staffName: item.staffName,
+        productName: item.productName,
+        quantity: Number(item.quantity || 0),
+        productTypeName: item.productTypeName,
+        transactionType: item.transactionType,
+        transactionReason: item.transactionReason,
+        unitPrice: Number(item.unitPrice || 0),
+        total: Number(item.total || 0),
+        retailPrice: Number(item.retailPrice || 0),
+        retailTotal: Number(item.retailPrice || 0) * Number(item.quantity || 0)
+      })),
+      categorySummary: categorySummary.map((c: any) => ({
+        categoryName: c.categoryName,
+        totalQuantity: Number(c.totalQuantity || 0),
+        totalValue: Number(c.totalValue || 0)
+      })),
+      typeSummary: typeSummary.map((t: any) => ({
+        transactionType: t.transactionType,
+        saleCount: Number(t.saleCount || 0),
+        totalQuantity: Number(t.totalQuantity || 0),
+        totalValue: Number(t.totalValue || 0)
+      })),
+      staffSummary: staffSummary.map((s: any) => ({
+        staffName: s.staffName,
+        itemTransactionCount: Number(s.itemTransactionCount || 0),
+        totalQuantity: Number(s.totalQuantity || 0),
+        totalValue: Number(s.totalValue || 0)
+      }))
+    };
+  }
+
+  // ─── İADE DETAY RAPORU ──────────────────────────────────────────
+
+  async getRefundsReport(filters: { startDate?: string; endDate?: string; companyId?: number }) {
+    const { dateFilter, params } = this.buildDateFilter({ startDate: filters.startDate, endDate: filters.endDate });
+
+    const itemsRes = await this.dataSource.query(`
+      SELECT 
+        si.id as id,
+        COALESCE(NULLIF(s.tableName, ''), t.name, ps.tableName, 'Paket/Hızlı Satış') as tableName,
+        s.id as saleId,
+        COALESCE(si.addedAt, s.createdAt) as transactionDate,
+        COALESCE(u.firstName + ' ' + u.lastName, 'Sistem') as staffName,
+        p.name as productName,
+        CAST(si.quantity AS DECIMAL(18,2)) as quantity,
+        COALESCE(si.productTypeName, 'Diğer') as productTypeName,
+        si.status as status,
+        si.refundReason as refundReason,
+        CAST(si.unitPrice AS DECIMAL(18,2)) as unitPrice,
+        CAST(si.total AS DECIMAL(18,2)) as total,
+        CAST(COALESCE(p.price, 0) AS DECIMAL(18,2)) as retailPrice
+      FROM sale_items si
+      JOIN sales s ON s.id = si.saleId
+      LEFT JOIN tables t ON t.id = s.tableId
+      LEFT JOIN sales ps ON ps.id = s.parentSaleId
+      LEFT JOIN products p ON p.id = si.productId
+      LEFT JOIN users u ON u.id = COALESCE(si.refundedByUserId, s.waiterId)
+      WHERE si.status = 'REFUNDED'
+        ${dateFilter}
+        ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      ORDER BY transactionDate DESC
+    `, params).catch(() => []);
+
+    const categorySummary = await this.dataSource.query(`
+      SELECT 
+        COALESCE(si.productTypeName, 'Diğer') as categoryName,
+        SUM(CAST(si.quantity AS DECIMAL(18,2))) as totalQuantity,
+        SUM(CAST(COALESCE(p.price, 0) * si.quantity AS DECIMAL(18,2))) as totalValue
+      FROM sale_items si
+      JOIN sales s ON s.id = si.saleId
+      LEFT JOIN products p ON p.id = si.productId
+      WHERE si.status = 'REFUNDED'
+        ${dateFilter}
+        ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      GROUP BY COALESCE(si.productTypeName, 'Diğer')
+      ORDER BY totalQuantity DESC
+    `, params).catch(() => []);
+
+    const staffSummary = await this.dataSource.query(`
+      SELECT 
+        COALESCE(u.firstName + ' ' + u.lastName, 'Sistem') as staffName,
+        COUNT(si.id) as itemTransactionCount,
+        SUM(CAST(si.quantity AS DECIMAL(18,2))) as totalQuantity,
+        SUM(CAST(COALESCE(p.price, 0) * si.quantity AS DECIMAL(18,2))) as totalValue
+      FROM sale_items si
+      JOIN sales s ON s.id = si.saleId
+      LEFT JOIN products p ON p.id = si.productId
+      LEFT JOIN users u ON u.id = COALESCE(si.refundedByUserId, s.waiterId)
+      WHERE si.status = 'REFUNDED'
+        ${dateFilter}
+        ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      GROUP BY u.firstName, u.lastName
+      ORDER BY totalQuantity DESC
+    `, params).catch(() => []);
+
+    return {
+      items: itemsRes.map((item: any) => ({
+        id: item.id,
+        tableName: item.tableName,
+        saleId: item.saleId,
+        transactionDate: item.transactionDate,
+        staffName: item.staffName,
+        productName: item.productName,
+        quantity: Number(item.quantity || 0),
+        productTypeName: item.productTypeName,
+        status: item.status,
+        refundReason: item.refundReason,
+        unitPrice: Number(item.unitPrice || 0),
+        total: Number(item.total || 0),
+        retailPrice: Number(item.retailPrice || 0),
+        retailTotal: Number(item.retailPrice || 0) * Number(item.quantity || 0)
+      })),
+      categorySummary: categorySummary.map((c: any) => ({
+        categoryName: c.categoryName,
+        totalQuantity: Number(c.totalQuantity || 0),
+        totalValue: Number(c.totalValue || 0)
+      })),
+      staffSummary: staffSummary.map((s: any) => ({
+        staffName: s.staffName,
+        itemTransactionCount: Number(s.itemTransactionCount || 0),
+        totalQuantity: Number(s.totalQuantity || 0),
+        totalValue: Number(s.totalValue || 0)
+      }))
+    };
+  }
+
+  async getCancelledReport(filters: { startDate?: string; endDate?: string; companyId?: number }) {
+    const { dateFilter, params } = this.buildDateFilter({ startDate: filters.startDate, endDate: filters.endDate });
+
+    const itemsRes = await this.dataSource.query(`
+      SELECT 
+        si.id as id,
+        COALESCE(NULLIF(s.tableName, ''), t.name, ps.tableName, 'Paket/Hızlı Satış') as tableName,
+        s.id as saleId,
+        COALESCE(si.addedAt, s.createdAt) as transactionDate,
+        COALESCE(u.firstName + ' ' + u.lastName, 'Sistem') as staffName,
+        p.name as productName,
+        CAST(si.quantity AS DECIMAL(18,2)) as quantity,
+        COALESCE(si.productTypeName, 'Diğer') as productTypeName,
+        si.status as status,
+        si.cancelReason as cancelReason,
+        CAST(si.unitPrice AS DECIMAL(18,2)) as unitPrice,
+        CAST(si.total AS DECIMAL(18,2)) as total,
+        CAST(COALESCE(p.price, 0) AS DECIMAL(18,2)) as retailPrice
+      FROM sale_items si
+      JOIN sales s ON s.id = si.saleId
+      LEFT JOIN tables t ON t.id = s.tableId
+      LEFT JOIN sales ps ON ps.id = s.parentSaleId
+      LEFT JOIN products p ON p.id = si.productId
+      LEFT JOIN users u ON u.id = COALESCE(si.cancelledByUserId, s.waiterId)
+      WHERE si.status = 'CANCELLED'
+        ${dateFilter}
+        ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      ORDER BY transactionDate DESC
+    `, params).catch(() => []);
+
+    const categorySummary = await this.dataSource.query(`
+      SELECT 
+        COALESCE(si.productTypeName, 'Diğer') as categoryName,
+        SUM(CAST(si.quantity AS DECIMAL(18,2))) as totalQuantity,
+        SUM(CAST(COALESCE(p.price, 0) * si.quantity AS DECIMAL(18,2))) as totalValue
+      FROM sale_items si
+      JOIN sales s ON s.id = si.saleId
+      LEFT JOIN products p ON p.id = si.productId
+      WHERE si.status = 'CANCELLED'
+        ${dateFilter}
+        ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      GROUP BY COALESCE(si.productTypeName, 'Diğer')
+      ORDER BY totalQuantity DESC
+    `, params).catch(() => []);
+
+    const staffSummary = await this.dataSource.query(`
+      SELECT 
+        COALESCE(u.firstName + ' ' + u.lastName, 'Sistem') as staffName,
+        COUNT(si.id) as itemTransactionCount,
+        SUM(CAST(si.quantity AS DECIMAL(18,2))) as totalQuantity,
+        SUM(CAST(COALESCE(p.price, 0) * si.quantity AS DECIMAL(18,2))) as totalValue
+      FROM sale_items si
+      JOIN sales s ON s.id = si.saleId
+      LEFT JOIN products p ON p.id = si.productId
+      LEFT JOIN users u ON u.id = COALESCE(si.cancelledByUserId, s.waiterId)
+      WHERE si.status = 'CANCELLED'
+        ${dateFilter}
+        ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      GROUP BY u.firstName, u.lastName
+      ORDER BY totalQuantity DESC
+    `, params).catch(() => []);
+
+    return {
+      items: itemsRes.map((item: any) => ({
+        id: item.id,
+        tableName: item.tableName,
+        saleId: item.saleId,
+        transactionDate: item.transactionDate,
+        staffName: item.staffName,
+        productName: item.productName,
+        quantity: Number(item.quantity || 0),
+        productTypeName: item.productTypeName,
+        status: item.status,
+        cancelReason: item.cancelReason,
+        unitPrice: Number(item.unitPrice || 0),
+        total: Number(item.total || 0),
+        retailPrice: Number(item.retailPrice || 0),
+        retailTotal: Number(item.retailPrice || 0) * Number(item.quantity || 0)
+      })),
+      categorySummary: categorySummary.map((c: any) => ({
+        categoryName: c.categoryName,
+        totalQuantity: Number(c.totalQuantity || 0),
+        totalValue: Number(c.totalValue || 0)
+      })),
+      staffSummary: staffSummary.map((s: any) => ({
+        staffName: s.staffName,
+        itemTransactionCount: Number(s.itemTransactionCount || 0),
+        totalQuantity: Number(s.totalQuantity || 0),
+        totalValue: Number(s.totalValue || 0)
+      }))
+    };
+  }
+
+  async getDiscountsReport(filters: { startDate?: string; endDate?: string; companyId?: number }) {
+    const { dateFilter, params } = this.buildDateFilter({ startDate: filters.startDate, endDate: filters.endDate });
+
+    const itemsRes = await this.dataSource.query(`
+      SELECT 
+        si.id as id,
+        COALESCE(NULLIF(s.tableName, ''), t.name, ps.tableName, 'Paket/Hızlı Satış') as tableName,
+        s.id as saleId,
+        COALESCE(si.addedAt, s.createdAt) as transactionDate,
+        COALESCE(u.firstName + ' ' + u.lastName, 'Sistem') as staffName,
+        p.name as productName,
+        CAST(si.quantity AS DECIMAL(18,2)) as quantity,
+        COALESCE(si.productTypeName, 'Diğer') as productTypeName,
+        si.status as status,
+        CAST(si.unitPrice AS DECIMAL(18,2)) as unitPrice,
+        CAST(si.total AS DECIMAL(18,2)) as total,
+        CAST(si.discountAmount AS DECIMAL(18,2)) as discountAmount,
+        CAST(si.discountRate AS DECIMAL(5,2)) as discountRate,
+        CAST(s.discountAmount AS DECIMAL(18,2)) as saleDiscountAmount,
+        CAST(s.discountRate AS DECIMAL(5,2)) as saleDiscountRate,
+        CAST(s.totalAmount AS DECIMAL(18,2)) as saleTotalAmount
+      FROM sale_items si
+      JOIN sales s ON s.id = si.saleId
+      LEFT JOIN tables t ON t.id = s.tableId
+      LEFT JOIN sales ps ON ps.id = s.parentSaleId
+      LEFT JOIN products p ON p.id = si.productId
+      LEFT JOIN users u ON u.id = COALESCE(s.waiterId, si.addedByUserId)
+      WHERE si.status NOT IN ('CANCELLED', 'REFUNDED')
+        AND s.status = 'COMPLETED'
+        AND (si.discountAmount > 0 OR s.discountAmount > 0)
+        ${dateFilter}
+        ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      ORDER BY transactionDate DESC
+    `, params).catch(() => []);
+
+    const categorySummary = await this.dataSource.query(`
+      SELECT 
+        COALESCE(si.productTypeName, 'Diğer') as categoryName,
+        SUM(CAST(si.quantity AS DECIMAL(18,2))) as totalQuantity,
+        SUM(CAST(si.discountAmount AS DECIMAL(18,2))) as totalValue
+      FROM sale_items si
+      JOIN sales s ON s.id = si.saleId
+      WHERE si.status NOT IN ('CANCELLED', 'REFUNDED')
+        AND s.status = 'COMPLETED'
+        AND (si.discountAmount > 0 OR s.discountAmount > 0)
+        ${dateFilter}
+        ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      GROUP BY COALESCE(si.productTypeName, 'Diğer')
+      ORDER BY totalQuantity DESC
+    `, params).catch(() => []);
+
+    const staffSummary = await this.dataSource.query(`
+      SELECT 
+        COALESCE(u.firstName + ' ' + u.lastName, 'Sistem') as staffName,
+        COUNT(si.id) as itemTransactionCount,
+        SUM(CAST(si.quantity AS DECIMAL(18,2))) as totalQuantity,
+        SUM(CAST(si.discountAmount AS DECIMAL(18,2))) as totalValue
+      FROM sale_items si
+      JOIN sales s ON s.id = si.saleId
+      LEFT JOIN products p ON p.id = si.productId
+      LEFT JOIN users u ON u.id = COALESCE(s.waiterId, si.addedByUserId)
+      WHERE si.status NOT IN ('CANCELLED', 'REFUNDED')
+        AND s.status = 'COMPLETED'
+        AND (si.discountAmount > 0 OR s.discountAmount > 0)
+        ${dateFilter}
+        ${filters.companyId ? ` AND (s.companyId = ${filters.companyId} OR s.companyId IS NULL)` : ''}
+      GROUP BY u.firstName, u.lastName
+      ORDER BY totalQuantity DESC
+    `, params).catch(() => []);
+
+    return {
+      items: itemsRes.map((item: any) => ({
+        id: item.id,
+        tableName: item.tableName,
+        saleId: item.saleId,
+        transactionDate: item.transactionDate,
+        staffName: item.staffName,
+        productName: item.productName,
+        quantity: Number(item.quantity || 0),
+        productTypeName: item.productTypeName,
+        status: item.status,
+        unitPrice: Number(item.unitPrice || 0),
+        total: Number(item.total || 0),
+        discountAmount: Number(item.discountAmount || 0),
+        discountRate: Number(item.discountRate || 0),
+        saleDiscountAmount: Number(item.saleDiscountAmount || 0),
+        saleDiscountRate: Number(item.saleDiscountRate || 0),
+        saleTotalAmount: Number(item.saleTotalAmount || 0)
+      })),
+      categorySummary: categorySummary.map((c: any) => ({
+        categoryName: c.categoryName,
+        totalQuantity: Number(c.totalQuantity || 0),
+        totalValue: Number(c.totalValue || 0)
+      })),
+      staffSummary: staffSummary.map((s: any) => ({
+        staffName: s.staffName,
+        itemTransactionCount: Number(s.itemTransactionCount || 0),
+        totalQuantity: Number(s.totalQuantity || 0),
+        totalValue: Number(s.totalValue || 0)
+      }))
+    };
+  }
 }
+

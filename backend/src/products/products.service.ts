@@ -10,6 +10,8 @@ import { Modifier } from '../modifiers/modifier.entity';
 import { ProductTransaction } from './product-transaction.entity';
 import { ProductType } from '../product-types/product-type.entity';
 import { Department } from '../departments/department.entity';
+import { SaleItem } from '../sales/sale-item.entity';
+import { SetGroupItem } from './set-group-item.entity';
 import * as xlsx from 'xlsx';
 
 @Injectable()
@@ -36,7 +38,7 @@ export class ProductsService {
     private productsCache: Product[] | null = null;
     private quickSaleCache: Product[] | null = null;
     
-    private clearCache() {
+    clearCache() {
         this.productsCache = null;
         this.quickSaleCache = null;
     }
@@ -56,21 +58,35 @@ export class ProductsService {
         });
 
         if (products.length > 0) {
-            const rawModifiers = await this.productRepository.query(`
-                SELECT pm.productsId as productId, m.*
-                FROM product_modifiers pm
-                JOIN modifiers m ON m.id = pm.modifiersId
+            // Load all modifiers
+            const allModifiers = await this.modifierRepository.find({ relations: ['group'] });
+
+            // Load direct product-modifier links
+            const rawLinks = await this.productRepository.query(`
+                SELECT productsId as productId, modifiersId as modifierId
+                FROM product_modifiers
             `);
 
             products.forEach(p => {
-                const mods = rawModifiers.filter((m: any) => m.productId === p.id);
+                const directIds = rawLinks.filter((l: any) => l.productId === p.id).map((l: any) => l.modifierId);
+                
+                const mods = allModifiers.filter((m: any) => 
+                    directIds.includes(m.id) ||
+                    m.isGeneral === true ||
+                    (m.productTypeId !== null && m.productTypeId !== undefined && p.productTypeId === m.productTypeId) ||
+                    (m.productCategory && p.category && p.category.toLowerCase().trim() === m.productCategory.toLowerCase().trim())
+                );
+
                 p.modifiers = mods.map((m: any) => ({
                     id: m.id,
                     name: m.name,
-                    groupName: m.groupName,
+                    groupName: m.group?.name || m.groupName,
+                    isGeneral: m.isGeneral,
+                    productTypeId: m.productTypeId,
+                    productCategory: m.productCategory,
                     createdAt: m.createdAt,
                     updatedAt: m.updatedAt
-                }));
+                })) as any;
             });
         }
         this.productsCache = products;
@@ -108,20 +124,32 @@ export class ProductsService {
             throw new NotFoundException(`Product with ID ${id} not found`);
         }
 
-        const rawModifiers = await repo.query(`
-            SELECT m.*
-            FROM product_modifiers pm
-            JOIN modifiers m ON m.id = pm.modifiersId
-            WHERE pm.productsId = @0
+        const modRepo = manager ? manager.getRepository(Modifier) : this.modifierRepository;
+        const allModifiers = await modRepo.find({ relations: ['group'] });
+        const rawLinks = await repo.query(`
+            SELECT modifiersId as modifierId
+            FROM product_modifiers
+            WHERE productsId = @0
         `, [id]);
+        const directIds = rawLinks.map((l: any) => l.modifierId);
 
-        product.modifiers = rawModifiers.map((m: any) => ({
+        const mods = allModifiers.filter((m: any) => 
+            directIds.includes(m.id) ||
+            m.isGeneral === true ||
+            (m.productTypeId !== null && m.productTypeId !== undefined && product.productTypeId === m.productTypeId) ||
+            (m.productCategory && product.category && product.category.toLowerCase().trim() === m.productCategory.toLowerCase().trim())
+        );
+
+        product.modifiers = mods.map((m: any) => ({
             id: m.id,
             name: m.name,
-            groupName: m.groupName,
+            groupName: m.group?.name || m.groupName,
+            isGeneral: m.isGeneral,
+            productTypeId: m.productTypeId,
+            productCategory: m.productCategory,
             createdAt: m.createdAt,
             updatedAt: m.updatedAt
-        }));
+        })) as any;
         return product;
     }
 
@@ -261,8 +289,8 @@ export class ProductsService {
         if (newPrice !== oldPrice) {
             try {
                 await this.productRepository.query(`
-                    INSERT INTO audit_logs (timestamp, actionType, productName, oldValue, newValue, description, companyId)
-                    VALUES (GETDATE(), 'PRICE_CHANGE', @0, @1, @2, @3, 1)
+                    INSERT INTO audit_logs (timestamp, actionType, productName, oldValue, newValue, description, companyId, businessDate)
+                    VALUES (GETDATE(), 'PRICE_CHANGE', @0, @1, @2, @3, 1, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
                 `, [product.name, String(oldPrice), String(newPrice), 'Ürün taban fiyatı güncellendi']);
             } catch { /* sessiz geç */ }
         }
@@ -309,7 +337,59 @@ export class ProductsService {
     }
 
     async remove(id: number): Promise<void> {
-        throw new BadRequestException('Güvenlik kuralı gereği ürünler kalıcı olarak silinemez. Lütfen silmek yerine ürünü pasife almayı (Gizle) deneyin.');
+        const product = await this.findOne(id);
+
+        // 1. Check product transactions
+        const transactionCount = await this.transactionRepository.count({
+            where: { productId: id }
+        });
+        if (transactionCount > 0) {
+            throw new BadRequestException('Bu ürüne ait satış veya işlem hareketleri bulunmaktadır. Hareketi olan ürünler silinemez, ancak pasif duruma getirilebilir.');
+        }
+
+        // 2. Check sale items (completed tickets/checks)
+        const saleItemCount = await this.productRepository.manager.count(SaleItem, {
+            where: { productId: id }
+        });
+        if (saleItemCount > 0) {
+            throw new BadRequestException('Bu ürün geçmiş veya mevcut adisyonlarda yer almaktadır. Adisyonda kullanılan ürünler silinemez, ancak pasif duruma getirilebilir.');
+        }
+
+        // 3. Check if used as hammadde (ingredient) in other recipes
+        const ingredientCount = await this.recipeRepository.count({
+            where: { ingredientId: id }
+        });
+        if (ingredientCount > 0) {
+            throw new BadRequestException('Bu ürün başka bir ürünün reçetesinde malzeme (hammadde) olarak kullanılmaktadır. Lütfen önce ilgili reçetelerden kaldırın.');
+        }
+
+        // 4. Check if used in set menu groups
+        const setGroupItemCount = await this.productRepository.manager.count(SetGroupItem, {
+            where: { productId: id }
+        });
+        if (setGroupItemCount > 0) {
+            throw new BadRequestException('Bu ürün bir set menü (seçmeli menü) içerisinde grup elemanı olarak tanımlanmıştır. Lütfen önce set menü tanımından kaldırın.');
+        }
+
+        // Safe delete sequence:
+        // A. Break variation to recipe header references
+        await this.productRepository.manager.update('ProductVariation', { productId: id }, { recipeHeaderId: null });
+
+        // B. Delete recipe lines for product's recipe headers
+        const recipeHeaders = await this.headerRepository.find({ where: { productId: id } });
+        for (const header of recipeHeaders) {
+            await this.lineRepository.delete({ recipeHeaderId: header.id });
+        }
+
+        // C. Delete recipe headers
+        await this.headerRepository.delete({ productId: id });
+
+        // D. Delete product recipes
+        await this.recipeRepository.delete({ productId: id });
+
+        // E. Finally, delete the product (cascades variations, set menu, modifiers, visible zones)
+        await this.productRepository.remove(product);
+        this.clearCache();
     }
 
     async reorderProducts(items: { id: number, orderIndex: number }[]): Promise<void> {

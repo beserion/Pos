@@ -365,7 +365,7 @@ export class SalesService implements OnModuleInit {
       const unitPrice = Number(item.unitPrice || 0);
       const lineBase = quantity * unitPrice;
 
-      if (Number(item.discountRate || 0) > 0) {
+      if (Number(item.discountRate || 0) !== 0) {
         item.discountAmount = Number((lineBase * (Number(item.discountRate) / 100)).toFixed(2));
       }
 
@@ -379,11 +379,13 @@ export class SalesService implements OnModuleInit {
     // Dynamic General Discount Calculation
     if (Number(sale.discountRate || 0) > 0) {
       sale.discountAmount = Number((subTotal * (Number(sale.discountRate) / 100)).toFixed(2));
-    } else {
+    } else if (Number(sale.discountAmount || 0) > 0) {
       if (Number(sale.discountAmount || 0) > subTotal) {
         sale.discountAmount = subTotal;
       }
+      sale.discountRate = Number((subTotal > 0 ? (sale.discountAmount / subTotal) * 100 : 0).toFixed(2));
     }
+
 
     const discountAmount = Number(sale.discountAmount || 0);
     const serviceFee = Number(sale.serviceFee || 0);
@@ -404,10 +406,22 @@ export class SalesService implements OnModuleInit {
           relations: ['items']
         });
 
-        const activeSales = [saved, ...otherActiveSales];
+        const activeSales = ['NEW', 'PREPARATION', 'READY', 'SERVED'].includes(saved.status)
+          ? [saved, ...otherActiveSales]
+          : otherActiveSales;
         const newTableTotal = activeSales.reduce((sum, s) => sum + Number(s.totalAmount || 0), 0);
 
+        const isTableEmpty = activeSales.length === 0 || newTableTotal === 0;
+
         table.currentTotal = Number(newTableTotal.toFixed(2));
+        table.status = isTableEmpty ? 'BOŞ' : 'DOLU';
+        if (isTableEmpty) {
+          table.waiterName = '';
+          table.waiterId = null as any;
+          table.orderStartTime = null as any;
+          table.isBillRequested = false;
+          table.tempName = null as any;
+        }
         await manager.save(Table, table);
       }
     }
@@ -454,20 +468,57 @@ export class SalesService implements OnModuleInit {
 
       sale.discountRate = discountRate;
       sale.discountAmount = discountAmount;
+      await manager.save(Sale, sale);
       
       const saved = await this.recalculateSaleTotals(sale, manager);
 
       // Audit Log
       try {
         await manager.query(`
-          INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId)
-          VALUES (GETDATE(), @0, 'DISCOUNT', @1, @2, @3, @4, @5)
+          INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId, businessDate)
+          VALUES (GETDATE(), @0, 'DISCOUNT', @1, @2, @3, @4, @5, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
         `, [userId, sale.id, sale.tableName, sale.discountAmount, `Genel indirim uygulandı: %${discountRate} / ₺${discountAmount}`, sale.companyId || 1]);
       } catch {}
 
       this.kitchenGateway.notifySaleUpdate(saved);
       this.tablesService.clearCache();
       
+      return saved;
+    });
+  }
+
+  async updateBillRequest(saleId: number, isBillRequested: boolean, userId: number = 0): Promise<Sale> {
+    return await this.saleRepository.manager.transaction(async (manager) => {
+      const sale = await manager.findOne(Sale, {
+        where: { id: saleId },
+        relations: ['table']
+      });
+      if (!sale) throw new NotFoundException('Adisyon bulunamadı.');
+
+      sale.isBillRequested = isBillRequested;
+      const saved = await manager.save(Sale, sale);
+
+      if (sale.tableId) {
+        // Diğer aktif adisyonları kontrol et
+        const otherActiveSales = await manager.find(Sale, {
+          where: {
+            tableId: sale.tableId,
+            status: In(['NEW', 'PREPARATION', 'READY', 'SERVED']),
+            id: Not(saleId)
+          }
+        });
+
+        const allOtherLocked = otherActiveSales.every(s => s.isBillRequested);
+
+        if (isBillRequested && allOtherLocked) {
+          await manager.update(Table, sale.tableId, { isBillRequested: true });
+        } else if (!isBillRequested) {
+          await manager.update(Table, sale.tableId, { isBillRequested: false });
+        }
+      }
+
+      this.kitchenGateway.notifySaleUpdate(saved);
+      this.tablesService.clearCache();
       return saved;
     });
   }
@@ -494,7 +545,7 @@ export class SalesService implements OnModuleInit {
 
       if (limit > 0) {
         let requestedRate = discountRate;
-        if (discountRate === 0 && discountAmount > 0) {
+        if (discountRate === 0 && discountAmount !== 0) {
           const checkItem = await this.saleRepository.manager.findOne(SaleItem, { where: { id: itemId } });
           if (checkItem) {
             const splitQty = discountQty && discountQty > 0 && discountQty < checkItem.quantity ? discountQty : checkItem.quantity;
@@ -571,8 +622,8 @@ export class SalesService implements OnModuleInit {
       // Audit Log
       try {
         await manager.query(`
-          INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId)
-          VALUES (GETDATE(), @0, 'ITEM_DISCOUNT', @1, @2, @3, @4, @5)
+          INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId, businessDate)
+          VALUES (GETDATE(), @0, 'ITEM_DISCOUNT', @1, @2, @3, @4, @5, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
         `, [userId, savedSale.id, savedSale.tableName, discountAmount, `Satır indirimi uygulandı: %${discountRate} / ₺${discountAmount} (Adet: ${qtyToDiscount || item.quantity})`, savedSale.companyId || 1]);
       } catch {}
 
@@ -717,9 +768,20 @@ export class SalesService implements OnModuleInit {
         throw new BadRequestException('Gün sonu alınmış satışlar geri yüklenemez.');
       }
 
+      // Reverse partner transaction BEFORE clearing paymentMethod
+      const originalPaymentMethod = sale.paymentMethod;
+      if ((originalPaymentMethod === 'PARTNER' || originalPaymentMethod === 'CARI' || originalPaymentMethod === 'OPEN') && sale.partnerId) {
+        try {
+          await this.financeService.removeBySource('SALE', sale.id, manager);
+        } catch (e) {
+          this.logger.error('Failed to remove partner transaction during sale restore:', e);
+        }
+      }
+
       // Update sale
       sale.status = 'SERVED'; // Active status
       sale.paymentMethod = null as any;
+      sale.partnerId = null as any;
       sale.paidAmountCash = 0;
       sale.paidAmountCreditCard = 0;
 
@@ -754,8 +816,8 @@ export class SalesService implements OnModuleInit {
       // Auditing
       try {
         await manager.query(`
-          INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId)
-          VALUES (GETDATE(), @0, 'RESTORE_SALE', @1, @2, @3, @4, @5)
+          INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId, businessDate)
+          VALUES (GETDATE(), @0, 'RESTORE_SALE', @1, @2, @3, @4, @5, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
         `, [userId, sale.id, sale.tableName, sale.totalAmount, 'Satış masaya geri yüklendi', sale.companyId || 1]);
       } catch {}
 
@@ -888,7 +950,62 @@ export class SalesService implements OnModuleInit {
 
         if (items && items.length > 0) {
           const saleItems: SaleItem[] = [];
+
+          const isMerging = Boolean(mergeSaleIds && mergeSaleIds.length > 0);
+          let existingPromoItems: SaleItem[] = [];
+          if (isMerging) {
+            existingPromoItems = await manager.find(SaleItem, {
+              where: {
+                sale: { id: In(mergeSaleIds) },
+                transactionType: In(['COMPLIMENTARY', 'FREE', 'TICKET']),
+                parentItemId: IsNull()
+              }
+            });
+          }
+
           for (const item of items as any[]) {
+            const tType = item.transactionType || 'SALE';
+            const tReason = item.transactionReason || null;
+
+            // Check if there is an existing promo item to carry over
+            let matchedPromoItem: SaleItem | undefined = undefined;
+            if (isMerging && ['COMPLIMENTARY', 'FREE', 'TICKET'].includes(tType)) {
+              const matchIndex = existingPromoItems.findIndex(existing => 
+                existing.productId === Number(item.productId) && 
+                Math.abs(Number(existing.quantity) - Number(item.quantity)) < 0.001 && 
+                existing.transactionType === tType
+              );
+              if (matchIndex !== -1) {
+                matchedPromoItem = existingPromoItems[matchIndex];
+                existingPromoItems.splice(matchIndex, 1);
+              }
+            }
+
+            if (matchedPromoItem) {
+              matchedPromoItem.sale = savedSale;
+              matchedPromoItem.isPaid = savedSale.status === 'COMPLETED';
+              if (item.note) matchedPromoItem.note = item.note;
+              if (tReason) matchedPromoItem.transactionReason = tReason;
+              
+              const savedParent = await manager.save(SaleItem, matchedPromoItem);
+              saleItems.push(savedParent);
+
+              // Update its sub-items (extras) in the database
+              const subItems = await manager.find(SaleItem, {
+                where: {
+                  parentItemId: matchedPromoItem.id,
+                  sale: { id: In(mergeSaleIds) }
+                }
+              });
+              for (const subItem of subItems) {
+                subItem.sale = savedSale;
+                subItem.isPaid = savedSale.status === 'COMPLETED';
+                const savedSub = await manager.save(SaleItem, subItem);
+                saleItems.push(savedSub);
+              }
+              
+              continue;
+            }
             let rawSetMenu = null;
             if (!item.subItems || item.subItems.length === 0) {
               const rawProducts = await manager.query(`SELECT isSet FROM products WHERE id = ${item.productId}`);
@@ -919,9 +1036,6 @@ export class SalesService implements OnModuleInit {
               }
             }
 
-            const tType = item.transactionType || 'SALE';
-            const tReason = item.transactionReason || null;
-            
             // İşlem Tipi Yetki Kontrolleri
             if (addedByUserId && tType !== 'SALE') {
               const cached = getCachedPerms(addedByUserId);
@@ -969,7 +1083,7 @@ export class SalesService implements OnModuleInit {
               sale: savedSale,
               isPaid: savedSale.status === 'COMPLETED',
               addedByUserId: addedByUserId || (data as any).waiterId || (data as any).userId || undefined,
-              addedAt: new Date(),
+              addedAt: item.addedAt ? new Date(item.addedAt) : new Date(),
             });
             const savedParent = await manager.save(SaleItem, parentItem);
             saleItems.push(savedParent);
@@ -994,7 +1108,8 @@ export class SalesService implements OnModuleInit {
                   menuGroupId: String(subItem.menuGroupId || ''),
                   isMarshed: false,
                   sale: savedSale,
-                  isPaid: savedSale.status === 'COMPLETED'
+                  isPaid: savedSale.status === 'COMPLETED',
+                  addedAt: subItem.addedAt ? new Date(subItem.addedAt) : new Date()
                 });
                 const savedSub = await manager.save(SaleItem, newSub);
                 saleItems.push(savedSub);
@@ -1033,39 +1148,127 @@ export class SalesService implements OnModuleInit {
         // Tüm satış hareketleri Gün Sonu (endOfDay) alındığında
         // account_transactions tablosuna toplu olarak upsert edilir.
 
-        // Table Status update
+        // Map to keep track of paid items and their quantities
+        const paidQuantities = new Map<number, number>();
+        for (const item of (items || []) as any[]) {
+          if (item.id) {
+            paidQuantities.set(Number(item.id), Number(item.quantity));
+          }
+          if (item.subItems) {
+            for (const sub of item.subItems) {
+              if (sub.id) {
+                paidQuantities.set(Number(sub.id), Number(sub.quantity));
+              }
+            }
+          }
+        }
+
+        // Stock deduction & Old Order Cleanup
+        if (!mergeSaleIds || mergeSaleIds.length === 0) {
+          await this.deductStockForSale(savedSale, manager);
+        } else {
+          // SQL Server'da "Foreign Key" kısıtlaması nedeniyle hiyerarşik silme hatalarını (parentSaleId)
+          // önlemek için silinecek olan tüm adisyonlara yönelik olan (onlara bağlı olan çocukların) referanslarını temizliyoruz.
+          await manager.update(Sale, { parentSaleId: In(mergeSaleIds) }, { parentSaleId: null as any });
+
+          for (const oldId of mergeSaleIds) {
+            const oldSale = await manager.findOne(Sale, { where: { id: oldId }, relations: ['items'] });
+            if (oldSale) {
+              if (oldSale.items && oldSale.items.length > 0) {
+                const activeItems = oldSale.items.filter(i => i.status !== 'CANCELLED' && i.status !== 'REFUNDED');
+
+                if (activeItems.length > 0) {
+                  for (const oldItem of activeItems) {
+                    if (paidQuantities.has(oldItem.id)) {
+                      const paidQty = paidQuantities.get(oldItem.id) || 0;
+                      const remainingQty = Number(oldItem.quantity) - paidQty;
+
+                      if (remainingQty <= 0.001) {
+                        // Tamamen ödendi. Önce varsa alt ürünlerini (modifiers) silelim.
+                        await manager.delete(SaleItem, { parentItemId: oldItem.id });
+                        // Kendisini silelim.
+                        await manager.delete(SaleItem, oldItem.id);
+                      } else {
+                        // Kısmen ödendi. Miktarı düşürelim.
+                        oldItem.quantity = remainingQty;
+                        oldItem.total = Number((remainingQty * Number(oldItem.unitPrice) * Number(oldItem.saleTypeMultiplier)).toFixed(2));
+                        await manager.save(SaleItem, oldItem);
+
+                        // Alt ürünlerini (subItems/modifiers) de orantısal olarak düşürelim (varsa).
+                        const subItems = await manager.find(SaleItem, { where: { parentItemId: oldItem.id } });
+                        for (const sub of subItems) {
+                          if (paidQuantities.has(sub.id)) {
+                            const subPaidQty = paidQuantities.get(sub.id) || 0;
+                            const subRemainingQty = Number(sub.quantity) - subPaidQty;
+                            if (subRemainingQty <= 0.001) {
+                              await manager.delete(SaleItem, sub.id);
+                            } else {
+                              sub.quantity = subRemainingQty;
+                              sub.total = Number((subRemainingQty * Number(sub.unitPrice) * Number(sub.saleTypeMultiplier)).toFixed(2));
+                              await manager.save(SaleItem, sub);
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+
+              // Eski adisyonda aktif (ödenmemiş) ürün kalıp kalmadığını kontrol et
+              const remainingActiveItems = await manager.find(SaleItem, {
+                where: {
+                  sale: { id: oldSale.id },
+                  status: Not(In(['CANCELLED', 'REFUNDED']))
+                }
+              });
+
+              if (remainingActiveItems.length > 0) {
+                // Hâlâ ödenmemiş ürün var. Adisyonu silme, sadece toplam tutarını yeniden hesapla
+                await this.recalculateSaleTotals(oldSale.id, manager);
+              } else {
+                // Aktif ürün kalmadı. Adisyonu sil.
+                // Silmeden önce bu adisyondaki iptal/iade edilmiş satırları yeni adisyona taşı ki raporlardan silinmesin.
+                const cancelledOrRefundedItems = await manager.find(SaleItem, {
+                  where: {
+                    sale: { id: oldSale.id },
+                    status: In(['CANCELLED', 'REFUNDED'])
+                  }
+                });
+                if (cancelledOrRefundedItems.length > 0) {
+                  await manager.update(SaleItem, { id: In(cancelledOrRefundedItems.map(i => i.id)) }, { sale: { id: savedSale.id } });
+                }
+
+                await manager.delete(Sale, oldSale.id);
+              }
+            }
+          }
+        }
+
+        // Table Status & Totals update (Ödeme/Adisyon güncellemelerinden sonra yapılır)
         if (data.tableId) {
           const table = await manager.findOne(Table, { where: { id: data.tableId, isDeleted: false } });
           if (table) {
             const waiter = await manager.findOne(User, { where: { id: data.waiterId || (data as any).userId } });
             
-            // Masaya ait diğer aktif adisyonları kontrol et (şu an kapatılacak/birleştirilecek olanlar hariç)
-            const otherActiveSales = await manager.find(Sale, {
+            // Masaya ait güncel aktif adisyonları çek
+            const activeSalesAfter = await manager.find(Sale, {
               where: {
                 tableId: data.tableId,
-                status: In(['NEW', 'PREPARATION', 'READY', 'SERVED']),
-                id: mergeSaleIds && mergeSaleIds.length > 0 ? Not(In(mergeSaleIds)) : undefined
+                status: In(['NEW', 'PREPARATION', 'READY', 'SERVED'])
               },
               relations: ['items']
             });
 
-            // Yeni satış COMPLETED ise ve başka aktif adisyon yoksa masayı boşalt
-            const isTableEmpty = (savedSale.status === 'COMPLETED' && otherActiveSales.length === 0);
+            const isTableEmpty = (activeSalesAfter.length === 0);
             
-            // currentTotal hesapla
+            // Masanın toplam tutarını kalan aktif adisyonlardaki aktif ürünlerin toplamı olarak hesapla
             let newTotal = 0;
-            if (savedSale.status !== 'COMPLETED') {
-               // Yeni bir sipariş ekleniyorsa (veya sipariş güncelleniyorsa): mevcut toplam + yeni sipariş toplamı
-               const itemsTotal = (savedSale.items || []).reduce((sum, i: any) => sum + Number(i.total || 0), 0);
-               const effectiveTotal = itemsTotal > 0 ? itemsTotal : Number(savedSale.totalAmount || 0);
-               newTotal = Number(table.currentTotal || 0) + effectiveTotal;
-            } else {
-               // Bir ödeme alındıysa: kalan aktif adisyonların toplamı
-               newTotal = otherActiveSales.reduce((sum, s) => {
-                 const sTotal = (s.items || []).reduce((isum, i) => isum + Number(i.total || 0), 0);
-                 return sum + (sTotal > 0 ? sTotal : Number(s.totalAmount || 0));
-               }, 0);
-            }
+            activeSalesAfter.forEach(s => {
+              const activeCheckItems = (s.items || []).filter(i => i.status !== 'CANCELLED' && i.status !== 'REFUNDED');
+              const sTotal = activeCheckItems.reduce((sum, i) => sum + Number(i.total || 0), 0);
+              newTotal += sTotal;
+            });
 
             await manager.update(Table, data.tableId, {
               status: isTableEmpty ? 'BOŞ' : 'DOLU',
@@ -1076,38 +1279,6 @@ export class SalesService implements OnModuleInit {
               isBillRequested: false,
               tempName: isTableEmpty ? (null as any) : table.tempName
             });
-          }
-        }
-
-        // Stock deduction & Old Order Cleanup
-        if (!mergeSaleIds || mergeSaleIds.length === 0) {
-          await this.deductStockForSale(savedSale, manager);
-        } else {
-          // SQL Server'da "Foreign Key" kısıtlaması nedeniyle hiyerarşik silme hatalarını (parentSaleId)
-          // önlemek için silinecek olan tüm adisyonlara yönelik olan (onlara bağlı olan çocukların) referanslarını temizliyoruz.
-          if (mergeSaleIds && mergeSaleIds.length > 0) {
-            await manager.update(Sale, { parentSaleId: In(mergeSaleIds) }, { parentSaleId: null as any });
-          }
-
-          for (const oldId of mergeSaleIds) {
-            const oldSale = await manager.findOne(Sale, { where: { id: oldId }, relations: ['items'] });
-            if (oldSale) {
-              // SQL Server'da "IN ()" hatası almamak için dizi uzunluğu kontrolü
-              if (oldSale.items && oldSale.items.length > 0) {
-                // IPTAL veya IADE edilmiş ürünleri yeni adisyona taşıyoruz (raporlar için silinmemeli)
-                const cancelledOrRefunded = oldSale.items.filter(i => i.status === 'CANCELLED' || i.status === 'REFUNDED');
-                const activeItems = oldSale.items.filter(i => i.status !== 'CANCELLED' && i.status !== 'REFUNDED');
-
-                if (cancelledOrRefunded.length > 0) {
-                  await manager.update(SaleItem, { id: In(cancelledOrRefunded.map(i => i.id)) }, { sale: { id: savedSale.id } });
-                }
-
-                if (activeItems.length > 0) {
-                  await manager.delete(SaleItem, activeItems.map(i => i.id));
-                }
-              }
-              await manager.delete(Sale, oldId);
-            }
           }
         }
 
@@ -1137,8 +1308,8 @@ export class SalesService implements OnModuleInit {
           }).catch(() => {});
           try {
             await manager.query(`
-              INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId)
-              VALUES (GETDATE(), @0, 'DISCOUNT', @1, @2, @3, @4, @5)
+              INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId, businessDate)
+              VALUES (GETDATE(), @0, 'DISCOUNT', @1, @2, @3, @4, @5, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
             `, [data.waiterId || (data as any).userId || 0, savedSale.id, data.tableName, data.discountAmount, `İndirim uygulandı: %${discountRate.toFixed(1)}`, data.companyId || 1]);
           } catch { /* sessizce geç */ }
         }
@@ -1154,8 +1325,8 @@ export class SalesService implements OnModuleInit {
           }).catch(() => {});
           try {
             await manager.query(`
-              INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId)
-              VALUES (GETDATE(), @0, 'COMPLIMENTARY', @1, @2, @3, @4, @5)
+              INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId, businessDate)
+              VALUES (GETDATE(), @0, 'COMPLIMENTARY', @1, @2, @3, @4, @5, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
             `, [data.waiterId || (data as any).userId || 0, savedSale.id, data.tableName, 0, `İkram kaydedildi`, data.companyId || 1]);
           } catch { /* sessizce geç */ }
         }
@@ -1223,6 +1394,27 @@ export class SalesService implements OnModuleInit {
           }
         }
 
+        // ─── CARİ HESAP HAREKETİ — PARTNER Ödemeleri ───
+        if (fullSale.status === 'COMPLETED' && fullSale.paymentMethod === 'PARTNER' && fullSale.partnerId) {
+          try {
+            await this.financeService.create({
+              partnerId: fullSale.partnerId,
+              amount: Number(fullSale.totalAmount || 0),
+              type: 'INCOME',
+              category: 'Satış',
+              description: `POS Satış — Masa: ${fullSale.tableName || '-'} (Cari)`,
+              paymentMethod: 'CARI',
+              sourceType: 'SALE',
+              sourceId: savedSale.id,
+              createdAt: new Date(),
+              shiftId: fullSale.shiftId,
+              cashRegisterId: fullSale.cashRegisterId,
+            }, manager);
+          } catch (err) {
+            this.logger.error('Cari hesap hareketi oluşturulamadı (create):', err);
+          }
+        }
+
         // Bildirimler ECR başarılıysa (veya ECR bağlı değilse) buraya ulaşır
         this.kitchenGateway.notifySaleUpdate(fullSale);
         this.tablesService.clearCache();
@@ -1262,7 +1454,7 @@ export class SalesService implements OnModuleInit {
         this.kitchenGateway.server.emit('itemMarshed', {
           itemId: targetItem.id,
           saleId: item.sale?.id,
-          tableName: item.sale?.tableName,
+          tableName: item.sale?.tableName || item.sale?.table?.name,
           productId: targetItem.productId,
           isMarshed: true,
           saleType: targetItem.saleType
@@ -1281,8 +1473,8 @@ export class SalesService implements OnModuleInit {
 
       if (rawProduct && rawProduct.length > 0) {
         const printTableName = item.sale?.subCheckLabel
-          ? `${item.sale?.tableName} / ${item.sale.subCheckLabel}`
-          : item.sale?.tableName;
+          ? `${item.sale?.tableName || item.sale?.table?.name || 'Paket'} / ${item.sale.subCheckLabel}`
+          : (item.sale?.tableName || item.sale?.table?.name || 'Paket');
 
         const displayName = targetItem.saleType && targetItem.saleType !== 'STANDARD'
           ? `${rawProduct[0].name} - ${targetItem.saleType === 'HALF' ? 'Yarım' : 'Duble'}`
@@ -1399,8 +1591,8 @@ export class SalesService implements OnModuleInit {
       // Audit Log
       try {
         await manager.query(`
-          INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId)
-          VALUES (GETDATE(), @0, 'TRANSACTION_TYPE_CHANGE', @1, @2, @3, @4, @5)
+          INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId, businessDate)
+          VALUES (GETDATE(), @0, 'TRANSACTION_TYPE_CHANGE', @1, @2, @3, @4, @5, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
         `, [userId, item.sale?.id, item.sale?.tableName, diff, `İşlem tipi değiştirildi: ${type} (${reason || ''})`, (item.sale as any)?.companyId || 1]);
       } catch {}
 
@@ -1557,6 +1749,27 @@ export class SalesService implements OnModuleInit {
           throw new Error(`Yazarkasa RED: ${ecrResult.error || 'Bilinmeyen hata'}`);
         }
       }
+
+      // ─── CARİ HESAP HAREKETİ — PARTNER / OPEN Ödemeleri ───
+      if ((paymentMethod === 'PARTNER' || paymentMethod === 'OPEN') && partnerId) {
+        try {
+          await this.financeService.create({
+            partnerId: partnerId,
+            amount: Number(totalCheckoutAmount || 0),
+            type: 'INCOME',
+            category: 'Satış',
+            description: `POS Kısmi Ödeme — Masa: ${table?.name || '-'} (Cari)`,
+            paymentMethod: 'CARI',
+            sourceType: 'SALE',
+            sourceId: savedCheckoutSale.id,
+            createdAt: new Date(),
+            shiftId: savedCheckoutSale.shiftId || firstItemSale?.shiftId,
+            cashRegisterId: savedCheckoutSale.cashRegisterId || firstItemSale?.cashRegisterId,
+          }, manager);
+        } catch (err) {
+          this.logger.error('Cari hesap hareketi oluşturulamadı (payBatchItems):', err);
+        }
+      }
     });
 
     if (itemIds && itemIds.length > 0) {
@@ -1641,7 +1854,7 @@ export class SalesService implements OnModuleInit {
               if (sale.items?.length) {
                 for (const item of sale.items) {
                   if (!item.productId || item.status === 'CANCELLED' || item.status === 'REFUNDED') continue;
-                  const recipeMultiplier = item.saleTypeMultiplier ? Number(item.saleTypeMultiplier) : 1;
+                  const recipeMultiplier = await this.getRecipeMultiplier(item.saleType, manager);
                   await this.stockMovementsService.createReverseConsumption(
                     item.productId,
                     Number(item.quantity),
@@ -1684,8 +1897,8 @@ export class SalesService implements OnModuleInit {
     // Denetim logu
     try {
       await this.saleRepository.query(`
-        INSERT INTO audit_logs (timestamp, actionType, tableNo, description, companyId)
-        VALUES (GETDATE(), 'ADISYON_CANCEL', @0, @1, 1)
+        INSERT INTO audit_logs (timestamp, actionType, tableNo, description, companyId, businessDate)
+        VALUES (GETDATE(), 'ADISYON_CANCEL', @0, @1, 1, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
       `, [String(tableId), `Masa #${tableId} toplu adisyon iptali`]);
     } catch { /* sessiz geç */ }
   }
@@ -1722,7 +1935,7 @@ export class SalesService implements OnModuleInit {
         try {
           for (const item of sale.items) {
             if (!item.productId || item.status === 'CANCELLED' || item.status === 'REFUNDED') continue;
-            const recipeMultiplier = item.saleTypeMultiplier ? Number(item.saleTypeMultiplier) : 1;
+            const recipeMultiplier = await this.getRecipeMultiplier(item.saleType, manager);
             await this.stockMovementsService.createReverseConsumption(
               item.productId,
               Number(item.quantity),
@@ -1743,22 +1956,11 @@ export class SalesService implements OnModuleInit {
       if (sale.tableId) {
         await this.recalculateTableStatusAndCleanup(sale.tableId, manager);
       }
-
-      // Audit Log
-      try {
-        await manager.query(`
-          INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId)
-          VALUES (GETDATE(), @0, 'SALE_CANCEL', @1, @2, @3, @4, @5)
-        `, [userId, id, sale.tableName, sale.totalAmount, reason || 'Adisyon iptal edildi', sale.companyId || 1]);
-      } catch {}
-
-      this.kitchenGateway.notifySaleUpdate(updated as any);
-      this.tablesService.clearCache();
       return updated;
     });
   }
 
-  async cancelItem(itemId: number, reason: string, userId: number): Promise<SaleItem> {
+  async cancelItem(itemId: number, reason: string, userId: number, quantity?: number): Promise<SaleItem> {
     if (userId) {
       const cached = getCachedPerms(userId);
       const isSuper = cached?.roleName === 'ADMIN' || cached?.roleName === 'ADMINISTRATOR';
@@ -1777,33 +1979,138 @@ export class SalesService implements OnModuleInit {
       throw new BadRequestException('Set menü içerikleri tek tek iptal edilemez. Lütfen ana menüyü iptal ediniz.');
     }
 
-    // isMarshed check removed: garson mutfağa gönderilmiş ürünü de iptal edebilir
-    // Mutfak ekranına iptal bildirimi gidecek
-
-    item.status = 'CANCELLED';
-    item.cancelReason = reason;
-    (item as any).cancelledByUserId = userId;
-
-    const updated = await this.saleItemRepository.save(item);
-
+    const cancelQty = Number(quantity || 0);
+    const originalQty = Number(item.quantity);
     const childItems = await this.saleItemRepository.find({ where: { parentItemId: item.id, status: 'ACTIVE' } });
-    for (const child of childItems) {
-      child.status = 'CANCELLED';
-      child.cancelReason = reason;
-      (child as any).cancelledByUserId = userId;
-      await this.saleItemRepository.save(child);
+
+    let itemToCancel = item;
+
+    if (cancelQty > 0 && cancelQty < originalQty) {
+      // Kısmi İptal - Split İşlemi
+      const remainingQty = originalQty - cancelQty;
+      const originalRatio = remainingQty / originalQty;
+      const cancelRatio = cancelQty / originalQty;
+
+      const newDiscountAmount = Number((Number(item.discountAmount) * cancelRatio).toFixed(2));
+      item.discountAmount = Number((Number(item.discountAmount) * originalRatio).toFixed(2));
+      item.quantity = remainingQty;
+      item.total = Number((remainingQty * Number(item.unitPrice) * Number(item.saleTypeMultiplier) - item.discountAmount).toFixed(2));
+      
+      await this.saleItemRepository.save(item);
+
+      // İptal edilen kısım için yeni bir SaleItem oluştur
+      const newItem = this.saleItemRepository.create({
+        product: { id: item.productId } as any,
+        productId: item.productId,
+        quantity: cancelQty,
+        unitPrice: item.unitPrice,
+        costPrice: item.costPrice,
+        note: item.note,
+        isPaid: item.isPaid,
+        isWaiting: item.isWaiting,
+        isMarshed: item.isMarshed,
+        isReady: item.isReady,
+        status: 'CANCELLED',
+        cancelReason: reason,
+        cancelledByUserId: userId,
+        parentItemId: item.parentItemId,
+        menuGroupId: item.menuGroupId,
+        saleType: item.saleType,
+        saleTypeMultiplier: item.saleTypeMultiplier,
+        variationId: item.variationId,
+        variationName: item.variationName,
+        transactionType: item.transactionType,
+        transactionReason: item.transactionReason,
+        addedByUserId: item.addedByUserId,
+        addedAt: item.addedAt,
+        discountRate: item.discountRate,
+        discountAmount: newDiscountAmount,
+        total: Number((cancelQty * Number(item.unitPrice) * Number(item.saleTypeMultiplier) - newDiscountAmount).toFixed(2)),
+        sale: item.sale,
+        isSentToPrinter: item.isSentToPrinter,
+        sentOutputProfileId: item.sentOutputProfileId,
+        productTypeName: item.productTypeName
+      }) as any;
+
+      itemToCancel = await this.saleItemRepository.save(newItem);
+
+      // Alt kalemleri de orantısal böl
+      for (const child of childItems) {
+        const childCancelQty = Number((Number(child.quantity) * cancelRatio).toFixed(2));
+        const childRemainingQty = Number(child.quantity) - childCancelQty;
+
+        if (childRemainingQty > 0) {
+          child.quantity = childRemainingQty;
+          child.total = Number((childRemainingQty * Number(child.unitPrice) * Number(child.saleTypeMultiplier)).toFixed(2));
+          await this.saleItemRepository.save(child);
+
+          const newChild = this.saleItemRepository.create({
+            product: { id: child.productId } as any,
+            productId: child.productId,
+            quantity: childCancelQty,
+            unitPrice: child.unitPrice,
+            costPrice: child.costPrice,
+            note: child.note,
+            isPaid: child.isPaid,
+            isWaiting: child.isWaiting,
+            isMarshed: child.isMarshed,
+            isReady: child.isReady,
+            status: 'CANCELLED',
+            cancelReason: reason,
+            cancelledByUserId: userId,
+            parentItemId: itemToCancel.id,
+            menuGroupId: child.menuGroupId,
+            saleType: child.saleType,
+            saleTypeMultiplier: child.saleTypeMultiplier,
+            variationId: child.variationId,
+            variationName: child.variationName,
+            transactionType: child.transactionType,
+            transactionReason: child.transactionReason,
+            addedByUserId: child.addedByUserId,
+            addedAt: child.addedAt,
+            discountRate: child.discountRate,
+            discountAmount: 0,
+            total: Number((childCancelQty * Number(child.unitPrice) * Number(child.saleTypeMultiplier)).toFixed(2)),
+            sale: child.sale,
+            isSentToPrinter: child.isSentToPrinter,
+            sentOutputProfileId: child.sentOutputProfileId,
+            productTypeName: child.productTypeName
+          }) as any;
+          await this.saleItemRepository.save(newChild);
+        } else {
+          child.status = 'CANCELLED';
+          child.cancelReason = reason;
+          (child as any).cancelledByUserId = userId;
+          child.parentItemId = itemToCancel.id;
+          await this.saleItemRepository.save(child);
+        }
+      }
+    } else {
+      // Tam İptal
+      item.status = 'CANCELLED';
+      item.cancelReason = reason;
+      (item as any).cancelledByUserId = userId;
+      await this.saleItemRepository.save(item);
+
+      for (const child of childItems) {
+        child.status = 'CANCELLED';
+        child.cancelReason = reason;
+        (child as any).cancelledByUserId = userId;
+        await this.saleItemRepository.save(child);
+      }
     }
 
     // Mutfak çıktısı (Parametreye bağlı)
     const printOnCancel = await this.parametersService.getValue('printer', 'print_on_cancel');
     if (printOnCancel === 'true') {
       const fullItem = await this.saleItemRepository.findOne({
-        where: { id: item.id },
+        where: { id: itemToCancel.id },
         relations: ['sale', 'sale.table', 'sale.table.zone', 'sale.waiter', 'product', 'product.outputProfile']
       });
       if (fullItem) {
         await this.printersService.printKitchen({
           tableName: fullItem.sale?.tableName || fullItem.sale?.table?.name,
+          subCheckLabel: fullItem.sale?.subCheckLabel,
           waiterName: fullItem.sale?.waiter ? `${fullItem.sale.waiter.firstName} ${fullItem.sale.waiter.lastName}` : 'Garson',
           zoneId: fullItem.sale?.table?.zone?.id,
           items: [fullItem]
@@ -1817,24 +2124,24 @@ export class SalesService implements OnModuleInit {
     // Denetim logu
     try {
       await this.saleRepository.query(`
-        INSERT INTO audit_logs (timestamp, userId, actionType, saleId, productName, amount, description, companyId)
-        VALUES (GETDATE(), @0, 'ITEM_CANCEL', @1, @2, @3, @4, 1)
-      `, [userId, item.sale?.id, `Ürün #${item.productId}`, item.total, reason || 'İptal edildi']);
+        INSERT INTO audit_logs (timestamp, userId, actionType, saleId, productName, amount, description, companyId, businessDate)
+        VALUES (GETDATE(), @0, 'ITEM_CANCEL', @1, @2, @3, @4, 1, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
+      `, [userId, itemToCancel.sale?.id, `Ürün #${itemToCancel.productId}`, itemToCancel.total, reason || 'İptal edildi']);
     } catch { /* audit log hatası sessizce geç */ }
 
     // Yeni: Reçete bazlı stok geri yükleme (StockMovement)
     if (isStockReverseEnabled) {
       try {
-        const recipeMultiplier = item.saleTypeMultiplier ? Number(item.saleTypeMultiplier) : 1;
+        const recipeMultiplier = await this.getRecipeMultiplier(itemToCancel.saleType, this.saleRepository.manager);
         await this.stockMovementsService.createReverseConsumption(
-          item.productId,
-          Number(item.quantity),
+          itemToCancel.productId,
+          Number(itemToCancel.quantity),
           recipeMultiplier,
           'SALE',
-          item.sale?.id,
+          itemToCancel.sale?.id,
           userId,
           this.saleRepository.manager,
-          item.variationId || undefined,
+          itemToCancel.variationId || undefined,
         );
       } catch (err) {
         this.logger.warn('StockMovement cancel reverse error (non-fatal):', err?.message);
@@ -1844,55 +2151,55 @@ export class SalesService implements OnModuleInit {
     // 12.md: Ürün İşlem Geçmişi Kaydı (İptal)
     try {
         await this.productsService.recordTransaction({
-            productId: item.productId,
-            variationId: item.variationId || undefined,
-            variationName: item.variationName || undefined,
-            productName: `[IPTAL] ${item.productId}`, // Item table sometimes doesn't have name
-            qty: -Number(item.quantity),
-            price: Number(item.total),
+            productId: itemToCancel.productId,
+            variationId: itemToCancel.variationId || undefined,
+            variationName: itemToCancel.variationName || undefined,
+            productName: `[IPTAL] ${itemToCancel.productId}`,
+            qty: -Number(itemToCancel.quantity),
+            price: Number(itemToCancel.total),
             type: 'void',
             status: 'completed',
-            orderId: item.sale?.id,
+            orderId: itemToCancel.sale?.id,
             userId: userId,
-            businessDate: item.sale?.createdAt || new Date(),
+            businessDate: itemToCancel.sale?.createdAt || new Date(),
         });
     } catch {}
 
     // 13. Adisyon ve Masa durumlarını güncelle (Tutarlar & Askıda kalma kontrolü)
-    if (item.sale) {
+    if (itemToCancel.sale) {
       const remainingItems = await this.saleItemRepository.find({
-        where: { sale: { id: item.sale.id } }
+        where: { sale: { id: itemToCancel.sale.id } }
       });
       const activeItems = remainingItems.filter(i => i.status !== 'CANCELLED' && i.status !== 'REFUNDED');
       const newTotalAmount = activeItems.reduce((sum, i) => sum + Number(i.total || (Number(i.unitPrice) * Number(i.quantity))), 0);
 
       const manager = this.saleRepository.manager;
       if (activeItems.length === 0) {
-        await manager.update(Sale, item.sale.id, { status: 'CANCELLED', totalAmount: 0 });
-        if (item.sale.tableId) {
-          await this.recalculateTableStatusAndCleanup(item.sale.tableId, manager);
-          const freshTable = await manager.findOne(Table, { where: { id: item.sale.tableId } });
+        await manager.update(Sale, itemToCancel.sale.id, { status: 'CANCELLED', totalAmount: 0 });
+        if (itemToCancel.sale.tableId) {
+          await this.recalculateTableStatusAndCleanup(itemToCancel.sale.tableId, manager);
+          const freshTable = await manager.findOne(Table, { where: { id: itemToCancel.sale.tableId } });
           if (freshTable && freshTable.status === 'BOŞ') {
             this.alertsService.trigger('SALE_CANCELLED', {
-              tableId: item.sale.tableId,
+              tableId: itemToCancel.sale.tableId,
               description: `Tüm ürünler iptal edildiği için masa adisyonu otomatik kapatıldı.`
             }).catch(() => {});
           }
         }
       } else {
-        await manager.update(Sale, item.sale.id, { totalAmount: newTotalAmount });
-        if (item.sale.tableId) {
-          await this.recalculateTableStatusAndCleanup(item.sale.tableId, manager);
+        await manager.update(Sale, itemToCancel.sale.id, { totalAmount: newTotalAmount });
+        if (itemToCancel.sale.tableId) {
+          await this.recalculateTableStatusAndCleanup(itemToCancel.sale.tableId, manager);
         }
       }
     }
 
-    this.kitchenGateway.notifySaleUpdate(item.sale as any);
+    this.kitchenGateway.notifySaleUpdate(itemToCancel.sale as any);
     this.tablesService.clearCache();
-    return updated;
+    return itemToCancel;
   }
 
-  async refundItem(itemId: number, reason: string, userId: number): Promise<SaleItem> {
+  async refundItem(itemId: number, reason: string, userId: number, quantity?: number): Promise<SaleItem> {
     if (userId) {
       const cached = getCachedPerms(userId);
       const isSuper = cached?.roleName === 'ADMIN' || cached?.roleName === 'ADMINISTRATOR';
@@ -1910,30 +2217,138 @@ export class SalesService implements OnModuleInit {
       throw new BadRequestException('Set menü içerikleri tek tek iade edilemez. Lütfen ana menüyü iade ediniz.');
     }
 
-    item.status = 'REFUNDED';
-    item.refundReason = reason;
-    (item as any).refundedByUserId = userId;
-
-    const updated = await this.saleItemRepository.save(item);
-
+    const refundQty = Number(quantity || 0);
+    const originalQty = Number(item.quantity);
     const childItems = await this.saleItemRepository.find({ where: { parentItemId: item.id, status: 'ACTIVE' } });
-    for (const child of childItems) {
-      child.status = 'REFUNDED';
-      child.refundReason = reason;
-      (child as any).refundedByUserId = userId;
-      await this.saleItemRepository.save(child);
+
+    let itemToRefund = item;
+
+    if (refundQty > 0 && refundQty < originalQty) {
+      // Kısmi İade - Split İşlemi
+      const remainingQty = originalQty - refundQty;
+      const originalRatio = remainingQty / originalQty;
+      const refundRatio = refundQty / originalQty;
+
+      const newDiscountAmount = Number((Number(item.discountAmount) * refundRatio).toFixed(2));
+      item.discountAmount = Number((Number(item.discountAmount) * originalRatio).toFixed(2));
+      item.quantity = remainingQty;
+      item.total = Number((remainingQty * Number(item.unitPrice) * Number(item.saleTypeMultiplier) - item.discountAmount).toFixed(2));
+      
+      await this.saleItemRepository.save(item);
+
+      // İade edilen kısım için yeni bir SaleItem oluştur
+      const newItem = this.saleItemRepository.create({
+        product: { id: item.productId } as any,
+        productId: item.productId,
+        quantity: refundQty,
+        unitPrice: item.unitPrice,
+        costPrice: item.costPrice,
+        note: item.note,
+        isPaid: item.isPaid,
+        isWaiting: item.isWaiting,
+        isMarshed: item.isMarshed,
+        isReady: item.isReady,
+        status: 'REFUNDED',
+        refundReason: reason,
+        refundedByUserId: userId,
+        parentItemId: item.parentItemId,
+        menuGroupId: item.menuGroupId,
+        saleType: item.saleType,
+        saleTypeMultiplier: item.saleTypeMultiplier,
+        variationId: item.variationId,
+        variationName: item.variationName,
+        transactionType: item.transactionType,
+        transactionReason: item.transactionReason,
+        addedByUserId: item.addedByUserId,
+        addedAt: item.addedAt,
+        discountRate: item.discountRate,
+        discountAmount: newDiscountAmount,
+        total: Number((refundQty * Number(item.unitPrice) * Number(item.saleTypeMultiplier) - newDiscountAmount).toFixed(2)),
+        sale: item.sale,
+        isSentToPrinter: item.isSentToPrinter,
+        sentOutputProfileId: item.sentOutputProfileId,
+        productTypeName: item.productTypeName
+      }) as any;
+
+      itemToRefund = await this.saleItemRepository.save(newItem);
+
+      // Alt kalemleri de orantısal böl
+      for (const child of childItems) {
+        const childRefundQty = Number((Number(child.quantity) * refundRatio).toFixed(2));
+        const childRemainingQty = Number(child.quantity) - childRefundQty;
+
+        if (childRemainingQty > 0) {
+          child.quantity = childRemainingQty;
+          child.total = Number((childRemainingQty * Number(child.unitPrice) * Number(child.saleTypeMultiplier)).toFixed(2));
+          await this.saleItemRepository.save(child);
+
+          const newChild = this.saleItemRepository.create({
+            product: { id: child.productId } as any,
+            productId: child.productId,
+            quantity: childRefundQty,
+            unitPrice: child.unitPrice,
+            costPrice: child.costPrice,
+            note: child.note,
+            isPaid: child.isPaid,
+            isWaiting: child.isWaiting,
+            isMarshed: child.isMarshed,
+            isReady: child.isReady,
+            status: 'REFUNDED',
+            refundReason: reason,
+            refundedByUserId: userId,
+            parentItemId: itemToRefund.id,
+            menuGroupId: child.menuGroupId,
+            saleType: child.saleType,
+            saleTypeMultiplier: child.saleTypeMultiplier,
+            variationId: child.variationId,
+            variationName: child.variationName,
+            transactionType: child.transactionType,
+            transactionReason: child.transactionReason,
+            addedByUserId: child.addedByUserId,
+            addedAt: child.addedAt,
+            discountRate: child.discountRate,
+            discountAmount: 0,
+            total: Number((childRefundQty * Number(child.unitPrice) * Number(child.saleTypeMultiplier)).toFixed(2)),
+            sale: child.sale,
+            isSentToPrinter: child.isSentToPrinter,
+            sentOutputProfileId: child.sentOutputProfileId,
+            productTypeName: child.productTypeName
+          }) as any;
+          await this.saleItemRepository.save(newChild);
+        } else {
+          child.status = 'REFUNDED';
+          child.refundReason = reason;
+          (child as any).refundedByUserId = userId;
+          child.parentItemId = itemToRefund.id;
+          await this.saleItemRepository.save(child);
+        }
+      }
+    } else {
+      // Tam İade
+      item.status = 'REFUNDED';
+      item.refundReason = reason;
+      (item as any).refundedByUserId = userId;
+      await this.saleItemRepository.save(item);
+
+      for (const child of childItems) {
+        child.status = 'REFUNDED';
+        child.refundReason = reason;
+        (child as any).refundedByUserId = userId;
+        await this.saleItemRepository.save(child);
+      }
     }
 
     // Mutfak çıktısı (Parametreye bağlı)
     const printOnRefund = await this.parametersService.getValue('printer', 'print_on_refund');
     if (printOnRefund === 'true') {
       const fullItem = await this.saleItemRepository.findOne({
-        where: { id: item.id },
+        where: { id: itemToRefund.id },
         relations: ['sale', 'sale.table', 'sale.table.zone', 'sale.waiter', 'product', 'product.outputProfile']
       });
       if (fullItem) {
         await this.printersService.printKitchen({
           tableName: fullItem.sale?.tableName || fullItem.sale?.table?.name,
+          subCheckLabel: fullItem.sale?.subCheckLabel,
           waiterName: fullItem.sale?.waiter ? `${fullItem.sale.waiter.firstName} ${fullItem.sale.waiter.lastName}` : 'Garson',
           zoneId: fullItem.sale?.table?.zone?.id,
           items: [fullItem]
@@ -1944,17 +2359,17 @@ export class SalesService implements OnModuleInit {
     // Denetim logu
     try {
       await this.saleRepository.query(`
-        INSERT INTO audit_logs (timestamp, userId, actionType, saleId, productName, amount, description, companyId)
-        VALUES (GETDATE(), @0, 'ITEM_REFUND', @1, @2, @3, @4, 1)
-      `, [userId, item.sale?.id, `Ürün #${item.productId}`, item.total, reason || 'İade edildi']);
+        INSERT INTO audit_logs (timestamp, userId, actionType, saleId, productName, amount, description, companyId, businessDate)
+        VALUES (GETDATE(), @0, 'ITEM_REFUND', @1, @2, @3, @4, 1, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
+      `, [userId, itemToRefund.sale?.id, `Ürün #${itemToRefund.productId}`, itemToRefund.total, reason || 'İade edildi']); // Note: keep user string or close to original
     } catch { /* audit log hatası sessizce geç */ }
 
     // KDS/Yazıcıya iade bildirimi
     this.kitchenGateway.server.emit('itemRefunded', {
-      itemId: item.id,
-      saleId: item.sale?.id,
-      tableName: item.sale?.tableName,
-      productId: item.productId,
+      itemId: itemToRefund.id,
+      saleId: itemToRefund.sale?.id,
+      tableName: itemToRefund.sale?.tableName,
+      productId: itemToRefund.productId,
       status: 'REFUNDED',
     });
 
@@ -1962,47 +2377,45 @@ export class SalesService implements OnModuleInit {
     const isRefundReverseEnabled = await this.checkStockReverseParam('refund');
     if (isRefundReverseEnabled) {
       try {
-        const recipeMultiplier = item.saleTypeMultiplier ? Number(item.saleTypeMultiplier) : 1;
+        const recipeMultiplier = await this.getRecipeMultiplier(itemToRefund.saleType, this.saleRepository.manager);
         await this.stockMovementsService.createReverseConsumption(
-          item.productId,
-          Number(item.quantity),
+          itemToRefund.productId,
+          Number(itemToRefund.quantity),
           recipeMultiplier,
           'SALE',
-          item.sale?.id,
+          itemToRefund.sale?.id,
           userId,
           this.saleRepository.manager,
-          item.variationId || undefined,
+          itemToRefund.variationId || undefined,
         );
       } catch (err) {
         this.logger.warn('StockMovement refund item reverse error (non-fatal):', err?.message);
       }
     }
-
-    if (item.sale) {
+    if (itemToRefund.sale) {
       const remainingItems = await this.saleItemRepository.find({
-        where: { sale: { id: item.sale.id } }
+        where: { sale: { id: itemToRefund.sale.id } }
       });
       const activeItems = remainingItems.filter(i => i.status !== 'CANCELLED' && i.status !== 'REFUNDED');
       const newTotalAmount = activeItems.reduce((sum, i) => sum + Number(i.total || (Number(i.unitPrice) * Number(i.quantity))), 0);
 
       const manager = this.saleRepository.manager;
       if (activeItems.length === 0) {
-        await manager.update(Sale, item.sale.id, { status: 'CANCELLED', totalAmount: 0 });
-        if (item.sale.tableId) {
-          await this.recalculateTableStatusAndCleanup(item.sale.tableId, manager);
+        await manager.update(Sale, itemToRefund.sale.id, { status: 'CANCELLED', totalAmount: 0 });
+        if (itemToRefund.sale.tableId) {
+          await this.recalculateTableStatusAndCleanup(itemToRefund.sale.tableId, manager);
         }
       } else {
-        await manager.update(Sale, item.sale.id, { totalAmount: newTotalAmount });
-        if (item.sale.tableId) {
-          await this.recalculateTableStatusAndCleanup(item.sale.tableId, manager);
+        await manager.update(Sale, itemToRefund.sale.id, { totalAmount: newTotalAmount });
+        if (itemToRefund.sale.tableId) {
+          await this.recalculateTableStatusAndCleanup(itemToRefund.sale.tableId, manager);
         }
       }
-      this.kitchenGateway.notifySaleUpdate(item.sale as any);
+      this.kitchenGateway.notifySaleUpdate(itemToRefund.sale as any);
       this.tablesService.clearCache();
     }
 
-
-    return updated;
+    return itemToRefund;
   }
 
   async refundSale(saleId: number, reason: string, userId: number): Promise<Sale> {
@@ -2043,6 +2456,7 @@ export class SalesService implements OnModuleInit {
         const first = fullItems[0];
         await this.printersService.printKitchen({
           tableName: first.sale?.tableName || first.sale?.table?.name,
+          subCheckLabel: first.sale?.subCheckLabel,
           waiterName: first.sale?.waiter ? `${first.sale.waiter.firstName} ${first.sale.waiter.lastName}` : 'Garson',
           zoneId: first.sale?.table?.zone?.id,
           items: fullItems
@@ -2053,8 +2467,8 @@ export class SalesService implements OnModuleInit {
     // Denetim logu
     try {
       await this.saleRepository.query(`
-        INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId)
-        VALUES (GETDATE(), @0, 'SALE_REFUND', @1, @2, @3, @4, 1)
+        INSERT INTO audit_logs (timestamp, userId, actionType, saleId, tableNo, amount, description, companyId, businessDate)
+        VALUES (GETDATE(), @0, 'SALE_REFUND', @1, @2, @3, @4, 1, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
       `, [userId, saleId, sale.tableName, sale.totalAmount, reason || 'Tam adisyon iadesi']);
     } catch { /* sessizce geç */ }
 
@@ -2065,7 +2479,7 @@ export class SalesService implements OnModuleInit {
         if (sale.items?.length) {
           for (const item of sale.items) {
             if (!item.productId) continue;
-            const recipeMultiplier = item.saleTypeMultiplier ? Number(item.saleTypeMultiplier) : 1;
+            const recipeMultiplier = await this.getRecipeMultiplier(item.saleType, this.saleRepository.manager);
             await this.stockMovementsService.createReverseConsumption(
               item.productId,
               Number(item.quantity),
@@ -2096,7 +2510,7 @@ export class SalesService implements OnModuleInit {
     if (!saleType || saleType === 'STANDARD') return 1.0;
     const paramKey = saleType === 'HALF' ? 'half_recipe_multiplier' : 'double_recipe_multiplier';
     const result = await manager.query(
-      `SELECT value FROM system_parameters WHERE [module] = 'pos' AND [key] = '${paramKey}'`
+      `SELECT value FROM system_parameters WHERE [module] = 'half_double' AND [key] = '${paramKey}'`
     );
     return result[0]?.value ? Number(result[0].value) : 1.0;
   }
@@ -2375,8 +2789,8 @@ export class SalesService implements OnModuleInit {
                   throw new BadRequestException('Sipariş alma yetkiniz bulunmamaktadır.');
               }
 
-              if (sale.table?.isBillRequested && !extraPerms.includes('OP:ORDER_AFTER_BILL')) {
-                  throw new BadRequestException('Adisyon zaten yazdırılmış. Yeni ürün eklemek için yetkiniz yetersiz veya masa geri açılmalıdır.');
+              if ((sale.isBillRequested || sale.table?.isBillRequested) && !extraPerms.includes('OP:ORDER_AFTER_BILL')) {
+                  throw new BadRequestException('Bu adisyon veya masa zaten yazdırılmış. Yeni ürün eklemek için yetkiniz yetersiz.');
               }
 
               const waitersCanOrderToAnyTableVal = await this.parametersService.getValue('pos', 'waiters_can_order_to_any_table');
@@ -2769,6 +3183,13 @@ export class SalesService implements OnModuleInit {
 
     // Sadece kök adisyonları dön (alt adisyonlar zaten subChecks relation'ında)
     const rootSales = sales.filter(s => !s.parentSaleId);
+
+    // Kök adisyonların alt adisyonlarından iptal edilmiş veya tamamlanmış olanları filtrele
+    rootSales.forEach(s => {
+      if (s.subChecks) {
+        s.subChecks = s.subChecks.filter(sub => ['NEW', 'PREPARATION', 'READY', 'SERVED'].includes(sub.status));
+      }
+    });
 
     // Product bilgilerini map et
     const allSales = [...rootSales];
@@ -3351,6 +3772,10 @@ export class SalesService implements OnModuleInit {
       });
       if (!sourceSale) throw new NotFoundException('Kaynak adisyon bulunamadı.');
 
+      if (sourceSale.status === 'COMPLETED' || sourceSale.status === 'CANCELLED') {
+        throw new BadRequestException('Ödenmiş, kapanmış veya iptal edilmiş adisyondan aktarım yapılamaz.');
+      }
+
       let targetSale: Sale;
 
       if (body.targetSubCheckId === 'NEW') {
@@ -3390,6 +3815,10 @@ export class SalesService implements OnModuleInit {
         }) as Sale;
         if (!targetSale) throw new NotFoundException('Hedef adisyon bulunamadı.');
 
+        if (targetSale.status === 'COMPLETED' || targetSale.status === 'CANCELLED') {
+          throw new BadRequestException('Ödenmiş, kapanmış veya iptal edilmiş adisyona aktarım yapılamaz.');
+        }
+
         // Aynı masa kontrolü
         if (sourceSale.tableId !== targetSale.tableId) {
           throw new BadRequestException('Masa içi taşıma sadece aynı masanın adisyonları arasında yapılabilir.');
@@ -3401,6 +3830,11 @@ export class SalesService implements OnModuleInit {
         where: { id: In(body.itemIds), sale: { id: body.sourceSubCheckId } },
       });
       if (selectedItems.length === 0) throw new BadRequestException('Taşınacak ürün bulunamadı.');
+
+      const hasPaidItems = selectedItems.some(i => i.isPaid);
+      if (hasPaidItems) {
+        throw new BadRequestException('Ödenmiş ürünler aktarılamaz.');
+      }
 
       const allItemIds = new Set(body.itemIds);
       for (const item of selectedItems) {
@@ -3728,6 +4162,7 @@ export class SalesService implements OnModuleInit {
       const cleanTarget = await manager.findOne(Sale, { where: { id: targetSubSale.id }, relations: ['items'] });
       if (cleanSource) this.kitchenGateway.notifySaleUpdate(cleanSource);
       if (cleanTarget) this.kitchenGateway.notifySaleUpdate(cleanTarget);
+      this.tablesService.clearCache();
 
       return {
         success: true,
@@ -4088,6 +4523,31 @@ export class SalesService implements OnModuleInit {
     if (table) {
       const isTableEmpty = activeSales.length === 0 || newTableTotal === 0;
       
+      if (isTableEmpty && activeSales.length > 0) {
+        // Masa boşalıyor ama veritabanında kapatılmamış aktif adisyonlar (ve dolayısıyla ikram/bedelsiz ürünler) var.
+        // Bunları 'COMPLETED' statüsüne çekip ürünleri isPaid = true yapıyoruz ki rapora yansısınlar.
+        for (const sale of activeSales) {
+          const activeItems = await manager.find(SaleItem, {
+            where: {
+              sale: { id: sale.id },
+              status: Not(In(['CANCELLED', 'REFUNDED']))
+            }
+          });
+
+          if (activeItems.length > 0) {
+            for (const item of activeItems) {
+              item.isPaid = true;
+              await manager.save(SaleItem, item);
+            }
+            await manager.update(Sale, sale.id, { status: 'COMPLETED' });
+          } else {
+            // Hiç aktif ürün barındırmayan boş adisyonları temizle
+            await manager.update(Sale, { parentSaleId: sale.id }, { parentSaleId: null as any });
+            await manager.delete(Sale, sale.id);
+          }
+        }
+      }
+
       await manager.update(Table, tableId, {
         status: isTableEmpty ? 'BOŞ' : 'DOLU',
         currentTotal: Number(newTableTotal.toFixed(2)),

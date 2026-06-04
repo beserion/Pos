@@ -2,12 +2,15 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProductType } from './product-type.entity';
+import { Product } from '../products/product.entity';
 
 @Injectable()
 export class ProductTypesService {
   constructor(
     @InjectRepository(ProductType)
     private readonly repo: Repository<ProductType>,
+    @InjectRepository(Product)
+    private readonly productRepository: Repository<Product>,
   ) {}
 
   async findAll(): Promise<ProductType[]> {
@@ -56,6 +59,16 @@ export class ProductTypesService {
 
   async remove(id: number): Promise<void> {
     const type = await this.findOne(id);
+    
+    const productInType = await this.productRepository.findOne({
+      where: { productTypeId: id }
+    });
+    if (productInType) {
+      throw new BadRequestException(
+        `"${type.name}" ürün cinsi kullanımda (bu cinse bağlı ürünler var) olduğu için silinemez. Önce ürünleri güncelleyin veya silin.`
+      );
+    }
+
     await this.repo.remove(type);
   }
 }

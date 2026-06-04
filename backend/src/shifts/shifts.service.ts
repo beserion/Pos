@@ -92,8 +92,8 @@ export class ShiftsService {
     const saved = await this.shiftRepo.save(shift);
     try {
       await this.shiftRepo.query(`
-        INSERT INTO audit_logs (timestamp, userId, actionType, amount, description, companyId, cashRegisterId, shiftId)
-        VALUES (GETDATE(), @0, 'SHIFT_OPEN', @1, @2, @3, @4, @5)
+        INSERT INTO audit_logs (timestamp, userId, actionType, amount, description, companyId, cashRegisterId, shiftId, businessDate)
+        VALUES (GETDATE(), @0, 'SHIFT_OPEN', @1, @2, @3, @4, @5, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
       `, [userId, openingCash, `Vardiya Açıldı. Açılış: ${openingCash} ₺`, companyId, cashRegisterId, saved.id]);
     } catch { /* sessiz geç */ }
     return saved;
@@ -124,8 +124,8 @@ export class ShiftsService {
     const saved = await this.shiftRepo.save(shift);
     try {
       await this.shiftRepo.query(`
-        INSERT INTO audit_logs (timestamp, userId, actionType, amount, description, companyId, cashRegisterId, shiftId)
-        VALUES (GETDATE(), @0, 'SHIFT_CLOSE', @1, @2, @3, @4, @5)
+        INSERT INTO audit_logs (timestamp, userId, actionType, amount, description, companyId, cashRegisterId, shiftId, businessDate)
+        VALUES (GETDATE(), @0, 'SHIFT_CLOSE', @1, @2, @3, @4, @5, COALESCE((SELECT NULLIF(value, '') FROM system_parameters WHERE module = 'pos' AND [key] = 'active_business_date'), CONVERT(VARCHAR(10), GETDATE(), 23)))
       `, [shift.userId, closingCash, `Vardiya Kapatıldı. Kapanış: ${closingCash} ₺, Beklenen: ${expectedCash} ₺, Fark: ${shift.cashDifference} ₺`, shift.companyId, shift.cashRegisterId, shift.id]);
     } catch { /* sessiz geç */ }
     return saved;
@@ -263,6 +263,17 @@ export class ShiftsService {
     );
 
     const totalCashIn = Number(result[0]?.totalCashIn || 0);
-    return Number((shift.openingCash + totalCashIn).toFixed(2));
+
+    // Sum manual cash transactions (collections & payouts) for the shift
+    const manualCashResult = await this.shiftRepo.manager.query(
+      `SELECT 
+        ISNULL(SUM(CASE WHEN type = 'INCOME' THEN CAST(amount AS DECIMAL(12,2)) ELSE -CAST(amount AS DECIMAL(12,2)) END), 0) as totalManualCash
+       FROM account_transactions 
+       WHERE shiftId = @0 AND paymentMethod = 'KASA'`,
+      [shift.id],
+    );
+    const totalManualCash = Number(manualCashResult[0]?.totalManualCash || 0);
+
+    return Number((shift.openingCash + totalCashIn + totalManualCash).toFixed(2));
   }
 }

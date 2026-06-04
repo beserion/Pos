@@ -75,10 +75,10 @@ export class AuditLogService {
     if (filters.tableNo) qb.andWhere('al.tableNo LIKE :tableNo', { tableNo: `%${filters.tableNo}%` });
 
     if (filters.startDate) {
-      qb.andWhere('al.timestamp >= :startDate', { startDate: `${filters.startDate} 00:00:00` });
+      qb.andWhere('COALESCE(al.businessDate, CONVERT(VARCHAR(10), al.timestamp, 23)) >= :startDate', { startDate: filters.startDate });
     }
     if (filters.endDate) {
-      qb.andWhere('al.timestamp <= :endDate', { endDate: `${filters.endDate} 23:59:59.999` });
+      qb.andWhere('COALESCE(al.businessDate, CONVERT(VARCHAR(10), al.timestamp, 23)) <= :endDate', { endDate: filters.endDate });
     }
 
     const [data, total] = await qb

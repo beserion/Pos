@@ -41,7 +41,7 @@ export function PageClient() {
         { key: 'ORDERS', title: tAdmin('purchaseOrders'), subtitle: tAdmin('purchaseOrdersDesc'), path: `/${locale}/admin/orders`, icon: 'fa-cart-shopping', color: 'text-amber-500', featureKey: 'finance_system' },
         { key: 'COURIERS', title: tAdmin('couriers'), subtitle: tAdmin('couriersDesc'), path: `/${locale}/admin/couriers`, icon: 'fa-user-helmet-safety', color: 'text-orange-500', featureKey: 'delivery_system' },
         { key: 'DELIVERY', title: tAdmin('deliveries'), subtitle: tAdmin('deliveriesDesc'), path: `/${locale}/admin/deliveries`, icon: 'fa-truck-fast', color: 'text-indigo-500', featureKey: 'delivery_system' },
-        { key: 'WAITER', title: tAdmin('tablet'), subtitle: tAdmin('tabletDesc'), path: `/${locale}/waiter`, icon: 'fa-tablet-screen-button', color: 'text-rose-500', featureKey: 'waiter_app' },
+        // { key: 'WAITER', title: tAdmin('tablet'), subtitle: tAdmin('tabletDesc'), path: `/${locale}/waiter`, icon: 'fa-tablet-screen-button', color: 'text-rose-500', featureKey: 'waiter_app' },
         { key: 'SYSTEM', title: 'Parametreler', subtitle: 'Modül bazlı sistem ayarları', path: `/${locale}/admin/parameters`, icon: 'fa-sliders', color: 'text-violet-500' },
         { key: 'SYSTEM', title: 'Lisans Yönetimi', subtitle: 'Modül ve premium özellik yetkilerini yönet', path: `/${locale}/admin/license`, icon: 'fa-shield-keyhole', color: 'text-indigo-600' },
         // { key: 'SYSTEM', title: 'Veri İçe Aktar', subtitle: 'Excel dosyasından ürün ve stok kartı aktarımı yap', path: `/${locale}/admin/import`, icon: 'fa-file-import', color: 'text-amber-500' },

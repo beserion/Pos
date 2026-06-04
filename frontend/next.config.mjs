@@ -4,7 +4,7 @@ const withNextIntl = createNextIntlPlugin('./src/i18n.ts');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: (process.env.NEXT_OUTPUT as 'standalone' | 'export') || 'standalone',
+  output: process.env.NEXT_OUTPUT || 'standalone',
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -13,7 +13,7 @@ const nextConfig = {
   },
   trailingSlash: false,
   // Güvenli geliştirme için bu domainlere izin veriyoruz
-  allowedDevOrigins: ['inans.posnetx.com', 'test.posnetx.com', 'apitest.posnetx.com', 'localhost:3000', 'tester.posnetx.com'],
+  allowedDevOrigins: ['inans.posnetx.com', 'test.posnetx.com', 'apitest.posnetx.com', 'localhost:4000', 'tester.posnetx.com'],
   async headers() {
     return [
       {
@@ -35,7 +35,7 @@ const nextConfig = {
       {
         // Boss PWA API proxy
         source: '/boss-api/:path*',
-        destination: 'http://localhost:3100/:path*',
+        destination: 'http://localhost:4100/:path*',
       },
       {
         // Garson PWA ana dizini
@@ -59,6 +59,6 @@ const nextConfig = {
       }
     ];
   },
-} as any;
+};
 
 export default withNextIntl(nextConfig);

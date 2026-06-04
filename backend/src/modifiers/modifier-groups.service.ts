@@ -2,12 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ModifierGroup } from './modifier-group.entity';
+import { ProductsService } from '../products/products.service';
 
 @Injectable()
 export class ModifierGroupsService {
     constructor(
         @InjectRepository(ModifierGroup)
         private modifierGroupRepository: Repository<ModifierGroup>,
+        private productsService: ProductsService,
     ) { }
 
     findAll(): Promise<ModifierGroup[]> {
@@ -22,19 +24,23 @@ export class ModifierGroupsService {
         return group;
     }
 
-    create(groupData: Partial<ModifierGroup>): Promise<ModifierGroup> {
+    async create(groupData: Partial<ModifierGroup>): Promise<ModifierGroup> {
         const group = this.modifierGroupRepository.create(groupData);
-        return this.modifierGroupRepository.save(group);
+        const saved = await this.modifierGroupRepository.save(group);
+        this.productsService.clearCache();
+        return saved;
     }
 
     async update(id: number, groupData: Partial<ModifierGroup>): Promise<ModifierGroup> {
         await this.findOne(id);
         await this.modifierGroupRepository.update(id, groupData);
+        this.productsService.clearCache();
         return this.findOne(id);
     }
 
     async remove(id: number): Promise<void> {
         const group = await this.findOne(id);
         await this.modifierGroupRepository.remove(group);
+        this.productsService.clearCache();
     }
 }

@@ -6,6 +6,9 @@ import { CashRegister } from '../cash-registers/cash-register.entity';
 import { OrderRoutingService } from '../order-routing/order-routing.service';
 import { ParametersService } from '../parameters/parameters.service';
 import { OutputProfile } from '../output-profiles/output-profile.entity';
+import { Table } from '../tables/table.entity';
+import { Zone } from '../zones/zone.entity';
+import { Sale } from '../sales/sale.entity';
 
 /** Türkçe özel karakterleri ASCII karşılıklarına çevirir (yazıcı uyumluluğu için) */
 function trASCII(text: string): string {
@@ -169,6 +172,47 @@ export class PrintersService {
     data: any,
     profile?: OutputProfile
   ): Promise<{ success: boolean; message: string }> {
+    let zoneName = '';
+    let tempName = data.tempName || '';
+    let subCheckLabel = data.subCheckLabel || '';
+    let waiterName = data.waiterName || '';
+
+    if (data.id) {
+      try {
+        const sale = await this.dataSource.getRepository(Sale).findOne({
+          where: { id: Number(data.id) },
+          relations: ['table', 'table.zone', 'waiter'],
+        });
+        if (sale) {
+          if (sale.table) {
+            if (!tempName && sale.table.tempName) {
+              tempName = sale.table.tempName;
+            }
+            if (sale.table.zone) {
+              zoneName = sale.table.zone.name;
+            }
+          }
+          if (!subCheckLabel && sale.subCheckLabel) {
+            subCheckLabel = sale.subCheckLabel;
+          }
+          if (!waiterName && sale.waiter) {
+            waiterName = `${sale.waiter.firstName || ''} ${sale.waiter.lastName || ''}`.trim();
+          }
+        }
+      } catch (err) {
+        this.logger.error(`Error resolving sale/table details in printToMultiplePrinters: ${err.message}`);
+      }
+    }
+
+    if (!zoneName && data.zoneId) {
+      try {
+        const zone = await this.dataSource.getRepository(Zone).findOne({
+          where: { id: Number(data.zoneId) }
+        });
+        if (zone) zoneName = zone.name;
+      } catch (err) {}
+    }
+
     const { ThermalPrinter, PrinterTypes, CharacterSet, BreakLine } =
       await import('node-thermal-printer');
 
@@ -229,11 +273,29 @@ export class PrintersService {
           thermalPrinter.alignLeft();
           const date = new Date(data.date || new Date()).toLocaleString('tr-TR');
           
-          if (profile?.showTable !== false && data.tableName) {
+          if (data.tableName || zoneName) {
             const headerTw = Math.max(0, tw === 0 ? 1 : tw);
             const headerTh = Math.max(0, th === 0 ? 1 : th);
             thermalPrinter.setTextSize(headerTw, headerTh);
-            thermalPrinter.println(trASCII(data.tableName));
+
+            // Bölüm adı kalın punto
+            if (zoneName) {
+              thermalPrinter.bold(true);
+              thermalPrinter.println(trASCII(zoneName.toUpperCase()));
+            }
+
+            // Masa adı + geçici masa adı + alt adisyon
+            let tableDisplayName = data.tableName || '';
+            if (tempName) {
+              tableDisplayName += ` (${tempName.toUpperCase()})`;
+            }
+            if (subCheckLabel) {
+              tableDisplayName += ` - ${subCheckLabel}`;
+            }
+
+            thermalPrinter.bold(true);
+            thermalPrinter.println(trASCII(tableDisplayName));
+
             thermalPrinter.setTextSize(tw, th);
             thermalPrinter.bold(false);
             thermalPrinter.drawLine();
@@ -248,9 +310,11 @@ export class PrintersService {
             displayDate = date.includes(' ') ? date.split(' ')[0] : new Date().toLocaleDateString('tr-TR');
           }
           const timeOnly = date.includes(' ') ? date.split(' ')[1].substring(0, 5) : date;
-          thermalPrinter.leftRight(`Tarih: ${displayDate} ${timeOnly}`, `No: ${data.receiptNumber || '000000'}`);
+          thermalPrinter.leftRight(`Tarih: ${displayDate} ${timeOnly}`, `No: ${trASCII(String(data.receiptNumber || data.id || '000000'))}`);
           
-          if (profile?.showWaiter !== false && data.cashierName) {
+          if (waiterName) {
+            thermalPrinter.println(`Hesap Isteyen: ${trASCII(waiterName)}`);
+          } else if (profile?.showWaiter !== false && data.cashierName) {
             thermalPrinter.println(`Kasiyer: ${trASCII(data.cashierName)}`);
           }
           thermalPrinter.drawLine();
@@ -266,7 +330,8 @@ export class PrintersService {
             if (item.saleType === 'HALF') portionStr = '(YARIM) ';
             else if (item.saleType === 'DOUBLE') portionStr = '(DUBLE) ';
             
-            const nameStr = `${item.quantity}x ${portionStr}${trASCII(item.name)}`;
+            const itemName = item.name || item.product?.name || 'Urun';
+            const nameStr = `${item.quantity}x ${portionStr}${trASCII(itemName)}`;
             const txLabel = getTransactionLabel(item.transactionType);
             const totalStr = txLabel && Number(item.total) === 0
               ? `[${txLabel}]`
@@ -274,6 +339,10 @@ export class PrintersService {
                 ? `${Number(item.total).toFixed(2)} TL [${txLabel}]`
                 : `${Number(item.total).toFixed(2)} TL`;
             thermalPrinter.leftRight(nameStr, totalStr);
+
+            if (Number(item.discountAmount || 0) > 0) {
+              thermalPrinter.println(`  Indirim: -${Number(item.discountAmount).toFixed(2)} TL`);
+            }
 
             if (profile?.showPortion !== false) {
               if (item.subItems && item.subItems.length > 0) {
@@ -302,7 +371,8 @@ export class PrintersService {
               else if (item.saleType === 'DOUBLE') portionStr = '(DUBLE) ';
               
               const statusLabel = item.status === 'REFUNDED' ? 'IADE' : 'IPTAL';
-              const nameStr = `${item.quantity}x ${portionStr}${trASCII(item.name)} [${statusLabel}]`;
+              const itemName = item.name || item.product?.name || 'Urun';
+              const nameStr = `${item.quantity}x ${portionStr}${trASCII(itemName)} [${statusLabel}]`;
               thermalPrinter.println(nameStr);
               const reason = item.refundReason || item.cancelReason || item.note;
               if (reason) thermalPrinter.println(`  Sebep: ${trASCII(reason)}`);
@@ -389,6 +459,51 @@ export class PrintersService {
       console.log('[printKitchen] Gelen data:', JSON.stringify({ tableName: data.tableName, waiterName: data.waiterName, orderType: data.orderType, itemCount: itemsToPrint.length }));
       if (itemsToPrint.length === 0) {
         return { success: false, message: 'Yazdırılacak ürün bulunamadı.' };
+      }
+
+      let zoneName = '';
+      let tempName = data.tempName || '';
+      let subCheckLabel = data.subCheckLabel || '';
+
+      let saleId: number | null = null;
+      if (data.receiptNumber && typeof data.receiptNumber === 'string') {
+        const match = data.receiptNumber.match(/\d+/);
+        if (match) {
+          saleId = parseInt(match[0]);
+        }
+      } else if (data.id) {
+        saleId = Number(data.id);
+      }
+
+      if (saleId) {
+        try {
+          const sale = await this.dataSource.getRepository(Sale).findOne({
+            where: { id: saleId },
+            relations: ['table', 'table.zone'],
+          });
+          if (sale?.table) {
+            if (!tempName && sale.table.tempName) {
+              tempName = sale.table.tempName;
+            }
+            if (sale.table.zone) {
+              zoneName = sale.table.zone.name;
+            }
+          }
+          if (!subCheckLabel && sale?.subCheckLabel) {
+            subCheckLabel = sale.subCheckLabel;
+          }
+        } catch (err) {
+          this.logger.error(`Error resolving sale/table details in printKitchen: ${err.message}`);
+        }
+      }
+
+      if (!zoneName && data.zoneId) {
+        try {
+          const zone = await this.dataSource.getRepository(Zone).findOne({ where: { id: Number(data.zoneId) } });
+          if (zone) {
+            zoneName = zone.name;
+          }
+        } catch (err) {}
       }
 
       // Yeni Nesil Yönlendirme Algoritması Devreye Giriyor
@@ -504,13 +619,30 @@ export class PrintersService {
                 const date = new Date(data.date || new Date()).toLocaleString('tr-TR');
 
                 // Masa adı — büyük ve belirgin
-                if (data.tableName && profile.showTable !== false) {
+                if ((data.tableName || zoneName) && profile.showTable !== false) {
                   thermalPrinter.alignCenter();
-                  thermalPrinter.bold(true);
                   const tableTw = Math.max(0, tw === 0 ? 1 : tw);
                   const tableTh = Math.max(0, th === 0 ? 1 : th);
                   thermalPrinter.setTextSize(tableTw, tableTh);
-                  thermalPrinter.println(trASCII(data.tableName));
+
+                  // Bölüm adı kalın punto
+                  if (zoneName) {
+                    thermalPrinter.bold(true);
+                    thermalPrinter.println(trASCII(zoneName.toUpperCase()));
+                  }
+
+                  // Masa adı + geçici masa adı + alt adisyon
+                  let tableDisplayName = data.tableName || '';
+                  if (tempName) {
+                    tableDisplayName += ` (${tempName.toUpperCase()})`;
+                  }
+                  if (subCheckLabel) {
+                    tableDisplayName += ` - ${subCheckLabel}`;
+                  }
+
+                  thermalPrinter.bold(true);
+                  thermalPrinter.println(trASCII(tableDisplayName));
+
                   const resetTw = Math.max(0, tw - 1);
                   const resetTh = Math.max(0, th - 1);
                   thermalPrinter.setTextSize(resetTw, resetTh);
@@ -527,7 +659,7 @@ export class PrintersService {
                   kitchenDisplayDate = date.includes(' ') ? date.split(' ')[0] : new Date().toLocaleDateString('tr-TR');
                 }
                 const timeOnly = date.includes(' ') ? date.split(' ')[1].substring(0, 5) : date;
-                thermalPrinter.leftRight(`Tarih: ${kitchenDisplayDate} ${timeOnly}`, `No: ${data.receiptNumber || '000000'}`);
+                 thermalPrinter.leftRight(`Tarih: ${kitchenDisplayDate} ${timeOnly}`, `No: ${trASCII(String(data.receiptNumber || data.id || '000000'))}`);
                 if (data.waiterName && profile.showWaiter !== false) {
                   thermalPrinter.bold(true);
                   thermalPrinter.println(`Garson: ${trASCII(data.waiterName)}`);
@@ -557,6 +689,7 @@ export class PrintersService {
                   if (item.saleType === 'HALF') portionStr = '(YARIM) ';
                   else if (item.saleType === 'DOUBLE') portionStr = '(DUBLE) ';
 
+                  const itemName = item.name || item.product?.name || 'Urun';
                   if (profile.showPrice) {
                     // Müşteri fişi formatı (fiyat gösterimli)
                     const txLabel = getTransactionLabel(item.transactionType);
@@ -565,10 +698,13 @@ export class PrintersService {
                       : txLabel
                         ? `${Number(item.total || item.price * item.quantity).toFixed(2)} TL [${txLabel}]`
                         : `${Number(item.total || item.price * item.quantity).toFixed(2)} TL`;
-                    thermalPrinter.leftRight(`${item.quantity}x ${portionStr}${trASCII(item.name)}`, totalStr);
+                    thermalPrinter.leftRight(`${item.quantity}x ${portionStr}${trASCII(itemName)}`, totalStr);
+                    if (Number(item.discountAmount || 0) > 0) {
+                      thermalPrinter.println(`  Indirim: -${Number(item.discountAmount).toFixed(2)} TL`);
+                    }
                   } else {
                     // Normal mutfak formatı (Bitişik gösterim)
-                    thermalPrinter.println(`${item.quantity}x ${portionStr}${trASCII(item.name)}`);
+                    thermalPrinter.println(`${item.quantity}x ${portionStr}${trASCII(itemName)}`);
                   }
                   thermalPrinter.bold(false);
                   
@@ -602,11 +738,15 @@ export class PrintersService {
                     if (item.saleType === 'HALF') portionStr = '(YARIM) ';
                     else if (item.saleType === 'DOUBLE') portionStr = '(DUBLE) ';
 
+                    const itemName = item.name || item.product?.name || 'Urun';
                     if (profile.showPrice) {
                       const totalStr = `${Number(item.total || item.price * item.quantity).toFixed(2)} TL`;
-                      thermalPrinter.leftRight(`${item.quantity}x ${portionStr}${trASCII(item.name)}`, totalStr);
+                      thermalPrinter.leftRight(`${item.quantity}x ${portionStr}${trASCII(itemName)}`, totalStr);
+                      if (Number(item.discountAmount || 0) > 0) {
+                        thermalPrinter.println(`  Indirim: -${Number(item.discountAmount).toFixed(2)} TL`);
+                      }
                     } else {
-                      thermalPrinter.println(`${item.quantity}x ${portionStr}${trASCII(item.name)}`);
+                      thermalPrinter.println(`${item.quantity}x ${portionStr}${trASCII(itemName)}`);
                     }
                     thermalPrinter.bold(false);
 
@@ -644,7 +784,8 @@ export class PrintersService {
                    thermalPrinter.drawLine();
                    for (const item of cancelledItems) {
                      thermalPrinter.bold(true);
-                     thermalPrinter.println(`${item.quantity}x IPTAL ${trASCII(item.name)}`);
+                     const itemName = item.name || item.product?.name || 'Urun';
+                     thermalPrinter.println(`${item.quantity}x IPTAL ${trASCII(itemName)}`);
                      thermalPrinter.bold(false);
                      const reason = item.refundReason || item.cancelReason || item.note;
               if (reason) thermalPrinter.println(`  Sebep: ${trASCII(reason)}`);
@@ -658,13 +799,22 @@ export class PrintersService {
                     .filter((i: any) => !i.isCancelled)
                     .reduce((sum: number, i: any) => sum + (Number(i.total) || Number(i.price) * Number(i.quantity)), 0);
 
+                  const generalDiscount = Number(data.discountAmount || 0);
+                  const finalTotalAmount = Number((totalAmount - generalDiscount).toFixed(2));
+
+                  if (generalDiscount > 0) {
+                    thermalPrinter.drawLine();
+                    thermalPrinter.leftRight('ARA TOPLAM', `${totalAmount.toFixed(2)} TL`);
+                    thermalPrinter.leftRight('INDIRIM', `-${generalDiscount.toFixed(2)} TL`);
+                  }
+
                   thermalPrinter.drawLine();
                   // TOPLAM — profil boyutundan 1 kademe büyük
                   const kitchenTotalTw = Math.min((tw || 0) + 1, 2);
                   const kitchenTotalTh = Math.min((th || 0) + 1, 2);
                   thermalPrinter.setTextSize(kitchenTotalTw, kitchenTotalTh);
                   thermalPrinter.bold(true);
-                  thermalPrinter.leftRight('TOPLAM', `${totalAmount.toFixed(2)} TL`);
+                  thermalPrinter.leftRight('TOPLAM', `${finalTotalAmount.toFixed(2)} TL`);
                   thermalPrinter.bold(false);
                   thermalPrinter.setTextNormal();
 
@@ -681,11 +831,11 @@ export class PrintersService {
                       const usdRate = Number(usdStr) || 35.20;
                       const gbpRate = Number(gbpStr) || 44.10;
 
-                      if (totalAmount > 0) {
+                      if (finalTotalAmount > 0) {
                         thermalPrinter.drawLine();
-                        thermalPrinter.leftRight('EURO  (EUR)', `${(totalAmount / eurRate).toFixed(2)} EUR`);
-                        thermalPrinter.leftRight('DOLAR (USD)', `${(totalAmount / usdRate).toFixed(2)} USD`);
-                        thermalPrinter.leftRight('STERLIN (GBP)', `${(totalAmount / gbpRate).toFixed(2)} GBP`);
+                        thermalPrinter.leftRight('EURO  (EUR)', `${(finalTotalAmount / eurRate).toFixed(2)} EUR`);
+                        thermalPrinter.leftRight('DOLAR (USD)', `${(finalTotalAmount / usdRate).toFixed(2)} USD`);
+                        thermalPrinter.leftRight('STERLIN (GBP)', `${(finalTotalAmount / gbpRate).toFixed(2)} GBP`);
                       }
                     } catch (err) {
                       console.warn('Döviz kurlari alinamadi, atlaniliyor.', err);
@@ -824,6 +974,23 @@ export class PrintersService {
 
   async printZReport(data: any): Promise<{ success: boolean; message: string }> {
     try {
+      let dovizAnalizi = data.dovizAnalizi;
+      if (!dovizAnalizi && data.businessDate) {
+        try {
+          const crFilter = data.cashRegisterId ? `AND s.cashRegisterId = ${data.cashRegisterId}` : '';
+          dovizAnalizi = await this.dataSource.query(`
+            SELECT 
+              COALESCE(s.paidCurrency, 'TRY') as currency,
+              SUM(CAST(s.paidCurrencyAmount AS DECIMAL(12,2))) as totalAmount
+            FROM sales s
+            WHERE s.status = 'COMPLETED' AND s.paidCurrencyAmount > 0 AND s.businessDate = @0 ${crFilter}
+            GROUP BY s.paidCurrency
+          `, [data.businessDate]);
+        } catch (e) {
+          this.logger.warn('dovizAnalizi query failed in printZReport:', e);
+        }
+      }
+
       // 1. Z_REPORT tipindeki profili bul
       const profile = await this.profileRepository.findOne({
         where: { profileType: 'Z_REPORT', isActive: true },
@@ -887,6 +1054,9 @@ export class PrintersService {
         thermalPrinter.alignLeft();
         thermalPrinter.println(`Z No: ${data.zNumber || '---'}`);
         thermalPrinter.println(`Tarih: ${new Date(data.createdAt || new Date()).toLocaleString('tr-TR')}`);
+        if (data.businessDate) {
+          thermalPrinter.println(`Program Tarihi: ${new Date(data.businessDate).toLocaleDateString('tr-TR')}`);
+        }
         thermalPrinter.println(`Kasa: ${trASCII(data.cashRegisterName || 'KASA 1')}`);
         thermalPrinter.println(`Kullanici: ${trASCII(data.userName || 'Admin')}`);
         thermalPrinter.drawLine();
@@ -917,7 +1087,8 @@ export class PrintersService {
           thermalPrinter.bold(false);
           thermalPrinter.alignLeft();
           thermalPrinter.leftRight('TOPLAM FIS', `${data.totalReceipts || 0}`);
-          thermalPrinter.leftRight('IADE TOPLAM', `${Number(data.refundTotal || 0).toFixed(2)} TL`);
+          const iadeAdetStr = data.refundCount > 0 ? ` (${Number(data.refundCount).toFixed(0)} Ad.)` : '';
+          thermalPrinter.leftRight('IADE TOPLAM', `${Number(data.refundTotal || 0).toFixed(2)} TL${iadeAdetStr}`);
           thermalPrinter.leftRight('IPTAL TOPLAM', `${Number(data.cancelTotal || 0).toFixed(2)} TL`);
           if (data.discountTotal > 0) thermalPrinter.leftRight('INDIRIM TOPLAM', `${Number(data.discountTotal).toFixed(2)} TL`);
           thermalPrinter.drawLine();
@@ -940,6 +1111,19 @@ export class PrintersService {
           }
         }
         thermalPrinter.drawLine();
+
+        // Exchange Currency Analysis (Döviz Analizi)
+        if (dovizAnalizi && dovizAnalizi.length > 0) {
+          thermalPrinter.alignCenter();
+          thermalPrinter.bold(true);
+          thermalPrinter.println('--- ALINAN DOVIZ TOPLAMLARI ---');
+          thermalPrinter.bold(false);
+          thermalPrinter.alignLeft();
+          for (const d of dovizAnalizi) {
+            thermalPrinter.leftRight(trASCII(d.currency), `${Number(d.totalAmount).toFixed(2)}`);
+          }
+          thermalPrinter.drawLine();
+        }
 
         // VAT Summary
         if (profile.showVatSummary && data.taxTotal !== undefined) {
@@ -1055,6 +1239,132 @@ export class PrintersService {
         `, [zReport.businessDate, zReport.companyId]);
       } catch (e) { this.logger.warn('Urun satislari cekilemedi:', e); }
 
+      // 3.1. Giderler (Kasadan Ödeme)
+      let payoutTotal = 0;
+      try {
+        const expenseRes = await this.dataSource.query(`
+          SELECT SUM(CAST(amount AS DECIMAL(12,2))) as payout
+          FROM account_transactions s
+          WHERE s.type = 'EXPENSE' AND s.businessDate = @0
+        `, [zReport.businessDate]);
+        payoutTotal = Number(expenseRes[0]?.payout || 0);
+      } catch (e) { this.logger.warn('Giderler cekilemedi:', e); }
+
+      // 3.2. Cari Tahsilat Kırılımları (Nakit/Kart)
+      let cariNakit = 0, cariKredi = 0;
+      try {
+        const cariCollectionsRes = await this.dataSource.query(`
+          SELECT 
+            s.paymentMethod,
+            SUM(CAST(s.amount AS DECIMAL(12,2))) as toplam
+          FROM account_transactions s
+          WHERE s.type = 'INCOME' AND s.partnerId > 0 AND s.businessDate = @0
+          GROUP BY s.paymentMethod
+        `, [zReport.businessDate]);
+        cariNakit = Number(cariCollectionsRes.find((c: any) => c.paymentMethod === 'KASA' || c.paymentMethod === 'CASH')?.toplam || 0);
+        cariKredi = Number(cariCollectionsRes.find((c: any) => c.paymentMethod === 'KREDI_KARTI' || c.paymentMethod === 'CREDIT_CARD')?.toplam || 0);
+      } catch (e) { this.logger.warn('Cari tahsilatlar cekilemedi:', e); }
+
+      // 3.3. Döviz Analizi
+      let dovizAnalizi: any[] = [];
+      try {
+        const crFilter = zReport.cashRegisterId ? `AND s.cashRegisterId = ${zReport.cashRegisterId}` : '';
+        dovizAnalizi = await this.dataSource.query(`
+          SELECT 
+            COALESCE(s.paidCurrency, 'TRY') as currency,
+            SUM(CAST(s.paidCurrencyAmount AS DECIMAL(12,2))) as totalAmount
+          FROM sales s
+          WHERE s.status = 'COMPLETED' AND s.paidCurrencyAmount > 0 AND s.businessDate = @0 ${crFilter}
+          GROUP BY s.paidCurrency
+        `, [zReport.businessDate]);
+      } catch (e) { this.logger.warn('Doviz analizi cekilemedi:', e); }
+
+      // 3.4. İşlem Kırılımları (İade, İptal, İkram, Ödenmez vb.)
+      let islemDetaylari: any[] = [];
+      try {
+        const crFilter = zReport.cashRegisterId ? `AND s.cashRegisterId = ${zReport.cashRegisterId}` : '';
+        islemDetaylari = await this.dataSource.query(`
+          SELECT 
+            si.status,
+            si.transactionType,
+            SUM(CAST(si.quantity AS DECIMAL(12,2))) as adet,
+            SUM(CAST(si.total AS DECIMAL(12,2))) as toplam,
+            SUM(CAST(COALESCE(p.price, 0) * si.quantity AS DECIMAL(12,2))) as retailToplam
+          FROM sale_items si
+          JOIN sales s ON s.id = si.saleId
+          LEFT JOIN products p ON p.id = si.productId
+          WHERE s.status = 'COMPLETED' AND s.businessDate = @0 ${crFilter}
+          GROUP BY si.status, si.transactionType
+        `, [zReport.businessDate]);
+      } catch (e) { this.logger.warn('Islem detaylari cekilemedi:', e); }
+
+      // 3.5. İndirim Toplamları
+      let satisIndirim = 0, cariIndirim = 0;
+      try {
+        const crFilter = zReport.cashRegisterId ? `AND s.cashRegisterId = ${zReport.cashRegisterId}` : '';
+        const indirimDetayRes = await this.dataSource.query(`
+          SELECT 
+            CASE WHEN s.paymentMethod IN ('CARI', 'PARTNER', 'OPEN') THEN 'CARI' ELSE 'SATIS' END as tip,
+            SUM(CAST(s.discountAmount AS DECIMAL(12,2))) as toplam
+          FROM sales s
+          WHERE s.status = 'COMPLETED' AND s.discountAmount > 0 AND s.businessDate = @0 ${crFilter}
+          GROUP BY CASE WHEN s.paymentMethod IN ('CARI', 'PARTNER', 'OPEN') THEN 'CARI' ELSE 'SATIS' END
+        `, [zReport.businessDate]);
+        satisIndirim = Number(indirimDetayRes.find((i: any) => i.tip === 'SATIS')?.toplam || 0);
+        cariIndirim = Number(indirimDetayRes.find((i: any) => i.tip === 'CARI')?.toplam || 0);
+      } catch (e) { this.logger.warn('Indirim detaylari cekilemedi:', e); }
+
+      // 3.6. Açık Hesap Detayı
+      let acikHesapDetay: any[] = [];
+      try {
+        const crFilter = zReport.cashRegisterId ? `AND s.cashRegisterId = ${zReport.cashRegisterId}` : '';
+        acikHesapDetay = await this.dataSource.query(`
+          SELECT 
+            COALESCE(p.name, 'Bilinmeyen Cari') as cariAdi,
+            SUM(CAST(s.totalAmount AS DECIMAL(12,2))) as toplam
+          FROM sales s
+          JOIN partners p ON p.id = s.partnerId
+          WHERE s.status = 'COMPLETED' AND s.paymentMethod IN ('CARI', 'PARTNER', 'OPEN') AND s.businessDate = @0 ${crFilter}
+          GROUP BY p.name
+        `, [zReport.businessDate]);
+      } catch (e) { this.logger.warn('Acik hesap detaylari cekilemedi:', e); }
+
+      // 3.7. Kasiyer / Kasa Tahsilat Toplamları
+      let kasiyerTahsilat: any[] = [];
+      try {
+        const crFilter = zReport.cashRegisterId ? `AND s.cashRegisterId = ${zReport.cashRegisterId}` : '';
+        kasiyerTahsilat = await this.dataSource.query(`
+          SELECT 
+            COALESCE(cr.name, 'Ana Kasa') as kasaAdi,
+            SUM(CAST(s.totalAmount AS DECIMAL(12,2))) as toplam
+          FROM sales s
+          LEFT JOIN cash_registers cr ON cr.id = s.cashRegisterId
+          WHERE s.status = 'COMPLETED' AND s.businessDate = @0 ${crFilter}
+          GROUP BY cr.name
+        `, [zReport.businessDate]);
+      } catch (e) { this.logger.warn('Kasiyer tahsilatlari cekilemedi:', e); }
+
+      // 3.8. Müşteri / Hizmet Tipi Toplamları
+      let musteriToplamlari: any[] = [];
+      try {
+        const crFilter = zReport.cashRegisterId ? `AND s.cashRegisterId = ${zReport.cashRegisterId}` : '';
+        musteriToplamlari = await this.dataSource.query(`
+          SELECT 
+            CASE 
+              WHEN s.tableName LIKE 'Paket%' OR s.tableName LIKE 'Servis%' OR s.tableName LIKE 'Delivery%' THEN 'PAKET' 
+              ELSE 'MASA' 
+            END as tip,
+            COUNT(s.id) as adet,
+            SUM(CAST(s.totalAmount AS DECIMAL(12,2))) as toplam
+          FROM sales s
+          WHERE s.status = 'COMPLETED' AND s.businessDate = @0 ${crFilter}
+          GROUP BY CASE 
+            WHEN s.tableName LIKE 'Paket%' OR s.tableName LIKE 'Servis%' OR s.tableName LIKE 'Delivery%' THEN 'PAKET' 
+            ELSE 'MASA' 
+          END
+        `, [zReport.businessDate]);
+      } catch (e) { this.logger.warn('Musteri toplamlari cekilemedi:', e); }
+
       // JSON alanları parse et
       let categoryTotals: any[] = [];
       let paymentTotals: any[] = [];
@@ -1063,7 +1373,25 @@ export class PrintersService {
       try { paymentTotals = typeof zReport.paymentTotals === 'string' ? JSON.parse(zReport.paymentTotals) : (zReport.paymentTotals || []); } catch {}
       try { waiterSales = typeof zReport.waiterSales === 'string' ? JSON.parse(zReport.waiterSales) : (zReport.waiterSales || []); } catch {}
 
-      const data = { ...zReport, userName, cashRegisterName, productSales, categoryTotals, paymentTotals, waiterSales };
+      const data = { 
+        ...zReport, 
+        userName, 
+        cashRegisterName, 
+        productSales, 
+        categoryTotals, 
+        paymentTotals, 
+        waiterSales,
+        payoutTotal,
+        cariNakit,
+        cariKredi,
+        dovizAnalizi,
+        islemDetaylari,
+        satisIndirim,
+        cariIndirim,
+        acikHesapDetay,
+        kasiyerTahsilat,
+        musteriToplamlari
+      };
 
       // 4. Yazıcı Bağlantısını Kur (Frontend'den seçilen yazıcı)
       const { ThermalPrinter, PrinterTypes, CharacterSet, BreakLine } = await import('node-thermal-printer');
@@ -1110,10 +1438,11 @@ export class PrintersService {
 
       // BİLGİ
       thermalPrinter.alignLeft();
-      thermalPrinter.println(`Z No   : ${data.zNumber || '---'}`);
-      thermalPrinter.println(`Tarih  : ${new Date(data.businessDate).toLocaleDateString('tr-TR')}`);
-      thermalPrinter.println(`Kasa   : ${trASCII(data.cashRegisterName)}`);
-      thermalPrinter.println(`Kasiyer: ${trASCII(data.userName)}`);
+      thermalPrinter.println(`Z No     : ${data.zNumber || '---'}`);
+      thermalPrinter.println(`Tarih    : ${new Date(data.createdAt || new Date()).toLocaleString('tr-TR')}`);
+      thermalPrinter.println(`P.Tarihi : ${new Date(data.businessDate).toLocaleDateString('tr-TR')}`);
+      thermalPrinter.println(`Kasa     : ${trASCII(data.cashRegisterName)}`);
+      thermalPrinter.println(`Kasiyer  : ${trASCII(data.userName)}`);
       thermalPrinter.drawLine();
 
       // SATIŞ TOPLAMLARI (showProductSummary)
@@ -1147,9 +1476,24 @@ export class PrintersService {
         thermalPrinter.bold(false); thermalPrinter.alignLeft();
         thermalPrinter.leftRight('TOPLAM FIS', `${data.totalReceipts || 0}`);
         thermalPrinter.leftRight('URUN ADEDI', `${data.totalProductCount || 0}`);
-        thermalPrinter.leftRight('IADE TOPLAM', `${Number(data.refundTotal || 0).toFixed(2)} TL`);
-        thermalPrinter.leftRight('IPTAL TOPLAM', `${Number(data.cancelTotal || 0).toFixed(2)} TL`);
-        if (Number(data.discountTotal) > 0) thermalPrinter.leftRight('INDIRIM', `${Number(data.discountTotal).toFixed(2)} TL`);
+
+        const iadeItemTotal = data.islemDetaylari?.filter((i: any) => i.status === 'REFUNDED').reduce((sum: number, i: any) => sum + Number(i.toplam), 0) || 0;
+        const iadeItemQty = data.islemDetaylari?.filter((i: any) => i.status === 'REFUNDED').reduce((sum: number, i: any) => sum + Number(i.adet), 0) || 0;
+        const odenmezItemTotal = data.islemDetaylari?.filter((i: any) => i.transactionType === 'NON_PAYABLE' && i.status === 'ACTIVE').reduce((sum: number, i: any) => sum + Number(i.retailToplam), 0) || 0;
+        const silinenItemTotal = data.islemDetaylari?.filter((i: any) => i.status === 'CANCELLED').reduce((sum: number, i: any) => sum + Number(i.toplam), 0) || 0;
+        const ikramItemTotal = data.islemDetaylari?.filter((i: any) => i.transactionType === 'COMPLIMENTARY' && i.status === 'ACTIVE').reduce((sum: number, i: any) => sum + Number(i.retailToplam), 0) || 0;
+        const satisItemTotal = data.islemDetaylari?.filter((i: any) => i.transactionType === 'SALE' && i.status === 'ACTIVE').reduce((sum: number, i: any) => sum + Number(i.toplam), 0) || 0;
+        const personelItemTotal = data.islemDetaylari?.filter((i: any) => i.transactionType === 'STAFF' && i.status === 'ACTIVE').reduce((sum: number, i: any) => sum + Number(i.retailToplam), 0) || 0;
+        const promosyonItemTotal = data.islemDetaylari?.filter((i: any) => i.transactionType === 'PROMOTION' && i.status === 'ACTIVE').reduce((sum: number, i: any) => sum + Number(i.retailToplam), 0) || 0;
+
+        thermalPrinter.leftRight('SATIS', `${satisItemTotal.toFixed(2)} TL`);
+        if (ikramItemTotal > 0) thermalPrinter.leftRight('IKRAM', `${ikramItemTotal.toFixed(2)} TL`);
+        if (silinenItemTotal > 0) thermalPrinter.leftRight('IPTAL', `${silinenItemTotal.toFixed(2)} TL`);
+        if (iadeItemTotal > 0) thermalPrinter.leftRight('IADE', `${iadeItemTotal.toFixed(2)} TL (${iadeItemQty.toFixed(0)} Ad.)`);
+        if (odenmezItemTotal > 0) thermalPrinter.leftRight('ODENMEZ', `${odenmezItemTotal.toFixed(2)} TL`);
+        if (personelItemTotal > 0) thermalPrinter.leftRight('PERSONEL', `${personelItemTotal.toFixed(2)} TL`);
+        if (promosyonItemTotal > 0) thermalPrinter.leftRight('PROMOSYON', `${promosyonItemTotal.toFixed(2)} TL`);
+
         if (Number(data.serviceFeeTotal) > 0) thermalPrinter.leftRight('SERVIS BEDELI', `${Number(data.serviceFeeTotal).toFixed(2)} TL`);
         thermalPrinter.drawLine();
       }
@@ -1158,16 +1502,102 @@ export class PrintersService {
       thermalPrinter.alignCenter(); thermalPrinter.bold(true);
       thermalPrinter.println('--- ODEME TOPLAMLARI ---');
       thermalPrinter.bold(false); thermalPrinter.alignLeft();
-      if (paymentTotals.length > 0) {
-        for (const pt of paymentTotals) {
-          thermalPrinter.leftRight(trASCII(pt.method === 'CASH' ? 'NAKIT' : pt.method === 'CREDIT_CARD' ? 'KREDI KARTI' : pt.method), `${Number(pt.total).toFixed(2)} TL`);
-        }
-      } else {
-        thermalPrinter.leftRight('NAKIT', `${Number(data.cashCollection || 0).toFixed(2)} TL`);
-        thermalPrinter.leftRight('KREDI KARTI', `${Number(data.creditCardCollection || 0).toFixed(2)} TL`);
-        if (Number(data.cariCollection) > 0) thermalPrinter.leftRight('CARI', `${Number(data.cariCollection).toFixed(2)} TL`);
-      }
+
+      thermalPrinter.leftRight('SATIS NAKIT', `${Number(data.cashCollection || 0).toFixed(2)} TL`);
+      if (Number(data.cariNakit || 0) > 0) thermalPrinter.leftRight('CARI NAKIT', `${Number(data.cariNakit).toFixed(2)} TL`);
+      thermalPrinter.leftRight('SATIS KREDI', `${Number(data.creditCardCollection || 0).toFixed(2)} TL`);
+      if (Number(data.cariKredi || 0) > 0) thermalPrinter.leftRight('CARI KREDI', `${Number(data.cariKredi).toFixed(2)} TL`);
+      if (Number(data.cariCollection || 0) > 0) thermalPrinter.leftRight('CARI HESAP', `${Number(data.cariCollection).toFixed(2)} TL`);
+      if (Number(data.payoutTotal || 0) > 0) thermalPrinter.leftRight('KASADAN ODEME (-)', `${Number(data.payoutTotal).toFixed(2)} TL`);
+
+      const netTahsilat = (Number(data.cashCollection || 0) + Number(data.creditCardCollection || 0) + Number(data.cariCollection || 0) + Number(data.cariNakit || 0) + Number(data.cariKredi || 0)) - Number(data.payoutTotal || 0);
+      thermalPrinter.bold(true);
+      thermalPrinter.leftRight('NET TAHSILAT', `${netTahsilat.toFixed(2)} TL`);
+      thermalPrinter.bold(false);
       thermalPrinter.drawLine();
+
+      // ALINAN DÖVİZ TOPLAMLARI
+      if (dovizAnalizi && dovizAnalizi.length > 0) {
+        thermalPrinter.alignCenter(); thermalPrinter.bold(true);
+        thermalPrinter.println('--- ALINAN DOVIZ TOPLAMLARI ---');
+        thermalPrinter.bold(false); thermalPrinter.alignLeft();
+        for (const d of dovizAnalizi) {
+          thermalPrinter.leftRight(trASCII(d.currency), `${Number(d.totalAmount).toFixed(2)}`);
+        }
+        thermalPrinter.drawLine();
+      }
+
+      // İNDİRİM DETAYLARI
+      if (Number(data.satisIndirim || 0) > 0 || Number(data.cariIndirim || 0) > 0) {
+        thermalPrinter.alignCenter(); thermalPrinter.bold(true);
+        thermalPrinter.println('--- INDIRIM DETAYLARI ---');
+        thermalPrinter.bold(false); thermalPrinter.alignLeft();
+        if (Number(data.satisIndirim || 0) > 0) thermalPrinter.leftRight('SATIS INDIRIMI', `${Number(data.satisIndirim).toFixed(2)} TL`);
+        if (Number(data.cariIndirim || 0) > 0) thermalPrinter.leftRight('CARI HESAP IND.', `${Number(data.cariIndirim).toFixed(2)} TL`);
+        thermalPrinter.drawLine();
+      }
+
+      // AÇIK HESAP DETAYLARI (Cari Liste)
+      if (data.acikHesapDetay && data.acikHesapDetay.length > 0) {
+        thermalPrinter.alignCenter(); thermalPrinter.bold(true);
+        thermalPrinter.println('--- ACIK HESAP LISTESI ---');
+        thermalPrinter.bold(false); thermalPrinter.alignLeft();
+        for (const a of data.acikHesapDetay) {
+          thermalPrinter.leftRight(trASCII(a.cariAdi), `${Number(a.toplam).toFixed(2)} TL`);
+        }
+        thermalPrinter.drawLine();
+      }
+
+      // KASA TAHSİLATLARI
+      if (data.kasiyerTahsilat && data.kasiyerTahsilat.length > 0) {
+        thermalPrinter.alignCenter(); thermalPrinter.bold(true);
+        thermalPrinter.println('--- KASA TAHSILATLARI ---');
+        thermalPrinter.bold(false); thermalPrinter.alignLeft();
+        for (const k of data.kasiyerTahsilat) {
+          thermalPrinter.leftRight(trASCII(k.kasaAdi), `${Number(k.toplam).toFixed(2)} TL`);
+        }
+        thermalPrinter.drawLine();
+      }
+
+      // HİZMET TİPLERİ (Paket / Masa)
+      if (data.musteriToplamlari && data.musteriToplamlari.length > 0) {
+        thermalPrinter.alignCenter(); thermalPrinter.bold(true);
+        thermalPrinter.println('--- HIZMET TIPLERI ---');
+        thermalPrinter.bold(false); thermalPrinter.alignLeft();
+        for (const m of data.musteriToplamlari) {
+          thermalPrinter.leftRight(trASCII(m.tip === 'PAKET' ? 'PAKET (SERVIS)' : 'MASA (KISI)'), `${Number(m.toplam).toFixed(2)} TL (${m.adet} Ad.)`);
+        }
+        thermalPrinter.drawLine();
+      }
+
+      // KATEGORİ X İŞLEM TİPİ DAĞILIMI (Bölüm Detayları)
+      let catTxTotals: any[] = [];
+      if (typeof data.categoryTransactionTotals === 'string') {
+        try { catTxTotals = JSON.parse(data.categoryTransactionTotals); } catch {}
+      } else if (Array.isArray(data.categoryTransactionTotals)) {
+        catTxTotals = data.categoryTransactionTotals;
+      }
+      
+      if (catTxTotals && catTxTotals.length > 0) {
+        thermalPrinter.alignCenter(); thermalPrinter.bold(true);
+        thermalPrinter.println('--- BOLUM ISLEM DETAYLARI ---');
+        thermalPrinter.bold(false); thermalPrinter.alignLeft();
+        for (const ct of catTxTotals) {
+          const typeStr = ct.transactionType === 'SALE' && ct.status === 'ACTIVE' ? 'SATIS' :
+                          ct.transactionType === 'COMPLIMENTARY' && ct.status === 'ACTIVE' ? 'IKRAM' :
+                          ct.status === 'CANCELLED' ? 'IPTAL' :
+                          ct.status === 'REFUNDED' ? 'IADE' :
+                          ct.transactionType === 'NON_PAYABLE' && ct.status === 'ACTIVE' ? 'ODENMEZ' :
+                          ct.transactionType === 'STAFF' && ct.status === 'ACTIVE' ? 'PERSONEL' :
+                          ct.transactionType === 'PROMOTION' && ct.status === 'ACTIVE' ? 'PROMOSYON' : ct.transactionType || ct.status;
+          
+          thermalPrinter.leftRight(
+            `${trASCII(ct.categoryName).substring(0, 12)} [${trASCII(typeStr)}]`,
+            `${Number(ct.total).toFixed(2)} TL (${Number(ct.quantity).toFixed(0)} Ad.)`
+          );
+        }
+        thermalPrinter.drawLine();
+      }
 
       // KDV ÖZETİ (showVatSummary)
       if (profile?.showVatSummary && Number(data.taxTotal) > 0) {
@@ -1235,11 +1665,13 @@ export class PrintersService {
         const ptp = await import('pdf-to-printer');
         // getPrinters returns an array of printer objects which usually have { deviceId, name } or similar.
         const list = await ptp.getPrinters();
-        osPrinters = list.map((p: any) => ({
-          name: p.deviceId || p.name || typeof p === 'string' ? p : 'Bilinmeyen Yazıcı',
-          port: p.port || p.portName || '',
-          isDefault: p.isDefault || false
-        }));
+        if (Array.isArray(list)) {
+          osPrinters = list.filter(Boolean).map((p: any) => ({
+            name: String(p.deviceId || p.name || (typeof p === 'string' ? p : 'Bilinmeyen Yazıcı')),
+            port: String(p.port || p.portName || ''),
+            isDefault: Boolean(p.isDefault)
+          }));
+        }
       } catch (err) {
         console.warn('pdf-to-printer method failed, system might not support it.', err);
       }
@@ -1253,11 +1685,11 @@ export class PrintersService {
          try {
             const { stdout } = await execAsync('powershell -Command "Get-Printer | Select-Object Name, PortName, Shared | ConvertTo-Json"');
             const parsed = JSON.parse(stdout);
-            const printersArr = Array.isArray(parsed) ? parsed : [parsed];
+            const printersArr = (Array.isArray(parsed) ? parsed : [parsed]).filter(Boolean);
             osPrinters = printersArr.map((p: any) => ({
-              name: p.Name,
-              port: p.PortName,
-              shared: p.Shared
+              name: String(p.Name || 'Bilinmeyen Yazıcı'),
+              port: String(p.PortName || ''),
+              shared: Boolean(p.Shared)
             }));
          } catch(e) {
             console.warn('Powershell fallback failed', e);

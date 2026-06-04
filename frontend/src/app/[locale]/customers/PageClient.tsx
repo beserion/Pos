@@ -375,7 +375,9 @@ export function PageClient() {
                                                 <button onClick={() => openEditModal(c)} className="text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors p-2 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-900/30" title="Düzenle">
                                                     <i className="fat fa-pen-to-square text-lg"></i>
                                                 </button>
-
+                                                <button onClick={() => handleDelete(c.id)} className="text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition-colors p-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/30" title="Sil">
+                                                    <i className="fat fa-trash text-lg"></i>
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>

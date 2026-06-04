@@ -96,15 +96,53 @@ export class PartnersService {
   }
 
   async remove(id: number): Promise<void> {
-    await this.findOne(id);
+    const partner = await this.findOne(id);
+
+    if (partner.name === 'PERAKENDE MÜŞTERİ' || partner.name === 'PAREKENDE MÜŞTERİ') {
+      throw new BadRequestException('PERAKENDE MÜŞTERİ silinemez.');
+    }
+
+    const txCount = await this.partnerRepository.manager.count('AccountTransaction', {
+      where: { partnerId: id },
+    });
+    if (txCount > 0) {
+      throw new BadRequestException(
+        'Bu cariye ait hesap hareketleri (işlemler) bulunmaktadır. Silinemez.',
+      );
+    }
+
+    const invoiceCount = await this.partnerRepository.manager.count('Invoice', {
+      where: { partnerId: id },
+    });
+    if (invoiceCount > 0) {
+      throw new BadRequestException('Bu cariye ait faturalar bulunmaktadır. Silinemez.');
+    }
+
+    const saleCount = await this.partnerRepository.manager.count('Sale', {
+      where: { partnerId: id },
+    });
+    if (saleCount > 0) {
+      throw new BadRequestException(
+        'Bu cariye ait satış veya adisyon kayıtları bulunmaktadır. Silinemez.',
+      );
+    }
+
     await this.partnerRepository.delete(id);
   }
   
   async getOrCreateRetailCustomer(): Promise<Partner> {
-    const retail = await this.partnerRepository.findOne({ where: { name: 'PAREKENDE MÜŞTERİ' } });
+    let retail = await this.partnerRepository.findOne({ where: { name: 'PERAKENDE MÜŞTERİ' } });
     if (retail) return retail;
+
+    // Check if the old misspelled one exists and rename it
+    const oldRetail = await this.partnerRepository.findOne({ where: { name: 'PAREKENDE MÜŞTERİ' } });
+    if (oldRetail) {
+      oldRetail.name = 'PERAKENDE MÜŞTERİ';
+      return await this.partnerRepository.save(oldRetail);
+    }
+
     return await this.create({
-      name: 'PAREKENDE MÜŞTERİ',
+      name: 'PERAKENDE MÜŞTERİ',
       type: 'CUSTOMER',
       isActive: true,
     });

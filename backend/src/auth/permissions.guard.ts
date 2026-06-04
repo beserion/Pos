@@ -88,7 +88,13 @@ export class PermissionsGuard implements CanActivate {
         }
         
         const extraPermsArr = extra.map((s: string) => s.trim()).filter(Boolean);
-        allUserPerms = [...rolePermsArr, ...extraPermsArr];
+        
+        const negativePerms = extraPermsArr.filter(p => p.startsWith('!')).map(p => p.slice(1).toUpperCase());
+        const positiveExtra = extraPermsArr.filter(p => !p.startsWith('!'));
+        
+        const filteredRolePerms = rolePermsArr.filter(p => !negativePerms.includes(p.toUpperCase()));
+        
+        allUserPerms = [...filteredRolePerms, ...positiveExtra];
 
         userPermsCache.set(userId, {
           allUserPerms,

@@ -5,6 +5,9 @@ import { StockCard } from './stock-card.entity';
 import { UnitConversion } from './unit-conversion.entity';
 import { StockGroup } from '../stock-groups/stock-group.entity';
 import { Warehouse } from '../warehouses/warehouse.entity';
+import { StockMovement } from '../stock-movements/stock-movement.entity';
+import { RecipeLine } from '../recipes/recipe-line.entity';
+import { InvoiceItem } from '../invoices/invoice-item.entity';
 import * as xlsx from 'xlsx';
 
 @Injectable()
@@ -120,7 +123,33 @@ export class StockCardsService {
   }
 
   async remove(id: number): Promise<void> {
-    throw new BadRequestException('Güvenlik kuralı gereği sistemden stok kartı kalıcı olarak silinemez. Lütfen kartı düzenleyerek "Pasif" konuma alınız.');
+    const card = await this.findOne(id);
+
+    // 1. Check stock movements
+    const movementCount = await this.stockCardRepository.manager.count(StockMovement, {
+      where: { stockCardId: id }
+    });
+    if (movementCount > 0) {
+      throw new BadRequestException('Bu stok kartına ait envanter hareketleri (giriş, çıkış, sayım vb.) bulunmaktadır. Hareketi olan stok kartları silinemez, ancak pasif duruma getirilebilir.');
+    }
+
+    // 2. Check invoices
+    const invoiceCount = await this.stockCardRepository.manager.count(InvoiceItem, {
+      where: { stockCardId: id }
+    });
+    if (invoiceCount > 0) {
+      throw new BadRequestException('Bu stok kartı fatura kayıtlarında kullanılmaktadır. Faturada kullanılan stok kartları silinemez, ancak pasif duruma getirilebilir.');
+    }
+
+    // 3. Check recipes
+    const recipeLineCount = await this.stockCardRepository.manager.count(RecipeLine, {
+      where: { stockCardId: id }
+    });
+    if (recipeLineCount > 0) {
+      throw new BadRequestException('Bu stok kartı bir veya daha fazla ürünün reçetesinde yer almaktadır. Lütfen önce ilgili reçetelerden kaldırın.');
+    }
+
+    await this.stockCardRepository.remove(card);
   }
 
   async getCategories(): Promise<string[]> {

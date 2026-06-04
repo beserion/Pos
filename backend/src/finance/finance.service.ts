@@ -5,6 +5,7 @@ import { AccountTransaction } from './account-transaction.entity';
 import { PartnersService } from '../partners/partners.service';
 import { CompanyAccountService } from './company-account.service';
 import { ParametersService } from '../parameters/parameters.service';
+import { ShiftsService } from '../shifts/shifts.service';
 
 @Injectable()
 export class FinanceService {
@@ -16,6 +17,7 @@ export class FinanceService {
     private partnersService: PartnersService,
     private companyAccountService: CompanyAccountService,
     private parametersService: ParametersService,
+    private shiftsService: ShiftsService,
   ) {}
 
   async findAll(
@@ -86,6 +88,29 @@ export class FinanceService {
     (data as any).userId = data.userId || null;
     (data as any).companyAccountId = data.companyAccountId || null;
     (data as any).sourceId = data.sourceId || null;
+    (data as any).shiftId = data.shiftId || null;
+    (data as any).cashRegisterId = data.cashRegisterId || null;
+
+    if (data.userId && !data.shiftId) {
+      try {
+        const activeShift = await this.shiftsService.getActiveShift(data.userId);
+        if (activeShift) {
+          data.shiftId = activeShift.id;
+          data.cashRegisterId = activeShift.cashRegisterId;
+        }
+      } catch (err) {
+        this.logger.warn('Failed to retrieve active shift for transaction:', err);
+      }
+    }
+
+    if (!data.businessDate) {
+      try {
+        const stored = await this.parametersService.getValue('pos', 'active_business_date');
+        data.businessDate = (stored && stored.trim().length === 10) ? stored : new Date().toISOString().split('T')[0];
+      } catch {
+        data.businessDate = new Date().toISOString().split('T')[0];
+      }
+    }
 
     const transaction = repo.create(data);
     const saved = await repo.save(transaction);
@@ -332,8 +357,9 @@ export class FinanceService {
     });
   }
 
-  async removeBySource(sourceType: string, sourceId: number): Promise<void> {
-    const transaction = await this.transactionRepository.findOne({
+  async removeBySource(sourceType: string, sourceId: number, manager?: any): Promise<void> {
+    const repo = manager ? manager.getRepository(AccountTransaction) : this.transactionRepository;
+    const transaction = await repo.findOne({
       where: { sourceType, sourceId },
     });
     
@@ -344,7 +370,8 @@ export class FinanceService {
         await this.companyAccountService.updateBalance(
           transaction.companyAccountId,
           transaction.amount,
-          reverseType
+          reverseType,
+          manager
         );
       }
 
@@ -373,11 +400,12 @@ export class FinanceService {
         await this.partnersService.updateBalance(
           transaction.partnerId,
           transaction.amount,
-          reverseErpType
+          reverseErpType,
+          manager
         );
       }
 
-      await this.transactionRepository.delete(transaction.id);
+      await repo.delete(transaction.id);
     }
   }
 }

@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { FinanceService } from './finance.service';
 import { AccountTransaction } from './account-transaction.entity';
@@ -45,8 +46,9 @@ export class FinanceController {
   }
 
   @Post('transactions')
-  createTransaction(@Body() data: Partial<AccountTransaction>) {
-    return this.financeService.create(data);
+  createTransaction(@Body() data: Partial<AccountTransaction>, @Req() req: any) {
+    const userId = req.user?.userId || req.user?.id;
+    return this.financeService.create({ ...data, userId });
   }
 
   @Put('transactions/:id')

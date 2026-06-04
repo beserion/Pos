@@ -137,6 +137,10 @@ export class Sale {
   @Column({ default: 0 })
   subCheckIndex: number;
 
+  @Column({ default: false })
+  isBillRequested: boolean;
+
+
   // --- Transfer Alanları ---
   @Column({ nullable: true })
   transferredFromTableId: number;

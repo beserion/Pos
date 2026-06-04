@@ -2,12 +2,15 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Department } from './department.entity';
+import { Product } from '../products/product.entity';
 
 @Injectable()
 export class DepartmentsService {
   constructor(
     @InjectRepository(Department)
     private readonly repository: Repository<Department>,
+    @InjectRepository(Product)
+    private readonly productRepository: Repository<Product>,
   ) {}
 
   findAll() {
@@ -56,6 +59,29 @@ export class DepartmentsService {
   }
 
   async remove(id: number) {
+    const department = await this.findOne(id);
+    if (!department) {
+      throw new NotFoundException(`Kategori bulunamadı (ID: ${id})`);
+    }
+
+    const productInDept = await this.productRepository.findOne({
+      where: { category: department.name }
+    });
+    if (productInDept) {
+      throw new BadRequestException(
+        `"${department.name}" kategorisi kullanımda (bu kategoriye bağlı ürünler var) olduğu için silinemez. Önce bağlı ürünleri güncelleyin veya silin.`
+      );
+    }
+
+    const isUsedAsExtra = await this.repository.findOne({
+      where: { extraDepartmentId: id }
+    });
+    if (isUsedAsExtra) {
+      throw new BadRequestException(
+        `"${department.name}" kategorisi, "${isUsedAsExtra.name}" kategorisinin ekstra ürün grubu olarak ayarlandığı için silinemez.`
+      );
+    }
+
     return this.repository.delete(id);
   }
 

@@ -244,6 +244,7 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
     const [lineDiscountRate, setLineDiscountRate] = useState<number>(0);
     const [lineDiscountAmount, setLineDiscountAmount] = useState<number>(0);
     const [lineDiscountQty, setLineDiscountQty] = useState<number>(1);
+    const [lineDiscountTab, setLineDiscountTab] = useState<'discount' | 'increase'>('discount');
 
     // --- Variation Modal State ---
     const [isVariationModalOpen, setIsVariationModalOpen] = useState(false);
@@ -299,6 +300,7 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
     const [bulkSelectedItems, setBulkSelectedItems] = useState<{ type: 'EXISTING' | 'CART', identifier: any }[]>([]);
     const [bulkTransactionType, setBulkTransactionType] = useState<string>('SALE');
     const [isBulkReasonModalOpen, setIsBulkReasonModalOpen] = useState(false);
+    const [transactionReasonText, setTransactionReasonText] = useState('');
 
     // --- Geçici İsim States ---
     const [isTempNameModalOpen, setIsTempNameModalOpen] = useState(false);
@@ -692,13 +694,13 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
         }
     };
 
-    const confirmCancelItem = async (itemId: number, reason: string) => {
+    const confirmCancelItem = async (itemId: number, reason: string, quantity?: number) => {
         try {
             const token = localStorage.getItem('token') || (user as any)?.token;
             const res = await fetch(`${API_URL}/sales/items/${itemId}/cancel`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ reason })
+                body: JSON.stringify({ reason, quantity })
             });
             if (res.ok) {
                 toastSwal({ icon: 'success', title: 'Ürün iptal edildi.' });
@@ -733,13 +735,13 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
         }
     };
 
-    const confirmRefundItem = async (itemId: number, reason: string) => {
+    const confirmRefundItem = async (itemId: number, reason: string, quantity?: number) => {
         try {
             const token = localStorage.getItem('token') || (user as any)?.token;
             const res = await fetch(`${API_URL}/sales/items/${itemId}/refund`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ reason })
+                body: JSON.stringify({ reason, quantity })
             });
             if (res.ok) {
                 toastSwal({ icon: 'success', title: 'Ürün iade edildi.' });
@@ -816,6 +818,7 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
     const handleTransactionTypeChange = (type: string) => {
         setTempTransactionType(type);
         if (type === 'COMPLIMENTARY' || type === 'FREE') {
+            setTransactionReasonText('');
             setIsReasonModalOpen(true);
         } else {
             confirmTransactionType(type);
@@ -939,6 +942,26 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
     const saveLineDiscount = async () => {
         if (!selectedDiscountItem) return;
 
+        const isIncrease = lineDiscountTab === 'increase';
+        let finalRate = 0;
+        let finalAmount = 0;
+
+        if (isIncrease) {
+            finalAmount = lineDiscountAmount; // Fiyat değişikliğinde doğrudan girilen veya hesaplanan imzalı TL değeri
+            finalRate = 0; // Küsuratlı oran dönüşümlerini önlemek için oran 0 gönderilir
+        } else {
+            finalRate = Math.abs(lineDiscountRate);
+            if (lineDiscountAmount > 0) {
+                finalAmount = Math.abs(lineDiscountAmount);
+            } else if (lineDiscountRate > 0) {
+                const basePrice = selectedDiscountItem.type === 'CART' 
+                    ? calculateItemPrice(selectedDiscountItem) 
+                    : (selectedDiscountItem.unitPrice ?? selectedDiscountItem.product?.price ?? 0);
+                const totalBase = basePrice * lineDiscountQty;
+                finalAmount = Number((totalBase * lineDiscountRate / 100).toFixed(2));
+            }
+        }
+
         if (selectedDiscountItem.type === 'CART') {
             // Sepetteki geçici ürünün indirimini güncelle (Miktar bazlı bölmeyi destekle)
             setCart(prev => {
@@ -960,24 +983,20 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                         discountAmount: 0
                     };
                     // İndirim uygulanan adet için yeni bir sepet satırı oluştur
-                    const totalBase = basePrice * qtyToDiscount;
-                    const amount = lineDiscountAmount || (lineDiscountRate > 0 ? Number((totalBase * lineDiscountRate / 100).toFixed(2)) : 0);
                     const newItem = {
                         ...originalItem,
                         quantity: qtyToDiscount,
-                        discountRate: lineDiscountRate,
-                        discountAmount: amount,
+                        discountRate: finalRate,
+                        discountAmount: finalAmount,
                         uniqueId: Math.random().toString() // Tekrar gruplanmaması için benzersiz ID
                     };
                     newCart.push(newItem);
                 } else {
                     // Satırın tamamına indirim uygula
-                    const totalBase = basePrice * originalItem.quantity;
-                    const amount = lineDiscountAmount || (lineDiscountRate > 0 ? Number((totalBase * lineDiscountRate / 100).toFixed(2)) : 0);
                     newCart[selectedDiscountItem.index] = {
                         ...originalItem,
-                        discountRate: lineDiscountRate,
-                        discountAmount: amount
+                        discountRate: finalRate,
+                        discountAmount: finalAmount
                     };
                 }
                 return newCart;
@@ -987,21 +1006,22 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
         } else {
             // Gönderilmiş ürünün indirimini kaydet
             const token = localStorage.getItem('token') || (user as any)?.token;
+            
             try {
                 const res = await fetch(`${API_URL}/sales/items/${selectedDiscountItem.id}/discount`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                     body: JSON.stringify({
-                        discountRate: lineDiscountRate,
-                        discountAmount: lineDiscountAmount,
+                        discountRate: finalRate,
+                        discountAmount: finalAmount,
                         quantity: lineDiscountQty
                     })
                 });
                 if (!res.ok) {
                     const err = await res.json();
-                    toastSwal({ icon: 'error', title: err.message || 'Satır indirimi kaydedilemedi' });
+                    toastSwal({ icon: 'error', title: err.message || 'Satır işlemi kaydedilemedi' });
                 } else {
-                    toastSwal({ icon: 'success', title: 'Satır indirimi başarıyla uygulandı!' });
+                    toastSwal({ icon: 'success', title: isIncrease ? 'Fiyat değişikliği başarıyla uygulandı!' : 'Satır indirimi başarıyla uygulandı!' });
                     setIsLineDiscountModalOpen(false);
                     setSelectedDiscountItem(null);
                     // Refresh table data
@@ -1100,11 +1120,15 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
             // Tüm kalemleri mutfak yazıcısı yönlendirme sistemine gönder
             // Backend OutputProfile sistemi ile hangi ürünün nereye gideceğini belirler
             if (cart.length > 0) {
+                const activeCheck = allFlatChecks.find((f: any) => f.id === activeSubCheckId);
+                const subCheckLabel = activeCheck?.subCheckLabel;
+
                 const kitchenPrintData = {
                     orderType: 'MASA SİPARİŞİ',
                     receiptNumber: `SİP-${orderData?.id || '00'}`,
                     date: new Date(),
                     tableName: selectedTable?.name,
+                    subCheckLabel: subCheckLabel || null,
                     zoneId: selectedTable?.zone?.id,
                     waiterName: (user as any)?.firstName || (user as any)?.name || (user as any)?.username || (user as any)?.email?.split('@')[0] || 'Garson',
                     items: cart.map(item => ({
@@ -1187,7 +1211,7 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
         } catch (e) { console.error("Partners fetch failed", e); }
 
         const customerOptions = partners
-            .filter(p => p.type === 'CUSTOMER')
+            .filter(p => p.type === 'CUSTOMER' && p.name !== 'PERAKENDE MÜŞTERİ' && p.name !== 'PAREKENDE MÜŞTERİ')
             .reduce((acc, p) => ({ ...acc, [p.id]: p.name }), { '0': '-- Cari Seçilmedi --' });
 
         // Ask payment method and partner
@@ -1349,18 +1373,24 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                             Bu masanın adisyonu istenmiş durumda. Yeni sipariş girişi yapmak için masayı tekrar açmanız gerekir.
                         </p>
 
-                        <div className="flex flex-col sm:flex-row gap-4 w-full max-w-lg">
+                        <div className="flex flex-col sm:flex-row gap-4 w-full max-w-2xl">
                             <button
                                 onClick={reopenTable}
-                                className="flex-1 py-5 rounded-3xl bg-gradient-to-r from-amber-500 to-orange-600 text-white font-black text-lg uppercase tracking-widest shadow-2xl shadow-amber-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+                                className="flex-1 py-5 rounded-3xl bg-gradient-to-r from-amber-500 to-orange-600 text-white font-black text-sm sm:text-base uppercase tracking-widest shadow-2xl shadow-amber-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
                             >
-                                <i className="fat fa-unlock text-2xl"></i> Masayı Geri Aç
+                                <i className="fat fa-unlock text-xl"></i> Masayı Geri Aç
+                            </button>
+                            <button
+                                onClick={onSwitchToPos}
+                                className="flex-1 py-5 rounded-3xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white font-black text-sm sm:text-base uppercase tracking-widest shadow-2xl shadow-indigo-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+                            >
+                                <i className="fat fa-cash-register text-xl"></i> Kasa Ekranı
                             </button>
                             <button
                                 onClick={() => { setActiveTab('tables'); setSelectedTable(null); }}
-                                className="flex-1 py-5 rounded-3xl bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-black text-lg uppercase tracking-widest border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all hover:shadow-lg"
+                                className="flex-1 py-5 rounded-3xl bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-black text-sm sm:text-base uppercase tracking-widest border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all hover:shadow-lg flex items-center justify-center gap-3"
                             >
-                                Masalara Dön
+                                <i className="fat fa-reply text-xl"></i> Masalara Dön
                             </button>
                         </div>
                     </div>
@@ -2025,8 +2055,8 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                                 )}
                                             </span>
                                             <span className={`font-bold ${item.isPaid ? 'text-emerald-600 dark:text-emerald-400 line-through' : 'text-slate-600 dark:text-slate-300'}`}>
-                                                {Number(item.discountAmount || 0) > 0 && (
-                                                    <span className="text-red-500 line-through mr-1.5 text-xs">
+                                                {Number(item.discountAmount || 0) !== 0 && (
+                                                    <span className={`${Number(item.discountAmount) > 0 ? 'text-red-500 line-through' : 'text-slate-400 font-normal dark:text-slate-500'} mr-1.5 text-xs`}>
                                                         ₺{(item.quantity * item.unitPrice).toFixed(2)}
                                                     </span>
                                                 )}
@@ -2042,8 +2072,13 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                                             (-₺{Number(item.discountAmount || 0).toFixed(2)})
                                                         </span>
                                                     )}
+                                                    {Number(item.discountAmount || 0) < 0 && (
+                                                        <span className="text-emerald-500 dark:text-emerald-400 ml-1 font-bold">
+                                                            (+₺{Math.abs(Number(item.discountAmount || 0)).toFixed(2)})
+                                                        </span>
+                                                    )}
                                                     {getTransactionShortCode(item.transactionType) && (
-                                                        <span className="ml-1 text-indigo-500 bg-indigo-50 dark:bg-indigo-500/20 px-1.5 rounded-md">-{getTransactionShortCode(item.transactionType)}</span>
+                                                        <span className="ml-1 text-indigo-500 bg-indigo-50 dark:bg-indigo-500/20 px-1.5 rounded-md font-black text-[9px] border border-indigo-200 dark:border-indigo-500/30">-{getTransactionShortCode(item.transactionType)}</span>
                                                     )}
                                                 </span>
                                                 {item.addedByName && (
@@ -2061,15 +2096,22 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                                     <>
                                                         <button
                                                             onClick={() => {
+                                                                const isInc = (item.discountRate || 0) < 0 || (item.discountAmount || 0) < 0;
                                                                 setSelectedDiscountItem({ ...item, type: 'EXISTING' });
-                                                                setLineDiscountRate(item.discountRate || 0);
-                                                                setLineDiscountAmount(item.discountAmount || 0);
+                                                                setLineDiscountTab(isInc ? 'increase' : 'discount');
+                                                                setLineDiscountRate(isInc ? 0 : Math.abs(item.discountRate || 0));
+                                                                setLineDiscountAmount(isInc ? (item.discountAmount || 0) : Math.abs(item.discountAmount || 0));
                                                                 setLineDiscountQty(item.quantity || 1);
                                                                 setIsLineDiscountModalOpen(true);
                                                             }}
-                                                            className="text-[10px] font-black uppercase text-red-600 dark:text-red-400 hover:text-red-700 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 border border-red-200 dark:border-red-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1"
+                                                            className={`text-[10px] font-black uppercase border px-3 py-1 rounded-full transition-all flex items-center gap-1 ${
+                                                                (item.discountRate || 0) < 0 || (item.discountAmount || 0) < 0
+                                                                    ? 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border-emerald-200 dark:border-emerald-500/30'
+                                                                    : 'text-red-600 dark:text-red-400 hover:text-red-700 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 border-red-200 dark:border-red-500/30'
+                                                            }`}
                                                         >
-                                                            <i className="fat fa-percent text-[10px]"></i> İndirim
+                                                            <i className={(item.discountRate || 0) < 0 || (item.discountAmount || 0) < 0 ? "fat fa-plus text-[9px]" : "fat fa-percent text-[10px]"}></i>{' '}
+                                                            {(item.discountRate || 0) < 0 || (item.discountAmount || 0) < 0 ? 'Fiyat Değiştir' : 'İndirim'}
                                                         </button>
                                                         <button
                                                             onClick={(e) => {
@@ -2092,6 +2134,18 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                                             className="text-[10px] font-black uppercase text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 bg-yellow-50 dark:bg-yellow-500/10 hover:bg-yellow-100 dark:hover:bg-yellow-500/20 border border-yellow-200 dark:border-yellow-500/30 px-3 py-1 rounded-full transition-all flex items-center gap-1"
                                                         >
                                                             <i className="fat fa-arrow-right-arrow-left text-[10px]"></i> Transfer
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setTransferSourceSubCheckId(item.saleId);
+                                                                setTransferSelectedItemIds([item.id]);
+                                                                setTransferMode('ITEM_WITHIN_TABLE');
+                                                                setIsTransferModalOpen(true);
+                                                            }}
+                                                            className="w-7 h-7 flex items-center justify-center rounded-full text-blue-600 dark:text-blue-400 hover:text-blue-700 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 border border-blue-200 dark:border-blue-500/30 transition-all shadow-sm"
+                                                            title="Masa İçi Aktar"
+                                                        >
+                                                            <i className="fat fa-arrows-turn-to-dots text-[10px]"></i>
                                                         </button>
                                                     </>
                                                 )}
@@ -2152,8 +2206,8 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                             {item.variationName && <span className="text-[11px] text-indigo-500 font-bold tracking-widest mt-0.5">{item.variationName}</span>}
                                         </span>
                                         <span className="font-bold text-slate-800 dark:text-slate-100">
-                                            {Number(item.discountAmount || 0) > 0 && (
-                                                <span className="text-red-500 line-through mr-1.5 text-xs">
+                                            {Number(item.discountAmount || 0) !== 0 && (
+                                                <span className={`${Number(item.discountAmount) > 0 ? 'text-red-500 line-through' : 'text-slate-400 font-normal dark:text-slate-500'} mr-1.5 text-xs`}>
                                                     ₺{(calculateItemPrice(item) * item.quantity).toFixed(2)}
                                                 </span>
                                             )}
@@ -2167,6 +2221,11 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                                 {Number(item.discountAmount || 0) > 0 && (
                                                     <span className="text-red-500 dark:text-red-400 ml-1">
                                                         (-₺{Number(item.discountAmount || 0).toFixed(2)})
+                                                    </span>
+                                                )}
+                                                {Number(item.discountAmount || 0) < 0 && (
+                                                    <span className="text-emerald-500 dark:text-emerald-400 ml-1 font-bold">
+                                                        (+₺{Math.abs(Number(item.discountAmount || 0)).toFixed(2)})
                                                     </span>
                                                 )}
                                             </span>
@@ -2194,16 +2253,22 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                         <div className="flex items-center gap-2">
                                             <button
                                                 onClick={() => {
+                                                    const isInc = (item.discountRate || 0) < 0 || (item.discountAmount || 0) < 0;
                                                     setSelectedDiscountItem({ ...item, type: 'CART', index });
-                                                    setLineDiscountRate(item.discountRate || 0);
-                                                    setLineDiscountAmount(item.discountAmount || 0);
+                                                    setLineDiscountTab(isInc ? 'increase' : 'discount');
+                                                    setLineDiscountRate(isInc ? 0 : Math.abs(item.discountRate || 0));
+                                                    setLineDiscountAmount(isInc ? (item.discountAmount || 0) : Math.abs(item.discountAmount || 0));
                                                     setLineDiscountQty(item.quantity || 1);
                                                     setIsLineDiscountModalOpen(true);
                                                 }}
-                                                className="w-8 h-8 flex items-center justify-center text-red-500 hover:text-red-600 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 rounded-md transition-colors border border-red-200 dark:border-red-500/30"
-                                                title="İndirim Uygula"
+                                                className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors border ${
+                                                    (item.discountRate || 0) < 0 || (item.discountAmount || 0) < 0
+                                                        ? 'text-emerald-500 hover:text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 border-emerald-200 dark:border-emerald-500/30'
+                                                        : 'text-red-500 hover:text-red-600 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 border-red-200 dark:border-red-500/30'
+                                                }`}
+                                                title={(item.discountRate || 0) < 0 || (item.discountAmount || 0) < 0 ? 'Fiyat Değiştir' : 'İndirim Uygula'}
                                             >
-                                                <i className="fat fa-percent"></i>
+                                                <i className={(item.discountRate || 0) < 0 || (item.discountAmount || 0) < 0 ? 'fat fa-plus text-[11px]' : 'fat fa-percent'}></i>
                                             </button>
                                             <button
                                                 onClick={() => {
@@ -2714,27 +2779,45 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
             {isReasonModalOpen && (
                 <div className="fixed inset-0 z-[250] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
                     <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 p-8 animate-in fade-in zoom-in duration-300">
-                        <div className="text-center mb-8">
+                        <div className="text-center mb-6">
                             <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl ${tempTransactionType === 'COMPLIMENTARY' ? 'bg-indigo-100 text-indigo-600 shadow-indigo-500/20' : 'bg-rose-100 text-rose-600 shadow-rose-500/20'}`}>
                                 <i className={`fat ${tempTransactionType === 'COMPLIMENTARY' ? 'fa-gift' : 'fa-hand-holding-heart'} text-3xl`}></i>
                             </div>
                             <h2 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tight">İşlem Nedeni</h2>
-                            <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 font-medium">Lütfen bu işlem için geçerli bir sebep seçin veya yazın.</p>
+                            <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 font-medium">Lütfen bu işlem için geçerli bir sebep girin veya seçin.</p>
                         </div>
 
-                        <div className="space-y-3 mb-8">
-                            {['Müşteri Memnuniyeti', 'Gecikme Telafisi', 'Yönetici İkramı', 'Mutfak Hatası', 'Tanıtım / PR', 'Yanlış Sipariş', 'Personel Hatası'].map(reason => (
-                                <button
-                                    key={reason}
-                                    onClick={() => confirmTransactionType(tempTransactionType, reason)}
-                                    className="w-full p-4 text-left rounded-2xl border-2 border-slate-100 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500/50 hover:bg-emerald-50 dark:hover:bg-emerald-500/5 transition-all group"
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <span className="font-bold text-slate-700 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">{reason}</span>
-                                        <i className="fat fa-chevron-right text-slate-300 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all"></i>
-                                    </div>
-                                </button>
-                            ))}
+                        <div className="space-y-4 mb-6">
+                            {/* Hızlı Seçimler */}
+                            <div className="space-y-1.5">
+                                <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Hızlı Sebepler</label>
+                                <div className="flex gap-2">
+                                    {['Yönetici İkramı', 'Müşteri Memnuniyeti'].map(reason => (
+                                        <button
+                                            key={reason}
+                                            onClick={() => {
+                                                setTransactionReasonText(reason);
+                                                confirmTransactionType(tempTransactionType, reason);
+                                            }}
+                                            className="flex-1 p-3 text-center rounded-2xl border-2 border-slate-100 dark:border-slate-700 hover:border-emerald-500 text-xs font-bold text-slate-700 dark:text-slate-200 transition-all"
+                                        >
+                                            {reason}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Manuel Açıklama Girişi */}
+                            <div className="space-y-1.5">
+                                <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Açıklama</label>
+                                <input
+                                    type="text"
+                                    placeholder="Lütfen işlem nedenini yazın..."
+                                    value={transactionReasonText}
+                                    onChange={(e) => setTransactionReasonText(e.target.value)}
+                                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-emerald-550/20 outline-none"
+                                />
+                            </div>
                         </div>
 
                         <div className="flex gap-4">
@@ -2743,6 +2826,17 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                 className="flex-1 py-4 rounded-2xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
                             >
                                 Vazgeç
+                            </button>
+                            <button
+                                onClick={() => confirmTransactionType(tempTransactionType, transactionReasonText)}
+                                disabled={!transactionReasonText.trim()}
+                                className={`flex-1 py-4 rounded-2xl text-white font-black text-xs uppercase tracking-widest shadow-xl transition-all ${
+                                    transactionReasonText.trim()
+                                        ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/30 active:scale-95'
+                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed shadow-none'
+                                }`}
+                            >
+                                Uygula
                             </button>
                         </div>
                     </div>
@@ -2895,6 +2989,7 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                     <button
                                         onClick={() => {
                                             if (bulkTransactionType === 'COMPLIMENTARY' || bulkTransactionType === 'FREE') {
+                                                setTransactionReasonText('');
                                                 setIsBulkReasonModalOpen(true);
                                             } else {
                                                 handleBulkApply(bulkTransactionType);
@@ -2915,27 +3010,45 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
             {isBulkReasonModalOpen && (
                 <div className="fixed inset-0 z-[260] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
                     <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl overflow-hidden border border-white/20 dark:border-slate-700/50 p-8 animate-in fade-in zoom-in duration-300">
-                        <div className="text-center mb-8">
+                        <div className="text-center mb-6">
                             <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl ${bulkTransactionType === 'COMPLIMENTARY' ? 'bg-indigo-100 text-indigo-600 shadow-indigo-500/20' : 'bg-rose-100 text-rose-600 shadow-rose-500/20'}`}>
                                 <i className={`fat ${bulkTransactionType === 'COMPLIMENTARY' ? 'fa-gift' : 'fa-hand-holding-heart'} text-3xl`}></i>
                             </div>
                             <h2 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tight">İşlem Nedeni</h2>
-                            <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 font-medium">Lütfen <span className="font-bold text-indigo-500">{bulkSelectedItems.length} ürün</span> için toplu işlem sebebi seçin.</p>
+                            <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 font-medium">Lütfen <span className="font-bold text-indigo-500">{bulkSelectedItems.length} ürün</span> için toplu işlem sebebi girin veya seçin.</p>
                         </div>
 
-                        <div className="space-y-3 mb-8">
-                            {['Müşteri Memnuniyeti', 'Gecikme Telafisi', 'Yönetici İkramı', 'Mutfak Hatası', 'Tanıtım / PR', 'Yanlış Sipariş', 'Personel Hatası'].map(reason => (
-                                <button
-                                    key={reason}
-                                    onClick={() => handleBulkApply(bulkTransactionType, reason)}
-                                    className="w-full p-4 text-left rounded-2xl border-2 border-slate-100 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500/50 hover:bg-emerald-50 dark:hover:bg-emerald-500/5 transition-all group"
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <span className="font-bold text-slate-700 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">{reason}</span>
-                                        <i className="fat fa-chevron-right text-slate-300 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all"></i>
-                                    </div>
-                                </button>
-                            ))}
+                        <div className="space-y-4 mb-6">
+                            {/* Hızlı Seçimler */}
+                            <div className="space-y-1.5">
+                                <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Hızlı Sebepler</label>
+                                <div className="flex gap-2">
+                                    {['Yönetici İkramı', 'Müşteri Memnuniyeti'].map(reason => (
+                                        <button
+                                            key={reason}
+                                            onClick={() => {
+                                                setTransactionReasonText(reason);
+                                                handleBulkApply(bulkTransactionType, reason);
+                                            }}
+                                            className="flex-1 p-3 text-center rounded-2xl border-2 border-slate-100 dark:border-slate-700 hover:border-emerald-500 text-xs font-bold text-slate-700 dark:text-slate-200 transition-all"
+                                        >
+                                            {reason}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Manuel Açıklama Girişi */}
+                            <div className="space-y-1.5">
+                                <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1">Açıklama</label>
+                                <input
+                                    type="text"
+                                    placeholder="Lütfen işlem nedenini yazın..."
+                                    value={transactionReasonText}
+                                    onChange={(e) => setTransactionReasonText(e.target.value)}
+                                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-emerald-550/20 outline-none"
+                                />
+                            </div>
                         </div>
 
                         <div className="flex gap-4">
@@ -2944,6 +3057,17 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                 className="flex-1 py-4 rounded-2xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
                             >
                                 Vazgeç
+                            </button>
+                            <button
+                                onClick={() => handleBulkApply(bulkTransactionType, transactionReasonText)}
+                                disabled={!transactionReasonText.trim()}
+                                className={`flex-1 py-4 rounded-2xl text-white font-black text-xs uppercase tracking-widest shadow-xl transition-all ${
+                                    transactionReasonText.trim()
+                                        ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/30 active:scale-95'
+                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed shadow-none'
+                                }`}
+                            >
+                                Uygula
                             </button>
                         </div>
                     </div>
@@ -3196,20 +3320,52 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                                     onClick={async () => {
                                                         const Swal = (await import('sweetalert2')).default;
                                                         const isRefund = cancelView?.includes('REFUND');
-                                                        const { value: reason } = await Swal.fire({
-                                                            title: isRefund ? 'İade Nedeni' : 'İptal Nedeni',
-                                                            input: 'text',
-                                                            inputPlaceholder: `Neden ${isRefund ? 'iade' : 'iptal'} ediliyor?`,
+                                                        
+                                                        const { value: formValues } = await Swal.fire({
+                                                            title: isRefund ? 'Ürün İade Et' : 'Ürün İptal Et',
+                                                            html: `
+                                                                <div class="space-y-4 p-2 text-left">
+                                                                    <div class="space-y-1">
+                                                                        <label class="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Neden?</label>
+                                                                        <input id="swal-cancel-reason" class="swal2-input !w-full !m-0 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 rounded-xl" placeholder="Açıklama giriniz..." />
+                                                                    </div>
+                                                                    ${item.quantity > 1 ? `
+                                                                    <div class="space-y-1 mt-3">
+                                                                        <label class="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Adet</label>
+                                                                        <input id="swal-cancel-qty" type="number" class="swal2-input !w-full !m-0 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 rounded-xl" min="1" max="${item.quantity}" value="${item.quantity}" />
+                                                                        <span class="text-[10px] text-slate-400 block mt-1 font-medium">İptal edilecek adet seçiniz (Azami: ${item.quantity})</span>
+                                                                    </div>
+                                                                    ` : ''}
+                                                                </div>
+                                                            `,
                                                             showCancelButton: true,
                                                             confirmButtonText: isRefund ? 'İade Et' : 'İptal Et',
                                                             cancelButtonText: 'Vazgeç',
                                                             confirmButtonColor: isRefund ? '#4f46e5' : '#ef4444',
                                                             background: theme === 'dark' ? '#1e293b' : '#fff',
                                                             color: theme === 'dark' ? '#fff' : '#1e293b',
+                                                            preConfirm: () => {
+                                                                const reasonInput = document.getElementById('swal-cancel-reason') as HTMLInputElement;
+                                                                const reason = reasonInput ? reasonInput.value : '';
+                                                                const qtyInput = document.getElementById('swal-cancel-qty') as HTMLInputElement;
+                                                                const qty = qtyInput ? parseInt(qtyInput.value) : 1;
+
+                                                                if (!reason.trim()) {
+                                                                    Swal.showValidationMessage('Açıklama alanı zorunludur.');
+                                                                    return false;
+                                                                }
+                                                                if (qtyInput && (isNaN(qty) || qty < 1 || qty > item.quantity)) {
+                                                                    Swal.showValidationMessage(`Adet 1 ile ${item.quantity} arasında olmalıdır.`);
+                                                                    return false;
+                                                                }
+                                                                return { reason: reason.trim(), qty };
+                                                            }
                                                         });
-                                                        if (reason !== undefined) {
-                                                            if (isRefund) confirmRefundItem(item.id, reason);
-                                                            else confirmCancelItem(item.id, reason);
+
+                                                        if (formValues) {
+                                                            const { reason, qty } = formValues;
+                                                            if (isRefund) confirmRefundItem(item.id, reason, qty);
+                                                            else confirmCancelItem(item.id, reason, qty);
                                                         }
                                                     }}
                                                     className={`w-10 h-10 rounded-xl ${cancelView?.includes('REFUND') ? 'bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500' : 'bg-rose-500/10 text-rose-500 hover:bg-rose-500'} hover:text-white transition-all flex items-center justify-center`}
@@ -3235,16 +3391,61 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
             {isLineDiscountModalOpen && selectedDiscountItem && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
                     <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-md shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden border border-white/20 dark:border-slate-700/50 flex flex-col scale-100 animate-in zoom-in-95 duration-200">
-                        <div className="p-6 text-center shrink-0 border-b border-slate-100 dark:border-slate-700 bg-gradient-to-r from-red-500/10 to-orange-500/10">
-                            <div className="w-14 h-14 bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-3 shadow-inner">
-                                <span className="text-2xl font-bold">%</span>
+                        {/* Header with dynamic colors based on tab */}
+                        <div className={`p-6 text-center shrink-0 border-b border-slate-100 dark:border-slate-700 transition-all duration-300 ${
+                            lineDiscountTab === 'increase' 
+                                ? 'bg-gradient-to-r from-blue-500/10 to-indigo-500/10' 
+                                : 'bg-gradient-to-r from-red-500/10 to-orange-500/10'
+                        }`}>
+                            <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3 shadow-inner transition-all duration-300 ${
+                                lineDiscountTab === 'increase'
+                                    ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400'
+                                    : 'bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400'
+                            }`}>
+                                <span className="text-2xl font-bold">{lineDiscountTab === 'increase' ? '₺' : '%'}</span>
                             </div>
-                            <h2 className="text-xl font-black text-slate-800 dark:text-white">Satır İndirimi</h2>
+                            <h2 className="text-xl font-black text-slate-800 dark:text-white">
+                                {lineDiscountTab === 'increase' ? 'Fiyat Değişikliği' : 'Satır İndirimi'}
+                            </h2>
                             <p className="text-slate-500 dark:text-slate-400 text-xs font-medium mt-1">
                                 <span className="font-bold text-slate-700 dark:text-slate-300">
                                     {selectedDiscountItem.product?.name || selectedDiscountItem.productName || 'Ürün'}
-                                </span> ürününe indirim uygulayın.
+                                </span> ürününe {lineDiscountTab === 'increase' ? 'fiyat değişikliği uygulayın.' : 'indirim uygulayın.'}
                             </p>
+                        </div>
+
+                        {/* Segmented Tab Control */}
+                        <div className="px-6 pt-4 shrink-0">
+                            <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-2xl border border-slate-200/50 dark:border-slate-800">
+                                <button
+                                    onClick={() => {
+                                        setLineDiscountTab('discount');
+                                        setLineDiscountAmount(Math.abs(lineDiscountAmount));
+                                    }}
+                                    className={`flex-1 py-2.5 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 ${
+                                        lineDiscountTab === 'discount'
+                                            ? 'bg-white dark:bg-slate-800 text-red-600 dark:text-red-400 shadow-sm border border-slate-200/20 dark:border-slate-700/50'
+                                            : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-350'
+                                    }`}
+                                >
+                                    <i className="fat fa-percent text-[10px]"></i>
+                                    İndirim
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setLineDiscountTab('increase');
+                                        setLineDiscountRate(0);
+                                    }}
+                                    className={`flex-1 py-2.5 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 ${
+                                        lineDiscountTab === 'increase'
+                                            ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200/20 dark:border-slate-700/50'
+                                            : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-350'
+                                    }`}
+                                >
+                                    <i className="fat fa-tags text-[10px]"></i>
+                                    Fiyat Değiştir
+                                </button>
+                            </div>
                         </div>
 
                         <div className="p-6 space-y-4">
@@ -3255,7 +3456,9 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                         <span className="text-xs font-bold text-slate-600 dark:text-slate-350">{selectedDiscountItem.quantity} Adet</span>
                                     </div>
                                     <div className="flex justify-between items-center">
-                                        <span className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">İndirim Uygulanacak Adet</span>
+                                        <span className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                                            {lineDiscountTab === 'increase' ? 'Değişiklik Uygulanacak Adet' : 'İndirim Uygulanacak Adet'}
+                                        </span>
                                         <input
                                             type="number"
                                             value={lineDiscountQty || ''}
@@ -3265,14 +3468,17 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                                     Math.max(1, Number(e.target.value) || 1)
                                                 );
                                                 setLineDiscountQty(qty);
-                                                // İndirim oranı varsa tutarı yeni adede göre yeniden hesapla
-                                                const basePrice = selectedDiscountItem.type === 'CART' 
-                                                    ? calculateItemPrice(selectedDiscountItem) 
-                                                    : (selectedDiscountItem.unitPrice ?? selectedDiscountItem.product?.price ?? 0);
-                                                const totalBase = basePrice * qty;
-                                                setLineDiscountAmount(Number((totalBase * lineDiscountRate / 100).toFixed(2)));
+                                                if (lineDiscountTab === 'discount') {
+                                                    const basePrice = selectedDiscountItem.type === 'CART' 
+                                                        ? calculateItemPrice(selectedDiscountItem) 
+                                                        : (selectedDiscountItem.unitPrice ?? selectedDiscountItem.product?.price ?? 0);
+                                                    const totalBase = basePrice * qty;
+                                                    setLineDiscountAmount(Number((totalBase * lineDiscountRate / 100).toFixed(2)));
+                                                }
                                             }}
-                                            className="w-20 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 text-center text-sm font-black dark:text-white outline-none focus:ring-4 focus:ring-red-500/10 font-mono"
+                                            className={`w-20 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 text-center text-sm font-black dark:text-white outline-none transition-all font-mono focus:ring-4 ${
+                                                lineDiscountTab === 'increase' ? 'focus:ring-blue-500/10' : 'focus:ring-red-500/10'
+                                            }`}
                                             min="1"
                                             max={selectedDiscountItem.quantity}
                                         />
@@ -3294,74 +3500,135 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                                 </span>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-2 tracking-widest">İndirim (%)</label>
-                                    <input
-                                        type="number"
-                                        value={lineDiscountRate || ''}
-                                        onChange={(e) => {
-                                            const percent = Number(e.target.value) || 0;
-                                            setLineDiscountRate(percent);
-                                            const basePrice = selectedDiscountItem.type === 'CART' 
-                                                ? calculateItemPrice(selectedDiscountItem) 
-                                                : (selectedDiscountItem.unitPrice ?? selectedDiscountItem.product?.price ?? 0);
-                                            const totalBase = basePrice * lineDiscountQty;
-                                            setLineDiscountAmount(Number((totalBase * percent / 100).toFixed(2)));
-                                        }}
-                                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-3 py-2 text-sm font-black dark:text-white outline-none focus:ring-4 focus:ring-red-500/10 transition-all font-mono"
-                                        placeholder="0"
-                                        min="0"
-                                        max="100"
-                                    />
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-2 tracking-widest">İndirim (₺)</label>
-                                    <input
-                                        type="number"
-                                        value={lineDiscountAmount || ''}
-                                        onChange={(e) => {
-                                            const amount = Number(e.target.value) || 0;
-                                            setLineDiscountAmount(amount);
-                                            const basePrice = selectedDiscountItem.type === 'CART' 
-                                                ? calculateItemPrice(selectedDiscountItem) 
-                                                : (selectedDiscountItem.unitPrice ?? selectedDiscountItem.product?.price ?? 0);
-                                            const totalBase = basePrice * lineDiscountQty;
-                                            if (totalBase > 0) {
-                                                setLineDiscountRate(Number(((amount / totalBase) * 100).toFixed(2)));
-                                            } else {
-                                                setLineDiscountRate(0);
-                                            }
-                                        }}
-                                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-3 py-2 text-sm font-black dark:text-white outline-none focus:ring-4 focus:ring-red-500/10 transition-all font-mono"
-                                        placeholder="0.00"
-                                        min="0"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Hazır Hızlı İndirim Butonları */}
-                            <div className="flex flex-col gap-1.5 mt-2">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase ml-2 tracking-widest">Hızlı İndirim Oranları</label>
-                                <div className="flex gap-2 justify-between">
-                                    {[5, 10, 15, 20, 25, 50].map((rate) => (
-                                        <button
-                                            key={rate}
-                                            onClick={() => {
-                                                setLineDiscountRate(rate);
-                                                const basePrice = selectedDiscountItem.type === 'CART' 
+                            {lineDiscountTab === 'increase' ? (
+                                // Fiyat Değişikliği (Tutar / Yeni Fiyat girişi)
+                                <div className="grid grid-cols-2 gap-4 animate-in fade-in duration-200">
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-2 tracking-widest">
+                                            Yeni Birim Fiyat (₺)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={(() => {
+                                                const originalPrice = selectedDiscountItem.type === 'CART' 
                                                     ? calculateItemPrice(selectedDiscountItem) 
                                                     : (selectedDiscountItem.unitPrice ?? selectedDiscountItem.product?.price ?? 0);
-                                                const totalBase = basePrice * lineDiscountQty;
-                                                setLineDiscountAmount(Number((totalBase * rate / 100).toFixed(2)));
+                                                return Number((originalPrice - (lineDiscountAmount / lineDiscountQty)).toFixed(2)) || '';
+                                            })()}
+                                            onChange={(e) => {
+                                                const newPrice = Number(e.target.value) || 0;
+                                                const originalPrice = selectedDiscountItem.type === 'CART' 
+                                                    ? calculateItemPrice(selectedDiscountItem) 
+                                                    : (selectedDiscountItem.unitPrice ?? selectedDiscountItem.product?.price ?? 0);
+                                                
+                                                const calculatedAmount = (originalPrice - newPrice) * lineDiscountQty;
+                                                setLineDiscountAmount(calculatedAmount);
+                                                setLineDiscountRate(0);
                                             }}
-                                            className="flex-1 py-2 text-xs font-black bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-all active:scale-95"
-                                        >
-                                            %{rate}
-                                        </button>
-                                    ))}
+                                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-3 py-2 text-sm font-black dark:text-white outline-none transition-all font-mono focus:ring-4 focus:ring-blue-500/10"
+                                            placeholder="0.00"
+                                            min="0"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-2 tracking-widest">
+                                            Birim Fiyat Değişimi (₺)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={(() => {
+                                                return Number((- (lineDiscountAmount / lineDiscountQty)).toFixed(2)) || '';
+                                            })()}
+                                            onChange={(e) => {
+                                                const diff = Number(e.target.value) || 0;
+                                                const calculatedAmount = -diff * lineDiscountQty;
+                                                setLineDiscountAmount(calculatedAmount);
+                                                setLineDiscountRate(0);
+                                            }}
+                                            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-3 py-2 text-sm font-black dark:text-white outline-none transition-all font-mono focus:ring-4 focus:ring-blue-500/10"
+                                            placeholder="+/- 0.00"
+                                        />
+                                    </div>
                                 </div>
-                            </div>
+                            ) : (
+                                // Satır İndirimi
+                                <div className="space-y-4 animate-in fade-in duration-200">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="flex flex-col gap-1">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-2 tracking-widest">
+                                                İndirim (%)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={lineDiscountRate || ''}
+                                                onChange={(e) => {
+                                                    const percent = Number(e.target.value) || 0;
+                                                    setLineDiscountRate(percent);
+                                                    const basePrice = selectedDiscountItem.type === 'CART' 
+                                                        ? calculateItemPrice(selectedDiscountItem) 
+                                                        : (selectedDiscountItem.unitPrice ?? selectedDiscountItem.product?.price ?? 0);
+                                                    const totalBase = basePrice * lineDiscountQty;
+                                                    setLineDiscountAmount(Number((totalBase * percent / 100).toFixed(2)));
+                                                }}
+                                                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-3 py-2 text-sm font-black dark:text-white outline-none transition-all font-mono focus:ring-4 focus:ring-red-500/10"
+                                                placeholder="0"
+                                                min="0"
+                                                max="100"
+                                            />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-2 tracking-widest">
+                                                İndirim (₺)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={lineDiscountAmount || ''}
+                                                onChange={(e) => {
+                                                    const amount = Number(e.target.value) || 0;
+                                                    setLineDiscountAmount(amount);
+                                                    const basePrice = selectedDiscountItem.type === 'CART' 
+                                                        ? calculateItemPrice(selectedDiscountItem) 
+                                                        : (selectedDiscountItem.unitPrice ?? selectedDiscountItem.product?.price ?? 0);
+                                                    const totalBase = basePrice * lineDiscountQty;
+                                                    if (totalBase > 0) {
+                                                        setLineDiscountRate(Number(((amount / totalBase) * 100).toFixed(2)));
+                                                    } else {
+                                                        setLineDiscountRate(0);
+                                                    }
+                                                }}
+                                                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-3 py-2 text-sm font-black dark:text-white outline-none transition-all font-mono focus:ring-4 focus:ring-red-500/10"
+                                                placeholder="0.00"
+                                                min="0"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Hazır Hızlı Oran Butonları */}
+                                    <div className="flex flex-col gap-1.5 mt-2">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-2 tracking-widest">
+                                            Hızlı İndirim Oranları
+                                        </label>
+                                        <div className="flex gap-2 justify-between">
+                                            {[5, 10, 15, 20, 25, 50].map((rate) => (
+                                                <button
+                                                    key={rate}
+                                                    onClick={() => {
+                                                        setLineDiscountRate(rate);
+                                                        const basePrice = selectedDiscountItem.type === 'CART' 
+                                                            ? calculateItemPrice(selectedDiscountItem) 
+                                                            : (selectedDiscountItem.unitPrice ?? selectedDiscountItem.product?.price ?? 0);
+                                                        const totalBase = basePrice * lineDiscountQty;
+                                                        setLineDiscountAmount(Number((totalBase * rate / 100).toFixed(2)));
+                                                    }}
+                                                    className="flex-1 py-2 text-xs font-black bg-slate-100 hover:bg-slate-200 dark:bg-slate-700/60 dark:hover:bg-slate-700 rounded-xl transition-all active:scale-95 text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-450 hover:bg-red-50 dark:hover:bg-red-500/10"
+                                                >
+                                                    %{rate}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="p-6 shrink-0 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 flex gap-3">
@@ -3376,7 +3643,11 @@ export default function TakeOrderView({ onSwitchToPos, onCancelAdisyon }: { onSw
                             </button>
                             <button
                                 onClick={saveLineDiscount}
-                                className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-red-500 to-orange-500 text-white font-bold text-sm shadow-md shadow-red-500/20 hover:from-red-600 hover:to-orange-650 transition-all active:scale-[0.98]"
+                                className={`flex-1 py-3 rounded-2xl text-white font-bold text-sm shadow-md transition-all active:scale-[0.98] ${
+                                    lineDiscountTab === 'increase'
+                                        ? 'bg-gradient-to-r from-blue-500 to-indigo-500 shadow-blue-500/20 hover:from-blue-600 hover:to-indigo-650'
+                                        : 'bg-gradient-to-r from-red-500 to-orange-500 shadow-red-500/20 hover:from-red-600 hover:to-orange-650'
+                                }`}
                             >
                                 Uygula
                             </button>

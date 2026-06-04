@@ -157,9 +157,9 @@ export class SalesController {
 
   @Post('items/:id/cancel')
   @Permissions('OP:CAN_CANCEL_SALE')
-  cancelItem(@Param('id') id: string, @Body('reason') reason: string, @Request() req: any) {
+  cancelItem(@Param('id') id: string, @Body() body: { reason: string; quantity?: number }, @Request() req: any) {
     const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
-    return this.salesService.cancelItem(+id, reason || '', userId);
+    return this.salesService.cancelItem(+id, body.reason || '', userId, body.quantity);
   }
 
   @Post(':id/cancel')
@@ -171,9 +171,9 @@ export class SalesController {
 
   @Post('items/:id/refund')
   @Permissions('OP:CAN_CANCEL_SALE')
-  refundItem(@Param('id') id: string, @Body('reason') reason: string, @Request() req: any) {
+  refundItem(@Param('id') id: string, @Body() body: { reason: string; quantity?: number }, @Request() req: any) {
     const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
-    return this.salesService.refundItem(+id, reason || '', userId);
+    return this.salesService.refundItem(+id, body.reason || '', userId, body.quantity);
   }
 
   @Post(':id/refund')
@@ -292,6 +292,16 @@ export class SalesController {
     return this.salesService.transferTable(body, userId);
   }
   
+  @Put(':id/bill-request')
+  updateBillRequest(
+    @Param('id') id: string,
+    @Body() body: { isBillRequested: boolean },
+    @Request() req: any
+  ) {
+    const userId = req.user?.userId || req.user?.sub || req.user?.id || 0;
+    return this.salesService.updateBillRequest(+id, body.isBillRequested, userId);
+  }
+
   @Put(':id/discount')
   updateDiscount(
     @Param('id') id: string,

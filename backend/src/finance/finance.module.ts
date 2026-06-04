@@ -8,12 +8,14 @@ import { CompanyAccountService } from './company-account.service';
 import { CompanyAccountController } from './company-account.controller';
 import { PartnersModule } from '../partners/partners.module';
 import { ParametersModule } from '../parameters/parameters.module';
+import { ShiftsModule } from '../shifts/shifts.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([AccountTransaction, CompanyAccount]),
     PartnersModule,
     ParametersModule,
+    ShiftsModule,
   ],
   providers: [FinanceService, CompanyAccountService],
   controllers: [FinanceController, CompanyAccountController],

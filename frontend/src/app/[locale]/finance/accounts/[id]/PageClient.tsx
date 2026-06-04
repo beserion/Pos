@@ -24,6 +24,7 @@ interface Transaction {
     type: string;
     description: string;
     createdAt: string;
+    businessDate?: string;
     paymentMethod: string;
     documentNumber?: string;
     sourceType?: string;
@@ -282,7 +283,7 @@ export function PageClient() {
                                     transactions.map((tx) => (
                                         <tr key={tx.id} className="hover:bg-blue-500/5 dark:hover:bg-blue-500/10 transition-all group">
                                             <td className="px-8 py-4 whitespace-nowrap">
-                                                <div className="text-sm font-bold text-slate-700 dark:text-slate-200">{new Date(tx.createdAt).toLocaleDateString('tr-TR')}</div>
+                                                <div className="text-sm font-bold text-slate-700 dark:text-slate-200">{tx.businessDate ? tx.businessDate : new Date(tx.createdAt).toLocaleDateString('tr-TR')}</div>
                                                 <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{new Date(tx.createdAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</div>
                                             </td>
                                             <td className="px-8 py-4 text-center">

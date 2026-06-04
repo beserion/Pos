@@ -30,7 +30,8 @@ export function PageClient() {
     const [pinSaving, setPinSaving] = useState(false);
 
     const { setUser } = useAuth();
-    const router = useRouter();
+    const router = useRouter();
+
 
     // ─── Giriş ───────────────────────────────────────────────────────
     const handleSubmit = async (e: React.FormEvent) => {
@@ -157,7 +158,7 @@ export function PageClient() {
                                     required
                                     autoComplete="username"
                                     className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-800/50 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                                    placeholder="admin@admin.com veya 5xx..."
+                                    placeholder="mail@example.com"
                                     value={identifier}
                                     onChange={e => setIdentifier(e.target.value)}
                                 />
@@ -168,7 +169,7 @@ export function PageClient() {
                             <label className="block text-sm font-medium text-slate-300 mb-1">{tLogin('password')}</label>
                             <input type="password" required
                                 className="w-full px-4 py-3 rounded-xl bg-slate-800/50 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                                placeholder="admin123"
+                                placeholder="Your Password"
                                 value={password} onChange={e => setPassword(e.target.value)} />
                         </div>
                         {error && (
